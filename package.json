@@ -1,0 +1,25 @@
+{
+  "name": "sendlit",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "9.15.1",
+      "onFail": "download"
+    }
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/node": "^22.14.1"
+    }
+  },
+  "type": "module"
+}
