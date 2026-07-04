@@ -11,6 +11,7 @@ import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { NewSequenceDialog } from "@/components/dashboard/new-sequence-dialog";
 import { ApiError } from "@/lib/api-client";
+import { presentBroadcastStatus } from "@/lib/broadcast";
 import { listSequences, pauseSequence, startSequence } from "@/lib/api";
 import type { MailType, Sequence } from "@sendlit/email-blocks";
 
@@ -114,17 +115,32 @@ export function SequenceListPage({
                                             {sequence.title || "Untitled"}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <Badge variant={STATUS_VARIANT[sequence.status]}>
-                                                {sequence.status}
-                                            </Badge>
+                                            {type === "broadcast" ? (
+                                                <Badge
+                                                    variant={
+                                                        presentBroadcastStatus(sequence).variant
+                                                    }
+                                                >
+                                                    {presentBroadcastStatus(sequence).label}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant={STATUS_VARIANT[sequence.status]}>
+                                                    {sequence.status}
+                                                </Badge>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
                                             {sequence.emails.length}
                                         </td>
                                         <td className="px-4 py-3 text-right">
-                                            {(sequence.status === "active" ||
-                                                sequence.status === "draft" ||
-                                                sequence.status === "paused") && (
+                                            {/* Broadcasts are sent/scheduled from the editor —
+                                                a quick-start here would send immediately since
+                                                a draft broadcast's send time defaults to the
+                                                past (see lib/broadcast.ts). */}
+                                            {type !== "broadcast" &&
+                                                (sequence.status === "active" ||
+                                                    sequence.status === "draft" ||
+                                                    sequence.status === "paused") && (
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"

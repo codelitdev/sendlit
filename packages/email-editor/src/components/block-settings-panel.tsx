@@ -67,7 +67,7 @@ export function BlockSettingsPanel({
                     </Button>
                 </div>
                 <div className="p-4">
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-muted-foreground">
                         Block type &quot;{block.blockType}&quot; not found in
                         registry.
                     </p>
@@ -99,7 +99,7 @@ export function BlockSettingsPanel({
                     >
                         Email
                     </Button>
-                    <ChevronRight className="h-4 w-4 mx-1 text-gray-400" />
+                    <ChevronRight className="h-4 w-4 mx-1 text-muted-foreground" />
                     <span className="font-medium">{capitalizedBlockName}</span>
                 </div>
                 <Button

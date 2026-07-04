@@ -6,13 +6,18 @@ import {
   recordEspTestResult,
   upsertEspConfig,
   type EspConfig,
-} from "../../esp/queries";
+} from "../../settings/esp/queries";
 import { invalidateTeamTransport } from "../../mail/transport";
 import { sendTestMail } from "../../mail/send";
 import { getEmailFrom } from "../../utils/mail";
 import { getTeam } from "../../team/queries";
 import { AUTH_ERROR, errorResult, jsonResult } from "./responses";
-import { espConfigSchema, espProviders, successMessageSchema, testEspResultSchema } from "./schemas";
+import {
+  espConfigSchema,
+  espProviders,
+  successMessageSchema,
+  testEspResultSchema,
+} from "./schemas";
 import { getAuthAccount, getTeamId } from "./auth";
 
 function toPublicShape(config: EspConfig | null) {
@@ -144,14 +149,20 @@ export function registerEspTools(server: McpServer): void {
 
       const config = await getEspConfig(teamId);
       if (!config) {
-        return jsonResult({ success: false, error: "No ESP configured for this team yet." });
+        return jsonResult({
+          success: false,
+          error: "No ESP configured for this team yet.",
+        });
       }
 
       const account = getAuthAccount(extra);
       const team = await getTeam(teamId);
       const to = args.to || account?.email;
       if (!to) {
-        return jsonResult({ success: false, error: "No destination email address available." });
+        return jsonResult({
+          success: false,
+          error: "No destination email address available.",
+        });
       }
 
       const from = getEmailFrom({

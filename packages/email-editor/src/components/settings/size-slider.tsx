@@ -80,7 +80,7 @@ export function SizeSlider({
                         max={max}
                         step={step}
                     />
-                    <span className="ml-1 text-xs text-gray-500">{unit}</span>
+                    <span className="ml-1 text-xs text-muted-foreground">{unit}</span>
                 </div>
             </div>
             <Slider

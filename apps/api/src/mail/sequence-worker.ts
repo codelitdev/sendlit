@@ -16,7 +16,7 @@ const worker = new Worker(
             );
         }
     },
-    { connection: redis },
+    { connection: redis, concurrency: 10 },
 );
 
 export default worker;

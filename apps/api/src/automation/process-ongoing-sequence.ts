@@ -50,6 +50,11 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
     .limit(1);
   if (!ongoingSequence) return;
 
+  // A stale/duplicate job (or a concurrent worker) may arrive after another
+  // run already sent this tick's email and advanced the schedule. Without
+  // this guard the next email would go out immediately, skipping its delay.
+  if (ongoingSequence.nextEmailScheduledTime > Date.now()) return;
+
   try {
     const hasQuota = await hasMailQuotaRemaining(ongoingSequence.teamId);
     if (!hasQuota) {

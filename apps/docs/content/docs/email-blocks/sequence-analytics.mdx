@@ -1,0 +1,53 @@
+---
+title: SequenceAnalytics
+description: Show aggregate email performance metrics.
+---
+
+`SequenceAnalytics` renders aggregate delivery metrics for a broadcast or sequence.
+Pair it with [`SubscriberList`](/docs/email-blocks/subscriber-list) for the
+paginated subscriber list underneath — they're separate blocks since a host
+may want to show metrics without a subscriber list (or vice versa), and only
+the list needs pagination.
+
+<EmailBlockDemo demo="sequence-analytics" />
+
+## Usage
+
+This is the exact code behind the demo above.
+
+```tsx
+import { SequenceAnalytics } from "@sendlit/email-blocks";
+
+const analyticsMetrics = [
+  {
+    label: "Subscribers",
+    value: 11,
+    helpText: "Contacts currently enrolled in this sequence.",
+  },
+  {
+    label: "Emails Sent",
+    value: 11,
+    helpText: "Total emails delivered by this sequence.",
+  },
+  {
+    label: "Open Rate",
+    value: "18.2%",
+    helpText: "Delivered emails that were opened.",
+  },
+  {
+    label: "Click Rate",
+    value: "0.0%",
+    helpText: "Delivered emails with at least one tracked click.",
+  },
+  {
+    label: "Click-to-Open",
+    value: "0.0%",
+    helpText: "Opened emails that also received a tracked click.",
+  },
+];
+
+function Example() {
+  return <SequenceAnalytics metrics={analyticsMetrics} />;
+}
+```
+

@@ -1,0 +1,73 @@
+---
+title: TemplateChooser
+description: Pick from system and saved templates.
+---
+
+`TemplateChooser` combines system templates and team templates into a reusable picker with real previews.
+
+<EmailBlockDemo demo="template-chooser" />
+
+## Usage
+
+This is the exact code behind the demo above (with each template's `content` shortened to
+`defaultTemplateEmail` for brevity — the demo uses a fuller sample email for "Announcement" and
+"Customer update").
+
+```tsx
+import { useMemo, useState } from "react";
+import {
+  TemplateChooser,
+  defaultTemplateEmail,
+  type SystemTemplateSummary,
+  type EmailTemplate,
+} from "@sendlit/email-blocks";
+
+const now = new Date().toISOString();
+
+const systemTemplates: SystemTemplateSummary[] = [
+  {
+    templateId: "announcement",
+    title: "Announcement",
+    description: "Launch a feature, webinar, or limited-time offer.",
+    content: defaultTemplateEmail,
+  },
+  {
+    templateId: "blank",
+    title: "Blank",
+    description: "Start from the required unsubscribe and address footer.",
+    content: defaultTemplateEmail,
+  },
+];
+
+const savedTemplates: EmailTemplate[] = [
+  {
+    id: "template_row_1",
+    teamId: "team_1",
+    templateId: "customer-update",
+    title: "Customer update",
+    content: defaultTemplateEmail,
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
+function Example() {
+  const [selectedTemplate, setSelectedTemplate] = useState("announcement");
+
+  const selectedTemplateLabel = useMemo(() => {
+    const allTemplates = [...systemTemplates, ...savedTemplates];
+    return allTemplates.find(
+      (template) => template.templateId === selectedTemplate,
+    )?.title;
+  }, [selectedTemplate]);
+
+  return (
+    <TemplateChooser
+      systemTemplates={systemTemplates}
+      templates={savedTemplates}
+      onSelect={({ templateId }) => setSelectedTemplate(templateId)}
+    />
+  );
+}
+```
+

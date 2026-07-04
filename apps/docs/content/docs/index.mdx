@@ -1,0 +1,24 @@
+---
+title: SendLit Documentation
+description: Product, API, and email-block documentation for SendLit.
+---
+
+SendLit is an email marketing and automation service for managing contacts, reusable templates, broadcasts, and event-triggered sequences.
+
+## What is documented here
+
+- **Getting started** covers the core SendLit concepts and the shortest path to a first send.
+- **Email marketing** explains contacts, templates, broadcasts, and sequences.
+- **Email blocks** documents the reusable React components exported by `@sendlit/email-blocks`.
+- **Developers** covers API authentication and integration guidance.
+- **API reference** is generated from the SendLit REST contract.
+
+## Core model
+
+SendLit is organized around teams. A team owns contacts, templates, broadcasts, sequences, sending settings, and API keys.
+
+Broadcasts and sequences share the same backend model:
+
+- A **broadcast** is a one-off sequence with a single email.
+- A **sequence** is a multi-step automation that enrolls contacts from an event trigger.
+

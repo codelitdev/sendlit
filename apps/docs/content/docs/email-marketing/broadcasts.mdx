@@ -1,0 +1,16 @@
+---
+title: Broadcasts
+description: One-time email sends.
+---
+
+A broadcast is a one-off send to contacts matching an audience filter.
+
+Broadcast delivery uses the same sequence state machine as automations:
+
+- `draft` means the broadcast is editable.
+- `active` with a future send time means scheduled.
+- `active` after the send time means sending.
+- `completed` means sent.
+
+The first email's `delayInMillis` stores the absolute send timestamp for broadcasts.
+

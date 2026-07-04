@@ -66,7 +66,7 @@ export function SettingsSlider({
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <div className="rounded-full bg-gray-200 w-4 h-4 flex items-center justify-center text-xs text-gray-600 cursor-help">
+                                    <div className="rounded-full bg-muted text-muted-foreground w-4 h-4 flex items-center justify-center text-xs cursor-help">
                                         ?
                                     </div>
                                 </TooltipTrigger>
@@ -82,7 +82,7 @@ export function SettingsSlider({
                     <button
                         type="button"
                         onClick={handleReset}
-                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                        className="text-muted-foreground hover:text-foreground transition-colors"
                         aria-label="Reset to default"
                     >
                         <X className="h-3 w-3" />

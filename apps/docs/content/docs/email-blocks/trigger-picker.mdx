@@ -1,0 +1,75 @@
+---
+title: TriggerPicker
+description: Pick the event that enrolls contacts into a sequence.
+---
+
+`TriggerPicker` edits `triggerType` and optional `triggerData`. Host apps can
+pass their own `triggers` list to add or replace the built-in trigger options.
+
+<EmailBlockDemo demo="trigger-picker" />
+
+## Usage
+
+This is the exact code behind the demo above.
+
+```tsx
+import { useMemo, useState } from "react";
+import { TriggerPicker, type TriggerOption } from "@sendlit/email-blocks";
+
+function Example() {
+  const [trigger, setTrigger] = useState<{
+    triggerType: string;
+    triggerData?: string | null;
+  }>({
+    triggerType: "tag:added",
+    triggerData: "customers",
+  });
+  const [tags, setTags] = useState(["customers", "webinar", "trial"]);
+
+  const triggers: TriggerOption[] = useMemo(
+    () => [
+      {
+        value: "subscriber:added",
+        label: "A new contact subscribes",
+        needsData: false,
+      },
+      {
+        value: "tag:added",
+        label: "A tag is added to a contact",
+        needsData: true,
+        dataLabel: "Tag",
+        valueInput: {
+          type: "select",
+          placeholder: "Select a tag",
+          options: tags.map((tag) => ({ value: tag, label: tag })),
+        },
+      },
+      {
+        value: "tag:removed",
+        label: "A tag is removed from a contact",
+        needsData: true,
+        dataLabel: "Tag",
+        valueInput: {
+          type: "select",
+          placeholder: "Select a tag",
+          options: tags.map((tag) => ({ value: tag, label: tag })),
+        },
+      },
+    ],
+    [tags],
+  );
+
+  return (
+    <TriggerPicker
+      triggerType={trigger.triggerType}
+      triggerData={trigger.triggerData}
+      triggers={triggers}
+      onChange={setTrigger}
+    />
+  );
+}
+```
+
+Omit `triggers` to fall back to the built-in list (`subscriber:added`, `tag:added`, `tag:removed`), where
+the tag triggers use a plain text input instead of a `select`.
+

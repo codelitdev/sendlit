@@ -10,9 +10,9 @@ export const espProviders = [
   "custom",
 ] as const;
 
-/** Public shape only \u2014 the encrypted password/secret is never returned to
- * clients, only a `hasPassword` boolean (see `apps/api/src/esp/routes.ts`'s
- * `toPublicShape`). */
+/** Public shape only — the encrypted password/secret is never returned to
+ * clients, only a `hasPassword` boolean (see
+ * `apps/api/src/settings/esp/routes.ts`'s `toPublicShape`). */
 export const espConfigSchema = z.object({
   // Plain string, not the enum — the DB column is unconstrained text and
   // validated on write (see `upsertEspConfigBodySchema`).

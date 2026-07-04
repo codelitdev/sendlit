@@ -12,7 +12,7 @@ import mcpRoutes from "./mcp/routes";
 import contactsRoutes from "./contacts/routes";
 import templatesRoutes from "./templates/routes";
 import sequencesRoutes from "./sequences/routes";
-import espRoutes from "./esp/routes";
+import espRoutes from "./settings/esp/routes";
 import teamRoutes from "./team/routes";
 import provisioningRoutes from "./provisioning/routes";
 import trackingRoutes from "./tracking/routes";
@@ -45,11 +45,26 @@ const openApiDocument = generateOpenApi(
       },
     ],
     tags: [
-      { name: "Contacts", description: "Manage contacts (subscribers) and segmentation." },
+      {
+        name: "Contacts",
+        description: "Manage contacts (subscribers) and segmentation.",
+      },
       { name: "Templates", description: "Reusable email templates." },
-      { name: "Sequences", description: "Broadcasts (one-off) and sequences (multi-step, event-triggered)." },
-      { name: "ESP", description: "Per-team email sending provider (SMTP) configuration and test sends." },
-      { name: "Teams", description: "Team management (list/create/rename/delete), per-team API keys, and server-to-server provisioning." },
+      {
+        name: "Sequences",
+        description:
+          "Broadcasts (one-off) and sequences (multi-step, event-triggered).",
+      },
+      {
+        name: "Settings",
+        description:
+          "Per-team settings, including email sending provider (SMTP) configuration and test sends.",
+      },
+      {
+        name: "Teams",
+        description:
+          "Team management (list/create/rename/delete), per-team API keys, and server-to-server provisioning.",
+      },
     ],
     components: {
       securitySchemes: {

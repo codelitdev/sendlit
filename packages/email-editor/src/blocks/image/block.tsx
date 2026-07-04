@@ -53,7 +53,7 @@ export function ImageBlock({ block }: ImageBlockProps) {
                     />
                 ) : (
                     <div
-                        className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center bg-gray-50"
+                        className="border-2 border-dashed border-border rounded-lg p-4 text-center bg-muted"
                         style={{
                             minHeight: "100px",
                             display: "flex",
@@ -62,8 +62,8 @@ export function ImageBlock({ block }: ImageBlockProps) {
                         }}
                     >
                         <div>
-                            <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                            <p className="text-gray-500 text-sm">
+                            <ImageIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                            <p className="text-muted-foreground text-sm">
                                 Select an image from the settings panel
                             </p>
                         </div>

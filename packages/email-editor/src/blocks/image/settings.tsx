@@ -138,7 +138,7 @@ export function ImageSettings({
                                 e.preventDefault();
                                 handleSettingChange("src", url);
                             }}
-                            className="aspect-square rounded border-2 border-transparent hover:border-blue-500 overflow-hidden transition-colors"
+                            className="aspect-square rounded border-2 border-transparent hover:border-primary overflow-hidden transition-colors"
                         >
                             <img
                                 src={url || "/placeholder.svg"}

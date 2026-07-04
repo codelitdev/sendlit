@@ -7,7 +7,12 @@ export type EmailActionType = "tag:add" | "tag:remove";
 export type TriggerType =
   "tag:added" | "tag:removed" | "subscriber:added" | "date:occurred";
 
-export type ContactFilterName = "tag" | "email" | "subscription" | "signedUp";
+export type ContactFilterName =
+  | "tag"
+  | "email"
+  | "subscription"
+  | "signedUp"
+  | (string & {});
 
 export interface ContactFilterCondition {
   name: ContactFilterName;

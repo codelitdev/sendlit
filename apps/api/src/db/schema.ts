@@ -7,6 +7,7 @@ import {
   bigint,
   boolean,
   jsonb,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -282,6 +283,10 @@ export const ongoingSequences = pgTable(
     sequenceContactIdx: uniqueIndex(
       "ongoing_sequences_sequence_id_contact_id_idx",
     ).on(table.sequenceId, table.contactId),
+    // The 60s due-poll (`getDueOngoingSequences`) filters on this column.
+    nextScheduledIdx: index("ongoing_sequences_next_email_scheduled_time_idx").on(
+      table.nextEmailScheduledTime,
+    ),
   }),
 );
 

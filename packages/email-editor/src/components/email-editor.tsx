@@ -392,23 +392,23 @@ export function EmailEditor({
         <div
           className="email-container mx-auto"
           style={{
-            width: email.style.structure.page.width,
+            width: "100%",
             margin: `0px auto`,
             backgroundColor: email.style.structure.page.background,
             color:
               email.style.structure.page.foreground ||
               email.style.colors.foreground,
-            maxWidth: "800px",
+            maxWidth: email.style.structure.page.width,
             borderWidth: email.style.structure.page.borderWidth,
             borderStyle: email.style.structure.page.borderStyle,
             borderColor: email.style.colors.border,
-            borderRadius: email.style.structure.page.borderRadius,
+            borderRadius: "0px",
             overflow: "hidden",
           }}
         >
           {email.content.length === 0 && (
             <div className="p-4 text-center">
-              <p className="mb-4 text-gray-500">Your email is empty.</p>
+              <p className="mb-4 text-muted-foreground">Your email is empty.</p>
               <AddBlockButton
                 position="below"
                 index={0}
