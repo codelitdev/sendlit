@@ -243,11 +243,18 @@ const sequencesContract = c.router(
   { metadata: { tag: "Sequences" } },
 );
 
-const espContract = c.router(
+/**
+ * ESP configuration is a per-team *setting* (a singleton, get/upsert/remove/
+ * test — never a list, never multiple per team), not a resource collection
+ * like contacts/templates/sequences, so it's nested under `settings` rather
+ * than sitting as a sibling top-level group. This is also where future
+ * per-team settings (e.g. default sending identity, branding) should live.
+ */
+const espSettingsContract = c.router(
   {
     get: {
       method: "GET",
-      path: "/esp-config",
+      path: "/settings/esp",
       responses: { 200: espConfigSchema.nullable() },
       summary: "Get the team's ESP configuration",
       description:
@@ -255,7 +262,7 @@ const espContract = c.router(
     },
     upsert: {
       method: "PUT",
-      path: "/esp-config",
+      path: "/settings/esp",
       body: upsertEspConfigBodySchema,
       responses: { 200: espConfigSchema },
       summary: "Create or update the team's ESP configuration",
@@ -264,14 +271,14 @@ const espContract = c.router(
     },
     remove: {
       method: "DELETE",
-      path: "/esp-config",
+      path: "/settings/esp",
       responses: { 204: c.noBody() },
       summary:
         "Remove the team's ESP configuration (falls back to the platform default sender)",
     },
     test: {
       method: "POST",
-      path: "/esp-config/test",
+      path: "/settings/esp/test",
       body: testEspConfigBodySchema,
       responses: {
         200: testEspConfigResponseSchema,
@@ -283,8 +290,12 @@ const espContract = c.router(
         "Sends to the given address, or the current user's own email if omitted. Always attempts real delivery.",
     },
   },
-  { metadata: { tag: "ESP" } },
+  { metadata: { tag: "Settings" } },
 );
+
+const settingsContract = c.router({
+  esp: espSettingsContract,
+});
 
 const teamsContract = c.router(
   {
@@ -362,7 +373,7 @@ export const contract = c.router({
   contacts: contactsContract,
   templates: templatesContract,
   sequences: sequencesContract,
-  esp: espContract,
+  settings: settingsContract,
   teams: teamsContract,
   provisioning: provisioningContract,
 });

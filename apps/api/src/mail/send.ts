@@ -3,8 +3,10 @@ import logger from "../services/log";
 import { getTeamTransport } from "./transport";
 
 /** Platform default transporter, used when a team hasn't configured
- * their own ESP (see `esp/queries.ts` and `mail/transport.ts`). */
+ * their own ESP (see `settings/esp/queries.ts` and `mail/transport.ts`). */
 const defaultTransporter = createTransport({
+  pool: true,
+  maxConnections: 5,
   host: process.env.EMAIL_HOST,
   port: +(process.env.EMAIL_PORT || 587),
   auth: {

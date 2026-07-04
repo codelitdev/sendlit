@@ -4,10 +4,17 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Banner } from "@/components/dashboard/banner";
 import { ApiError } from "@/lib/api-client";
 import { getTemplate, updateTemplate } from "@/lib/api";
-import { TemplateForm, type TemplateFormValue } from "@sendlit/email-blocks";
+import { EmailEditor, type Email } from "@sendlit/email-editor";
+
+interface TemplateEditorValue {
+    title: string;
+    content: Email;
+}
 
 export default function TemplateEditorPage({
     params,
@@ -15,7 +22,7 @@ export default function TemplateEditorPage({
     params: Promise<{ templateId: string }>;
 }) {
     const { templateId } = use(params);
-    const [value, setValue] = useState<TemplateFormValue | null>(null);
+    const [value, setValue] = useState<TemplateEditorValue | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -65,7 +72,23 @@ export default function TemplateEditorPage({
 
             {error && <Banner className="mb-4">{error}</Banner>}
 
-            <TemplateForm value={value} onChange={setValue} className="flex-1 min-h-0" />
+            <div className="flex min-h-0 flex-1 flex-col gap-4">
+                <div className="max-w-sm space-y-1.5">
+                    <Label htmlFor="template-title">Title</Label>
+                    <Input
+                        id="template-title"
+                        value={value.title}
+                        onChange={(e) => setValue({ ...value, title: e.target.value })}
+                        placeholder="e.g. Welcome email"
+                    />
+                </div>
+                <div className="min-h-0 flex-1 rounded-lg border">
+                    <EmailEditor
+                        email={value.content}
+                        onChange={(content) => setValue({ ...value, content })}
+                    />
+                </div>
+            </div>
         </div>
     );
 }

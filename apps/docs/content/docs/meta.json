@@ -1,0 +1,11 @@
+{
+  "title": "SendLit",
+  "pages": [
+    "index",
+    "getting-started",
+    "email-marketing",
+    "email-blocks",
+    "developers",
+    "api-reference"
+  ]
+}

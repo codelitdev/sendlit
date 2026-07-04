@@ -98,11 +98,11 @@ export function BlockWrapper({
                 ref={blockRef}
                 className={`relative border-2 transition-all duration-200 ${
                     isSelected
-                        ? "border-blue-500"
+                        ? "border-primary"
                         : showControls
-                          ? "border-blue-300"
+                          ? "border-primary/60"
                           : "border-transparent"
-                } ${isMoving ? "border-blue-400 bg-blue-50/30" : ""}`}
+                } ${isMoving ? "border-primary/80 bg-primary/10" : ""}`}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 onClick={handleBlockClick}
@@ -133,7 +133,7 @@ export function BlockWrapper({
                 {showControls && !isMoving && hasAnyControls && (
                     <div
                         ref={controlsRef}
-                        className="absolute top-2 right-2 bg-white shadow-lg rounded-md border flex flex-row z-20"
+                        className="absolute top-2 right-2 bg-background shadow-lg rounded-md border flex flex-row z-20"
                         onMouseEnter={handleControlsMouseEnter}
                         onMouseLeave={handleControlsMouseLeave}
                         onClick={(e) => e.stopPropagation()}
@@ -145,10 +145,10 @@ export function BlockWrapper({
                                     e.stopPropagation();
                                     deleteBlock(block.id);
                                 }}
-                                className="p-2 hover:bg-red-50 hover:text-red-600 transition-colors rounded-l-md"
+                                className="p-2 hover:bg-destructive/10 hover:text-destructive transition-colors rounded-l-md"
                                 title="Delete block"
                             >
-                                <Trash className="h-3 w-3 text-black" />
+                                <Trash className="h-3 w-3 text-foreground" />
                             </button>
                         )}
 
@@ -159,10 +159,10 @@ export function BlockWrapper({
                                     e.stopPropagation();
                                     duplicateBlock(block.id);
                                 }}
-                                className={`p-2 hover:bg-gray-100 transition-colors ${!isFixed ? "" : "rounded-l-md"}`}
+                                className={`p-2 hover:bg-accent hover:text-accent-foreground transition-colors ${!isFixed ? "" : "rounded-l-md"}`}
                                 title="Duplicate block"
                             >
-                                <Copy className="h-3 w-3 text-black" />
+                                <Copy className="h-3 w-3 text-foreground" />
                             </button>
                         )}
 
@@ -173,11 +173,11 @@ export function BlockWrapper({
                                     e.stopPropagation();
                                     moveBlock(block.id, "up");
                                 }}
-                                className="p-2 hover:bg-gray-100 transition-colors"
+                                className="p-2 hover:bg-accent hover:text-accent-foreground transition-colors"
                                 title="Move up"
                                 disabled={isMoving}
                             >
-                                <ChevronUp className="h-3 w-3 text-black" />
+                                <ChevronUp className="h-3 w-3 text-foreground" />
                             </button>
                         )}
 
@@ -188,11 +188,11 @@ export function BlockWrapper({
                                     e.stopPropagation();
                                     moveBlock(block.id, "down");
                                 }}
-                                className="p-2 hover:bg-gray-100 transition-colors rounded-r-md"
+                                className="p-2 hover:bg-accent hover:text-accent-foreground transition-colors rounded-r-md"
                                 title="Move down"
                                 disabled={isMoving}
                             >
-                                <ChevronDown className="h-3 w-3 text-black" />
+                                <ChevronDown className="h-3 w-3 text-foreground" />
                             </button>
                         )}
                     </div>
@@ -200,8 +200,8 @@ export function BlockWrapper({
 
                 {/* Moving indicator */}
                 {isMoving && (
-                    <div className="absolute inset-0 bg-blue-100/20 border-2 border-blue-400 rounded-md pointer-events-none z-10">
-                        <div className="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded text-xs font-medium">
+                    <div className="absolute inset-0 bg-primary/10 border-2 border-primary/80 rounded-md pointer-events-none z-10">
+                        <div className="absolute top-2 right-2 bg-primary text-primary-foreground px-2 py-1 rounded text-xs font-medium">
                             Moving...
                         </div>
                     </div>

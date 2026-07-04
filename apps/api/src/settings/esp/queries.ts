@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
-import { db } from "../db/client";
-import { espConfigs } from "../db/schema";
-import { decryptSecret, encryptSecret } from "../utils/secret-crypto";
+import { db } from "../../db/client";
+import { espConfigs } from "../../db/schema";
+import { decryptSecret, encryptSecret } from "../../utils/secret-crypto";
 
 export type EspConfig = typeof espConfigs.$inferSelect;
 export type EspProvider =

@@ -51,7 +51,7 @@ export function SettingsSwitch({
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <div className="rounded-full bg-gray-200 w-4 h-4 flex items-center justify-center text-xs text-gray-600 cursor-help">
+                                <div className="rounded-full bg-muted text-muted-foreground w-4 h-4 flex items-center justify-center text-xs cursor-help">
                                     ?
                                 </div>
                             </TooltipTrigger>

@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { createExpressEndpoints, initServer } from "@ts-rest/express";
 import { contract } from "@sendlit/api-contract";
-import { requireAuth } from "../auth/middleware";
-import { requireTeam } from "../auth/require-team";
+import { requireAuth } from "../../auth/middleware";
+import { requireTeam } from "../../auth/require-team";
 import {
   deleteEspConfig,
   getEspConfig,
@@ -10,10 +10,10 @@ import {
   upsertEspConfig,
   type EspConfig,
 } from "./queries";
-import { invalidateTeamTransport } from "../mail/transport";
-import { sendTestMail } from "../mail/send";
-import { getEmailFrom } from "../utils/mail";
-import { getTeam } from "../team/queries";
+import { invalidateTeamTransport } from "../../mail/transport";
+import { sendTestMail } from "../../mail/send";
+import { getEmailFrom } from "../../utils/mail";
+import { getTeam } from "../../team/queries";
 
 const router = Router();
 router.use(requireAuth);
@@ -39,7 +39,7 @@ function toPublicShape(config: EspConfig | null) {
   };
 }
 
-const impl = s.router(contract.esp, {
+const impl = s.router(contract.settings.esp, {
   get: async ({ req }) => {
     const config = await getEspConfig((req as any).teamId);
     return { status: 200, body: toPublicShape(config) };
@@ -101,6 +101,6 @@ const impl = s.router(contract.esp, {
   },
 });
 
-createExpressEndpoints(contract.esp, impl, router);
+createExpressEndpoints(contract.settings.esp, impl, router);
 
 export default router;

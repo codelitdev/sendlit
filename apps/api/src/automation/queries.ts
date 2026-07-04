@@ -1,4 +1,4 @@
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, count, eq, lt, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { contacts, ongoingSequences, rules, sequences } from "../db/schema";
 import { EventType, sequenceBounceLimit } from "../config/constants";
@@ -141,9 +141,9 @@ export async function deleteOngoingSequence(id: string) {
 }
 
 export async function countOngoingSequencesForSequence(sequenceId: string) {
-  const rows = await db
-    .select({ id: ongoingSequences.id })
+  const [row] = await db
+    .select({ count: count() })
     .from(ongoingSequences)
     .where(eq(ongoingSequences.sequenceId, sequenceId));
-  return rows.length;
+  return row?.count ?? 0;
 }

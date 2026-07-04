@@ -1,0 +1,5 @@
+{
+  "title": "Email Marketing",
+  "icon": "Mail",
+  "pages": ["contacts", "templates", "broadcasts", "sequences", "settings"]
+}

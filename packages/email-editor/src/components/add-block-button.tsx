@@ -37,8 +37,8 @@ export function AddBlockButton({
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <button className="bg-white border border-gray-300 rounded-full p-1 shadow-sm hover:border-gray-400 transition-colors">
-                    <Plus className="h-3 w-3 text-gray-600" />
+                <button className="bg-background border border-border rounded-full p-1 shadow-sm hover:border-primary/50 transition-colors">
+                    <Plus className="h-3 w-3 text-muted-foreground" />
                 </button>
             </PopoverTrigger>
             <PopoverContent
@@ -54,14 +54,14 @@ export function AddBlockButton({
                         <button
                             key={blockType.type}
                             onClick={() => handleAddBlock(blockType.type)}
-                            className="flex flex-col items-center p-3 hover:bg-blue-50 rounded transition-colors border border-transparent hover:border-blue-200"
+                            className="flex flex-col items-center p-3 hover:bg-accent rounded transition-colors border border-transparent hover:border-primary/40"
                         >
-                            <div className="text-blue-600 mb-1">
+                            <div className="text-primary mb-1">
                                 {blockType.icon && (
                                     <blockType.icon className="w-5 h-5" />
                                 )}
                             </div>
-                            <span className="text-xs font-medium text-gray-700">
+                            <span className="text-xs font-medium text-foreground">
                                 {blockType.label}
                             </span>
                         </button>

@@ -15,7 +15,7 @@ export function SettingsSection({
     return (
         <div className={cn("space-y-4 pb-4 mb-4", className)}>
             {title && (
-                <div className="text-sm font-medium text-gray-700">{title}</div>
+                <div className="text-sm font-medium text-foreground">{title}</div>
             )}
             <div className="space-y-4">{children}</div>
         </div>

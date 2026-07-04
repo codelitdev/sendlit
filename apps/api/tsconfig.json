@@ -14,5 +14,8 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests are excluded from the production build (vitest is a devDependency);
+  // they're typechecked via tsconfig.test.json (`pnpm typecheck`) instead.
+  "exclude": ["**/*.test.ts", "src/test"]
 }

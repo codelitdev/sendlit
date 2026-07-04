@@ -146,7 +146,10 @@ export function getContact(contactId: string) {
 export function updateContact(
   contactId: string,
   patch: Partial<
-    Pick<Contact, "name" | "active" | "subscribedToUpdates" | "tags" | "customFields">
+    Pick<
+      Contact,
+      "name" | "active" | "subscribedToUpdates" | "tags" | "customFields"
+    >
   >,
 ) {
   return unwrap<Contact>(
@@ -328,7 +331,7 @@ export interface EspConfig {
 }
 
 export function getEspConfig() {
-  return unwrap<EspConfig | null>(client.esp.get());
+  return unwrap<EspConfig | null>(client.settings.esp.get());
 }
 
 export function updateEspConfig(input: {
@@ -342,15 +345,15 @@ export function updateEspConfig(input: {
   fromName?: string;
   fromEmail?: string;
 }) {
-  return unwrap<EspConfig>(client.esp.upsert({ body: input }));
+  return unwrap<EspConfig>(client.settings.esp.upsert({ body: input }));
 }
 
 export function deleteEspConfig() {
-  return unwrap<void>(client.esp.remove());
+  return unwrap<void>(client.settings.esp.remove());
 }
 
 export function testEspConfig(to?: string) {
   return unwrap<{ success: boolean; error?: string }>(
-    client.esp.test({ body: { to } }),
+    client.settings.esp.test({ body: { to } }),
   );
 }

@@ -1,8 +1,19 @@
 export { ContactFilterBuilder } from "./contact-filter-builder";
-export type { ContactFilterBuilderProps } from "./contact-filter-builder";
+export type {
+  ContactFilterBuilderProps,
+  ContactFilterDefinition,
+  ContactFilterOption,
+  ContactFilterSegment,
+  ContactFilterValueInput,
+} from "./contact-filter-builder";
 
 export { TriggerPicker } from "./trigger-picker";
-export type { TriggerPickerProps } from "./trigger-picker";
+export type {
+  TriggerPickerProps,
+  TriggerOption,
+  TriggerValueInput,
+  TriggerValueOption,
+} from "./trigger-picker";
 
 export { SequenceEmailForm } from "./sequence-email-form";
 export type {
@@ -13,8 +24,14 @@ export type {
 export { SequenceEmailList } from "./sequence-email-list";
 export type { SequenceEmailListProps } from "./sequence-email-list";
 
-export { TemplateForm } from "./template-form";
-export type { TemplateFormProps, TemplateFormValue } from "./template-form";
+export { SequenceAnalytics } from "./sequence-analytics";
+export type {
+  SequenceAnalyticsMetric,
+  SequenceAnalyticsProps,
+} from "./sequence-analytics";
+
+export { SubscriberList } from "./subscriber-list";
+export type { SubscriberListItem, SubscriberListProps } from "./subscriber-list";
 
 export { SequenceMetaForm } from "./sequence-meta-form";
 export type {

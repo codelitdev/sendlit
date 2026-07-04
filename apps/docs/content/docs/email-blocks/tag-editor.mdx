@@ -1,0 +1,53 @@
+---
+title: TagEditor
+description: Edit contact tags.
+---
+
+`TagEditor` is a combobox for a contact's tags: selected tags render as chips
+in the trigger, the dropdown lists existing tags (checked when selected) via
+an optional `options` pool, and typing a value with no match offers to create
+it.
+
+<EmailBlockDemo demo="tag-editor" />
+
+## Usage
+
+This is the exact code behind the demo above.
+
+```tsx
+import { useState } from "react";
+import { TagEditor } from "@sendlit/email-blocks";
+
+function Example() {
+  const [tagOptions, setTagOptions] = useState([
+    "customers",
+    "webinar",
+    "trial",
+    "vip",
+  ]);
+  const [contactTags, setContactTags] = useState(["customers"]);
+
+  return (
+    <TagEditor
+      tags={contactTags}
+      options={tagOptions}
+      onAdd={(tag) => {
+        setContactTags((current) =>
+          current.includes(tag) ? current : [...current, tag],
+        );
+        setTagOptions((current) =>
+          current.includes(tag) ? current : [...current, tag],
+        );
+      }}
+      onRemove={(tag) =>
+        setContactTags((current) => current.filter((item) => item !== tag))
+      }
+    />
+  );
+}
+```
+
+Omit `options` to only ever offer create-new (no existing-tag dropdown) — the
+component always includes whatever is already in `tags` even if it's missing
+from `options`.
+

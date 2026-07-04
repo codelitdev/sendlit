@@ -418,6 +418,32 @@ now resolves without warnings). **Anyone with a `next dev` process already
 running from before this upgrade needs to restart it** — it will otherwise
 keep running the old, now-unlinked 15.x build.
 
+Gap fix (post-Phase-5) — **done**: **ESP config moved from a top-level
+contract group to a `settings` namespace**. ESP configuration is a per-team
+*singleton setting* (get/upsert/remove/test — never a list, never more than
+one per team), unlike Contacts/Templates/Sequences, which are true resource
+collections (list, paginate, create many, delete individually). Sitting as
+`contract.esp` alongside those made it look like a peer entity when it isn't
+one. Fixed by nesting it under a new `contract.settings` group
+(`contract.settings.esp`), which also gives a natural home for future
+per-team settings (default sending identity, branding, webhook URLs, ...)
+without forcing them into ESP's specific schema or a schema-less blob.
+Route paths moved from `/esp-config`(`/test`) to `/settings/esp`(`/test`);
+`apps/api/src/esp/` was renamed to `apps/api/src/settings/esp/`. Deliberately
+**kept the underlying `esp_configs` Postgres table separate** rather than
+folding it into a generic settings blob/table: it holds an encrypted secret
+(the SMTP password), and an isolated table with narrow, explicitly-scoped
+query functions (`getDecryptedEspCredentials` used only internally by mail
+sending) is a stronger security boundary than a general "team settings" row
+that a future bulk-read endpoint could too easily return unfiltered. MCP tool
+names (`get_esp_config`, `update_esp_config`, ...) were left unchanged —
+only their internal import paths moved — since renaming them wouldn't add
+clarity for MCP/AI consumers. This was a breaking API change (route paths),
+made safely pre-launch with no external consumers yet. Validated:
+`packages/api-contract`, `apps/api` (`tsc --noEmit` + `pnpm run build`, which
+regenerates the OpenAPI doc from the updated contract), and `apps/web`
+(`tsc --noEmit` + `next build`) all compile clean.
+
 Gap fix (post-Phase-5) — **done**: fixed a bug in `packages/email-editor`
 (present verbatim in CourseLit's original source too, so pre-existing rather
 than introduced by the port) where editing any block setting from the

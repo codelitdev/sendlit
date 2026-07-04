@@ -1,0 +1,85 @@
+---
+title: SequenceEmailList
+description: Pick and reorder sequence emails.
+---
+
+`SequenceEmailList` renders ordered sequence emails and optional reorder controls.
+
+<EmailBlockDemo demo="sequence-email-list" />
+
+## Usage
+
+This is the exact code behind the demo above (with the emails' shared `content` shortened to
+`defaultTemplateEmail` here for brevity — the demo uses a fuller sample email).
+
+```tsx
+import { useState } from "react";
+import {
+  SequenceEmailList,
+  defaultTemplateEmail,
+  type SequenceEmail,
+} from "@sendlit/email-blocks";
+
+const day = 86_400_000;
+const now = new Date().toISOString();
+
+const initialEmails: SequenceEmail[] = [
+  {
+    id: "1",
+    sequenceId: "seq_1",
+    emailId: "email_1",
+    subject: "Welcome to SendLit",
+    content: defaultTemplateEmail,
+    delayInMillis: 0,
+    published: true,
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "2",
+    sequenceId: "seq_1",
+    emailId: "email_2",
+    subject: "Your first campaign checklist",
+    content: defaultTemplateEmail,
+    delayInMillis: 2 * day,
+    published: false,
+    actionType: "tag:add",
+    actionData: { tag: "activated" },
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "3",
+    sequenceId: "seq_1",
+    emailId: "email_3",
+    subject: "How to improve deliverability",
+    content: defaultTemplateEmail,
+    delayInMillis: 5 * day,
+    published: true,
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
+function Example() {
+  const [selectedEmailId, setSelectedEmailId] = useState("email_1");
+  const [emailsOrder, setEmailsOrder] = useState([
+    "email_1",
+    "email_2",
+    "email_3",
+  ]);
+
+  return (
+    <SequenceEmailList
+      emails={initialEmails}
+      emailsOrder={emailsOrder}
+      selectedEmailId={selectedEmailId}
+      onSelect={setSelectedEmailId}
+      onAdd={() => undefined}
+      onDelete={() => undefined}
+      onReorder={setEmailsOrder}
+    />
+  );
+}
+```
+
