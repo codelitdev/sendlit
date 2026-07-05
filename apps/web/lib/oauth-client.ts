@@ -1,7 +1,9 @@
 import { API_URL, OAUTH_CLIENT_ID } from "./config";
 import type { TokenResponse } from "./tokens";
 
-async function tokenRequest(body: Record<string, string>): Promise<TokenResponse | null> {
+async function tokenRequest(
+    body: Record<string, string>,
+): Promise<TokenResponse | null> {
     const res = await fetch(`${API_URL}/oauth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },

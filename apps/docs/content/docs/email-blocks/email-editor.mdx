@@ -24,15 +24,15 @@ This is the exact code behind the demo above.
 ```tsx
 import { useState } from "react";
 import {
-  EmailEditor,
-  defaultTemplateEmail,
-  type Email,
+    EmailEditor,
+    defaultTemplateEmail,
+    type Email,
 } from "@sendlit/email-blocks";
 
 function Example() {
-  const [email, setEmail] = useState<Email>(defaultTemplateEmail);
+    const [email, setEmail] = useState<Email>(defaultTemplateEmail);
 
-  return <EmailEditor email={email} onChange={setEmail} />;
+    return <EmailEditor email={email} onChange={setEmail} />;
 }
 ```
 

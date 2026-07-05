@@ -18,7 +18,12 @@ export function signAccessToken(
     scope: string[] = [],
 ): string {
     return jwt.sign(
-        { sub: accountId, cid: clientId, typ: "access", scope: scope.join(" ") },
+        {
+            sub: accountId,
+            cid: clientId,
+            typ: "access",
+            scope: scope.join(" "),
+        },
         SIGNING_KEY,
         { algorithm: "HS256", expiresIn: ACCESS_TOKEN_TTL, noTimestamp: false },
     );

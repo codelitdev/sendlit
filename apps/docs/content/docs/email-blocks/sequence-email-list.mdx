@@ -30,112 +30,114 @@ This is the exact code behind the demo above (with the emails' shared `content` 
 ```tsx
 import { useState } from "react";
 import {
-  SequenceEmailList,
-  defaultTemplateEmail,
-  type EmailTemplate,
-  type SequenceEmail,
-  type SystemTemplateSummary,
+    SequenceEmailList,
+    defaultTemplateEmail,
+    type EmailTemplate,
+    type SequenceEmail,
+    type SystemTemplateSummary,
 } from "@sendlit/email-blocks";
 
 const day = 86_400_000;
 const now = new Date().toISOString();
 
 const initialEmails: SequenceEmail[] = [
-  {
-    id: "1",
-    sequenceId: "seq_1",
-    emailId: "email_1",
-    subject: "Welcome to SendLit",
-    content: defaultTemplateEmail,
-    delayInMillis: 0,
-    published: true,
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: "2",
-    sequenceId: "seq_1",
-    emailId: "email_2",
-    subject: "Your first campaign checklist",
-    content: defaultTemplateEmail,
-    delayInMillis: 2 * day,
-    published: false,
-    actionType: "tag:add",
-    actionData: { tag: "activated" },
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: "3",
-    sequenceId: "seq_1",
-    emailId: "email_3",
-    subject: "How to improve deliverability",
-    content: defaultTemplateEmail,
-    delayInMillis: 5 * day,
-    published: true,
-    createdAt: now,
-    updatedAt: now,
-  },
+    {
+        id: "1",
+        sequenceId: "seq_1",
+        emailId: "email_1",
+        subject: "Welcome to SendLit",
+        content: defaultTemplateEmail,
+        delayInMillis: 0,
+        published: true,
+        createdAt: now,
+        updatedAt: now,
+    },
+    {
+        id: "2",
+        sequenceId: "seq_1",
+        emailId: "email_2",
+        subject: "Your first campaign checklist",
+        content: defaultTemplateEmail,
+        delayInMillis: 2 * day,
+        published: false,
+        actionType: "tag:add",
+        actionData: { tag: "activated" },
+        createdAt: now,
+        updatedAt: now,
+    },
+    {
+        id: "3",
+        sequenceId: "seq_1",
+        emailId: "email_3",
+        subject: "How to improve deliverability",
+        content: defaultTemplateEmail,
+        delayInMillis: 5 * day,
+        published: true,
+        createdAt: now,
+        updatedAt: now,
+    },
 ];
 
 const systemTemplates: SystemTemplateSummary[] = [
-  {
-    templateId: "blank",
-    title: "Blank",
-    description: "Start from the required unsubscribe and address footer.",
-    content: defaultTemplateEmail,
-  },
+    {
+        templateId: "blank",
+        title: "Blank",
+        description: "Start from the required unsubscribe and address footer.",
+        content: defaultTemplateEmail,
+    },
 ];
 
 const savedTemplates: EmailTemplate[] = [];
 
 function Example() {
-  const [emails, setEmails] = useState<SequenceEmail[]>(initialEmails);
-  const [selectedEmailId, setSelectedEmailId] = useState("email_1");
-  const [emailsOrder, setEmailsOrder] = useState([
-    "email_1",
-    "email_2",
-    "email_3",
-  ]);
+    const [emails, setEmails] = useState<SequenceEmail[]>(initialEmails);
+    const [selectedEmailId, setSelectedEmailId] = useState("email_1");
+    const [emailsOrder, setEmailsOrder] = useState([
+        "email_1",
+        "email_2",
+        "email_3",
+    ]);
 
-  return (
-    <SequenceEmailList
-      emails={emails}
-      emailsOrder={emailsOrder}
-      selectedEmailId={selectedEmailId}
-      onSelect={setSelectedEmailId}
-      onAdd={(templateId) => {
-        const template = [...systemTemplates, ...savedTemplates].find(
-          (item) => item.templateId === templateId,
-        );
-        if (!template) return;
-        const emailId = `email_${Date.now()}`;
-        const newEmail: SequenceEmail = {
-          id: emailId,
-          sequenceId: "seq_1",
-          emailId,
-          subject: `New email from "${template.title}"`,
-          content: template.content,
-          delayInMillis: 0,
-          published: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        setEmails((current) => [...current, newEmail]);
-        setEmailsOrder((current) => [...current, emailId]);
-        setSelectedEmailId(emailId);
-      }}
-      onDelete={(emailId) => {
-        setEmails((current) =>
-          current.filter((email) => email.emailId !== emailId),
-        );
-        setEmailsOrder((current) => current.filter((id) => id !== emailId));
-      }}
-      onReorder={setEmailsOrder}
-      systemTemplates={systemTemplates}
-      templates={savedTemplates}
-    />
-  );
+    return (
+        <SequenceEmailList
+            emails={emails}
+            emailsOrder={emailsOrder}
+            selectedEmailId={selectedEmailId}
+            onSelect={setSelectedEmailId}
+            onAdd={(templateId) => {
+                const template = [...systemTemplates, ...savedTemplates].find(
+                    (item) => item.templateId === templateId,
+                );
+                if (!template) return;
+                const emailId = `email_${Date.now()}`;
+                const newEmail: SequenceEmail = {
+                    id: emailId,
+                    sequenceId: "seq_1",
+                    emailId,
+                    subject: `New email from "${template.title}"`,
+                    content: template.content,
+                    delayInMillis: 0,
+                    published: false,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                };
+                setEmails((current) => [...current, newEmail]);
+                setEmailsOrder((current) => [...current, emailId]);
+                setSelectedEmailId(emailId);
+            }}
+            onDelete={(emailId) => {
+                setEmails((current) =>
+                    current.filter((email) => email.emailId !== emailId),
+                );
+                setEmailsOrder((current) =>
+                    current.filter((id) => id !== emailId),
+                );
+            }}
+            onReorder={setEmailsOrder}
+            systemTemplates={systemTemplates}
+            templates={savedTemplates}
+        />
+    );
 }
 ```
 
@@ -149,9 +151,11 @@ on a plain click, so in-app state (like `selectedEmailId`) stays in sync.
 
 ```tsx
 <SequenceEmailList
-  // ...other props
-  getEmailHref={(email) => `/dashboard/mails/sequence/${sequenceId}/${email.emailId}`}
-  onSelect={(emailId) => setSelectedEmailId(emailId)}
+    // ...other props
+    getEmailHref={(email) =>
+        `/dashboard/mails/sequence/${sequenceId}/${email.emailId}`
+    }
+    onSelect={(emailId) => setSelectedEmailId(emailId)}
 />
 ```
 

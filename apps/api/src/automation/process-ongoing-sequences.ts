@@ -34,7 +34,9 @@ export async function enqueueDueOngoingSequences(): Promise<void> {
  */
 export async function processOngoingSequences(): Promise<void> {
     if (!process.env.PIXEL_SIGNING_SECRET) {
-        throw new Error("PIXEL_SIGNING_SECRET environment variable is not defined");
+        throw new Error(
+            "PIXEL_SIGNING_SECRET environment variable is not defined",
+        );
     }
 
     // eslint-disable-next-line no-constant-condition
@@ -42,7 +44,10 @@ export async function processOngoingSequences(): Promise<void> {
         try {
             await enqueueDueOngoingSequences();
         } catch (err: any) {
-            logger.error({ error: err.message }, "processOngoingSequences loop failed");
+            logger.error(
+                { error: err.message },
+                "processOngoingSequences loop failed",
+            );
         }
 
         await new Promise((resolve) => setTimeout(resolve, 60 * 1000));

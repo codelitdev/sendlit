@@ -52,7 +52,10 @@ interface BroadcastEmailDraft {
     published: boolean;
 }
 
-const emptyFilter: ContactFilterWithAggregator = { aggregator: "or", filters: [] };
+const emptyFilter: ContactFilterWithAggregator = {
+    aggregator: "or",
+    filters: [],
+};
 
 /** Local-timezone value for a `datetime-local` input. */
 function toLocalInputValue(date: Date): string {
@@ -102,7 +105,11 @@ export default function BroadcastEditorPage({
                 setStats(await getSequenceStats(sequenceId));
             }
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to load broadcast");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to load broadcast",
+            );
         }
     }
 
@@ -204,243 +211,298 @@ export default function BroadcastEditorPage({
     const status = presentBroadcastStatus(sequence);
     const scheduledFor = broadcastScheduledFor(sequence);
     const scheduledForLabel = scheduledFor?.toLocaleString();
-    const editable = sequence.status === "draft" || sequence.status === "paused";
+    const editable =
+        sequence.status === "draft" || sequence.status === "paused";
 
     return (
         <ScrollablePage>
-        <div className="max-w-3xl">
-            <Link
-                href="/dashboard/broadcasts"
-                className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-            >
-                <ArrowLeft className="size-3.5" />
-                Back to broadcasts
-            </Link>
+            <div className="max-w-3xl">
+                <Link
+                    href="/dashboard/broadcasts"
+                    className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                >
+                    <ArrowLeft className="size-3.5" />
+                    Back to broadcasts
+                </Link>
 
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-center gap-3">
-                    <h1 className="text-2xl font-semibold tracking-tight">
-                        {sequence.title || "Untitled broadcast"}
-                    </h1>
-                    <Badge variant={status.variant}>{status.label}</Badge>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    {editable && (
-                        <>
-                            <Button variant="outline" onClick={() => save()} disabled={saving}>
-                                {saved ? <Check className="size-4" /> : null}
-                                {saved ? "Saved" : saving ? "Saving…" : "Save"}
-                            </Button>
-                            <Button variant="outline" onClick={openSchedule} disabled={working}>
-                                <CalendarClock className="size-4" />
-                                Schedule
-                            </Button>
-                            <Button onClick={() => setConfirmSendOpen(true)} disabled={working}>
-                                <Send className="size-4" />
-                                Send now
-                            </Button>
-                        </>
-                    )}
-                </div>
-            </div>
-
-            {error && <Banner className="mb-4">{error}</Banner>}
-
-            {scheduledForLabel && (
-                <Banner variant="success" className="mb-4 flex items-center justify-between gap-3">
-                    <span className="inline-flex items-center gap-1.5">
-                        <CalendarClock className="size-4" />
-                        Scheduled for {scheduledForLabel}
-                    </span>
-                    <Button variant="outline" size="sm" onClick={cancelSchedule} disabled={working}>
-                        <X className="size-4" />
-                        Cancel
-                    </Button>
-                </Banner>
-            )}
-
-            {stats && (
-                <div className="mb-6 grid grid-cols-4 gap-4">
-                    <StatCard label="Sent" value={stats.sent} />
-                    <StatCard label="Recipients" value={stats.subscribersCount} />
-                    <StatCard
-                        label="Open rate"
-                        value={`${Math.round(stats.openRate * 100)}%`}
-                    />
-                    <StatCard
-                        label="Click rate"
-                        value={`${Math.round(stats.clickThroughRate * 100)}%`}
-                    />
-                </div>
-            )}
-
-            <div className="space-y-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Sender &amp; audience</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="broadcast-title">Title</Label>
-                            <Input
-                                id="broadcast-title"
-                                value={meta.title}
-                                onChange={(e) =>
-                                    setMeta({ ...meta, title: e.target.value })
-                                }
-                                placeholder="e.g. October newsletter"
-                            />
-                        </div>
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="broadcast-from-name">
-                                    From name
-                                </Label>
-                                <Input
-                                    id="broadcast-from-name"
-                                    value={meta.fromName ?? ""}
-                                    onChange={(e) =>
-                                        setMeta({
-                                            ...meta,
-                                            fromName: e.target.value,
-                                        })
-                                    }
-                                    placeholder="Your name or company"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="broadcast-from-email">
-                                    From email
-                                </Label>
-                                <Input
-                                    id="broadcast-from-email"
-                                    type="email"
-                                    value={meta.fromEmail ?? ""}
-                                    onChange={(e) =>
-                                        setMeta({
-                                            ...meta,
-                                            fromEmail: e.target.value,
-                                        })
-                                    }
-                                    placeholder="you@yourdomain.com"
-                                />
-                            </div>
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>Audience</Label>
-                            <ContactFilterBuilder
-                                value={meta.filter ?? emptyFilter}
-                                onChange={(filter) => setMeta({ ...meta, filter })}
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Content</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-4">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="broadcast-subject">Subject</Label>
-                                <Input
-                                    id="broadcast-subject"
-                                    value={email.subject}
-                                    onChange={(e) =>
-                                        setEmail({ ...email, subject: e.target.value })
-                                    }
-                                    placeholder="Your subject line"
-                                />
-                            </div>
-                            <div className="flex items-center justify-between gap-4 sm:justify-start">
-                                <Label
-                                    htmlFor="broadcast-published"
-                                    className="flex-1 sm:flex-none"
+                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <h1 className="text-2xl font-semibold tracking-tight">
+                            {sequence.title || "Untitled broadcast"}
+                        </h1>
+                        <Badge variant={status.variant}>{status.label}</Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {editable && (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => save()}
+                                    disabled={saving}
                                 >
-                                    Published
-                                </Label>
-                                <Switch
-                                    id="broadcast-published"
-                                    checked={email.published}
-                                    onCheckedChange={(published) =>
-                                        setEmail({ ...email, published })
-                                    }
-                                />
-                            </div>
-                        </div>
-                        <div className="min-h-0 flex-1 rounded-lg border">
-                            <EmailEditor
-                                email={email.content}
-                                onChange={(content) => setEmail({ ...email, content })}
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+                                    {saved ? (
+                                        <Check className="size-4" />
+                                    ) : null}
+                                    {saved
+                                        ? "Saved"
+                                        : saving
+                                          ? "Saving…"
+                                          : "Save"}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={openSchedule}
+                                    disabled={working}
+                                >
+                                    <CalendarClock className="size-4" />
+                                    Schedule
+                                </Button>
+                                <Button
+                                    onClick={() => setConfirmSendOpen(true)}
+                                    disabled={working}
+                                >
+                                    <Send className="size-4" />
+                                    Send now
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                </div>
 
-            <Dialog open={confirmSendOpen} onOpenChange={setConfirmSendOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Send broadcast</DialogTitle>
-                        <DialogDescription>
-                            Your changes will be saved and the email will go out to
-                            every contact matching the audience filter. This can&apos;t
-                            be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
+                {error && <Banner className="mb-4">{error}</Banner>}
+
+                {scheduledForLabel && (
+                    <Banner
+                        variant="success"
+                        className="mb-4 flex items-center justify-between gap-3"
+                    >
+                        <span className="inline-flex items-center gap-1.5">
+                            <CalendarClock className="size-4" />
+                            Scheduled for {scheduledForLabel}
+                        </span>
                         <Button
                             variant="outline"
-                            onClick={() => setConfirmSendOpen(false)}
+                            size="sm"
+                            onClick={cancelSchedule}
                             disabled={working}
                         >
+                            <X className="size-4" />
                             Cancel
                         </Button>
-                        <Button onClick={() => startAt(Date.now())} disabled={working}>
-                            <Send className="size-4" />
-                            {working ? "Sending…" : "Send now"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    </Banner>
+                )}
 
-            <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Schedule broadcast</DialogTitle>
-                        <DialogDescription>
-                            Your changes will be saved and the email will go out to
-                            every contact matching the audience filter at the chosen
-                            time. You can cancel any time before it sends.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-2">
-                        <Label htmlFor="broadcast-schedule-at">Send at</Label>
-                        <Input
-                            id="broadcast-schedule-at"
-                            type="datetime-local"
-                            value={scheduleAt}
-                            min={toLocalInputValue(new Date())}
-                            onChange={(e) => setScheduleAt(e.target.value)}
+                {stats && (
+                    <div className="mb-6 grid grid-cols-4 gap-4">
+                        <StatCard label="Sent" value={stats.sent} />
+                        <StatCard
+                            label="Recipients"
+                            value={stats.subscribersCount}
+                        />
+                        <StatCard
+                            label="Open rate"
+                            value={`${Math.round(stats.openRate * 100)}%`}
+                        />
+                        <StatCard
+                            label="Click rate"
+                            value={`${Math.round(stats.clickThroughRate * 100)}%`}
                         />
                     </div>
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => setScheduleOpen(false)}
-                            disabled={working}
-                        >
-                            Cancel
-                        </Button>
-                        <Button onClick={confirmSchedule} disabled={working}>
-                            <CalendarClock className="size-4" />
-                            {working ? "Scheduling…" : "Schedule"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </div>
+                )}
+
+                <div className="space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">
+                                Sender &amp; audience
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="broadcast-title">Title</Label>
+                                <Input
+                                    id="broadcast-title"
+                                    value={meta.title}
+                                    onChange={(e) =>
+                                        setMeta({
+                                            ...meta,
+                                            title: e.target.value,
+                                        })
+                                    }
+                                    placeholder="e.g. October newsletter"
+                                />
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="broadcast-from-name">
+                                        From name
+                                    </Label>
+                                    <Input
+                                        id="broadcast-from-name"
+                                        value={meta.fromName ?? ""}
+                                        onChange={(e) =>
+                                            setMeta({
+                                                ...meta,
+                                                fromName: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Your name or company"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="broadcast-from-email">
+                                        From email
+                                    </Label>
+                                    <Input
+                                        id="broadcast-from-email"
+                                        type="email"
+                                        value={meta.fromEmail ?? ""}
+                                        onChange={(e) =>
+                                            setMeta({
+                                                ...meta,
+                                                fromEmail: e.target.value,
+                                            })
+                                        }
+                                        placeholder="you@yourdomain.com"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Audience</Label>
+                                <ContactFilterBuilder
+                                    value={meta.filter ?? emptyFilter}
+                                    onChange={(filter) =>
+                                        setMeta({ ...meta, filter })
+                                    }
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">Content</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-4">
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="broadcast-subject">
+                                        Subject
+                                    </Label>
+                                    <Input
+                                        id="broadcast-subject"
+                                        value={email.subject}
+                                        onChange={(e) =>
+                                            setEmail({
+                                                ...email,
+                                                subject: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Your subject line"
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between gap-4 sm:justify-start">
+                                    <Label
+                                        htmlFor="broadcast-published"
+                                        className="flex-1 sm:flex-none"
+                                    >
+                                        Published
+                                    </Label>
+                                    <Switch
+                                        id="broadcast-published"
+                                        checked={email.published}
+                                        onCheckedChange={(published) =>
+                                            setEmail({ ...email, published })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            <div className="min-h-0 flex-1 rounded-lg border">
+                                <EmailEditor
+                                    email={email.content}
+                                    onChange={(content) =>
+                                        setEmail({ ...email, content })
+                                    }
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                <Dialog
+                    open={confirmSendOpen}
+                    onOpenChange={setConfirmSendOpen}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Send broadcast</DialogTitle>
+                            <DialogDescription>
+                                Your changes will be saved and the email will go
+                                out to every contact matching the audience
+                                filter. This can&apos;t be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => setConfirmSendOpen(false)}
+                                disabled={working}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={() => startAt(Date.now())}
+                                disabled={working}
+                            >
+                                <Send className="size-4" />
+                                {working ? "Sending…" : "Send now"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Schedule broadcast</DialogTitle>
+                            <DialogDescription>
+                                Your changes will be saved and the email will go
+                                out to every contact matching the audience
+                                filter at the chosen time. You can cancel any
+                                time before it sends.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-2">
+                            <Label htmlFor="broadcast-schedule-at">
+                                Send at
+                            </Label>
+                            <Input
+                                id="broadcast-schedule-at"
+                                type="datetime-local"
+                                value={scheduleAt}
+                                min={toLocalInputValue(new Date())}
+                                onChange={(e) => setScheduleAt(e.target.value)}
+                            />
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => setScheduleOpen(false)}
+                                disabled={working}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={confirmSchedule}
+                                disabled={working}
+                            >
+                                <CalendarClock className="size-4" />
+                                {working ? "Scheduling…" : "Schedule"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </div>
         </ScrollablePage>
     );
 }

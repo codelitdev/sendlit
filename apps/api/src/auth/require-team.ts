@@ -37,7 +37,10 @@ export async function requireTeam(
     if (headerTeamId) {
         let membership;
         try {
-            membership = await getTeamMembership(headerTeamId, anyReq.accountId);
+            membership = await getTeamMembership(
+                headerTeamId,
+                anyReq.accountId,
+            );
         } catch {
             res.status(400).json({
                 error: "invalid_team_id",

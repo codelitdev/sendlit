@@ -81,7 +81,9 @@ function toFormState(config: EspConfig): FormState {
 }
 
 export default function EspSettingsPage() {
-    const [config, setConfig] = useState<EspConfig | null | undefined>(undefined);
+    const [config, setConfig] = useState<EspConfig | null | undefined>(
+        undefined,
+    );
     const [form, setForm] = useState<FormState>(emptyForm);
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -98,7 +100,11 @@ export default function EspSettingsPage() {
             setConfig(existing);
             setForm(existing ? toFormState(existing) : emptyForm);
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to load ESP settings");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to load ESP settings",
+            );
         }
     }
 
@@ -126,7 +132,11 @@ export default function EspSettingsPage() {
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to save ESP settings");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to save ESP settings",
+            );
         } finally {
             setSaving(false);
         }
@@ -140,7 +150,11 @@ export default function EspSettingsPage() {
             setForm(emptyForm);
             setTestResult(null);
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to remove ESP settings");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to remove ESP settings",
+            );
         }
     }
 
@@ -156,7 +170,8 @@ export default function EspSettingsPage() {
         } catch (err) {
             setTestResult({
                 success: false,
-                error: err instanceof ApiError ? err.message : "Test send failed",
+                error:
+                    err instanceof ApiError ? err.message : "Test send failed",
             });
         } finally {
             setTesting(false);
@@ -169,173 +184,239 @@ export default function EspSettingsPage() {
 
     return (
         <ScrollablePage>
-        <div className="max-w-2xl">
-            <PageHeader
-                title="Email sending (ESP)"
-                description="Connect your own SMTP provider so broadcasts and sequences send from your own domain/reputation. Any provider that exposes an SMTP relay works — SendGrid, Mailgun, Postmark, Amazon SES, Resend, or a custom server."
-            />
+            <div className="max-w-2xl">
+                <PageHeader
+                    title="Email sending (ESP)"
+                    description="Connect your own SMTP provider so broadcasts and sequences send from your own domain/reputation. Any provider that exposes an SMTP relay works — SendGrid, Mailgun, Postmark, Amazon SES, Resend, or a custom server."
+                />
 
-            {error && <Banner className="mb-4">{error}</Banner>}
+                {error && <Banner className="mb-4">{error}</Banner>}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Provider</CardTitle>
-                    {config && (
-                        <CardDescription>
-                            Configured{" "}
-                            {config.lastTestedAt && (
-                                <>
-                                    · last tested{" "}
-                                    {new Date(config.lastTestedAt).toLocaleString()}{" "}
-                                    {config.lastTestStatus === "success" ? (
-                                        <Badge variant="success">success</Badge>
-                                    ) : (
-                                        <Badge variant="destructive">failed</Badge>
-                                    )}
-                                </>
-                            )}
-                        </CardDescription>
-                    )}
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label>Provider</Label>
-                            <Select
-                                value={form.provider}
-                                onValueChange={(provider) =>
-                                    setForm({ ...form, provider: provider as EspProvider })
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base">Provider</CardTitle>
+                        {config && (
+                            <CardDescription>
+                                Configured{" "}
+                                {config.lastTestedAt && (
+                                    <>
+                                        · last tested{" "}
+                                        {new Date(
+                                            config.lastTestedAt,
+                                        ).toLocaleString()}{" "}
+                                        {config.lastTestStatus === "success" ? (
+                                            <Badge variant="success">
+                                                success
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="destructive">
+                                                failed
+                                            </Badge>
+                                        )}
+                                    </>
+                                )}
+                            </CardDescription>
+                        )}
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label>Provider</Label>
+                                <Select
+                                    value={form.provider}
+                                    onValueChange={(provider) =>
+                                        setForm({
+                                            ...form,
+                                            provider: provider as EspProvider,
+                                        })
+                                    }
+                                >
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {PROVIDERS.map((p) => (
+                                            <SelectItem
+                                                key={p.value}
+                                                value={p.value}
+                                            >
+                                                {p.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex items-end justify-between gap-3 pb-1.5 sm:justify-start">
+                                <Label htmlFor="esp-secure">
+                                    Use TLS (port 465)
+                                </Label>
+                                <Switch
+                                    id="esp-secure"
+                                    checked={form.secure}
+                                    onCheckedChange={(secure) =>
+                                        setForm({ ...form, secure })
+                                    }
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="esp-host">SMTP host</Label>
+                                <Input
+                                    id="esp-host"
+                                    value={form.host}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            host: e.target.value,
+                                        })
+                                    }
+                                    placeholder="smtp.sendgrid.net"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="esp-port">Port</Label>
+                                <Input
+                                    id="esp-port"
+                                    type="number"
+                                    value={form.port}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            port: e.target.value,
+                                        })
+                                    }
+                                    placeholder="587"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="esp-username">Username</Label>
+                                <Input
+                                    id="esp-username"
+                                    value={form.username}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            username: e.target.value,
+                                        })
+                                    }
+                                    autoComplete="off"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="esp-password">
+                                    Password / API key
+                                </Label>
+                                <Input
+                                    id="esp-password"
+                                    type="password"
+                                    value={form.password}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            password: e.target.value,
+                                        })
+                                    }
+                                    placeholder={
+                                        config?.hasPassword
+                                            ? "•••••••• (saved — leave blank to keep)"
+                                            : ""
+                                    }
+                                    autoComplete="new-password"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="esp-from-name">From name</Label>
+                                <Input
+                                    id="esp-from-name"
+                                    value={form.fromName}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            fromName: e.target.value,
+                                        })
+                                    }
+                                    placeholder="Your name or company"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="esp-from-email">
+                                    From email
+                                </Label>
+                                <Input
+                                    id="esp-from-email"
+                                    type="email"
+                                    value={form.fromEmail}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            fromEmail: e.target.value,
+                                        })
+                                    }
+                                    placeholder="you@yourdomain.com"
+                                />
+                            </div>
+                        </div>
+
+                        {testResult && (
+                            <Banner
+                                variant={
+                                    testResult.success ? "success" : "error"
                                 }
                             >
-                                <SelectTrigger className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {PROVIDERS.map((p) => (
-                                        <SelectItem key={p.value} value={p.value}>
-                                            {p.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                <span className="inline-flex items-center gap-1.5">
+                                    {testResult.success ? (
+                                        <CheckCircle2 className="size-4" />
+                                    ) : (
+                                        <XCircle className="size-4" />
+                                    )}
+                                    {testResult.success
+                                        ? "Test email sent successfully."
+                                        : testResult.error ||
+                                          "Test send failed."}
+                                </span>
+                            </Banner>
+                        )}
+                    </CardContent>
+                    <CardFooter className="flex-wrap justify-between gap-2">
+                        <div className="flex gap-2">
+                            <Button
+                                onClick={save}
+                                disabled={saving || !form.host}
+                            >
+                                {saved ? "Saved" : saving ? "Saving…" : "Save"}
+                            </Button>
+                            {config && (
+                                <Button
+                                    variant="outline"
+                                    onClick={runTest}
+                                    disabled={testing}
+                                >
+                                    <Send className="size-4" />
+                                    {testing ? "Sending…" : "Send test email"}
+                                </Button>
+                            )}
                         </div>
-                        <div className="flex items-end justify-between gap-3 pb-1.5 sm:justify-start">
-                            <Label htmlFor="esp-secure">Use TLS (port 465)</Label>
-                            <Switch
-                                id="esp-secure"
-                                checked={form.secure}
-                                onCheckedChange={(secure) => setForm({ ...form, secure })}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-host">SMTP host</Label>
-                            <Input
-                                id="esp-host"
-                                value={form.host}
-                                onChange={(e) => setForm({ ...form, host: e.target.value })}
-                                placeholder="smtp.sendgrid.net"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-port">Port</Label>
-                            <Input
-                                id="esp-port"
-                                type="number"
-                                value={form.port}
-                                onChange={(e) => setForm({ ...form, port: e.target.value })}
-                                placeholder="587"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-username">Username</Label>
-                            <Input
-                                id="esp-username"
-                                value={form.username}
-                                onChange={(e) => setForm({ ...form, username: e.target.value })}
-                                autoComplete="off"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-password">Password / API key</Label>
-                            <Input
-                                id="esp-password"
-                                type="password"
-                                value={form.password}
-                                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                                placeholder={config?.hasPassword ? "•••••••• (saved — leave blank to keep)" : ""}
-                                autoComplete="new-password"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-from-name">From name</Label>
-                            <Input
-                                id="esp-from-name"
-                                value={form.fromName}
-                                onChange={(e) => setForm({ ...form, fromName: e.target.value })}
-                                placeholder="Your name or company"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-from-email">From email</Label>
-                            <Input
-                                id="esp-from-email"
-                                type="email"
-                                value={form.fromEmail}
-                                onChange={(e) => setForm({ ...form, fromEmail: e.target.value })}
-                                placeholder="you@yourdomain.com"
-                            />
-                        </div>
-                    </div>
-
-                    {testResult && (
-                        <Banner variant={testResult.success ? "success" : "error"}>
-                            <span className="inline-flex items-center gap-1.5">
-                                {testResult.success ? (
-                                    <CheckCircle2 className="size-4" />
-                                ) : (
-                                    <XCircle className="size-4" />
-                                )}
-                                {testResult.success
-                                    ? "Test email sent successfully."
-                                    : testResult.error || "Test send failed."}
-                            </span>
-                        </Banner>
-                    )}
-                </CardContent>
-                <CardFooter className="flex-wrap justify-between gap-2">
-                    <div className="flex gap-2">
-                        <Button onClick={save} disabled={saving || !form.host}>
-                            {saved ? "Saved" : saving ? "Saving…" : "Save"}
-                        </Button>
                         {config && (
                             <Button
-                                variant="outline"
-                                onClick={runTest}
-                                disabled={testing}
+                                variant="ghost"
+                                className="text-destructive"
+                                onClick={remove}
                             >
-                                <Send className="size-4" />
-                                {testing ? "Sending…" : "Send test email"}
+                                <Trash2 className="size-4" />
+                                Remove configuration
                             </Button>
                         )}
-                    </div>
-                    {config && (
-                        <Button variant="ghost" className="text-destructive" onClick={remove}>
-                            <Trash2 className="size-4" />
-                            Remove configuration
-                        </Button>
-                    )}
-                </CardFooter>
-            </Card>
-        </div>
+                    </CardFooter>
+                </Card>
+            </div>
         </ScrollablePage>
     );
 }

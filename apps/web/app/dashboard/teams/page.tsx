@@ -56,7 +56,9 @@ export default function TeamsPage() {
                 cookieTeamId || (items.length === 1 ? items[0].id : null),
             );
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to load teams");
+            setError(
+                err instanceof ApiError ? err.message : "Failed to load teams",
+            );
         }
     }
 
@@ -70,26 +72,26 @@ export default function TeamsPage() {
 
     return (
         <ScrollablePage>
-        <div className="max-w-3xl">
-            <PageHeader
-                title="Teams"
-                description="Everything — contacts, templates, broadcasts, sequences, ESP config, API keys — is scoped to a team. Create as many as you need; switch between them any time."
-                action={<CreateTeamDialog onCreated={load} />}
-            />
+            <div className="max-w-3xl">
+                <PageHeader
+                    title="Teams"
+                    description="Everything — contacts, templates, broadcasts, sequences, ESP config, API keys — is scoped to a team. Create as many as you need; switch between them any time."
+                    action={<CreateTeamDialog onCreated={load} />}
+                />
 
-            {error && <Banner className="mb-4">{error}</Banner>}
+                {error && <Banner className="mb-4">{error}</Banner>}
 
-            <div className="space-y-4">
-                {teams.map((team) => (
-                    <TeamCard
-                        key={team.id}
-                        team={team}
-                        isCurrent={team.id === currentTeamId}
-                        onChanged={load}
-                    />
-                ))}
+                <div className="space-y-4">
+                    {teams.map((team) => (
+                        <TeamCard
+                            key={team.id}
+                            team={team}
+                            isCurrent={team.id === currentTeamId}
+                            onChanged={load}
+                        />
+                    ))}
+                </div>
             </div>
-        </div>
         </ScrollablePage>
     );
 }
@@ -117,7 +119,9 @@ function CreateTeamDialog({ onCreated }: { onCreated: () => void }) {
             document.body.appendChild(form);
             form.submit();
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to create team");
+            setError(
+                err instanceof ApiError ? err.message : "Failed to create team",
+            );
             setSubmitting(false);
         }
     }
@@ -147,7 +151,10 @@ function CreateTeamDialog({ onCreated }: { onCreated: () => void }) {
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button onClick={submit} disabled={!name.trim() || submitting}>
+                    <Button
+                        onClick={submit}
+                        disabled={!name.trim() || submitting}
+                    >
                         Create
                     </Button>
                 </DialogFooter>
@@ -177,7 +184,11 @@ function TeamCard({
             setKeys(items);
             setKeysLoaded(true);
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to load API keys");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to load API keys",
+            );
         }
     }
 
@@ -194,7 +205,11 @@ function TeamCard({
             setNewKeyName("");
             await loadKeys();
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to create API key");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to create API key",
+            );
         }
     }
 
@@ -203,19 +218,29 @@ function TeamCard({
             await deleteTeamKey(team.id, key);
             await loadKeys();
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to delete API key");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to delete API key",
+            );
         }
     }
 
     async function removeTeam() {
-        if (!confirm(`Delete "${team.name}"? This deletes everything scoped to it — contacts, templates, broadcasts, sequences.`)) {
+        if (
+            !confirm(
+                `Delete "${team.name}"? This deletes everything scoped to it — contacts, templates, broadcasts, sequences.`,
+            )
+        ) {
             return;
         }
         try {
             await deleteTeam(team.id);
             onChanged();
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to delete team");
+            setError(
+                err instanceof ApiError ? err.message : "Failed to delete team",
+            );
         }
     }
 
@@ -229,7 +254,11 @@ function TeamCard({
                 {!isCurrent && (
                     <form action="/api/team/switch" method="POST">
                         <input type="hidden" name="teamId" value={team.id} />
-                        <input type="hidden" name="redirectTo" value="/dashboard/teams" />
+                        <input
+                            type="hidden"
+                            name="redirectTo"
+                            value="/dashboard/teams"
+                        />
                         <Button type="submit" variant="outline" size="sm">
                             Switch to this team
                         </Button>
@@ -238,7 +267,12 @@ function TeamCard({
             </CardHeader>
             <CardContent className="space-y-3">
                 {error && <Banner>{error}</Banner>}
-                <Button variant="ghost" size="sm" onClick={toggleKeys} className="gap-1.5 px-0">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleKeys}
+                    className="gap-1.5 px-0"
+                >
                     <KeyRound className="size-4" />
                     {showKeys ? "Hide API keys" : "Manage API keys"}
                 </Button>
@@ -246,7 +280,9 @@ function TeamCard({
                 {showKeys && (
                     <div className="space-y-3 rounded-md border p-3">
                         {keys.length === 0 && keysLoaded && (
-                            <p className="text-sm text-muted-foreground">No API keys yet.</p>
+                            <p className="text-sm text-muted-foreground">
+                                No API keys yet.
+                            </p>
                         )}
                         {keys.map((k) => (
                             <div
@@ -254,12 +290,18 @@ function TeamCard({
                                 className="flex items-center justify-between gap-2 text-sm"
                             >
                                 <div className="min-w-0">
-                                    <div className="font-medium">{k.name || "Untitled"}</div>
+                                    <div className="font-medium">
+                                        {k.name || "Untitled"}
+                                    </div>
                                     <div className="flex items-center gap-1.5 truncate font-mono text-xs text-muted-foreground">
                                         {k.key}
                                         <button
                                             type="button"
-                                            onClick={() => navigator.clipboard.writeText(k.key)}
+                                            onClick={() =>
+                                                navigator.clipboard.writeText(
+                                                    k.key,
+                                                )
+                                            }
                                             className="shrink-0"
                                             title="Copy"
                                         >
@@ -284,7 +326,11 @@ function TeamCard({
                                 placeholder="e.g. CourseLit integration"
                                 className="h-8"
                             />
-                            <Button size="sm" onClick={addKey} disabled={!newKeyName.trim()}>
+                            <Button
+                                size="sm"
+                                onClick={addKey}
+                                disabled={!newKeyName.trim()}
+                            >
                                 <Plus className="size-4" />
                                 Create key
                             </Button>
@@ -293,7 +339,12 @@ function TeamCard({
                 )}
             </CardContent>
             <CardFooter>
-                <Button variant="ghost" size="sm" className="text-destructive" onClick={removeTeam}>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                    onClick={removeTeam}
+                >
                     <Trash2 className="size-4" />
                     Delete team
                 </Button>

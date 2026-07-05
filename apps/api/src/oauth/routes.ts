@@ -4,7 +4,11 @@ import { DcrValidationError, oauthModel, registerClient } from "./model";
 import type { DcrRequest, DcrResponse } from "./model";
 import { OAuth2Server, oauth } from "./server";
 import { authorizePage, errorPage } from "./authorize-page";
-import { findAccountByEmail, createAccount, getAccount } from "../account/queries";
+import {
+    findAccountByEmail,
+    createAccount,
+    getAccount,
+} from "../account/queries";
 import { verifyAccessToken } from "./jwt";
 import logger from "../services/log";
 import {

@@ -11,7 +11,11 @@ const worker = new Worker(
             await processOngoingSequence(ongoingSequenceId);
         } catch (err: any) {
             logger.error(
-                { error: err.message, job_id: String(job.id), ongoingSequenceId },
+                {
+                    error: err.message,
+                    job_id: String(job.id),
+                    ongoingSequenceId,
+                },
                 "sequence worker failed",
             );
         }

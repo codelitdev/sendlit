@@ -20,47 +20,79 @@ import { useState } from "react";
 import { SubscriberList, type SubscriberListItem } from "@sendlit/email-blocks";
 
 const allSubscribers: SubscriberListItem[] = [
-  { id: "contact_1", name: "Ava Whitfield", email: "ava.whitfield@example.com" },
-  { id: "contact_2", email: "noah.carter@example.com" },
-  { id: "contact_3", email: "mia.johnson@example.com" },
-  { id: "contact_4", name: "Isabelle Moreau", email: "isabelle.moreau@example.com" },
-  { id: "contact_5", name: "Olivia Bennett", email: "olivia.bennett@example.com" },
-  { id: "contact_6", name: "Ethan Brooks", email: "ethan.brooks@example.com" },
-  { id: "contact_7", email: "sophia.reyes@example.com" },
-  { id: "contact_8", name: "Lucas Fischer", email: "lucas.fischer@example.com" },
-  { id: "contact_9", email: "amara.osei@example.com" },
-  { id: "contact_10", name: "Grace Kim", email: "grace.kim@example.com" },
-  { id: "contact_11", email: "daniel.novak@example.com" },
-  { id: "contact_12", name: "Priya Sharma", email: "priya.sharma@example.com" },
-  { id: "contact_13", email: "victor.alves@example.com" },
-  { id: "contact_14", name: "Marco Rossi", email: "marco.rossi@example.com" },
-  { id: "contact_15", email: "hannah.wells@example.com" },
-  { id: "contact_16", name: "Aiko Tanaka", email: "aiko.tanaka@example.com" },
-  { id: "contact_17", email: "ibrahim.khalil@example.com" },
-  { id: "contact_18", name: "Liam O'Brien", email: "liam.obrien@example.com" },
-  { id: "contact_19", email: "zoe.martin@example.com" },
-  { id: "contact_20", name: "Sofia Torres", email: "sofia.torres@example.com" },
+    {
+        id: "contact_1",
+        name: "Ava Whitfield",
+        email: "ava.whitfield@example.com",
+    },
+    { id: "contact_2", email: "noah.carter@example.com" },
+    { id: "contact_3", email: "mia.johnson@example.com" },
+    {
+        id: "contact_4",
+        name: "Isabelle Moreau",
+        email: "isabelle.moreau@example.com",
+    },
+    {
+        id: "contact_5",
+        name: "Olivia Bennett",
+        email: "olivia.bennett@example.com",
+    },
+    {
+        id: "contact_6",
+        name: "Ethan Brooks",
+        email: "ethan.brooks@example.com",
+    },
+    { id: "contact_7", email: "sophia.reyes@example.com" },
+    {
+        id: "contact_8",
+        name: "Lucas Fischer",
+        email: "lucas.fischer@example.com",
+    },
+    { id: "contact_9", email: "amara.osei@example.com" },
+    { id: "contact_10", name: "Grace Kim", email: "grace.kim@example.com" },
+    { id: "contact_11", email: "daniel.novak@example.com" },
+    {
+        id: "contact_12",
+        name: "Priya Sharma",
+        email: "priya.sharma@example.com",
+    },
+    { id: "contact_13", email: "victor.alves@example.com" },
+    { id: "contact_14", name: "Marco Rossi", email: "marco.rossi@example.com" },
+    { id: "contact_15", email: "hannah.wells@example.com" },
+    { id: "contact_16", name: "Aiko Tanaka", email: "aiko.tanaka@example.com" },
+    { id: "contact_17", email: "ibrahim.khalil@example.com" },
+    {
+        id: "contact_18",
+        name: "Liam O'Brien",
+        email: "liam.obrien@example.com",
+    },
+    { id: "contact_19", email: "zoe.martin@example.com" },
+    {
+        id: "contact_20",
+        name: "Sofia Torres",
+        email: "sofia.torres@example.com",
+    },
 ].map((subscriber) => ({ ...subscriber, href: `/contacts/${subscriber.id}` }));
 
 const SUBSCRIBERS_PER_PAGE = 10;
 
 function Example() {
-  const [page, setPage] = useState(1);
-  const totalPages = Math.ceil(allSubscribers.length / SUBSCRIBERS_PER_PAGE);
-  const pagedSubscribers = allSubscribers.slice(
-    (page - 1) * SUBSCRIBERS_PER_PAGE,
-    page * SUBSCRIBERS_PER_PAGE,
-  );
+    const [page, setPage] = useState(1);
+    const totalPages = Math.ceil(allSubscribers.length / SUBSCRIBERS_PER_PAGE);
+    const pagedSubscribers = allSubscribers.slice(
+        (page - 1) * SUBSCRIBERS_PER_PAGE,
+        page * SUBSCRIBERS_PER_PAGE,
+    );
 
-  return (
-    <SubscriberList
-      subscribers={pagedSubscribers}
-      totalCount={allSubscribers.length}
-      page={page}
-      totalPages={totalPages}
-      onPageChange={setPage}
-    />
-  );
+    return (
+        <SubscriberList
+            subscribers={pagedSubscribers}
+            totalCount={allSubscribers.length}
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+        />
+    );
 }
 ```
 

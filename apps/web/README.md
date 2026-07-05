@@ -1,7 +1,9 @@
 # Introduction
+
 This web application provides a user interface for managing email automation based on API and ready to use components from the `packages/` directory.
 
 ## Architecture
+
 - Uses `shadcn/ui`-style components (vendored in `components/ui`, same primitives as `packages/email-editor`/`packages/email-blocks`).
 - Authenticates against the API's OAuth2 (Authorization Code + PKCE) flow. A
   same-origin BFF (`app/api/auth/*`, `app/api/proxy/[...path]`) performs the

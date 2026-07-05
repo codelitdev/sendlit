@@ -27,17 +27,17 @@ This API provides email automation.
   OpenAPI document (`@ts-rest/open-api`, see `src/swagger-generator.ts`), and
   `apps/web`'s typed client (`@ts-rest/core`) — so the docs can't describe a
   shape the server doesn't actually accept/return. Every `routes.ts` in this
-  app is a *thin adapter*: it extracts `params`/`query`/`body` (already
+  app is a _thin adapter_: it extracts `params`/`query`/`body` (already
   validated) and delegates to the unchanged, framework-agnostic functions in
   that domain's `queries.ts`, which holds all the actual business logic. If
   Express is ever swapped for something else, only these adapter files
   should need to change.
 - Two always-running loops (`src/automation/start.ts`):
-  - `process-rules.ts` — fires date-scheduled broadcasts
-  - `process-ongoing-sequences.ts` — polls due sequence/broadcast deliveries and
-    hands them to a BullMQ queue, processed by `process-ongoing-sequence.ts`
-    (renders the email, adds an open-tracking pixel + click-tracked links,
-    sends it, and schedules the next email)
+    - `process-rules.ts` — fires date-scheduled broadcasts
+    - `process-ongoing-sequences.ts` — polls due sequence/broadcast deliveries and
+      hands them to a BullMQ queue, processed by `process-ongoing-sequence.ts`
+      (renders the email, adds an open-tracking pixel + click-tracked links,
+      sends it, and schedules the next email)
 - Tag/subscriber-added triggers are event-driven (`automation/fire-event.ts`),
   called directly from the contacts routes instead of being polled.
 - An OAuth/API-key-protected MCP server (`POST /mcp`), ported from
@@ -64,7 +64,7 @@ This API provides email automation.
   are a follow-up).
 - **API keys are team-scoped, not account-scoped** — a team can hold several,
   independently named/revocable keys (`src/apikey/*`, `POST/GET/DELETE
-  /teams/:teamId/keys`). A key always resolves to exactly one team; there's no
+/teams/:teamId/keys`). A key always resolves to exactly one team; there's no
   ambiguity for API/MCP clients authenticated this way.
 - **OAuth-authenticated (browser) requests** resolve their team from an
   explicit `X-Sendlit-Team-Id` header, validated against team membership on
@@ -78,7 +78,7 @@ This API provides email automation.
   both stacks have booted, keyed by a consumer-supplied `externalId` rather
   than email (a consumer's own tenants may share an owner email) — see
   `src/provisioning/routes.ts`.
-- `SUPER_ADMIN_EMAIL` is a *different*, boot-time-only convenience (mirrors
+- `SUPER_ADMIN_EMAIL` is a _different_, boot-time-only convenience (mirrors
   MediaLit's admin-bootstrap script): on startup, if set and no account exists
   for it yet, creates one (with its default team + key) and logs the key once
   — useful for local dev/self-hosting, not for provisioning a multi-tenant
@@ -116,4 +116,4 @@ The API listens on `PORT` (default `80`) and exposes:
   OAuth/API-key auth)
 - `POST /mcp` — MCP server (JSON-RPC over HTTP, `Mcp-Session-Id` header for
   session continuation); authenticate the same way as REST (`Authorization:
-  Bearer <token>` or `x-sendlit-apikey`)
+Bearer <token>` or `x-sendlit-apikey`)

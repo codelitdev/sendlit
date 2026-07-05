@@ -15,7 +15,10 @@ import { presentBroadcastStatus } from "@/lib/broadcast";
 import { listSequences, pauseSequence, startSequence } from "@/lib/api";
 import type { MailType, Sequence } from "@sendlit/email-blocks";
 
-const STATUS_VARIANT: Record<Sequence["status"], "success" | "secondary" | "outline"> = {
+const STATUS_VARIANT: Record<
+    Sequence["status"],
+    "success" | "secondary" | "outline"
+> = {
     active: "success",
     draft: "secondary",
     paused: "outline",
@@ -75,7 +78,9 @@ export function SequenceListPage({
                     <NewSequenceDialog
                         type={type}
                         label={createLabel}
-                        onCreated={(sequenceId) => router.push(`${basePath}/${sequenceId}`)}
+                        onCreated={(sequenceId) =>
+                            router.push(`${basePath}/${sequenceId}`)
+                        }
                     />
                 }
             />
@@ -96,9 +101,15 @@ export function SequenceListPage({
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b text-left text-muted-foreground">
-                                    <th className="px-4 py-3 font-medium">Title</th>
-                                    <th className="px-4 py-3 font-medium">Status</th>
-                                    <th className="px-4 py-3 font-medium">Emails</th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Title
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Status
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Emails
+                                    </th>
                                     <th className="px-4 py-3" />
                                 </tr>
                             </thead>
@@ -108,7 +119,9 @@ export function SequenceListPage({
                                         key={sequence.sequenceId}
                                         className="cursor-pointer border-b last:border-0 hover:bg-accent/50"
                                         onClick={() =>
-                                            router.push(`${basePath}/${sequence.sequenceId}`)
+                                            router.push(
+                                                `${basePath}/${sequence.sequenceId}`,
+                                            )
                                         }
                                     >
                                         <td className="px-4 py-3 font-medium">
@@ -118,13 +131,25 @@ export function SequenceListPage({
                                             {type === "broadcast" ? (
                                                 <Badge
                                                     variant={
-                                                        presentBroadcastStatus(sequence).variant
+                                                        presentBroadcastStatus(
+                                                            sequence,
+                                                        ).variant
                                                     }
                                                 >
-                                                    {presentBroadcastStatus(sequence).label}
+                                                    {
+                                                        presentBroadcastStatus(
+                                                            sequence,
+                                                        ).label
+                                                    }
                                                 </Badge>
                                             ) : (
-                                                <Badge variant={STATUS_VARIANT[sequence.status]}>
+                                                <Badge
+                                                    variant={
+                                                        STATUS_VARIANT[
+                                                            sequence.status
+                                                        ]
+                                                    }
+                                                >
                                                     {sequence.status}
                                                 </Badge>
                                             )}
@@ -139,23 +164,26 @@ export function SequenceListPage({
                                                 past (see lib/broadcast.ts). */}
                                             {type !== "broadcast" &&
                                                 (sequence.status === "active" ||
-                                                    sequence.status === "draft" ||
-                                                    sequence.status === "paused") && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        toggle(sequence);
-                                                    }}
-                                                >
-                                                    {sequence.status === "active" ? (
-                                                        <Pause className="size-4" />
-                                                    ) : (
-                                                        <Play className="size-4" />
-                                                    )}
-                                                </Button>
-                                            )}
+                                                    sequence.status ===
+                                                        "draft" ||
+                                                    sequence.status ===
+                                                        "paused") && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            toggle(sequence);
+                                                        }}
+                                                    >
+                                                        {sequence.status ===
+                                                        "active" ? (
+                                                            <Pause className="size-4" />
+                                                        ) : (
+                                                            <Play className="size-4" />
+                                                        )}
+                                                    </Button>
+                                                )}
                                         </td>
                                     </tr>
                                 ))}

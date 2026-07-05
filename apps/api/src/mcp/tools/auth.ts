@@ -6,7 +6,7 @@ import type { Account } from "../../account/queries";
  * OAuth-authenticated session resolves to its sole team if the account only
  * has one, otherwise the connection is rejected (see `mcp/routes.ts`). */
 export function getTeamId(extra: any): string | null {
-  return extra?.authInfo?.clientId || null;
+    return extra?.authInfo?.clientId || null;
 }
 
 /** The logged-in human, when authenticated via OAuth — `null` for API-key
@@ -14,5 +14,5 @@ export function getTeamId(extra: any): string | null {
  * members). Only used for cosmetic fallbacks (e.g. "send the test email to
  * me"), never for authorization. */
 export function getAuthAccount(extra: any): Account | null {
-  return extra?.authInfo?.account || null;
+    return extra?.authInfo?.account || null;
 }

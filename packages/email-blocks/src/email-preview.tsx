@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, startTransition } from "react";
-import { defaultEmail, renderEmailToHtml, type Email } from "@sendlit/email-editor";
+import {
+    defaultEmail,
+    renderEmailToHtml,
+    type Email,
+} from "@sendlit/email-editor";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -108,13 +112,17 @@ export function EmailPreview({
     const normalizedEmail = normalizeEmailForPreview(content);
     const previewWidth = getPreviewWidth(normalizedEmail);
     const minHeightPx = toPixels(minHeight);
-    const scale = wrapperWidth > 0 ? Math.min(wrapperWidth / previewWidth, 1) : 1;
+    const scale =
+        wrapperWidth > 0 ? Math.min(wrapperWidth / previewWidth, 1) : 1;
     // Before `onLoad` reports the real content height, size as if content
     // exactly filled `minHeight`. Once known, scale that real height down to
     // match what's actually visible — using it unscaled would reserve space
     // for a 1:1 render, leaving a blank gap under the shrunk-down content.
-    const previewViewportHeight = contentHeight ?? (scale > 0 ? minHeightPx / scale : minHeightPx);
-    const previewHeight = contentHeight ? previewViewportHeight * scale : minHeightPx;
+    const previewViewportHeight =
+        contentHeight ?? (scale > 0 ? minHeightPx / scale : minHeightPx);
+    const previewHeight = contentHeight
+        ? previewViewportHeight * scale
+        : minHeightPx;
 
     return (
         <div className={cn("relative", className)}>
@@ -146,7 +154,9 @@ export function EmailPreview({
 }
 
 function getPreviewWidth(email: Email): number {
-    const width = email.style?.structure?.page?.width || defaultEmail.style.structure.page.width;
+    const width =
+        email.style?.structure?.page?.width ||
+        defaultEmail.style.structure.page.width;
     const parsedWidth = Number.parseInt(width || "600px", 10);
     return Number.isFinite(parsedWidth) ? parsedWidth : 600;
 }
@@ -166,7 +176,10 @@ function normalizeEmailForPreview(content: Email): Email {
         style: {
             ...defaultStyle,
             ...(content.style || {}),
-            colors: { ...defaultStyle.colors, ...(content.style?.colors || {}) },
+            colors: {
+                ...defaultStyle.colors,
+                ...(content.style?.colors || {}),
+            },
             typography: {
                 ...defaultStyle.typography,
                 ...(content.style?.typography || {}),

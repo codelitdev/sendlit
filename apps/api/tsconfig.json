@@ -1,21 +1,21 @@
 {
-  "compilerOptions": {
-    "outDir": "dist",
-    "target": "es2020",
-    "module": "nodenext",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "moduleResolution": "nodenext",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": ["src"],
-  // Tests are excluded from the production build (vitest is a devDependency);
-  // they're typechecked via tsconfig.test.json (`pnpm typecheck`) instead.
-  "exclude": ["**/*.test.ts", "src/test"]
+    "compilerOptions": {
+        "outDir": "dist",
+        "target": "es2020",
+        "module": "nodenext",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "moduleResolution": "nodenext",
+        "baseUrl": ".",
+        "paths": {
+            "@/*": ["./src/*"]
+        }
+    },
+    "include": ["src"],
+    // Tests are excluded from the production build (vitest is a devDependency);
+    // they're typechecked via tsconfig.test.json (`pnpm typecheck`) instead.
+    "exclude": ["**/*.test.ts", "src/test"]
 }

@@ -46,7 +46,11 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
 
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
     return (
-        <div data-slot="card-content" className={cn("p-6 pt-0", className)} {...props} />
+        <div
+            data-slot="card-content"
+            className={cn("p-6 pt-0", className)}
+            {...props}
+        />
     );
 }
 
@@ -60,4 +64,11 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     );
 }
 
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };
+export {
+    Card,
+    CardHeader,
+    CardTitle,
+    CardDescription,
+    CardContent,
+    CardFooter,
+};

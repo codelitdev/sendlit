@@ -3,5 +3,5 @@ import { openapi } from "@/lib/openapi";
 import client from "./api-page.client";
 
 export const APIPage = createAPIPage(openapi, {
-  client,
+    client,
 });

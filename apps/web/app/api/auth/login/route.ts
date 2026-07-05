@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { API_URL, OAUTH_CLIENT_ID, getRedirectUri } from "@/lib/config";
-import { generateCodeChallenge, generateCodeVerifier, generateState } from "@/lib/pkce";
+import {
+    generateCodeChallenge,
+    generateCodeVerifier,
+    generateState,
+} from "@/lib/pkce";
 import { OAUTH_STATE_COOKIE, OAUTH_VERIFIER_COOKIE } from "@/lib/tokens";
 
 /**

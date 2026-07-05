@@ -11,7 +11,9 @@ export function generatePixelToken(
 ): string {
     const secret = process.env.PIXEL_SIGNING_SECRET;
     if (!secret) {
-        throw new Error("PIXEL_SIGNING_SECRET environment variable is not defined");
+        throw new Error(
+            "PIXEL_SIGNING_SECRET environment variable is not defined",
+        );
     }
     return jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
 }
@@ -21,7 +23,9 @@ export function verifyPixelToken<T = Record<string, unknown>>(
 ): T | null {
     const secret = process.env.PIXEL_SIGNING_SECRET;
     if (!secret) {
-        throw new Error("PIXEL_SIGNING_SECRET environment variable is not defined");
+        throw new Error(
+            "PIXEL_SIGNING_SECRET environment variable is not defined",
+        );
     }
     try {
         return jwt.verify(token, secret) as T;

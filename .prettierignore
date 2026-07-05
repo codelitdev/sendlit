@@ -1,0 +1,14 @@
+# Ignoring NextJS files
+.next/
+**/.next/
+
+# Ignore build files
+dist/
+**/dist/
+out/_next/
+**/out/
+**/out/_next/
+
+# Ignore generated docs files
+.source/
+**/.source/

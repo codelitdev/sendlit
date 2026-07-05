@@ -19,35 +19,36 @@ import { useState } from "react";
 import { TagEditor } from "@sendlit/email-blocks";
 
 function Example() {
-  const [tagOptions, setTagOptions] = useState([
-    "customers",
-    "webinar",
-    "trial",
-    "vip",
-  ]);
-  const [contactTags, setContactTags] = useState(["customers"]);
+    const [tagOptions, setTagOptions] = useState([
+        "customers",
+        "webinar",
+        "trial",
+        "vip",
+    ]);
+    const [contactTags, setContactTags] = useState(["customers"]);
 
-  return (
-    <TagEditor
-      tags={contactTags}
-      options={tagOptions}
-      onAdd={(tag) => {
-        setContactTags((current) =>
-          current.includes(tag) ? current : [...current, tag],
-        );
-        setTagOptions((current) =>
-          current.includes(tag) ? current : [...current, tag],
-        );
-      }}
-      onRemove={(tag) =>
-        setContactTags((current) => current.filter((item) => item !== tag))
-      }
-    />
-  );
+    return (
+        <TagEditor
+            tags={contactTags}
+            options={tagOptions}
+            onAdd={(tag) => {
+                setContactTags((current) =>
+                    current.includes(tag) ? current : [...current, tag],
+                );
+                setTagOptions((current) =>
+                    current.includes(tag) ? current : [...current, tag],
+                );
+            }}
+            onRemove={(tag) =>
+                setContactTags((current) =>
+                    current.filter((item) => item !== tag),
+                )
+            }
+        />
+    );
 }
 ```
 
 Omit `options` to only ever offer create-new (no existing-tag dropdown) — the
 component always includes whatever is already in `tags` even if it's missing
 from `options`.
-

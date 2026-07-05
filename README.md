@@ -1,7 +1,9 @@
 # SendLit
+
 Open-source email marketing platform
 
 ## Tech stack
+
 - TypeScript
 - PostgreSQL
 - Redis

@@ -46,7 +46,9 @@ export function encryptSecret(plaintext: string): string {
         cipher.final(),
     ]);
     const authTag = cipher.getAuthTag();
-    return [iv, authTag, ciphertext].map((buf) => buf.toString("base64")).join(".");
+    return [iv, authTag, ciphertext]
+        .map((buf) => buf.toString("base64"))
+        .join(".");
 }
 
 export function decryptSecret(payload: string): string {

@@ -1,6 +1,9 @@
 import { SQL, and, eq, gt, ilike, lt, not, sql, or } from "drizzle-orm";
 import { contacts } from "../db/schema";
-import { UserFilter, userFilterAggregationOperators } from "../config/constants";
+import {
+    UserFilter,
+    userFilterAggregationOperators,
+} from "../config/constants";
 
 export interface ContactFilterCondition {
     name: (typeof UserFilter)[keyof typeof UserFilter];

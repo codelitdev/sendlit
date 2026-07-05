@@ -1,9 +1,9 @@
 import { source } from "@/lib/source";
 import {
-  DocsBody,
-  DocsDescription,
-  DocsPage,
-  DocsTitle,
+    DocsBody,
+    DocsDescription,
+    DocsPage,
+    DocsTitle,
 } from "fumadocs-ui/page";
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import { notFound, redirect } from "next/navigation";
@@ -12,70 +12,72 @@ import { getMDXComponents } from "@/mdx-components";
 const API_REFERENCE_INDEX = "/api-reference/listContacts";
 
 export default async function Page(props: {
-  params: Promise<{ slug?: string[] }>;
+    params: Promise<{ slug?: string[] }>;
 }) {
-  const params = await props.params;
-  process.stderr.write(`Rendering docs slug: ${(params.slug ?? []).join("/") || "index"}\n`);
-  const slugPath = params.slug?.join("/");
+    const params = await props.params;
+    process.stderr.write(
+        `Rendering docs slug: ${(params.slug ?? []).join("/") || "index"}\n`,
+    );
+    const slugPath = params.slug?.join("/");
 
-  if (slugPath === "api-reference" || slugPath === "rest-api") {
-    redirect(API_REFERENCE_INDEX);
-  }
+    if (slugPath === "api-reference" || slugPath === "rest-api") {
+        redirect(API_REFERENCE_INDEX);
+    }
 
-  const page = source.getPage(params.slug);
-  if (!page) notFound();
+    const page = source.getPage(params.slug);
+    if (!page) notFound();
 
-  const MDXContent = page.data.body;
+    const MDXContent = page.data.body;
 
-  return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
-      <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription>{page.data.description}</DocsDescription>
-      <DocsBody>
-        <MDXContent
-          components={getMDXComponents({
-            a: createRelativeLink(source, page),
-          })}
-        />
-      </DocsBody>
-    </DocsPage>
-  );
+    return (
+        <DocsPage toc={page.data.toc} full={page.data.full}>
+            <DocsTitle>{page.data.title}</DocsTitle>
+            <DocsDescription>{page.data.description}</DocsDescription>
+            <DocsBody>
+                <MDXContent
+                    components={getMDXComponents({
+                        a: createRelativeLink(source, page),
+                    })}
+                />
+            </DocsBody>
+        </DocsPage>
+    );
 }
 
 export async function generateStaticParams() {
-  let params: { slug?: string[] }[];
-  try {
-    params = source.generateParams();
-  } catch (error) {
-    console.error("Failed to generate docs static params", error);
-    throw error;
-  }
-  const bySlug = new Map<string, { slug?: string[] }>();
+    let params: { slug?: string[] }[];
+    try {
+        params = source.generateParams();
+    } catch (error) {
+        console.error("Failed to generate docs static params", error);
+        throw error;
+    }
+    const bySlug = new Map<string, { slug?: string[] }>();
 
-  for (const param of [{ slug: [] as string[] }, ...params]) {
-    bySlug.set((param.slug ?? []).join("/"), param);
-  }
+    for (const param of [{ slug: [] as string[] }, ...params]) {
+        bySlug.set((param.slug ?? []).join("/"), param);
+    }
 
-  return [...bySlug.values()];
+    return [...bySlug.values()];
 }
 
 export async function generateMetadata(props: {
-  params: Promise<{ slug?: string[] }>;
+    params: Promise<{ slug?: string[] }>;
 }) {
-  const params = await props.params;
+    const params = await props.params;
 
-  if (params.slug?.join("/") === "api-reference") {
+    if (params.slug?.join("/") === "api-reference") {
+        return {
+            title: "API Reference",
+            description: "Interactive REST API documentation for SendLit.",
+        };
+    }
+
+    const page = source.getPage(params.slug);
+    if (!page) notFound();
+
     return {
-      title: "API Reference",
-      description: "Interactive REST API documentation for SendLit.",
+        title: page.data.title,
+        description: page.data.description,
     };
-  }
-
-  const page = source.getPage(params.slug);
-  if (!page) notFound();
-
-  return {
-    title: page.data.title,
-    description: page.data.description,
-  };
 }

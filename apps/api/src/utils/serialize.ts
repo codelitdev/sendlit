@@ -9,26 +9,28 @@
  * need to do it explicitly before returning `{ status, body }`).
  */
 export type SerializedDates<T> = T extends Date
-  ? string
-  : T extends (infer U)[]
-    ? SerializedDates<U>[]
-    : T extends object
-      ? { [K in keyof T]: SerializedDates<T[K]> }
-      : T;
+    ? string
+    : T extends (infer U)[]
+      ? SerializedDates<U>[]
+      : T extends object
+        ? { [K in keyof T]: SerializedDates<T[K]> }
+        : T;
 
 export function serializeDates<T>(value: T): SerializedDates<T> {
-  if (value instanceof Date) {
-    return value.toISOString() as SerializedDates<T>;
-  }
-  if (Array.isArray(value)) {
-    return value.map(serializeDates) as SerializedDates<T>;
-  }
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = serializeDates(v);
+    if (value instanceof Date) {
+        return value.toISOString() as SerializedDates<T>;
     }
-    return out as SerializedDates<T>;
-  }
-  return value as SerializedDates<T>;
+    if (Array.isArray(value)) {
+        return value.map(serializeDates) as SerializedDates<T>;
+    }
+    if (value && typeof value === "object") {
+        const out: Record<string, unknown> = {};
+        for (const [key, v] of Object.entries(
+            value as Record<string, unknown>,
+        )) {
+            out[key] = serializeDates(v);
+        }
+        return out as SerializedDates<T>;
+    }
+    return value as SerializedDates<T>;
 }

@@ -1,25 +1,40 @@
 {
-  "name": "sendlit",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "9.15.1",
-      "onFail": "download"
-    }
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/node": "^22.14.1"
-    }
-  },
-  "type": "module"
+    "name": "sendlit",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "ci:publish": "pnpm publish -r --no-git-checks",
+        "lint": "eslint packages apps --quiet",
+        "prettier": "prettier --write packages apps *.md",
+        "prepare": "husky",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "packageManager": "pnpm@11.10.0",
+    "devEngines": {
+        "packageManager": {
+            "name": "pnpm",
+            "version": "11.10.0",
+            "onFail": "download"
+        }
+    },
+    "devDependencies": {
+        "@changesets/cli": "^2.29.7",
+        "eslint": "^9.12.0",
+        "eslint-config-next": "16.0.3",
+        "eslint-config-prettier": "^8.5.0",
+        "eslint-plugin-import": "^2.32.0",
+        "eslint-plugin-react": "^7.37.5",
+        "eslint-plugin-react-hooks": "^7.0.1",
+        "eslint-plugin-unused-imports": "^4.3.0",
+        "globals": "^15.15.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^15.2.2",
+        "prettier": "^3.0.2",
+        "typescript-eslint": "^8.46.0"
+    },
+    "type": "module"
 }

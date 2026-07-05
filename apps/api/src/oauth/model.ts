@@ -2,7 +2,10 @@ import crypto from "crypto";
 import type OAuth2Server from "@node-oauth/oauth2-server";
 import logger from "../services/log";
 import { findClientByClientId, createClient } from "./client-store";
-import { isTokenRevoked, revokeToken as persistRevokedToken } from "./revoked-token-store";
+import {
+    isTokenRevoked,
+    revokeToken as persistRevokedToken,
+} from "./revoked-token-store";
 import {
     signAccessToken,
     signRefreshToken,
@@ -109,11 +112,15 @@ function validateRedirectUri(uri: unknown): string {
     }
 
     if (parsed.hash) {
-        throw new DcrValidationError("redirect_uri must not contain a fragment");
+        throw new DcrValidationError(
+            "redirect_uri must not contain a fragment",
+        );
     }
 
     if (parsed.username || parsed.password) {
-        throw new DcrValidationError("redirect_uri must not contain credentials");
+        throw new DcrValidationError(
+            "redirect_uri must not contain credentials",
+        );
     }
 
     if (parsed.protocol !== "https:") {

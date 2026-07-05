@@ -1,4 +1,5 @@
 import { Mail, Send } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -28,25 +29,30 @@ export default async function LoginPage({
                     <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
                         <Send className="size-5" />
                     </div>
-                    <CardTitle className="text-xl">Sign in to SendLit</CardTitle>
+                    <CardTitle className="text-xl">
+                        Sign in to SendLit
+                    </CardTitle>
                     <CardDescription>
-                        We&apos;ll email you a one-time code — no password needed.
+                        We&apos;ll email you a one-time code — no password
+                        needed.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {error && (
                         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                            {ERROR_MESSAGES[error] || "Something went wrong. Please try again."}
+                            {ERROR_MESSAGES[error] ||
+                                "Something went wrong. Please try again."}
                         </p>
                     )}
                     <Button asChild className="w-full">
-                        <a href="/api/auth/login">
+                        <Link href="/api/auth/login">
                             <Mail className="size-4" />
                             Continue with email
-                        </a>
+                        </Link>
                     </Button>
                     <p className="text-center text-xs text-muted-foreground">
-                        Authentication is handled by the SendLit API over OAuth2 (PKCE).
+                        Authentication is handled by the SendLit API over OAuth2
+                        (PKCE).
                     </p>
                 </CardContent>
             </Card>

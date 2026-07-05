@@ -7,10 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-    Card,
-    CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
     Dialog,
     DialogContent,
@@ -39,7 +36,11 @@ export default function ContactsPage() {
             setContacts(items);
             setTotal(total);
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to load contacts");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to load contacts",
+            );
         }
     }
 
@@ -52,7 +53,13 @@ export default function ContactsPage() {
             <PageHeader
                 title="Contacts"
                 description={`${total} contact${total === 1 ? "" : "s"}`}
-                action={<NewContactDialog open={open} onOpenChange={setOpen} onCreated={() => load(q)} />}
+                action={
+                    <NewContactDialog
+                        open={open}
+                        onOpenChange={setOpen}
+                        onCreated={() => load(q)}
+                    />
+                }
             />
 
             {error && <Banner className="mb-4">{error}</Banner>}
@@ -77,7 +84,9 @@ export default function ContactsPage() {
             <Card>
                 <CardContent className="p-0">
                     {contacts === null ? (
-                        <p className="p-6 text-sm text-muted-foreground">Loading…</p>
+                        <p className="p-6 text-sm text-muted-foreground">
+                            Loading…
+                        </p>
                     ) : contacts.length === 0 ? (
                         <p className="p-6 text-sm text-muted-foreground">
                             No contacts yet. Create one to get started.
@@ -86,16 +95,27 @@ export default function ContactsPage() {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b text-left text-muted-foreground">
-                                    <th className="px-4 py-3 font-medium">Email</th>
-                                    <th className="px-4 py-3 font-medium">Name</th>
-                                    <th className="px-4 py-3 font-medium">Tags</th>
-                                    <th className="px-4 py-3 font-medium">Status</th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Email
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Name
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Tags
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Status
+                                    </th>
                                     <th className="px-4 py-3" />
                                 </tr>
                             </thead>
                             <tbody>
                                 {contacts.map((contact) => (
-                                    <tr key={contact.contactId} className="border-b last:border-0">
+                                    <tr
+                                        key={contact.contactId}
+                                        className="border-b last:border-0"
+                                    >
                                         <td className="px-4 py-3">
                                             <Link
                                                 href={`/dashboard/contacts/${contact.contactId}`}
@@ -110,10 +130,15 @@ export default function ContactsPage() {
                                         <td className="px-4 py-3">
                                             <div className="flex flex-wrap gap-1">
                                                 {contact.tags.length === 0 && (
-                                                    <span className="text-muted-foreground">—</span>
+                                                    <span className="text-muted-foreground">
+                                                        —
+                                                    </span>
                                                 )}
                                                 {contact.tags.map((tag) => (
-                                                    <Badge key={tag} variant="secondary">
+                                                    <Badge
+                                                        key={tag}
+                                                        variant="secondary"
+                                                    >
                                                         {tag}
                                                     </Badge>
                                                 ))}
@@ -122,7 +147,9 @@ export default function ContactsPage() {
                                         <td className="px-4 py-3">
                                             <Badge
                                                 variant={
-                                                    contact.subscribedToUpdates ? "success" : "outline"
+                                                    contact.subscribedToUpdates
+                                                        ? "success"
+                                                        : "outline"
                                                 }
                                             >
                                                 {contact.subscribedToUpdates
@@ -135,7 +162,9 @@ export default function ContactsPage() {
                                                 variant="ghost"
                                                 size="icon"
                                                 onClick={async () => {
-                                                    await deleteContact(contact.contactId);
+                                                    await deleteContact(
+                                                        contact.contactId,
+                                                    );
                                                     load(q);
                                                 }}
                                             >
@@ -177,7 +206,11 @@ function NewContactDialog({
             onOpenChange(false);
             onCreated();
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to create contact");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to create contact",
+            );
         } finally {
             setSubmitting(false);
         }

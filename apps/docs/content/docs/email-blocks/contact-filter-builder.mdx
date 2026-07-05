@@ -22,157 +22,159 @@ This is the exact code behind the demo above.
 ```tsx
 import { useState } from "react";
 import {
-  ContactFilterBuilder,
-  type ContactFilterDefinition,
-  type ContactFilterSegment,
-  type ContactFilterWithAggregator,
+    ContactFilterBuilder,
+    type ContactFilterDefinition,
+    type ContactFilterSegment,
+    type ContactFilterWithAggregator,
 } from "@sendlit/email-blocks";
 
 const initialFilter: ContactFilterWithAggregator = {
-  aggregator: "and",
-  filters: [
-    { name: "tag", condition: "is", value: "customers" },
-    { name: "email", condition: "contains", value: "@example.com" },
-  ],
+    aggregator: "and",
+    filters: [
+        { name: "tag", condition: "is", value: "customers" },
+        { name: "email", condition: "contains", value: "@example.com" },
+    ],
 };
 
 const initialContactSegments: ContactFilterSegment[] = [
-  {
-    id: "paid-product",
-    name: "Paid product",
-    filter: {
-      aggregator: "and",
-      filters: [{ name: "subscription", condition: "is", value: "subscribed" }],
+    {
+        id: "paid-product",
+        name: "Paid product",
+        filter: {
+            aggregator: "and",
+            filters: [
+                { name: "subscription", condition: "is", value: "subscribed" },
+            ],
+        },
     },
-  },
-  {
-    id: "tagged-customers",
-    name: "Tagged: customers",
-    filter: {
-      aggregator: "and",
-      filters: [{ name: "tag", condition: "is", value: "customers" }],
+    {
+        id: "tagged-customers",
+        name: "Tagged: customers",
+        filter: {
+            aggregator: "and",
+            filters: [{ name: "tag", condition: "is", value: "customers" }],
+        },
     },
-  },
 ];
 
 const contactFilterDefinitions: ContactFilterDefinition[] = [
-  {
-    name: "email",
-    label: "Email",
-    conditions: [
-      { value: "is", label: "is exactly" },
-      { value: "contains", label: "contains" },
-      { value: "not_contains", label: "does not contain" },
-    ],
-    valueInput: {
-      type: "text",
-      label: "Email value",
-      placeholder: "e.g. example.com",
+    {
+        name: "email",
+        label: "Email",
+        conditions: [
+            { value: "is", label: "is exactly" },
+            { value: "contains", label: "contains" },
+            { value: "not_contains", label: "does not contain" },
+        ],
+        valueInput: {
+            type: "text",
+            label: "Email value",
+            placeholder: "e.g. example.com",
+        },
     },
-  },
-  {
-    name: "community",
-    label: "Community",
-    conditions: [
-      { value: "has", label: "member of" },
-      { value: "does_not_have", label: "not a member of" },
-    ],
-    valueInput: {
-      type: "select",
-      label: "Community",
-      placeholder: "Select community",
-      options: [
-        { value: "community-discussion", label: "Discussion Learners" },
-        { value: "community-customers", label: "Customers" },
-      ],
+    {
+        name: "community",
+        label: "Community",
+        conditions: [
+            { value: "has", label: "member of" },
+            { value: "does_not_have", label: "not a member of" },
+        ],
+        valueInput: {
+            type: "select",
+            label: "Community",
+            placeholder: "Select community",
+            options: [
+                { value: "community-discussion", label: "Discussion Learners" },
+                { value: "community-customers", label: "Customers" },
+            ],
+        },
     },
-  },
-  {
-    name: "lastActive",
-    label: "Last active",
-    conditions: [
-      { value: "after", label: "after" },
-      { value: "before", label: "before" },
-      { value: "on", label: "on" },
-    ],
-    valueInput: {
-      type: "date",
-      label: "Last active date",
-      dateValueFormat: "date",
+    {
+        name: "lastActive",
+        label: "Last active",
+        conditions: [
+            { value: "after", label: "after" },
+            { value: "before", label: "before" },
+            { value: "on", label: "on" },
+        ],
+        valueInput: {
+            type: "date",
+            label: "Last active date",
+            dateValueFormat: "date",
+        },
     },
-  },
-  {
-    name: "tag",
-    label: "Tag",
-    conditions: [
-      { value: "has", label: "has" },
-      { value: "does_not_have", label: "does not have" },
-    ],
-    valueInput: {
-      type: "select",
-      label: "Tag",
-      placeholder: "Select a tag",
-      options: [
-        { value: "customers", label: "customers" },
-        { value: "webinar", label: "webinar" },
-        { value: "trial", label: "trial" },
-      ],
+    {
+        name: "tag",
+        label: "Tag",
+        conditions: [
+            { value: "has", label: "has" },
+            { value: "does_not_have", label: "does not have" },
+        ],
+        valueInput: {
+            type: "select",
+            label: "Tag",
+            placeholder: "Select a tag",
+            options: [
+                { value: "customers", label: "customers" },
+                { value: "webinar", label: "webinar" },
+                { value: "trial", label: "trial" },
+            ],
+        },
     },
-  },
-  {
-    name: "permission",
-    label: "Permission",
-    conditions: [
-      { value: "has", label: "has" },
-      { value: "does_not_have", label: "does not have" },
-    ],
-    valueInput: {
-      type: "select",
-      label: "Permission",
-      placeholder: "Select permission",
-      options: [
-        { value: "manage_products", label: "Manage products" },
-        { value: "publish_content", label: "Publish content" },
-        { value: "buy_products", label: "Buy products" },
-        { value: "manage_users", label: "Manage users" },
-        { value: "manage_community", label: "Manage community" },
-      ],
+    {
+        name: "permission",
+        label: "Permission",
+        conditions: [
+            { value: "has", label: "has" },
+            { value: "does_not_have", label: "does not have" },
+        ],
+        valueInput: {
+            type: "select",
+            label: "Permission",
+            placeholder: "Select permission",
+            options: [
+                { value: "manage_products", label: "Manage products" },
+                { value: "publish_content", label: "Publish content" },
+                { value: "buy_products", label: "Buy products" },
+                { value: "manage_users", label: "Manage users" },
+                { value: "manage_community", label: "Manage community" },
+            ],
+        },
     },
-  },
 ];
 
 function Example() {
-  const [filter, setFilter] =
-    useState<ContactFilterWithAggregator>(initialFilter);
-  const [contactSegments, setContactSegments] = useState<
-    ContactFilterSegment[]
-  >(initialContactSegments);
-  const [selectedSegmentId, setSelectedSegmentId] = useState("");
+    const [filter, setFilter] =
+        useState<ContactFilterWithAggregator>(initialFilter);
+    const [contactSegments, setContactSegments] = useState<
+        ContactFilterSegment[]
+    >(initialContactSegments);
+    const [selectedSegmentId, setSelectedSegmentId] = useState("");
 
-  return (
-    <ContactFilterBuilder
-      value={filter}
-      onChange={setFilter}
-      filterDefinitions={contactFilterDefinitions}
-      segments={contactSegments}
-      selectedSegmentId={selectedSegmentId}
-      onSegmentSelect={(segment) => setSelectedSegmentId(segment.id)}
-      onSaveSegment={(name, savedFilter) => {
-        const newSegment: ContactFilterSegment = {
-          id: `segment-${Date.now()}`,
-          name,
-          filter: savedFilter,
-        };
-        setContactSegments((current) => [...current, newSegment]);
-        setSelectedSegmentId(newSegment.id);
-      }}
-      onDeleteSegment={(segment) => {
-        setContactSegments((current) =>
-          current.filter((item) => item.id !== segment.id),
-        );
-      }}
-      count={51}
-    />
-  );
+    return (
+        <ContactFilterBuilder
+            value={filter}
+            onChange={setFilter}
+            filterDefinitions={contactFilterDefinitions}
+            segments={contactSegments}
+            selectedSegmentId={selectedSegmentId}
+            onSegmentSelect={(segment) => setSelectedSegmentId(segment.id)}
+            onSaveSegment={(name, savedFilter) => {
+                const newSegment: ContactFilterSegment = {
+                    id: `segment-${Date.now()}`,
+                    name,
+                    filter: savedFilter,
+                };
+                setContactSegments((current) => [...current, newSegment]);
+                setSelectedSegmentId(newSegment.id);
+            }}
+            onDeleteSegment={(segment) => {
+                setContactSegments((current) =>
+                    current.filter((item) => item.id !== segment.id),
+                );
+            }}
+            count={51}
+        />
+    );
 }
 ```

@@ -1,17 +1,17 @@
 {
-  "title": "Email Blocks",
-  "icon": "Blocks",
-  "pages": [
-    "overview",
-    "getting-started",
-    "contact-filter-builder",
-    "trigger-picker",
-    "tag-editor",
-    "sequence-analytics",
-    "subscriber-list",
-    "sequence-email-list",
-    "email-editor",
-    "email-preview",
-    "template-chooser"
-  ]
+    "title": "Email Blocks",
+    "icon": "Blocks",
+    "pages": [
+        "overview",
+        "getting-started",
+        "contact-filter-builder",
+        "trigger-picker",
+        "tag-editor",
+        "sequence-analytics",
+        "subscriber-list",
+        "sequence-email-list",
+        "email-editor",
+        "email-preview",
+        "template-chooser"
+    ]
 }

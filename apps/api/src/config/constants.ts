@@ -14,7 +14,12 @@ export const sequenceDelayBetweenMailsInMillis = process.env
 export const mailTypes = ["broadcast", "sequence"] as const;
 export type MailType = (typeof mailTypes)[number];
 
-export const sequenceStatus = ["draft", "active", "paused", "completed"] as const;
+export const sequenceStatus = [
+    "draft",
+    "active",
+    "paused",
+    "completed",
+] as const;
 export type SequenceStatus = (typeof sequenceStatus)[number];
 
 export const emailActionTypes = ["tag:add", "tag:remove"] as const;

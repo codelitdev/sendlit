@@ -29,9 +29,15 @@ export default function TemplateEditorPage({
 
     useEffect(() => {
         getTemplate(templateId)
-            .then((template) => setValue({ title: template.title, content: template.content }))
+            .then((template) =>
+                setValue({ title: template.title, content: template.content }),
+            )
             .catch((err) =>
-                setError(err instanceof ApiError ? err.message : "Failed to load template"),
+                setError(
+                    err instanceof ApiError
+                        ? err.message
+                        : "Failed to load template",
+                ),
             );
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [templateId]);
@@ -45,14 +51,19 @@ export default function TemplateEditorPage({
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Failed to save template");
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to save template",
+            );
         } finally {
             setSaving(false);
         }
     }
 
     if (error && !value) return <Banner>{error}</Banner>;
-    if (!value) return <p className="text-sm text-muted-foreground">Loading…</p>;
+    if (!value)
+        return <p className="text-sm text-muted-foreground">Loading…</p>;
 
     return (
         <div className="flex h-full flex-col p-8">
@@ -78,7 +89,9 @@ export default function TemplateEditorPage({
                     <Input
                         id="template-title"
                         value={value.title}
-                        onChange={(e) => setValue({ ...value, title: e.target.value })}
+                        onChange={(e) =>
+                            setValue({ ...value, title: e.target.value })
+                        }
                         placeholder="e.g. Welcome email"
                     />
                 </div>

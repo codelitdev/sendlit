@@ -21,9 +21,9 @@ fixed vs. deliberately accepted.
    `sequence` queue.
 3. **Worker** — `sequence-worker.ts` → `process-ongoing-sequence.ts`: checks quota,
    picks the next published/unsent email, renders (Liquid merge tags + open pixel
-   + click-tracked links), sends via `sendMail()`, records an `email_deliveries`
-   row, and either schedules the next email or deletes the row (marking a
-   broadcast `sent` once every recipient is delivered).
+    - click-tracked links), sends via `sendMail()`, records an `email_deliveries`
+      row, and either schedules the next email or deletes the row (marking a
+      broadcast `sent` once every recipient is delivered).
 
 ## What was already solid
 
@@ -54,6 +54,7 @@ duplicate jobs for the same `ongoingSequenceId`.
   email #2 as "next", and sent it immediately — skipping its configured delay.
 
 **Fix (both halves applied):**
+
 - `jobId: ongoingSequence.id` on `sequenceQueue.add()` — BullMQ drops adds whose
   id is already waiting/active/delayed, so a row is never queued twice at once.
 - Dueness guard at the top of `processOngoingSequence`
@@ -68,6 +69,7 @@ nodemailer transport (a fresh SMTP connection per message). A 10k broadcast
 would take 1–3 hours.
 
 **Fix:**
+
 - Worker `concurrency: 10`.
 - `pool: true, maxConnections: 5` on the platform default transporter and on
   per-team ESP transporters (`mail/transport.ts` — these are already cached per

@@ -6,23 +6,23 @@ import { createTeam } from "../team/queries";
 export type Account = typeof accounts.$inferSelect;
 
 export async function getAccount(id: string): Promise<Account | null> {
-  const [row] = await db
-    .select()
-    .from(accounts)
-    .where(eq(accounts.id, id))
-    .limit(1);
-  return row ?? null;
+    const [row] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, id))
+        .limit(1);
+    return row ?? null;
 }
 
 export async function findAccountByEmail(
-  email: string,
+    email: string,
 ): Promise<Account | null> {
-  const [row] = await db
-    .select()
-    .from(accounts)
-    .where(eq(accounts.email, email))
-    .limit(1);
-  return row ?? null;
+    const [row] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.email, email))
+        .limit(1);
+    return row ?? null;
 }
 
 /**
@@ -33,18 +33,18 @@ export async function findAccountByEmail(
  * team-scoped rather than account-scoped.
  */
 export async function createAccount(
-  email: string,
-  name?: string,
+    email: string,
+    name?: string,
 ): Promise<Account> {
-  const [account] = await db
-    .insert(accounts)
-    .values({ email, name })
-    .returning();
+    const [account] = await db
+        .insert(accounts)
+        .values({ email, name })
+        .returning();
 
-  await createTeam({
-    ownerAccountId: account.id,
-    name: name ? `${name}'s Team` : "My Team",
-  });
+    await createTeam({
+        ownerAccountId: account.id,
+        name: name ? `${name}'s Team` : "My Team",
+    });
 
-  return account;
+    return account;
 }

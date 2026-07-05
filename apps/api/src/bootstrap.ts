@@ -28,10 +28,17 @@ export async function createSuperAdminIfMissing(): Promise<void> {
         const keys = teams[0] ? await getApiKeysByTeamId(teams[0].id) : [];
 
         logger.info(
-            { accountId: account.id, teamId: teams[0]?.id, apiKey: keys[0]?.key },
+            {
+                accountId: account.id,
+                teamId: teams[0]?.id,
+                apiKey: keys[0]?.key,
+            },
             "Super admin account created",
         );
     } catch (err: any) {
-        logger.error({ error: err.message }, "Failed to create super admin account");
+        logger.error(
+            { error: err.message },
+            "Failed to create super admin account",
+        );
     }
 }
