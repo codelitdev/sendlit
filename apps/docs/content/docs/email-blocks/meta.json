@@ -3,15 +3,15 @@
   "icon": "Blocks",
   "pages": [
     "overview",
+    "getting-started",
     "contact-filter-builder",
     "trigger-picker",
     "tag-editor",
     "sequence-analytics",
     "subscriber-list",
     "sequence-email-list",
-    "sequence-meta-form",
+    "email-editor",
     "email-preview",
-    "template-chooser",
-    "sequence-email-form"
+    "template-chooser"
   ]
 }

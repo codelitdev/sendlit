@@ -29,13 +29,30 @@ import {
     updateSequenceEmail,
 } from "@/lib/api";
 import {
-    SequenceEmailForm,
-    SequenceMetaForm,
+    ContactFilterBuilder,
+    EmailEditor,
+    type ContactFilterWithAggregator,
+    type Email,
     type Sequence,
-    type SequenceEmailFormValue,
-    type SequenceMetaFormValue,
     type SequenceStats,
 } from "@sendlit/email-blocks";
+import { Switch } from "@/components/ui/switch";
+
+interface BroadcastMeta {
+    title: string;
+    fromName?: string | null;
+    fromEmail?: string | null;
+    filter?: ContactFilterWithAggregator | null;
+}
+
+interface BroadcastEmailDraft {
+    subject: string;
+    content: Email;
+    delayInMillis: number;
+    published: boolean;
+}
+
+const emptyFilter: ContactFilterWithAggregator = { aggregator: "or", filters: [] };
 
 /** Local-timezone value for a `datetime-local` input. */
 function toLocalInputValue(date: Date): string {
@@ -51,8 +68,8 @@ export default function BroadcastEditorPage({
 }) {
     const { sequenceId } = use(params);
     const [sequence, setSequence] = useState<Sequence | null>(null);
-    const [meta, setMeta] = useState<SequenceMetaFormValue | null>(null);
-    const [email, setEmail] = useState<SequenceEmailFormValue | null>(null);
+    const [meta, setMeta] = useState<BroadcastMeta | null>(null);
+    const [email, setEmail] = useState<BroadcastEmailDraft | null>(null);
     const [stats, setStats] = useState<SequenceStats | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -262,8 +279,60 @@ export default function BroadcastEditorPage({
                     <CardHeader>
                         <CardTitle className="text-base">Sender &amp; audience</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <SequenceMetaForm type="broadcast" value={meta} onChange={setMeta} />
+                    <CardContent className="space-y-4">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="broadcast-title">Title</Label>
+                            <Input
+                                id="broadcast-title"
+                                value={meta.title}
+                                onChange={(e) =>
+                                    setMeta({ ...meta, title: e.target.value })
+                                }
+                                placeholder="e.g. October newsletter"
+                            />
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="broadcast-from-name">
+                                    From name
+                                </Label>
+                                <Input
+                                    id="broadcast-from-name"
+                                    value={meta.fromName ?? ""}
+                                    onChange={(e) =>
+                                        setMeta({
+                                            ...meta,
+                                            fromName: e.target.value,
+                                        })
+                                    }
+                                    placeholder="Your name or company"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="broadcast-from-email">
+                                    From email
+                                </Label>
+                                <Input
+                                    id="broadcast-from-email"
+                                    type="email"
+                                    value={meta.fromEmail ?? ""}
+                                    onChange={(e) =>
+                                        setMeta({
+                                            ...meta,
+                                            fromEmail: e.target.value,
+                                        })
+                                    }
+                                    placeholder="you@yourdomain.com"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Audience</Label>
+                            <ContactFilterBuilder
+                                value={meta.filter ?? emptyFilter}
+                                onChange={(filter) => setMeta({ ...meta, filter })}
+                            />
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -271,8 +340,41 @@ export default function BroadcastEditorPage({
                     <CardHeader>
                         <CardTitle className="text-base">Content</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <SequenceEmailForm value={email} onChange={setEmail} variant="broadcast" />
+                    <CardContent className="flex flex-col gap-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="broadcast-subject">Subject</Label>
+                                <Input
+                                    id="broadcast-subject"
+                                    value={email.subject}
+                                    onChange={(e) =>
+                                        setEmail({ ...email, subject: e.target.value })
+                                    }
+                                    placeholder="Your subject line"
+                                />
+                            </div>
+                            <div className="flex items-center justify-between gap-4 sm:justify-start">
+                                <Label
+                                    htmlFor="broadcast-published"
+                                    className="flex-1 sm:flex-none"
+                                >
+                                    Published
+                                </Label>
+                                <Switch
+                                    id="broadcast-published"
+                                    checked={email.published}
+                                    onCheckedChange={(published) =>
+                                        setEmail({ ...email, published })
+                                    }
+                                />
+                            </div>
+                        </div>
+                        <div className="min-h-0 flex-1 rounded-lg border">
+                            <EmailEditor
+                                email={email.content}
+                                onChange={(content) => setEmail({ ...email, content })}
+                            />
+                        </div>
                     </CardContent>
                 </Card>
             </div>

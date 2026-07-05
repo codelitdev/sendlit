@@ -3,19 +3,96 @@ title: Overview
 description: Reusable React blocks for SendLit product flows.
 ---
 
-`@sendlit/email-blocks` exports headless, ready-to-use React components for composing SendLit flows.
+`@sendlit/email-blocks` lets you embed SendLit email-marketing UI directly
+inside a React application.
 
-The package contains form blocks, selectors, previews, and list controls. Components use controlled props so host apps own persistence and API calls.
+The package exports headless, ready-to-use components for composing SendLit
+flows: audience filtering, automation triggers, tags, sequence email lists,
+email editing, previews, template selection, subscriber lists, and analytics.
+Components use controlled props, so your app owns state, persistence, and API
+calls.
 
-## Components
+New to the package? Start with [Getting Started](/email-blocks/getting-started)
+for installation and Tailwind setup. The sidebar lists every component with
+its own prop reference and a live, editable demo.
 
-- `ContactFilterBuilder`
-- `TriggerPicker`
-- `TagEditor`
-- `SequenceAnalytics`
-- `SubscriberList`
-- `SequenceEmailList`
-- `SequenceMetaForm`
-- `EmailPreview`
-- `TemplateChooser`
-- `SequenceEmailForm`
+## What are email blocks?
+
+Email blocks are pre-built React components for common SendLit product
+surfaces. They handle:
+
+- **Audience targeting** — build contact filters and reusable segments with
+  [`ContactFilterBuilder`](/email-blocks/contact-filter-builder).
+- **Automation setup** — choose sequence enrollment events with
+  [`TriggerPicker`](/email-blocks/trigger-picker).
+- **Contact metadata** — add and remove tags with
+  [`TagEditor`](/email-blocks/tag-editor).
+- **Sequence composition** — list, add, select, delete, and reorder sequence
+  emails with [`SequenceEmailList`](/email-blocks/sequence-email-list).
+- **Email creation** — edit email content with
+  [`EmailEditor`](/email-blocks/email-editor), render it with
+  [`EmailPreview`](/email-blocks/email-preview), and start from templates with
+  [`TemplateChooser`](/email-blocks/template-chooser).
+- **Operations views** — inspect subscribers with
+  [`SubscriberList`](/email-blocks/subscriber-list) and sequence performance
+  with [`SequenceAnalytics`](/email-blocks/sequence-analytics).
+
+## Supported frameworks
+
+The only peer dependency is `react@^19.2.0` — nothing in the package depends
+on Next.js itself, so it works in any React 19 app (Next.js App Router,
+Vite, etc.).
+
+Every component is marked `"use client"`, so they're safe to import directly
+into a Next.js App Router Server Component — the client boundary is already
+established inside the package; you don't need to add your own `"use
+client"` wrapper around them.
+
+## Prerequisites
+
+- A React 19 application.
+- Tailwind configured to scan `@sendlit/email-blocks` output.
+- shadcn CSS-variable theme tokens available in your app stylesheet.
+- Application state and API calls wired in the host app.
+
+## Getting started
+
+Install the package, configure Tailwind, and render your first controlled
+component in the [Getting Started](/email-blocks/getting-started) guide.
+
+Each component page includes:
+
+- A live, editable demo.
+- The exact demo code.
+- Prop details and notes for customization.
+
+## Ownership flow
+
+Email blocks do not persist data on their own. A typical integration works
+like this:
+
+1. Your app loads SendLit data from its API or local state.
+2. You pass that data into a block as controlled props.
+3. The user edits the UI.
+4. The block reports changes through callbacks such as `onChange`, `onAdd`,
+   `onSelect`, or `onDelete`.
+5. Your app validates, saves, or syncs those changes.
+
+## TypeScript
+
+Ships full `.d.ts` type definitions for every component's props, plus the
+supporting domain types (`ContactFilterWithAggregator`, `SequenceEmail`,
+`SystemTemplateSummary`, etc.).
+
+## Module format
+
+Published as ESM only (`dist/index.mjs`) — there's no CommonJS build. Use it
+from a bundler/runtime that supports ES modules (Next.js, Vite, and modern
+Node all do out of the box).
+
+## Styling
+
+Built with Tailwind utility classes and shadcn's CSS-variable theme tokens
+(`bg-background`, `text-muted-foreground`, `border-input`, etc.) — there's no
+compiled stylesheet to import. See [Getting Started](/email-blocks/getting-started)
+for the Tailwind content-scanning and theme-token setup this requires.

@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useRef, useState, startTransition } from "react";
 import { defaultEmail, renderEmailToHtml, type Email } from "@sendlit/email-editor";
 import { cn } from "@/lib/utils";
@@ -7,6 +9,9 @@ export interface EmailPreviewProps {
     content: Email | null;
     className?: string;
     minHeight?: string;
+    iframeTitle?: string;
+    errorPrefix?: string;
+    fallbackErrorMessage?: string;
 }
 
 /**
@@ -22,12 +27,16 @@ export function EmailPreview({
     content,
     className,
     minHeight = "420px",
+    iframeTitle = "Email preview",
+    errorPrefix = "Error: ",
+    fallbackErrorMessage = "Failed to render email",
 }: EmailPreviewProps) {
     const [renderedHTML, setRenderedHTML] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(!!content);
     const [error, setError] = useState<string | null>(null);
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const [wrapperWidth, setWrapperWidth] = useState(0);
+    const [contentHeight, setContentHeight] = useState<number | null>(null);
 
     useEffect(() => {
         if (content) {
@@ -44,11 +53,12 @@ export function EmailPreview({
                     startTransition(() => {
                         setRenderedHTML(html);
                         setIsLoading(false);
+                        setContentHeight(null);
                     });
                 })
                 .catch((err) => {
                     startTransition(() => {
-                        setError(err.message || "Failed to render email");
+                        setError(err.message || fallbackErrorMessage);
                         setIsLoading(false);
                     });
                 });
@@ -87,14 +97,24 @@ export function EmailPreview({
     }
 
     if (error) {
-        return <div className="text-sm text-destructive">Error: {error}</div>;
+        return (
+            <div className="text-sm text-destructive">
+                {errorPrefix}
+                {error}
+            </div>
+        );
     }
 
     const normalizedEmail = normalizeEmailForPreview(content);
-    const previewHeight = toPixels(minHeight);
     const previewWidth = getPreviewWidth(normalizedEmail);
+    const minHeightPx = toPixels(minHeight);
     const scale = wrapperWidth > 0 ? Math.min(wrapperWidth / previewWidth, 1) : 1;
-    const previewViewportHeight = scale > 0 ? previewHeight / scale : previewHeight;
+    // Before `onLoad` reports the real content height, size as if content
+    // exactly filled `minHeight`. Once known, scale that real height down to
+    // match what's actually visible — using it unscaled would reserve space
+    // for a 1:1 render, leaving a blank gap under the shrunk-down content.
+    const previewViewportHeight = contentHeight ?? (scale > 0 ? minHeightPx / scale : minHeightPx);
+    const previewHeight = contentHeight ? previewViewportHeight * scale : minHeightPx;
 
     return (
         <div className={cn("relative", className)}>
@@ -113,7 +133,12 @@ export function EmailPreview({
                         transformOrigin: "top center",
                     }}
                     scrolling="no"
-                    title="Email preview"
+                    title={iframeTitle}
+                    onLoad={(event) => {
+                        const doc = event.currentTarget.contentDocument;
+                        const measured = doc?.documentElement?.scrollHeight;
+                        if (measured) setContentHeight(measured);
+                    }}
                 />
             </div>
         </div>

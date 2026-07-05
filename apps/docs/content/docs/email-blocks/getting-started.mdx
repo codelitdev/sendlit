@@ -1,0 +1,112 @@
+---
+title: Getting Started
+description: Install and wire up @sendlit/email-blocks in a host app.
+---
+
+## Install
+
+```bash
+npm install @sendlit/email-blocks
+```
+
+`react@^19.2.0` is a peer dependency — install it if your app doesn't already
+have it.
+
+## Set up Tailwind
+
+Every block is built with Tailwind utility classes and shadcn's CSS-variable
+theme tokens (`bg-background`, `text-muted-foreground`, `border-input`,
+`bg-destructive`, etc.) — there's no bundled stylesheet to import, so your
+app's own Tailwind build has to know about this package's classes and define
+those tokens.
+
+**1. Scan this package's output for classes.**
+
+If you're on Tailwind v4 (CSS-based config), add a `@source` directive
+alongside your `@import "tailwindcss"`:
+
+```css
+@import "tailwindcss";
+
+@source "../node_modules/@sendlit/email-blocks/dist/**/*.mjs";
+```
+
+On Tailwind v3, add the same path to your config's `content` array instead:
+
+```ts
+// tailwind.config.ts
+export default {
+  content: [
+    "./app/**/*.{ts,tsx}",
+    "./node_modules/@sendlit/email-blocks/dist/**/*.mjs",
+  ],
+  // ...
+};
+```
+
+(Adjust the relative path to wherever `node_modules` actually resolves in
+your setup — e.g. a monorepo workspace app would point at the package's
+`src/**/*.{ts,tsx}` instead of `dist`, same as this docs site and
+`@sendlit/web` both do internally.)
+
+**2. Define the shadcn theme tokens**, if your app doesn't already have them
+(skip this if you've already run shadcn's `init` or copied its default
+theme):
+
+```css
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 222.2 84% 4.9%;
+  --radius: 0.5rem;
+}
+```
+
+If you're on Tailwind v4, also map them under `@theme inline` (see this
+site's own `app/global.css` for the exact block) so utilities like
+`bg-background` resolve to `--background`.
+
+## Render your first block
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { TagEditor } from "@sendlit/email-blocks";
+
+export function ContactTags() {
+  const [tags, setTags] = useState<string[]>(["customers"]);
+
+  return (
+    <TagEditor
+      tags={tags}
+      onAdd={(tag) => setTags((current) => [...current, tag])}
+      onRemove={(tag) =>
+        setTags((current) => current.filter((item) => item !== tag))
+      }
+    />
+  );
+}
+```
+
+Every block is a controlled component — you own the state and any
+persistence/API calls, the component just renders it and reports changes via
+callbacks (`onChange`, `onAdd`, `onSelect`, etc.). See
+[Overview](/email-blocks/overview) for the full component list, and each
+block's own page for its props and a live, editable demo.

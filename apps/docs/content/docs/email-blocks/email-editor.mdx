@@ -1,0 +1,41 @@
+---
+title: EmailEditor
+description: WYSIWYG editor for an email's content.
+---
+
+`EmailEditor` edits an `Email`'s block content (text, separator, image, link
+by default) and reports changes via `onChange`; pass `blocks` to customize
+which block types are available.
+
+If all you need is the editor and renderer — no filters, triggers, or the
+other blocks in this package — install
+[`@sendlit/email-editor`](https://www.npmjs.com/package/@sendlit/email-editor)
+directly instead. `@sendlit/email-blocks` re-exports it in full (`EmailEditor`,
+`Email`, `EmailBlock`, `EmailMeta`, `EmailStyle`, `BlockComponent`,
+`renderEmailToHtml`, `defaultEmail`) purely so the components below can share
+its types without you needing a second dependency.
+
+<EmailBlockDemo demo="email-editor" />
+
+## Usage
+
+This is the exact code behind the demo above.
+
+```tsx
+import { useState } from "react";
+import {
+  EmailEditor,
+  defaultTemplateEmail,
+  type Email,
+} from "@sendlit/email-blocks";
+
+function Example() {
+  const [email, setEmail] = useState<Email>(defaultTemplateEmail);
+
+  return <EmailEditor email={email} onChange={setEmail} />;
+}
+```
+
+Pass the same `Email` value to [`EmailPreview`](/email-blocks/email-preview)
+or `renderEmailToHtml` (also re-exported) to see the rendered result or
+generate the HTML you actually send.

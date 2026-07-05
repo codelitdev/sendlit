@@ -6,12 +6,16 @@ import { ArrowLeft, Check, Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { ApiError } from "@/lib/api-client";
@@ -29,16 +33,34 @@ import {
   type SystemTemplate,
 } from "@/lib/api";
 import {
-  SequenceEmailForm,
+  EmailEditor,
   SequenceEmailList,
-  SequenceMetaForm,
-  TemplateChooser,
+  TriggerPicker,
+  type Email,
+  type EmailActionType,
   type EmailTemplate,
   type Sequence,
-  type SequenceEmailFormValue,
-  type SequenceMetaFormValue,
   type SequenceStats,
 } from "@sendlit/email-blocks";
+
+interface SequenceMeta {
+  title: string;
+  fromName?: string | null;
+  fromEmail?: string | null;
+  triggerType?: string | null;
+  triggerData?: string | null;
+}
+
+const MILLIS_IN_DAY = 86400000;
+
+interface EmailDraft {
+  subject: string;
+  content: Email;
+  delayInMillis: number;
+  published: boolean;
+  actionType?: EmailActionType | null;
+  actionData?: Record<string, unknown> | null;
+}
 
 const STATUS_VARIANT: Record<
   Sequence["status"],
@@ -57,16 +79,18 @@ export default function SequenceEditorPage({
 }) {
   const { sequenceId } = use(params);
   const [sequence, setSequence] = useState<Sequence | null>(null);
-  const [meta, setMeta] = useState<SequenceMetaFormValue | null>(null);
+  const [meta, setMeta] = useState<SequenceMeta | null>(null);
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
-  const [emailDraft, setEmailDraft] = useState<SequenceEmailFormValue | null>(
+  const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(
     null,
   );
   const [stats, setStats] = useState<SequenceStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingMeta, setSavingMeta] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
-  const [addEmailOpen, setAddEmailOpen] = useState(false);
+  const [systemTemplates, setSystemTemplates] = useState<SystemTemplate[]>([]);
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
 
   async function load(selectId?: string) {
     try {
@@ -114,6 +138,21 @@ export default function SequenceEditorPage({
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sequenceId]);
+
+  useEffect(() => {
+    setTemplatesLoading(true);
+    Promise.all([listSystemTemplates(), listTemplates()])
+      .then(([system, own]) => {
+        setSystemTemplates(system);
+        setTemplates(own);
+      })
+      .catch((err) =>
+        setError(
+          err instanceof ApiError ? err.message : "Failed to load templates",
+        ),
+      )
+      .finally(() => setTemplatesLoading(false));
+  }, []);
 
   async function saveMeta() {
     if (!meta) return;
@@ -268,8 +307,48 @@ export default function SequenceEditorPage({
               {savingMeta ? "Saving…" : "Save"}
             </Button>
           </CardHeader>
-          <CardContent>
-            <SequenceMetaForm type="sequence" value={meta} onChange={setMeta} />
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="sequence-title">Title</Label>
+              <Input
+                id="sequence-title"
+                value={meta.title}
+                onChange={(e) => setMeta({ ...meta, title: e.target.value })}
+                placeholder="e.g. Onboarding drip"
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="sequence-from-name">From name</Label>
+                <Input
+                  id="sequence-from-name"
+                  value={meta.fromName ?? ""}
+                  onChange={(e) =>
+                    setMeta({ ...meta, fromName: e.target.value })
+                  }
+                  placeholder="Your name or company"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="sequence-from-email">From email</Label>
+                <Input
+                  id="sequence-from-email"
+                  type="email"
+                  value={meta.fromEmail ?? ""}
+                  onChange={(e) =>
+                    setMeta({ ...meta, fromEmail: e.target.value })
+                  }
+                  placeholder="you@yourdomain.com"
+                />
+              </div>
+            </div>
+            <TriggerPicker
+              triggerType={meta.triggerType}
+              triggerData={meta.triggerData}
+              onChange={({ triggerType, triggerData }) =>
+                setMeta({ ...meta, triggerType, triggerData })
+              }
+            />
           </CardContent>
         </Card>
       </div>
@@ -284,13 +363,6 @@ export default function SequenceEditorPage({
             emailsOrder={sequence.emailsOrder}
             selectedEmailId={selectedEmailId ?? undefined}
             onSelect={(emailId) => selectEmail(sequence, emailId)}
-            onAdd={() => setAddEmailOpen(true)}
-            onDelete={handleDelete}
-            onReorder={handleReorder}
-          />
-          <AddEmailDialog
-            open={addEmailOpen}
-            onOpenChange={setAddEmailOpen}
             onAdd={async (templateId) => {
               const updated = await addSequenceEmail(sequenceId, templateId);
               setSequence(updated);
@@ -299,6 +371,11 @@ export default function SequenceEditorPage({
                 updated.emailsOrder[updated.emailsOrder.length - 1],
               );
             }}
+            onDelete={handleDelete}
+            onReorder={handleReorder}
+            systemTemplates={systemTemplates}
+            templates={templates}
+            templatesLoading={templatesLoading}
           />
         </div>
 
@@ -318,12 +395,99 @@ export default function SequenceEditorPage({
                   )}
                 </Button>
               </CardHeader>
-              <CardContent>
-                <SequenceEmailForm
-                  value={emailDraft}
-                  onChange={setEmailDraft}
-                  variant="sequence"
-                />
+              <CardContent className="flex flex-col gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-subject">Subject</Label>
+                    <Input
+                      id="email-subject"
+                      value={emailDraft.subject}
+                      onChange={(e) =>
+                        setEmailDraft({ ...emailDraft, subject: e.target.value })
+                      }
+                      placeholder="Your subject line"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 sm:justify-start">
+                    <Label htmlFor="email-published" className="flex-1 sm:flex-none">
+                      Published
+                    </Label>
+                    <Switch
+                      id="email-published"
+                      checked={emailDraft.published}
+                      onCheckedChange={(published) =>
+                        setEmailDraft({ ...emailDraft, published })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-delay">Send after (days)</Label>
+                    <Input
+                      id="email-delay"
+                      type="number"
+                      min={0}
+                      value={emailDraft.delayInMillis / MILLIS_IN_DAY}
+                      onChange={(e) =>
+                        setEmailDraft({
+                          ...emailDraft,
+                          delayInMillis:
+                            Number(e.target.value || 0) * MILLIS_IN_DAY,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>On send, tag contact</Label>
+                    <Select
+                      value={emailDraft.actionType ?? "none"}
+                      onValueChange={(actionType) =>
+                        setEmailDraft({
+                          ...emailDraft,
+                          actionType:
+                            actionType === "none"
+                              ? null
+                              : (actionType as EmailActionType),
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No action</SelectItem>
+                        <SelectItem value="tag:add">Add tag</SelectItem>
+                        <SelectItem value="tag:remove">Remove tag</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {emailDraft.actionType && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="email-action-data">Tag name</Label>
+                      <Input
+                        id="email-action-data"
+                        value={(emailDraft.actionData?.tag as string) ?? ""}
+                        onChange={(e) =>
+                          setEmailDraft({
+                            ...emailDraft,
+                            actionData: { tag: e.target.value },
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-h-0 flex-1 rounded-lg border">
+                  <EmailEditor
+                    email={emailDraft.content}
+                    onChange={(content) =>
+                      setEmailDraft({ ...emailDraft, content })
+                    }
+                  />
+                </div>
               </CardContent>
             </Card>
           ) : (
@@ -348,58 +512,5 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
         <p className="text-xl font-semibold">{value}</p>
       </CardContent>
     </Card>
-  );
-}
-
-function AddEmailDialog({
-  open,
-  onOpenChange,
-  onAdd,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onAdd: (templateId: string) => Promise<void>;
-}) {
-  const [systemTemplates, setSystemTemplates] = useState<SystemTemplate[]>([]);
-  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setLoading(true);
-    Promise.all([listSystemTemplates(), listTemplates()])
-      .then(([system, own]) => {
-        setSystemTemplates(system);
-        setTemplates(own);
-      })
-      .catch((err) =>
-        setError(
-          err instanceof ApiError ? err.message : "Failed to load templates",
-        ),
-      )
-      .finally(() => setLoading(false));
-  }, [open]);
-
-  async function onSelect(choice: { templateId: string }) {
-    await onAdd(choice.templateId);
-    onOpenChange(false);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Add email</DialogTitle>
-        </DialogHeader>
-        {error && <Banner>{error}</Banner>}
-        <TemplateChooser
-          systemTemplates={systemTemplates}
-          templates={templates}
-          onSelect={onSelect}
-          loading={loading}
-        />
-      </DialogContent>
-    </Dialog>
   );
 }

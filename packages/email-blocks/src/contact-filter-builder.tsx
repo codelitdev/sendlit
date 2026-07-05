@@ -75,6 +75,27 @@ export interface ContactFilterBuilderProps {
   countLabel?: string;
   className?: string;
   disabled?: boolean;
+  defaultSegmentLabel?: string;
+  segmentsHeading?: string;
+  segmentsDescription?: string;
+  saveSegmentDescription?: string;
+  deleteSegmentTitle?: string;
+  deleteSegmentDescription?: (segment: ContactFilterSegment) => string;
+  filtersButtonLabel?: string;
+  addFilterHeading?: string;
+  applyLabel?: string;
+  cancelLabel?: string;
+  deleteLabel?: string;
+  saveLabel?: string;
+  clearFiltersLabel?: string;
+  saveSegmentButtonLabel?: string;
+  segmentNameLabel?: string;
+  aggregatorAnyLabel?: string;
+  aggregatorAllLabel?: string;
+  aggregatorAriaLabel?: string;
+  searchPlaceholder?: string;
+  searchAriaLabel?: string;
+  segmentTriggerSrLabel?: string;
 }
 
 const defaultSegment: ContactFilterSegment = {
@@ -310,6 +331,28 @@ export function ContactFilterBuilder({
   countLabel = "Users",
   className,
   disabled = false,
+  defaultSegmentLabel = "Everyone",
+  segmentsHeading = "Segments",
+  segmentsDescription = "Separate contacts into distinct groups.",
+  saveSegmentDescription = "You can access the saved segments from the Segments dropdown",
+  deleteSegmentTitle = "Delete Segment",
+  deleteSegmentDescription = (segment) =>
+    `Are you sure you want to delete the segment "${segment.name}"? This action cannot be undone.`,
+  filtersButtonLabel = "Filters",
+  addFilterHeading = "Add filter",
+  applyLabel = "Apply",
+  cancelLabel = "Cancel",
+  deleteLabel = "Delete",
+  saveLabel = "Save",
+  clearFiltersLabel = "Clear filters",
+  saveSegmentButtonLabel = "Save new segment",
+  segmentNameLabel = "Segment name",
+  aggregatorAnyLabel = "Any",
+  aggregatorAllLabel = "All",
+  aggregatorAriaLabel = "Match contacts by",
+  searchPlaceholder = "Search by email",
+  searchAriaLabel = "Search contacts by email",
+  segmentTriggerSrLabel = "segment",
 }: ContactFilterBuilderProps) {
   const filters = value?.filters ?? [];
   const aggregator = value?.aggregator ?? "or";
@@ -332,13 +375,17 @@ export function ContactFilterBuilder({
     emptyFilter(defaultDefinition),
   );
 
+  const resolvedDefaultSegment: ContactFilterSegment = {
+    ...defaultSegment,
+    name: defaultSegmentLabel,
+  };
   const allSegments = useMemo(
-    () => [defaultSegment, ...(segments ?? [])],
-    [segments],
+    () => [resolvedDefaultSegment, ...(segments ?? [])],
+    [segments, defaultSegmentLabel],
   );
   const selectedSegment =
     allSegments.find((segment) => segment.id === selectedSegmentId) ??
-    defaultSegment;
+    resolvedDefaultSegment;
 
   function setFilters(nextFilters: ContactFilterCondition[]) {
     onChange({ aggregator, filters: nextFilters });
@@ -402,8 +449,8 @@ export function ContactFilterBuilder({
       setDeletingSegment(true);
       await onDeleteSegment(segmentPendingDelete);
       if (segmentPendingDelete.id === selectedSegmentId) {
-        onChange(defaultSegment.filter);
-        onSegmentSelect?.(defaultSegment);
+        onChange(resolvedDefaultSegment.filter);
+        onSegmentSelect?.(resolvedDefaultSegment);
       }
       setSegmentPendingDelete(undefined);
     } finally {
@@ -419,14 +466,14 @@ export function ContactFilterBuilder({
             <Button type="button" variant="outline" className="gap-2">
               <ChartPie className="size-4" />
               {selectedSegment.name}
-              <span className="sr-only">segment</span>
+              <span className="sr-only">{segmentTriggerSrLabel}</span>
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80 p-2">
             <div className="px-2 py-2">
-              <p className="text-sm font-semibold">Segments</p>
+              <p className="text-sm font-semibold">{segmentsHeading}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Separate contacts into distinct groups.
+                {segmentsDescription}
               </p>
             </div>
             <div className="mt-1 space-y-1">
@@ -491,7 +538,7 @@ export function ContactFilterBuilder({
               disabled={disabled}
             >
               <Filter className="size-4" />
-              Filters
+              {filtersButtonLabel}
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80">
@@ -501,7 +548,7 @@ export function ContactFilterBuilder({
                   id="contact-filter-add-title"
                   className="px-2 pb-2 text-sm font-semibold"
                 >
-                  Add filter
+                  {addFilterHeading}
                 </p>
                 {definitions.map((definition) => (
                   <button
@@ -568,7 +615,7 @@ export function ContactFilterBuilder({
                     disabled={!draftFilter.value}
                     onClick={() => addFilter(draftFilter)}
                   >
-                    Apply
+                    {applyLabel}
                   </Button>
                   <Button
                     type="button"
@@ -578,7 +625,7 @@ export function ContactFilterBuilder({
                       setFilterOpen(false);
                     }}
                   >
-                    Cancel
+                    {cancelLabel}
                   </Button>
                 </div>
               </div>
@@ -594,8 +641,8 @@ export function ContactFilterBuilder({
           }}
         >
           <Input
-            aria-label="Search contacts by email"
-            placeholder="Search by email"
+            aria-label={searchAriaLabel}
+            placeholder={searchPlaceholder}
             value={searchEmail}
             onChange={(event) => setSearchEmail(event.target.value)}
             onBlur={addEmailSearchFilter}
@@ -608,7 +655,7 @@ export function ContactFilterBuilder({
             size="icon"
             className="absolute right-0 top-0 h-full"
             disabled={disabled || !searchEmail.trim()}
-            aria-label="Search by email"
+            aria-label={searchAriaLabel}
           >
             <Search className="size-4" />
           </Button>
@@ -628,12 +675,12 @@ export function ContactFilterBuilder({
             disabled={disabled}
             onValueChange={(value) => updateAggregator(value as "and" | "or")}
           >
-            <SelectTrigger className="h-10 w-24" aria-label="Match contacts by">
+            <SelectTrigger className="h-10 w-24" aria-label={aggregatorAriaLabel}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="or">Any</SelectItem>
-              <SelectItem value="and">All</SelectItem>
+              <SelectItem value="or">{aggregatorAnyLabel}</SelectItem>
+              <SelectItem value="and">{aggregatorAllLabel}</SelectItem>
             </SelectContent>
           </Select>
 
@@ -666,7 +713,7 @@ export function ContactFilterBuilder({
 
           {!disabled && (
             <Button type="button" variant="secondary" onClick={clearFilters}>
-              Clear filters
+              {clearFiltersLabel}
             </Button>
           )}
 
@@ -685,15 +732,15 @@ export function ContactFilterBuilder({
                   type="button"
                   variant="ghost"
                   className="gap-2"
-                  aria-label="Save current filters as a new segment"
+                  aria-label={saveSegmentButtonLabel}
                 >
                   <Save className="size-4" />
-                  Save new segment
+                  {saveSegmentButtonLabel}
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-72">
                 <p className="text-sm text-muted-foreground">
-                  You can access the saved segments from the Segments dropdown
+                  {saveSegmentDescription}
                 </p>
                 <form
                   className="mt-3 flex flex-col gap-2"
@@ -703,7 +750,7 @@ export function ContactFilterBuilder({
                     htmlFor="contact-filter-segment-name"
                     className="text-sm font-semibold"
                   >
-                    Segment name
+                    {segmentNameLabel}
                   </Label>
                   <Input
                     id="contact-filter-segment-name"
@@ -716,7 +763,7 @@ export function ContactFilterBuilder({
                       type="submit"
                       disabled={!segmentName.trim() || savingSegment}
                     >
-                      Save
+                      {saveLabel}
                     </Button>
                   </div>
                 </form>
@@ -734,10 +781,11 @@ export function ContactFilterBuilder({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Segment</DialogTitle>
+            <DialogTitle>{deleteSegmentTitle}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the segment &quot;
-              {segmentPendingDelete?.name}&quot;? This action cannot be undone.
+              {segmentPendingDelete
+                ? deleteSegmentDescription(segmentPendingDelete)
+                : null}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -746,7 +794,7 @@ export function ContactFilterBuilder({
               variant="outline"
               onClick={() => setSegmentPendingDelete(undefined)}
             >
-              Cancel
+              {cancelLabel}
             </Button>
             <Button
               type="button"
@@ -754,7 +802,7 @@ export function ContactFilterBuilder({
               disabled={deletingSegment}
               onClick={confirmDeleteSegment}
             >
-              Delete
+              {deleteLabel}
             </Button>
           </DialogFooter>
         </DialogContent>

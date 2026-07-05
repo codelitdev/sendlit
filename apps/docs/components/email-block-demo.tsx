@@ -3,11 +3,10 @@
 import { useMemo, useState } from "react";
 import {
   ContactFilterBuilder,
+  EmailEditor,
   EmailPreview,
   SequenceAnalytics,
-  SequenceEmailForm,
   SequenceEmailList,
-  SequenceMetaForm,
   SubscriberList,
   TagEditor,
   TemplateChooser,
@@ -16,15 +15,13 @@ import {
   type ContactFilterWithAggregator,
   type ContactFilterDefinition,
   type ContactFilterSegment,
+  type Email,
   type EmailTemplate,
   type SequenceEmail,
-  type SequenceEmailFormValue,
-  type SequenceMetaFormValue,
   type SubscriberListItem,
   type SystemTemplateSummary,
   type TriggerOption,
 } from "@sendlit/email-blocks";
-import type { Email } from "@sendlit/email-editor";
 
 type DemoName =
   | "contact-filter-builder"
@@ -33,11 +30,9 @@ type DemoName =
   | "sequence-analytics"
   | "subscriber-list"
   | "sequence-email-list"
-  | "sequence-meta-broadcast"
-  | "sequence-meta-sequence"
+  | "email-editor"
   | "email-preview"
-  | "template-chooser"
-  | "sequence-email-form";
+  | "template-chooser";
 
 const day = 86_400_000;
 const now = new Date().toISOString();
@@ -399,33 +394,14 @@ export function EmailBlockDemo({ demo }: { demo: DemoName }) {
     ],
     [tagOptions],
   );
+  const [emails, setEmails] = useState<SequenceEmail[]>(initialEmails);
   const [selectedEmailId, setSelectedEmailId] = useState("email_1");
   const [emailsOrder, setEmailsOrder] = useState([
     "email_1",
     "email_2",
     "email_3",
   ]);
-  const [sequenceEmail, setSequenceEmail] = useState<SequenceEmailFormValue>({
-    subject: "Make your next announcement premium",
-    content: sampleEmail,
-    delayInMillis: day,
-    published: true,
-    actionType: "tag:add",
-    actionData: { tag: "engaged" },
-  });
-  const [broadcastMeta, setBroadcastMeta] = useState<SequenceMetaFormValue>({
-    title: "July product announcement",
-    fromName: "SendLit Team",
-    fromEmail: "hello@sendlit.dev",
-    filter,
-  });
-  const [sequenceMeta, setSequenceMeta] = useState<SequenceMetaFormValue>({
-    title: "New subscriber onboarding",
-    fromName: "SendLit Team",
-    fromEmail: "hello@sendlit.dev",
-    triggerType: "tag:added",
-    triggerData: "trial",
-  });
+  const [editorEmail, setEditorEmail] = useState<Email>(sampleEmail);
   const [selectedTemplate, setSelectedTemplate] = useState("announcement");
   const [subscriberPage, setSubscriberPage] = useState(1);
   const subscriberTotalPages = Math.ceil(
@@ -545,43 +521,53 @@ export function EmailBlockDemo({ demo }: { demo: DemoName }) {
           description="Ordered sequence steps."
         >
           <SequenceEmailList
-            emails={initialEmails}
+            emails={emails}
             emailsOrder={emailsOrder}
             selectedEmailId={selectedEmailId}
             onSelect={setSelectedEmailId}
-            onAdd={() => undefined}
-            onDelete={() => undefined}
-            onReorder={setEmailsOrder}
-          />
-        </DemoFrame>
-      );
-    case "sequence-meta-broadcast":
-      return (
-        <DemoFrame
-          title="SequenceMetaForm: Broadcast"
-          description="Title, sender, and audience."
-        >
-          <SequenceMetaForm
-            type="broadcast"
-            value={{ ...broadcastMeta, filter }}
-            onChange={(value) => {
-              setBroadcastMeta(value);
-              if (value.filter) setFilter(value.filter);
+            onAdd={(templateId) => {
+              const template = [...systemTemplates, ...savedTemplates].find(
+                (item) => item.templateId === templateId,
+              );
+              if (!template) return;
+              const emailId = `email_${Date.now()}`;
+              const newEmail: SequenceEmail = {
+                id: emailId,
+                sequenceId: "seq_1",
+                emailId,
+                subject: `New email from "${template.title}"`,
+                content: template.content,
+                delayInMillis: 0,
+                published: false,
+                createdAt: now,
+                updatedAt: now,
+              };
+              setEmails((current) => [...current, newEmail]);
+              setEmailsOrder((current) => [...current, emailId]);
+              setSelectedEmailId(emailId);
             }}
+            onDelete={(emailId) => {
+              setEmails((current) =>
+                current.filter((email) => email.emailId !== emailId),
+              );
+              setEmailsOrder((current) =>
+                current.filter((id) => id !== emailId),
+              );
+            }}
+            onReorder={setEmailsOrder}
+            systemTemplates={systemTemplates}
+            templates={savedTemplates}
           />
         </DemoFrame>
       );
-    case "sequence-meta-sequence":
+    case "email-editor":
       return (
         <DemoFrame
-          title="SequenceMetaForm: Sequence"
-          description="Title, sender, and trigger."
+          title="EmailEditor"
+          description="WYSIWYG editor for an email's content."
+          tall
         >
-          <SequenceMetaForm
-            type="sequence"
-            value={sequenceMeta}
-            onChange={setSequenceMeta}
-          />
+          <EmailEditor email={editorEmail} onChange={setEditorEmail} />
         </DemoFrame>
       );
     case "email-preview":
@@ -603,21 +589,6 @@ export function EmailBlockDemo({ demo }: { demo: DemoName }) {
             systemTemplates={systemTemplates}
             templates={savedTemplates}
             onSelect={({ templateId }) => setSelectedTemplate(templateId)}
-          />
-        </DemoFrame>
-      );
-    case "sequence-email-form":
-      return (
-        <DemoFrame
-          title="SequenceEmailForm"
-          description="Subject, publish state, delay, actions, and email editor."
-          tall
-        >
-          <SequenceEmailForm
-            value={sequenceEmail}
-            onChange={setSequenceEmail}
-            variant="sequence"
-            className="h-full"
           />
         </DemoFrame>
       );

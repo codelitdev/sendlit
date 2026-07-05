@@ -4,7 +4,7 @@ description: Show aggregate email performance metrics.
 ---
 
 `SequenceAnalytics` renders aggregate delivery metrics for a broadcast or sequence.
-Pair it with [`SubscriberList`](/docs/email-blocks/subscriber-list) for the
+Pair it with [`SubscriberList`](/email-blocks/subscriber-list) for the
 paginated subscriber list underneath — they're separate blocks since a host
 may want to show metrics without a subscriber list (or vice versa), and only
 the list needs pagination.
@@ -50,4 +50,3 @@ function Example() {
   return <SequenceAnalytics metrics={analyticsMetrics} />;
 }
 ```
-

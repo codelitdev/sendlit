@@ -1,7 +1,7 @@
 {
   "name": "@sendlit/email-blocks",
   "version": "0.1.0",
-  "description": "Headless, ready-to-use blocks for composing broadcasts, sequences and templates",
+  "description": "Headless, ready-to-use blocks for composing your own email workflows powered by SendLit",
   "author": "SendLit",
   "license": "MIT",
   "main": "dist/index.mjs",
@@ -45,6 +45,7 @@
     "typescript-eslint": "^7.4.0"
   },
   "dependencies": {
+    "@radix-ui/react-alert-dialog": "^1.1.11",
     "@radix-ui/react-avatar": "^1.1.3",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-label": "^2.1.4",

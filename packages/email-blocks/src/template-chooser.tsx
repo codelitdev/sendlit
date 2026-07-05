@@ -1,3 +1,5 @@
+"use client";
+
 import type { EmailTemplate } from "./types";
 import type { Email } from "@sendlit/email-editor";
 import { EmailPreview } from "./email-preview";
@@ -15,6 +17,12 @@ export interface TemplateChooserProps {
   onSelect: (choice: { templateId: string; title: string }) => void;
   loading?: boolean;
   className?: string;
+  systemSectionTitle?: string;
+  systemSectionDescription?: string;
+  templatesSectionTitle?: string;
+  templatesSectionDescription?: string;
+  loadingLabel?: string;
+  emptyTemplatesLabel?: string;
 }
 
 /**
@@ -32,14 +40,20 @@ export function TemplateChooser({
   onSelect,
   loading,
   className,
+  systemSectionTitle = "System",
+  systemSectionDescription = "Built-in starters for common email styles and use cases.",
+  templatesSectionTitle = "Your templates",
+  templatesSectionDescription = "Your saved templates, ready to reuse.",
+  loadingLabel = "Loading…",
+  emptyTemplatesLabel = "You haven't saved any templates yet.",
 }: TemplateChooserProps) {
   return (
     <div className={className}>
       <section className="space-y-3">
         <div>
-          <h3 className="text-sm font-semibold">System</h3>
+          <h3 className="text-sm font-semibold">{systemSectionTitle}</h3>
           <p className="text-xs text-muted-foreground">
-            Built-in starters for common email styles and use cases.
+            {systemSectionDescription}
           </p>
         </div>
         <TemplateGrid items={systemTemplates} onClick={onSelect} />
@@ -47,16 +61,16 @@ export function TemplateChooser({
 
       <section className="mt-8 space-y-3">
         <div>
-          <h3 className="text-sm font-semibold">Your templates</h3>
+          <h3 className="text-sm font-semibold">{templatesSectionTitle}</h3>
           <p className="text-xs text-muted-foreground">
-            Your saved templates, ready to reuse.
+            {templatesSectionDescription}
           </p>
         </div>
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{loadingLabel}</p>
         ) : templates.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            You haven&apos;t saved any templates yet.
+            {emptyTemplatesLabel}
           </p>
         ) : (
           <TemplateGrid items={templates} onClick={onSelect} />

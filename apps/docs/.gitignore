@@ -1,2 +1,5 @@
 .next/
 tsconfig.tsbuildinfo
+
+# generated content
+.source/

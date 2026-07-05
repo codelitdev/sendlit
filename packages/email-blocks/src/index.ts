@@ -15,12 +15,6 @@ export type {
   TriggerValueOption,
 } from "./trigger-picker";
 
-export { SequenceEmailForm } from "./sequence-email-form";
-export type {
-  SequenceEmailFormProps,
-  SequenceEmailFormValue,
-} from "./sequence-email-form";
-
 export { SequenceEmailList } from "./sequence-email-list";
 export type { SequenceEmailListProps } from "./sequence-email-list";
 
@@ -32,12 +26,6 @@ export type {
 
 export { SubscriberList } from "./subscriber-list";
 export type { SubscriberListItem, SubscriberListProps } from "./subscriber-list";
-
-export { SequenceMetaForm } from "./sequence-meta-form";
-export type {
-  SequenceMetaFormProps,
-  SequenceMetaFormValue,
-} from "./sequence-meta-form";
 
 export { TagEditor } from "./tag-editor";
 export type { TagEditorProps } from "./tag-editor";
@@ -54,3 +42,8 @@ export { EmailPreview } from "./email-preview";
 export type { EmailPreviewProps } from "./email-preview";
 
 export * from "./types";
+
+// Re-exported so consumers don't need a separate dependency on
+// `@sendlit/email-editor` just to type/render the `content` these blocks pass
+// around (e.g. `Email`, `EmailEditor`, `renderEmailToHtml`).
+export * from "@sendlit/email-editor";

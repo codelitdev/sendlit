@@ -8,6 +8,11 @@ search, applied filter chips, match mode, clearing, and optional segment saving.
 Host apps can inject their own discrete filter definitions for app-specific
 filters like products, communities, permissions, tags, or date-based activity.
 
+Every visible string (button/heading/dialog text, aria-labels, the default
+"Everyone" segment name) is a prop with an English default, down to the
+delete-segment confirmation copy (`deleteSegmentDescription`, a function of
+the segment being deleted).
+
 <EmailBlockDemo demo="contact-filter-builder" />
 
 ## Usage

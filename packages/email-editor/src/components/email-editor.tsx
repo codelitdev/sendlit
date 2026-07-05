@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useCallback, useEffect, useRef } from "react";
 import { BlockWrapper } from "./block-wrapper";
 import { AddBlockButton } from "./add-block-button";
