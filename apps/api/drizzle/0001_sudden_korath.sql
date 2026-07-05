@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "ongoing_sequences_next_email_scheduled_time_idx" ON "ongoing_sequences" USING btree ("next_email_scheduled_time");

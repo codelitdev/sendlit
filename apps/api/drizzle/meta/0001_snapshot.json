@@ -1,0 +1,1525 @@
+{
+    "id": "58bc2f05-dce1-42aa-be5e-d2d3bf0fd4a9",
+    "prevId": "0d7229f4-9fcc-46a0-a135-9812187bdcf3",
+    "version": "7",
+    "dialect": "postgresql",
+    "tables": {
+        "public.accounts": {
+            "name": "accounts",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "email": {
+                    "name": "email",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "name": {
+                    "name": "name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "accounts_email_unique": {
+                    "name": "accounts_email_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["email"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.api_keys": {
+            "name": "api_keys",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "key": {
+                    "name": "key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "name": {
+                    "name": "name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {
+                "api_keys_team_id_teams_id_fk": {
+                    "name": "api_keys_team_id_teams_id_fk",
+                    "tableFrom": "api_keys",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "api_keys_key_unique": {
+                    "name": "api_keys_key_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["key"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.contacts": {
+            "name": "contacts",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "contact_id": {
+                    "name": "contact_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "email": {
+                    "name": "email",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "name": {
+                    "name": "name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "active": {
+                    "name": "active",
+                    "type": "boolean",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": true
+                },
+                "subscribed_to_updates": {
+                    "name": "subscribed_to_updates",
+                    "type": "boolean",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": true
+                },
+                "custom_fields": {
+                    "name": "custom_fields",
+                    "type": "jsonb",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'{}'::jsonb"
+                },
+                "tags": {
+                    "name": "tags",
+                    "type": "text[]",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'{}'"
+                },
+                "unsubscribe_token": {
+                    "name": "unsubscribe_token",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "contacts_team_id_email_idx": {
+                    "name": "contacts_team_id_email_idx",
+                    "columns": [
+                        {
+                            "expression": "team_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "email",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "contacts_team_id_teams_id_fk": {
+                    "name": "contacts_team_id_teams_id_fk",
+                    "tableFrom": "contacts",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "contacts_contact_id_unique": {
+                    "name": "contacts_contact_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["contact_id"]
+                },
+                "contacts_unsubscribe_token_unique": {
+                    "name": "contacts_unsubscribe_token_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["unsubscribe_token"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.email_deliveries": {
+            "name": "email_deliveries",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "sequence_id": {
+                    "name": "sequence_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "contact_id": {
+                    "name": "contact_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "email_id": {
+                    "name": "email_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {
+                "email_deliveries_team_id_teams_id_fk": {
+                    "name": "email_deliveries_team_id_teams_id_fk",
+                    "tableFrom": "email_deliveries",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.email_events": {
+            "name": "email_events",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "sequence_id": {
+                    "name": "sequence_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "contact_id": {
+                    "name": "contact_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "email_id": {
+                    "name": "email_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "action": {
+                    "name": "action",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "link": {
+                    "name": "link",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "link_index": {
+                    "name": "link_index",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "bounce_type": {
+                    "name": "bounce_type",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "bounce_reason": {
+                    "name": "bounce_reason",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {
+                "email_events_team_id_teams_id_fk": {
+                    "name": "email_events_team_id_teams_id_fk",
+                    "tableFrom": "email_events",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.email_templates": {
+            "name": "email_templates",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "template_id": {
+                    "name": "template_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "title": {
+                    "name": "title",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "content": {
+                    "name": "content",
+                    "type": "jsonb",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "email_templates_team_id_title_idx": {
+                    "name": "email_templates_team_id_title_idx",
+                    "columns": [
+                        {
+                            "expression": "team_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "title",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "email_templates_team_id_teams_id_fk": {
+                    "name": "email_templates_team_id_teams_id_fk",
+                    "tableFrom": "email_templates",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "email_templates_template_id_unique": {
+                    "name": "email_templates_template_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["template_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.esp_configs": {
+            "name": "esp_configs",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "provider": {
+                    "name": "provider",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'smtp'"
+                },
+                "host": {
+                    "name": "host",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "port": {
+                    "name": "port",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 587
+                },
+                "secure": {
+                    "name": "secure",
+                    "type": "boolean",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": false
+                },
+                "username": {
+                    "name": "username",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "encrypted_secret": {
+                    "name": "encrypted_secret",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "from_name": {
+                    "name": "from_name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "from_email": {
+                    "name": "from_email",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "last_tested_at": {
+                    "name": "last_tested_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "last_test_status": {
+                    "name": "last_test_status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "last_test_error": {
+                    "name": "last_test_error",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {
+                "esp_configs_team_id_teams_id_fk": {
+                    "name": "esp_configs_team_id_teams_id_fk",
+                    "tableFrom": "esp_configs",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "esp_configs_team_id_unique": {
+                    "name": "esp_configs_team_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["team_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.oauth_clients": {
+            "name": "oauth_clients",
+            "schema": "",
+            "columns": {
+                "client_id": {
+                    "name": "client_id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true
+                },
+                "client_id_issued_at": {
+                    "name": "client_id_issued_at",
+                    "type": "bigint",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "redirect_uris": {
+                    "name": "redirect_uris",
+                    "type": "text[]",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "grant_types": {
+                    "name": "grant_types",
+                    "type": "text[]",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "token_endpoint_auth_method": {
+                    "name": "token_endpoint_auth_method",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'none'"
+                },
+                "client_name": {
+                    "name": "client_name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "scope": {
+                    "name": "scope",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.oauth_pending_auth": {
+            "name": "oauth_pending_auth",
+            "schema": "",
+            "columns": {
+                "pending_id": {
+                    "name": "pending_id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true
+                },
+                "client_id": {
+                    "name": "client_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "redirect_uri": {
+                    "name": "redirect_uri",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "code_challenge": {
+                    "name": "code_challenge",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "code_challenge_method": {
+                    "name": "code_challenge_method",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "state": {
+                    "name": "state",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "scope": {
+                    "name": "scope",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "email": {
+                    "name": "email",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "otp_hash": {
+                    "name": "otp_hash",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "otp_expires": {
+                    "name": "otp_expires",
+                    "type": "bigint",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "otp_sent_at": {
+                    "name": "otp_sent_at",
+                    "type": "bigint",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "otp_attempts": {
+                    "name": "otp_attempts",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "authorization_code": {
+                    "name": "authorization_code",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "expires_at": {
+                    "name": "expires_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.oauth_revoked_tokens": {
+            "name": "oauth_revoked_tokens",
+            "schema": "",
+            "columns": {
+                "jti": {
+                    "name": "jti",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true
+                },
+                "token_type": {
+                    "name": "token_type",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "account_id": {
+                    "name": "account_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "client_id": {
+                    "name": "client_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "expires_at": {
+                    "name": "expires_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "revoked_at": {
+                    "name": "revoked_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.ongoing_sequences": {
+            "name": "ongoing_sequences",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "sequence_id": {
+                    "name": "sequence_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "contact_id": {
+                    "name": "contact_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "next_email_scheduled_time": {
+                    "name": "next_email_scheduled_time",
+                    "type": "bigint",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "retry_count": {
+                    "name": "retry_count",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "sent_email_ids": {
+                    "name": "sent_email_ids",
+                    "type": "text[]",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'{}'"
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "ongoing_sequences_sequence_id_contact_id_idx": {
+                    "name": "ongoing_sequences_sequence_id_contact_id_idx",
+                    "columns": [
+                        {
+                            "expression": "sequence_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "contact_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "ongoing_sequences_next_email_scheduled_time_idx": {
+                    "name": "ongoing_sequences_next_email_scheduled_time_idx",
+                    "columns": [
+                        {
+                            "expression": "next_email_scheduled_time",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "ongoing_sequences_team_id_teams_id_fk": {
+                    "name": "ongoing_sequences_team_id_teams_id_fk",
+                    "tableFrom": "ongoing_sequences",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.rules": {
+            "name": "rules",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "rule_id": {
+                    "name": "rule_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "event": {
+                    "name": "event",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "sequence_id": {
+                    "name": "sequence_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "event_date_in_millis": {
+                    "name": "event_date_in_millis",
+                    "type": "bigint",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "event_data": {
+                    "name": "event_data",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {
+                "rules_team_id_teams_id_fk": {
+                    "name": "rules_team_id_teams_id_fk",
+                    "tableFrom": "rules",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "rules_rule_id_unique": {
+                    "name": "rules_rule_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["rule_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.sequence_emails": {
+            "name": "sequence_emails",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "sequence_id": {
+                    "name": "sequence_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "email_id": {
+                    "name": "email_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "subject": {
+                    "name": "subject",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "content": {
+                    "name": "content",
+                    "type": "jsonb",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "delay_in_millis": {
+                    "name": "delay_in_millis",
+                    "type": "bigint",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 86400000
+                },
+                "published": {
+                    "name": "published",
+                    "type": "boolean",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": false
+                },
+                "template_id": {
+                    "name": "template_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "action_type": {
+                    "name": "action_type",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "action_data": {
+                    "name": "action_data",
+                    "type": "jsonb",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "sequence_emails_sequence_id_email_id_idx": {
+                    "name": "sequence_emails_sequence_id_email_id_idx",
+                    "columns": [
+                        {
+                            "expression": "sequence_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "email_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "sequence_emails_sequence_id_sequences_id_fk": {
+                    "name": "sequence_emails_sequence_id_sequences_id_fk",
+                    "tableFrom": "sequence_emails",
+                    "tableTo": "sequences",
+                    "columnsFrom": ["sequence_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.sequences": {
+            "name": "sequences",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "sequence_id": {
+                    "name": "sequence_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "type": {
+                    "name": "type",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "title": {
+                    "name": "title",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "''"
+                },
+                "status": {
+                    "name": "status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'draft'"
+                },
+                "from_name": {
+                    "name": "from_name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "from_email": {
+                    "name": "from_email",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "trigger_type": {
+                    "name": "trigger_type",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "trigger_data": {
+                    "name": "trigger_data",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "filter": {
+                    "name": "filter",
+                    "type": "jsonb",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "exclude_filter": {
+                    "name": "exclude_filter",
+                    "type": "jsonb",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "emails_order": {
+                    "name": "emails_order",
+                    "type": "text[]",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'{}'"
+                },
+                "entrants": {
+                    "name": "entrants",
+                    "type": "text[]",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'{}'"
+                },
+                "report": {
+                    "name": "report",
+                    "type": "jsonb",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'{}'::jsonb"
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {
+                "sequences_team_id_teams_id_fk": {
+                    "name": "sequences_team_id_teams_id_fk",
+                    "tableFrom": "sequences",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "sequences_sequence_id_unique": {
+                    "name": "sequences_sequence_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["sequence_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.team_members": {
+            "name": "team_members",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "team_id": {
+                    "name": "team_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "account_id": {
+                    "name": "account_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "role": {
+                    "name": "role",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'owner'"
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "team_members_team_id_account_id_idx": {
+                    "name": "team_members_team_id_account_id_idx",
+                    "columns": [
+                        {
+                            "expression": "team_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "account_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "team_members_team_id_teams_id_fk": {
+                    "name": "team_members_team_id_teams_id_fk",
+                    "tableFrom": "team_members",
+                    "tableTo": "teams",
+                    "columnsFrom": ["team_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                },
+                "team_members_account_id_accounts_id_fk": {
+                    "name": "team_members_account_id_accounts_id_fk",
+                    "tableFrom": "team_members",
+                    "tableTo": "accounts",
+                    "columnsFrom": ["account_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.teams": {
+            "name": "teams",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "name": {
+                    "name": "name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "owner_account_id": {
+                    "name": "owner_account_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "external_id": {
+                    "name": "external_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "from_name": {
+                    "name": "from_name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "from_email": {
+                    "name": "from_email",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "mailing_address": {
+                    "name": "mailing_address",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "daily_mail_limit": {
+                    "name": "daily_mail_limit",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 1000
+                },
+                "monthly_mail_limit": {
+                    "name": "monthly_mail_limit",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 30000
+                },
+                "daily_mail_count": {
+                    "name": "daily_mail_count",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "monthly_mail_count": {
+                    "name": "monthly_mail_count",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "counters_reset_at": {
+                    "name": "counters_reset_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {
+                "teams_owner_account_id_accounts_id_fk": {
+                    "name": "teams_owner_account_id_accounts_id_fk",
+                    "tableFrom": "teams",
+                    "tableTo": "accounts",
+                    "columnsFrom": ["owner_account_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "teams_external_id_unique": {
+                    "name": "teams_external_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["external_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        }
+    },
+    "enums": {},
+    "schemas": {},
+    "sequences": {},
+    "roles": {},
+    "policies": {},
+    "views": {},
+    "_meta": {
+        "columns": {},
+        "schemas": {},
+        "tables": {}
+    }
+}
