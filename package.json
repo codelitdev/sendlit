@@ -8,7 +8,7 @@
         "lint": "eslint packages apps --quiet",
         "prettier": "prettier --write packages apps *.md",
         "prepare": "husky",
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "test": "pnpm --filter @sendlit/api test"
     },
     "keywords": [],
     "author": "",
