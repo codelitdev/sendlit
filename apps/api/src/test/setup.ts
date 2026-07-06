@@ -5,3 +5,5 @@ process.env.PIXEL_SIGNING_SECRET ||= "test-pixel-secret";
 process.env.PROTOCOL ||= "https";
 process.env.DOMAIN ||= "sendlit.test";
 process.env.EMAIL_FROM ||= "platform@sendlit.test";
+process.env.ESP_CREDENTIALS_ENCRYPTION_KEY ||=
+    "test-esp-secret-key-with-at-least-32-bytes";

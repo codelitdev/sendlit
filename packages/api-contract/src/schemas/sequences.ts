@@ -84,7 +84,7 @@ export const listSequencesQuerySchema = z.object({
 
 export const createSequenceBodySchema = z.object({
     type: z.enum(mailTypes),
-    templateId: z.string(),
+    templateId: z.string().min(1),
 });
 
 export const updateSequenceBodySchema = z.object({
@@ -98,14 +98,14 @@ export const updateSequenceBodySchema = z.object({
 });
 
 export const addSequenceEmailBodySchema = z.object({
-    templateId: z.string(),
+    templateId: z.string().min(1),
 });
 
 export const updateSequenceEmailBodySchema = z.object({
     subject: z.string().optional(),
     content: emailContentSchema.optional(),
     delayInMillis: z.number().optional(),
-    templateId: z.string().optional(),
+    templateId: z.string().min(1).optional(),
     actionType: z.enum(emailActionTypes).optional(),
     actionData: z.record(z.any()).optional(),
     published: z.boolean().optional(),

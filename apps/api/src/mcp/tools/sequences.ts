@@ -109,7 +109,10 @@ export function registerSequenceTools(server: McpServer): void {
         {
             description:
                 "Creates a new broadcast or sequence, seeding its first email from an existing template.",
-            inputSchema: { type: z.enum(mailTypes), templateId: z.string() },
+            inputSchema: {
+                type: z.enum(mailTypes),
+                templateId: z.string().min(1),
+            },
             outputSchema: sequenceSchema,
             annotations: {
                 readOnlyHint: false,
@@ -194,7 +197,10 @@ export function registerSequenceTools(server: McpServer): void {
         {
             description:
                 "Adds a new email step to a sequence, seeded from an existing template.",
-            inputSchema: { sequenceId: z.string(), templateId: z.string() },
+            inputSchema: {
+                sequenceId: z.string(),
+                templateId: z.string().min(1),
+            },
             outputSchema: sequenceSchema,
             annotations: {
                 readOnlyHint: false,

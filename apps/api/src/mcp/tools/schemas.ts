@@ -34,7 +34,7 @@ export const contactListSchema = z.object({
 export const templateSchema = z.object({
     id: z.string(),
     teamId: z.string(),
-    templateId: z.string(),
+    templateId: z.string().min(1),
     title: z.string(),
     content: emailContentSchema,
     createdAt: z.string().or(z.date()),
@@ -42,7 +42,7 @@ export const templateSchema = z.object({
 });
 
 export const systemTemplateSchema = z.object({
-    templateId: z.string(),
+    templateId: z.string().min(1),
     title: z.string(),
     description: z.string(),
     content: emailContentSchema,
@@ -54,7 +54,7 @@ export const sequenceEmailSchema = z.object({
     content: emailContentSchema,
     delayInMillis: z.number(),
     published: z.boolean(),
-    templateId: z.string().nullable().optional(),
+    templateId: z.string().min(1).nullable().optional(),
     actionType: z.enum(emailActionTypes).nullable().optional(),
     actionData: z.record(z.any()).nullable().optional(),
 });

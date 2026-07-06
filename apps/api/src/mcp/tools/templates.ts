@@ -64,7 +64,7 @@ export function registerTemplateTools(server: McpServer): void {
         "get_template",
         {
             description: "Returns a single email template by its template ID.",
-            inputSchema: { templateId: z.string() },
+            inputSchema: { templateId: z.string().min(1) },
             outputSchema: templateSchema,
             annotations: {
                 readOnlyHint: true,
@@ -124,7 +124,7 @@ export function registerTemplateTools(server: McpServer): void {
         {
             description: "Updates a template's title and/or content.",
             inputSchema: {
-                templateId: z.string(),
+                templateId: z.string().min(1),
                 title: z.string().min(1).optional(),
                 content: emailContentSchema.optional(),
             },
@@ -168,7 +168,7 @@ export function registerTemplateTools(server: McpServer): void {
         "delete_template",
         {
             description: "Permanently deletes an email template.",
-            inputSchema: { templateId: z.string() },
+            inputSchema: { templateId: z.string().min(1) },
             outputSchema: successMessageSchema,
             annotations: {
                 readOnlyHint: false,
