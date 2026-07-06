@@ -6,3 +6,7 @@ dist/
 
 # Generated docs source
 apps/docs/.source/
+apps/docs/next-env.d.ts
+
+# Tool caches
+.eslintcache
