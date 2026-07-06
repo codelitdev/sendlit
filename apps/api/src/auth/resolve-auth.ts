@@ -1,6 +1,6 @@
 import { validateBearerToken } from "../oauth/middleware";
 import { getAccount, Account } from "../account/queries";
-import { getApiKeyUsingKeyId, ApiKey } from "../apikey/queries";
+import { getApiKeyBySecret, ApiKey } from "../apikey/queries";
 
 type OAuthClaims = {
     accountId: string;
@@ -17,7 +17,7 @@ export type AuthInput = {
 export type AuthDependencies = {
     validateBearerToken: (bearer: string) => Promise<OAuthClaims | null>;
     getAccount: (id: string) => Promise<Account | null>;
-    getApiKeyUsingKeyId: (key: string) => Promise<ApiKey | null>;
+    getApiKeyBySecret: (secret: string) => Promise<ApiKey | null>;
 };
 
 export type AuthResult =
@@ -78,7 +78,7 @@ export function sendAuthError(res: any, auth: AuthResult): boolean {
 const defaultDependencies: AuthDependencies = {
     validateBearerToken,
     getAccount,
-    getApiKeyUsingKeyId,
+    getApiKeyBySecret,
 };
 
 function getHeaderValue(value: unknown): string | undefined {
@@ -117,7 +117,7 @@ export async function resolveAuth(
         getHeaderValue(input.bodyApiKey) || getHeaderValue(input.apiKeyHeader);
     if (!submittedApiKey) return { status: "missing" };
 
-    const apiKey = await dependencies.getApiKeyUsingKeyId(submittedApiKey);
+    const apiKey = await dependencies.getApiKeyBySecret(submittedApiKey);
     if (!apiKey) return { status: "unauthorized" };
 
     return {

@@ -300,6 +300,9 @@ importers:
       liquidjs:
         specifier: ^10.19.0
         version: 10.27.1
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.16
       nodemailer:
         specifier: ^9.0.1
         version: 9.0.1
@@ -312,6 +315,9 @@ importers:
       swagger-ui-express:
         specifier: ^5.0.1
         version: 5.0.1(express@4.22.2)
+      uuidv7:
+        specifier: ^1.0.2
+        version: 1.2.1
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -592,7 +598,7 @@ importers:
         version: 10.5.2(postcss@8.5.16)
       eslint:
         specifier: ^8.57.0
-        version: 8.57.1(supports-color@5.5.0)
+        version: 8.57.1
       postcss:
         specifier: ^8.4.35
         version: 8.5.16
@@ -613,7 +619,7 @@ importers:
         version: 4.9.5
       typescript-eslint:
         specifier: ^7.4.0
-        version: 7.18.0(eslint@8.57.1(supports-color@5.5.0))(supports-color@5.5.0)(typescript@4.9.5)
+        version: 7.18.0(eslint@8.57.1)(typescript@4.9.5)
 
   packages/email-editor:
     dependencies:
@@ -680,7 +686,7 @@ importers:
         version: 10.5.2(postcss@8.5.16)
       eslint:
         specifier: ^8.57.0
-        version: 8.57.1
+        version: 8.57.1(supports-color@5.5.0)
       postcss:
         specifier: ^8.4.35
         version: 8.5.16
@@ -701,7 +707,7 @@ importers:
         version: 4.9.5
       typescript-eslint:
         specifier: ^7.4.0
-        version: 7.18.0(eslint@8.57.1)(typescript@4.9.5)
+        version: 7.18.0(eslint@8.57.1(supports-color@5.5.0))(supports-color@5.5.0)(typescript@4.9.5)
 
 packages:
 
@@ -5732,6 +5738,11 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
+    engines: {node: ^18 || >=20}
+    hasBin: true
+
   napi-postinstall@0.3.4:
     resolution: {integrity: sha512-PHI5f1O0EP5xJ9gQmFGMS6IZcrVvTjpXjz7Na41gTE7eE2hK11lg04CECCYEEjdc17EV4DO+fkGEtt7TpTaTiQ==}
     engines: {node: ^12.20.0 || ^14.18.0 || >=16.0.0}
@@ -7024,6 +7035,10 @@ packages:
     resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
     hasBin: true
 
+  uuidv7@1.2.1:
+    resolution: {integrity: sha512-4kPkK3/XTQW9Hbm4CaqfICn+kY9LJtDVEOfgsRRra/+n2Ofg4NqzRFceAkxvQ/Ud/6BpHOPzj8cirqM7TzTN5Q==}
+    hasBin: true
+
   vary@1.1.2:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
@@ -7286,7 +7301,7 @@ snapshots:
       '@babel/code-frame': 7.29.7
       '@babel/generator': 7.29.7
       '@babel/helper-compilation-targets': 7.29.7
-      '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7)
+      '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7(supports-color@5.5.0))
       '@babel/helpers': 7.29.7
       '@babel/parser': 7.29.7
       '@babel/template': 7.29.7
@@ -7326,7 +7341,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-module-transforms@7.29.7(@babel/core@7.29.7)':
+  '@babel/helper-module-transforms@7.29.7(@babel/core@7.29.7(supports-color@5.5.0))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@5.5.0)
       '@babel/helper-module-imports': 7.29.7
@@ -12682,6 +12697,8 @@ snapshots:
 
   nanoid@3.3.15: {}
 
+  nanoid@5.1.16: {}
+
   napi-postinstall@0.3.4: {}
 
   natural-compare@1.4.0: {}
@@ -14196,6 +14213,8 @@ snapshots:
   utils-merge@1.0.1: {}
 
   uuid@11.1.1: {}
+
+  uuidv7@1.2.1: {}
 
   vary@1.1.2: {}
 

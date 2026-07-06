@@ -1,7 +1,6 @@
 import { eq, and } from "drizzle-orm";
 import { db } from "../db/client";
 import { rules } from "../db/schema";
-import { generateUniqueId } from "../utils/id";
 import {
     defaultEmail,
     type Email,
@@ -64,6 +63,7 @@ export async function addRule({
     eventDateInMillis,
 }: {
     teamId: string;
+    /** Internal `sequences.id` — `rules.sequenceId` is a uuid FK. */
     sequenceId: string;
     triggerType: string;
     triggerData?: string | null;
@@ -71,7 +71,6 @@ export async function addRule({
 }) {
     await db.insert(rules).values({
         teamId,
-        ruleId: generateUniqueId(),
         event: triggerType,
         sequenceId,
         eventDateInMillis: eventDateInMillis ?? null,
@@ -84,6 +83,7 @@ export async function removeRule({
     sequenceId,
 }: {
     teamId: string;
+    /** Internal `sequences.id`. */
     sequenceId: string;
 }) {
     await db

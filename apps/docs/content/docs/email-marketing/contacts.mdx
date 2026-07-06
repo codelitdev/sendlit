@@ -6,3 +6,11 @@ description: Manage subscribers and segmentation data.
 Contacts represent subscribers in a team. Each contact has an email address, subscription state, tags, and custom fields.
 
 Tags are the primary automation and segmentation primitive. They can be applied manually, through API calls, or as actions after sequence emails are sent.
+
+Custom fields store generic contact attributes as scalar values or scalar arrays. Use namespaced keys for data synced from another system, for example `courselit.products: ["course_123"]` or `courselit.permissions: ["manageUsers"]`. SendLit treats these as CRM contact attributes; it does not need to understand the source system's product, community, or permission model.
+
+## Segments
+
+A segment is a saved, named contact filter — a combination of tag, email, subscription status, and signup date conditions joined with `and`/`or`. Build the filter once, save it as a segment, and reuse it instead of rebuilding it for every broadcast or sequence.
+
+Segments are dynamic: they store the filter, not a list of contacts, so the matching contacts are computed at the time the segment is used. Manage them via the `/segments` endpoints (the Segments section in the API reference), and preview the currently matching contacts with `GET /contacts?segmentId={segmentId}`. For one-off filtering, `GET /contacts` also accepts `filter` as serialized `ContactFilterWithAggregator` JSON. Filters can target fixed contact fields, tags, and `customField` keys. `q`, `segmentId`, and `filter` combine with AND.

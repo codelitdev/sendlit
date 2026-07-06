@@ -53,7 +53,7 @@ export default function TeamsPage() {
             setTeams(items);
             const cookieTeamId = getCurrentTeamIdFromCookie();
             setCurrentTeamId(
-                cookieTeamId || (items.length === 1 ? items[0].id : null),
+                cookieTeamId || (items.length === 1 ? items[0].teamId : null),
             );
         } catch (err) {
             setError(
@@ -84,9 +84,9 @@ export default function TeamsPage() {
                 <div className="space-y-4">
                     {teams.map((team) => (
                         <TeamCard
-                            key={team.id}
+                            key={team.teamId}
                             team={team}
-                            isCurrent={team.id === currentTeamId}
+                            isCurrent={team.teamId === currentTeamId}
                             onChanged={load}
                         />
                     ))}
@@ -115,7 +115,7 @@ function CreateTeamDialog({ onCreated }: { onCreated: () => void }) {
             const form = document.createElement("form");
             form.method = "POST";
             form.action = "/api/team/switch";
-            form.innerHTML = `<input type="hidden" name="teamId" value="${team.id}"><input type="hidden" name="redirectTo" value="/dashboard/teams">`;
+            form.innerHTML = `<input type="hidden" name="teamId" value="${team.teamId}"><input type="hidden" name="redirectTo" value="/dashboard/teams">`;
             document.body.appendChild(form);
             form.submit();
         } catch (err) {
@@ -180,7 +180,7 @@ function TeamCard({
 
     async function loadKeys() {
         try {
-            const { items } = await listTeamKeys(team.id);
+            const { items } = await listTeamKeys(team.teamId);
             setKeys(items);
             setKeysLoaded(true);
         } catch (err) {
@@ -201,7 +201,7 @@ function TeamCard({
     async function addKey() {
         if (!newKeyName.trim()) return;
         try {
-            await createTeamKey(team.id, newKeyName.trim());
+            await createTeamKey(team.teamId, newKeyName.trim());
             setNewKeyName("");
             await loadKeys();
         } catch (err) {
@@ -215,7 +215,7 @@ function TeamCard({
 
     async function removeKey(key: string) {
         try {
-            await deleteTeamKey(team.id, key);
+            await deleteTeamKey(team.teamId, key);
             await loadKeys();
         } catch (err) {
             setError(
@@ -235,7 +235,7 @@ function TeamCard({
             return;
         }
         try {
-            await deleteTeam(team.id);
+            await deleteTeam(team.teamId);
             onChanged();
         } catch (err) {
             setError(
@@ -253,7 +253,11 @@ function TeamCard({
                 </CardTitle>
                 {!isCurrent && (
                     <form action="/api/team/switch" method="POST">
-                        <input type="hidden" name="teamId" value={team.id} />
+                        <input
+                            type="hidden"
+                            name="teamId"
+                            value={team.teamId}
+                        />
                         <input
                             type="hidden"
                             name="redirectTo"

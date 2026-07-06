@@ -12,10 +12,11 @@ vi.mock("../mail/send", () => ({
 import { db } from "../db/client";
 import { sendMail } from "../mail/send";
 import {
+    accounts,
+    contacts,
     emailDeliveries,
     ongoingSequences,
     sequences,
-    teams,
 } from "../db/schema";
 import { truncateAll, seedTeamAndContact, type TestDb } from "../test/db";
 import { seedSequence, seedOngoingSequence } from "../test/fixtures";
@@ -67,15 +68,15 @@ describe("getNextPublishedEmail", () => {
 
 describe("processOngoingSequence", () => {
     it("does nothing when the row is not yet due (duplicate-job guard)", async () => {
-        const { team, contact } = await seedTeamAndContact(tdb);
+        const { account, team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
-            contactId: contact.contactId,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
             nextEmailScheduledTime: Date.now() + 60_000,
         });
 
@@ -90,19 +91,23 @@ describe("processOngoingSequence", () => {
     });
 
     it("sends the next email, records the delivery, and schedules the follow-up", async () => {
-        const { team, contact } = await seedTeamAndContact(tdb);
-        const { sequenceRow } = await seedSequence(tdb, {
+        const { account, team, contact } = await seedTeamAndContact(tdb);
+        const { sequenceRow, emailRows } = await seedSequence(tdb, {
             teamId: team.id,
             emails: [
-                { emailId: "e1", subject: "First", delayInMillis: 0 },
-                { emailId: "e2", subject: "Second", delayInMillis: 3_600_000 },
+                { emailId: "email_e1", subject: "First", delayInMillis: 0 },
+                {
+                    emailId: "email_e2",
+                    subject: "Second",
+                    delayInMillis: 3_600_000,
+                },
             ],
         });
         const scheduledAt = Date.now() - 1000;
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
-            contactId: contact.contactId,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
             nextEmailScheduledTime: scheduledAt,
         });
 
@@ -117,35 +122,35 @@ describe("processOngoingSequence", () => {
         const deliveries = await tdb
             .select()
             .from(emailDeliveries)
-            .where(eq(emailDeliveries.contactId, contact.contactId));
+            .where(eq(emailDeliveries.contactId, contact.id));
         expect(deliveries).toHaveLength(1);
-        expect(deliveries[0].emailId).toBe("e1");
+        expect(deliveries[0].emailId).toBe(emailRows[0].id);
 
         const [after] = await tdb
             .select()
             .from(ongoingSequences)
             .where(eq(ongoingSequences.id, row.id));
-        expect(after.sentEmailIds).toEqual(["e1"]);
+        expect(after.sentEmailIds).toEqual(["email_e1"]);
         expect(after.nextEmailScheduledTime).toBe(scheduledAt + 3_600_000);
 
-        const [teamAfter] = await tdb
+        const [accountAfter] = await tdb
             .select()
-            .from(teams)
-            .where(eq(teams.id, team.id));
-        expect(teamAfter.dailyMailCount).toBe(1);
-        expect(teamAfter.monthlyMailCount).toBe(1);
+            .from(accounts)
+            .where(eq(accounts.id, account.id));
+        expect(accountAfter.dailyMailCount).toBe(1);
+        expect(accountAfter.monthlyMailCount).toBe(1);
     });
 
     it("renders merge tags, the tracking pixel, and click-tracked links", async () => {
         const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
-            contactId: contact.contactId,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
         });
 
         await processOngoingSequence(row.id);
@@ -164,19 +169,19 @@ describe("processOngoingSequence", () => {
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
             emails: [
-                { emailId: "e1", delayInMillis: 0 },
-                { emailId: "e2", delayInMillis: 3_600_000 },
+                { emailId: "email_e1", delayInMillis: 0 },
+                { emailId: "email_e2", delayInMillis: 3_600_000 },
             ],
         });
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
-            contactId: contact.contactId,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
         });
 
         await processOngoingSequence(row.id);
         // A stale duplicate BullMQ job arrives right after the schedule advanced:
-        // before the dueness guard this would send "e2" immediately.
+        // before the dueness guard this would send "email_e2" immediately.
         await processOngoingSequence(row.id);
 
         expect(mockedSendMail).toHaveBeenCalledTimes(1);
@@ -187,12 +192,12 @@ describe("processOngoingSequence", () => {
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
             type: "broadcast",
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
-            contactId: contact.contactId,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
         });
 
         await processOngoingSequence(row.id);
@@ -213,16 +218,16 @@ describe("processOngoingSequence", () => {
 
     it("skips sending when the team's mail quota is exhausted", async () => {
         const { team, contact } = await seedTeamAndContact(tdb, {
-            team: { dailyMailLimit: 5, dailyMailCount: 5 },
+            account: { dailyMailLimit: 5, dailyMailCount: 5 },
         });
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
-            contactId: contact.contactId,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
         });
 
         await processOngoingSequence(row.id);
@@ -236,21 +241,26 @@ describe("processOngoingSequence", () => {
         expect(remaining).toHaveLength(1);
     });
 
-    it("cleans up the row when the contact no longer exists", async () => {
-        const { team } = await seedTeamAndContact(tdb);
+    it("cascade-deletes the ongoing_sequences row when its contact is deleted", async () => {
+        // `ongoing_sequences.contact_id` is now a real `ON DELETE CASCADE` FK
+        // to `contacts.id`, so it's no longer possible to construct a row
+        // whose contact "no longer exists" — the FK makes that state
+        // structurally unreachable. Instead assert the DB-level cascade
+        // itself: deleting the contact removes the ongoing_sequences row
+        // without any app code (`processOngoingSequence`) running at all.
+        const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
-            contactId: "ghost-contact",
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
         });
 
-        await processOngoingSequence(row.id);
+        await tdb.delete(contacts).where(eq(contacts.id, contact.id));
 
-        expect(mockedSendMail).not.toHaveBeenCalled();
         const remaining = await tdb
             .select()
             .from(ongoingSequences)
@@ -268,12 +278,12 @@ describe("processOngoingSequence", () => {
         const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
-            contactId: contact.contactId,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
         });
         mockedSendMail.mockRejectedValueOnce(new Error("smtp down"));
 
@@ -295,13 +305,13 @@ describe("processOngoingSequence", () => {
         const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         // sequenceBounceLimit defaults to 3: this attempt is the third failure.
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
-            contactId: contact.contactId,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
             retryCount: 2,
         });
         mockedSendMail.mockRejectedValueOnce(new Error("smtp down"));

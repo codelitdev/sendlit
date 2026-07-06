@@ -1,11 +1,27 @@
 import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import type { CustomFields, CustomFieldValue } from "@sendlit/api-contract";
 import { db } from "../db/client";
-import { contacts, emailDeliveries, sequences } from "../db/schema";
+import {
+    contactCustomFieldValues,
+    contacts,
+    emailDeliveries,
+    sequenceEmails,
+    sequences,
+} from "../db/schema";
+// `contacts.contactId` auto-generates via `$defaultFn` (see `db/schema.ts`);
+// `generateUniqueId` is only still needed here for `unsubscribeToken`, an
+// opaque secret rather than a public resource ID.
 import { generateUniqueId } from "../utils/id";
 import { EventType, itemsPerPage } from "../config/constants";
 import { fireEvent } from "../automation/fire-event";
+import {
+    buildContactFilterCondition,
+    type ContactFilterWithAggregator,
+} from "./segment";
 
 export type Contact = typeof contacts.$inferSelect;
+type ContactListFilter =
+    ContactFilterWithAggregator | ContactFilterWithAggregator[];
 
 export async function createContact({
     teamId,
@@ -18,13 +34,12 @@ export async function createContact({
     email: string;
     name?: string;
     tags?: string[];
-    customFields?: Record<string, string>;
+    customFields?: CustomFields;
 }): Promise<Contact> {
     const [contact] = await db
         .insert(contacts)
         .values({
             teamId,
-            contactId: generateUniqueId(),
             email: email.toLowerCase().trim(),
             name,
             tags,
@@ -35,10 +50,15 @@ export async function createContact({
         .returning();
 
     if (contact) {
+        await syncContactCustomFieldValues({
+            teamId,
+            contactId: contact.id,
+            customFields,
+        });
         await fireEvent({
             teamId,
             event: EventType.SUBSCRIBER_ADDED,
-            contactId: contact.contactId,
+            contactId: contact.id,
         });
         return contact;
     }
@@ -77,6 +97,15 @@ export async function getContactByContactId(
     return row ?? null;
 }
 
+export async function getContactById(id: string): Promise<Contact | null> {
+    const [row] = await db
+        .select()
+        .from(contacts)
+        .where(eq(contacts.id, id))
+        .limit(1);
+    return row ?? null;
+}
+
 export async function getContactByUnsubscribeToken(
     token: string,
 ): Promise<Contact | null> {
@@ -88,17 +117,15 @@ export async function getContactByUnsubscribeToken(
     return row ?? null;
 }
 
-export async function listContacts({
+function listContactsConditions({
     teamId,
     searchText,
-    offset = 1,
-    rowsPerPage = itemsPerPage,
+    filter,
 }: {
     teamId: string;
     searchText?: string;
-    offset?: number;
-    rowsPerPage?: number;
-}): Promise<Contact[]> {
+    filter?: ContactListFilter;
+}) {
     const conditions = [eq(contacts.teamId, teamId)];
     if (searchText) {
         conditions.push(
@@ -108,19 +135,48 @@ export async function listContacts({
             )!,
         );
     }
+    const filters = Array.isArray(filter) ? filter : filter ? [filter] : [];
+    for (const contactFilter of filters) {
+        const filterCondition = buildContactFilterCondition(contactFilter);
+        if (filterCondition) {
+            conditions.push(filterCondition);
+        }
+    }
+    return and(...conditions);
+}
+
+export async function listContacts({
+    teamId,
+    searchText,
+    filter,
+    offset = 1,
+    rowsPerPage = itemsPerPage,
+}: {
+    teamId: string;
+    searchText?: string;
+    filter?: ContactListFilter;
+    offset?: number;
+    rowsPerPage?: number;
+}): Promise<Contact[]> {
     return db
         .select()
         .from(contacts)
-        .where(and(...conditions))
+        .where(listContactsConditions({ teamId, searchText, filter }))
         .limit(rowsPerPage)
         .offset((Math.max(offset, 1) - 1) * rowsPerPage);
 }
 
-export async function countContacts(teamId: string): Promise<number> {
+export async function countContacts(
+    teamId: string,
+    {
+        searchText,
+        filter,
+    }: { searchText?: string; filter?: ContactListFilter } = {},
+): Promise<number> {
     const [row] = await db
         .select({ value: count() })
         .from(contacts)
-        .where(eq(contacts.teamId, teamId));
+        .where(listContactsConditions({ teamId, searchText, filter }));
     return row?.value ?? 0;
 }
 
@@ -128,10 +184,7 @@ export async function updateContact(
     teamId: string,
     contactId: string,
     patch: Partial<
-        Pick<
-            Contact,
-            "name" | "tags" | "active" | "subscribedToUpdates" | "customFields"
-        >
+        Pick<Contact, "name" | "tags" | "subscribed" | "customFields">
     >,
 ): Promise<Contact | null> {
     const [row] = await db
@@ -141,6 +194,13 @@ export async function updateContact(
             and(eq(contacts.teamId, teamId), eq(contacts.contactId, contactId)),
         )
         .returning();
+    if (row && Object.prototype.hasOwnProperty.call(patch, "customFields")) {
+        await syncContactCustomFieldValues({
+            teamId,
+            contactId: row.id,
+            customFields: patch.customFields ?? {},
+        });
+    }
     return row ?? null;
 }
 
@@ -164,7 +224,7 @@ export async function addTagToContact(
             teamId,
             event: EventType.TAG_ADDED,
             eventData: tag,
-            contactId,
+            contactId: row.id,
         });
     }
     return row ?? null;
@@ -190,7 +250,7 @@ export async function removeTagFromContact(
             teamId,
             event: EventType.TAG_REMOVED,
             eventData: tag,
-            contactId,
+            contactId: row.id,
         });
     }
     return row ?? null;
@@ -200,11 +260,100 @@ export async function deleteContact(
     teamId: string,
     contactId: string,
 ): Promise<void> {
+    // `contact_custom_field_values.contact_id` is now an internal-id FK with
+    // `ON DELETE CASCADE`, so deleting the contact row below cascades to its
+    // custom field values automatically — no separate delete needed.
     await db
         .delete(contacts)
         .where(
             and(eq(contacts.teamId, teamId), eq(contacts.contactId, contactId)),
         );
+}
+
+function scalarValues(
+    value: CustomFieldValue,
+): Array<string | number | boolean> {
+    return Array.isArray(value) ? value : [value];
+}
+
+function customFieldRow({
+    teamId,
+    contactId,
+    key,
+    value,
+}: {
+    teamId: string;
+    contactId: string;
+    key: string;
+    value: string | number | boolean;
+}) {
+    if (typeof value === "number") {
+        return {
+            teamId,
+            contactId,
+            key,
+            valueType: "number",
+            valueNumber: value,
+        };
+    }
+    if (typeof value === "boolean") {
+        return {
+            teamId,
+            contactId,
+            key,
+            valueType: "boolean",
+            valueBoolean: value,
+        };
+    }
+
+    const date = new Date(value);
+    if (Number.isFinite(date.getTime())) {
+        return {
+            teamId,
+            contactId,
+            key,
+            valueType: "date",
+            valueText: value,
+            valueDate: date,
+        };
+    }
+
+    return {
+        teamId,
+        contactId,
+        key,
+        valueType: "string",
+        valueText: value,
+    };
+}
+
+async function syncContactCustomFieldValues({
+    teamId,
+    contactId,
+    customFields,
+}: {
+    teamId: string;
+    contactId: string;
+    customFields: CustomFields;
+}) {
+    await db
+        .delete(contactCustomFieldValues)
+        .where(
+            and(
+                eq(contactCustomFieldValues.teamId, teamId),
+                eq(contactCustomFieldValues.contactId, contactId),
+            ),
+        );
+
+    const rows = Object.entries(customFields).flatMap(([key, value]) =>
+        scalarValues(value).map((item) =>
+            customFieldRow({ teamId, contactId, key, value: item }),
+        ),
+    );
+
+    if (rows.length) {
+        await db.insert(contactCustomFieldValues).values(rows);
+    }
 }
 
 export interface ContactDelivery {
@@ -216,23 +365,25 @@ export interface ContactDelivery {
 }
 
 /** The broadcasts/sequence emails a contact has actually received, most
- * recent first — surfaced on the contact detail page. */
+ * recent first — surfaced on the contact detail page. `contactId` here is the
+ * contact's **internal** id (callers already have the `Contact` row loaded). */
 export async function getDeliveriesByContact(
     teamId: string,
     contactId: string,
 ): Promise<ContactDelivery[]> {
     const rows = await db
         .select({
-            sequenceId: emailDeliveries.sequenceId,
-            emailId: emailDeliveries.emailId,
+            sequenceId: sequences.sequenceId,
+            emailId: sequenceEmails.emailId,
             createdAt: emailDeliveries.createdAt,
             sequenceTitle: sequences.title,
             sequenceType: sequences.type,
         })
         .from(emailDeliveries)
+        .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
         .innerJoin(
-            sequences,
-            eq(sequences.sequenceId, emailDeliveries.sequenceId),
+            sequenceEmails,
+            eq(sequenceEmails.id, emailDeliveries.emailId),
         )
         .where(
             and(

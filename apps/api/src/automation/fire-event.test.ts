@@ -32,7 +32,7 @@ async function seedRule({
 }) {
     await tdb.insert(rules).values({
         teamId,
-        ruleId: `rule-${crypto.randomUUID()}`,
+        ruleId: `rule_${crypto.randomUUID()}`,
         event,
         sequenceId,
         eventData,
@@ -52,11 +52,11 @@ describe("fireEvent", () => {
         const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         await seedRule({
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
+            sequenceId: sequenceRow.id,
             event: EventType.TAG_ADDED,
             eventData: "vip",
         });
@@ -65,23 +65,21 @@ describe("fireEvent", () => {
             teamId: team.id,
             event: EventType.TAG_ADDED,
             eventData: "vip",
-            contactId: contact.contactId,
+            contactId: contact.id,
         });
 
-        expect(await enrolledContactIds(sequenceRow.sequenceId)).toEqual([
-            contact.contactId,
-        ]);
+        expect(await enrolledContactIds(sequenceRow.id)).toEqual([contact.id]);
     });
 
     it("ignores TAG_ADDED rules for a different tag", async () => {
         const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         await seedRule({
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
+            sequenceId: sequenceRow.id,
             event: EventType.TAG_ADDED,
             eventData: "vip",
         });
@@ -90,10 +88,10 @@ describe("fireEvent", () => {
             teamId: team.id,
             event: EventType.TAG_ADDED,
             eventData: "newsletter",
-            contactId: contact.contactId,
+            contactId: contact.id,
         });
 
-        expect(await enrolledContactIds(sequenceRow.sequenceId)).toEqual([]);
+        expect(await enrolledContactIds(sequenceRow.id)).toEqual([]);
     });
 
     it("does not enroll into sequences that are not active", async () => {
@@ -101,43 +99,41 @@ describe("fireEvent", () => {
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
             status: "paused",
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         await seedRule({
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
+            sequenceId: sequenceRow.id,
             event: EventType.SUBSCRIBER_ADDED,
         });
 
         await fireEvent({
             teamId: team.id,
             event: EventType.SUBSCRIBER_ADDED,
-            contactId: contact.contactId,
+            contactId: contact.id,
         });
 
-        expect(await enrolledContactIds(sequenceRow.sequenceId)).toEqual([]);
+        expect(await enrolledContactIds(sequenceRow.id)).toEqual([]);
     });
 
     it("enrolls on SUBSCRIBER_ADDED without any eventData matching", async () => {
         const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
-            emails: [{ emailId: "e1" }],
+            emails: [{ emailId: "email_e1" }],
         });
         await seedRule({
             teamId: team.id,
-            sequenceId: sequenceRow.sequenceId,
+            sequenceId: sequenceRow.id,
             event: EventType.SUBSCRIBER_ADDED,
         });
 
         await fireEvent({
             teamId: team.id,
             event: EventType.SUBSCRIBER_ADDED,
-            contactId: contact.contactId,
+            contactId: contact.id,
         });
 
-        expect(await enrolledContactIds(sequenceRow.sequenceId)).toEqual([
-            contact.contactId,
-        ]);
+        expect(await enrolledContactIds(sequenceRow.id)).toEqual([contact.id]);
     });
 });

@@ -13,7 +13,6 @@ import {
 import { invalidateTeamTransport } from "../../mail/transport";
 import { sendTestMail } from "../../mail/send";
 import { getEmailFrom } from "../../utils/mail";
-import { getTeam } from "../../team/queries";
 
 const router = Router();
 router.use(requireAuth);
@@ -70,7 +69,6 @@ const impl = s.router(contract.settings.esp, {
             name?: string;
             email?: string;
         } | null;
-        const team = await getTeam(teamId);
         const to = body.to || account?.email;
         if (!to) {
             return {
@@ -80,9 +78,8 @@ const impl = s.router(contract.settings.esp, {
         }
 
         const from = getEmailFrom({
-            name:
-                config.fromName || team?.fromName || account?.name || "SendLit",
-            email: config.fromEmail || team?.fromEmail || account?.email || "",
+            name: config.fromName || account?.name || "SendLit",
+            email: config.fromEmail || account?.email || "",
         });
 
         try {

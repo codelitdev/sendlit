@@ -13,7 +13,8 @@ export type ContactFilterName =
 export interface ContactFilterCondition {
     name: ContactFilterName;
     condition: string;
-    value: string;
+    value?: string;
+    key?: string;
     valueLabel?: string;
 }
 
@@ -30,7 +31,10 @@ export interface Contact {
     name?: string | null;
     active: boolean;
     subscribedToUpdates: boolean;
-    customFields: Record<string, string>;
+    customFields: Record<
+        string,
+        string | number | boolean | string[] | number[] | boolean[]
+    >;
     tags: string[];
     unsubscribeToken: string;
     createdAt: string;

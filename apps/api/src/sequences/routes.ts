@@ -22,6 +22,7 @@ import {
     type HydratedSequence,
 } from "./queries";
 import { serializeDates } from "../utils/serialize";
+import { omitInternal } from "../utils/public";
 
 const router = Router();
 router.use(requireAuth);
@@ -30,9 +31,18 @@ router.use(requireTeam);
 const s = initServer();
 
 // `content`/`filter`/`report` are jsonb columns (typed `unknown` by Drizzle),
-// looser than the contract's schema \u2014 same rationale as `templates/routes.ts`.
+// looser than the contract's schema — same rationale as `templates/routes.ts`.
+//
+// `sequenceEmails.sequenceId` stores its *parent* sequence's internal `id`
+// (see the file-level doc comment in `db/schema.ts`) — it's dropped here
+// rather than exposed, since it's an internal join key, not a public ID.
 function toBody(sequence: HydratedSequence): any {
-    return serializeDates(sequence);
+    return serializeDates({
+        ...omitInternal(sequence),
+        emails: sequence.emails.map((email) =>
+            omitInternal(email, ["sequenceId"]),
+        ),
+    });
 }
 
 const impl = s.router(contract.sequences, {

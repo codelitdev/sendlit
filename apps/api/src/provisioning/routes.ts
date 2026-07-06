@@ -7,7 +7,6 @@ import {
     findOrCreateBareAccount,
     findOrCreateTeamByExternalId,
 } from "../team/queries";
-import { getApiKeysByTeamId } from "../apikey/queries";
 import logger from "../services/log";
 
 const router = Router();
@@ -42,8 +41,9 @@ const s = initServer();
  * one team per CourseLit "domain"). Guarded by a static shared secret rather
  * than OAuth/API-key auth, since at provisioning time no team exists yet for
  * the caller to authenticate as. Idempotent: calling this again for the same
- * `externalId` returns the same team's (existing) API key rather than
- * creating a duplicate team.
+ * `externalId` returns the same team rather than creating a duplicate — but
+ * `apiKey` is only present on the call that created the team (keys are stored
+ * hashed, so the secret can never be re-read); the consumer must persist it.
  */
 const impl = s.router(contract.provisioning, {
     provisionTeam: async ({ body, req }) => {
@@ -63,14 +63,12 @@ const impl = s.router(contract.provisioning, {
                 ownerAccountId: account.id,
                 name: body.name,
             });
-            const keys = await getApiKeysByTeamId(team.id);
-
             return {
                 status: 200,
                 body: {
-                    teamId: team.id,
+                    teamId: team.teamId,
                     name: team.name,
-                    apiKey: keys[0]?.key,
+                    apiKey: team.defaultApiKeySecret,
                 },
             };
         } catch (err: any) {

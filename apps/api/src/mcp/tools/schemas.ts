@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contactFilterSchema, customFieldsSchema } from "@sendlit/api-contract";
 import {
     mailTypes,
     sequenceStatus,
@@ -12,14 +13,11 @@ export const emailContentSchema = z.object({
 });
 
 export const contactSchema = z.object({
-    id: z.string(),
-    teamId: z.string(),
     contactId: z.string(),
     email: z.string(),
     name: z.string().nullable().optional(),
-    active: z.boolean(),
-    subscribedToUpdates: z.boolean(),
-    customFields: z.record(z.string()).default({}),
+    subscribed: z.boolean(),
+    customFields: customFieldsSchema,
     tags: z.array(z.string()),
     unsubscribeToken: z.string(),
     createdAt: z.string().or(z.date()),
@@ -31,9 +29,31 @@ export const contactListSchema = z.object({
     total: z.number(),
 });
 
+export const contactDeliverySchema = z.object({
+    sequenceId: z.string(),
+    sequenceTitle: z.string(),
+    sequenceType: z.string(),
+    emailId: z.string(),
+    createdAt: z.string().or(z.date()).nullable(),
+});
+
+export const contactDeliveryListSchema = z.object({
+    items: z.array(contactDeliverySchema),
+});
+
+export const segmentSchema = z.object({
+    segmentId: z.string(),
+    name: z.string(),
+    filter: contactFilterSchema,
+    createdAt: z.string().or(z.date()),
+    updatedAt: z.string().or(z.date()),
+});
+
+export const segmentListSchema = z.object({
+    items: z.array(segmentSchema),
+});
+
 export const templateSchema = z.object({
-    id: z.string(),
-    teamId: z.string(),
     templateId: z.string().min(1),
     title: z.string(),
     content: emailContentSchema,
@@ -50,6 +70,9 @@ export const systemTemplateSchema = z.object({
 
 export const sequenceEmailSchema = z.object({
     emailId: z.string(),
+    // NOTE: intentionally no `sequenceId` here — the DB column of that name
+    // on `sequence_emails` holds the *parent* sequence's internal id (see
+    // `db/schema.ts`), not a public identifier, so it's never surfaced.
     subject: z.string(),
     content: emailContentSchema,
     delayInMillis: z.number(),
@@ -60,14 +83,10 @@ export const sequenceEmailSchema = z.object({
 });
 
 export const sequenceSchema = z.object({
-    id: z.string(),
-    teamId: z.string(),
     sequenceId: z.string(),
     type: z.enum(mailTypes),
     title: z.string(),
     status: z.enum(sequenceStatus),
-    fromName: z.string().nullable().optional(),
-    fromEmail: z.string().nullable().optional(),
     triggerType: z.string().nullable().optional(),
     triggerData: z.string().nullable().optional(),
     filter: z.record(z.any()).nullable().optional(),
@@ -100,15 +119,21 @@ export const testEspResultSchema = z.object({
 });
 
 export const teamSchema = z.object({
-    id: z.string(),
+    teamId: z.string(),
     name: z.string(),
 });
 
+/** The secret is stored hashed; listings only expose `keyPrefix`. Only
+ * `create_api_key` returns the full secret (see `createdApiKeySchema`). */
 export const apiKeySchema = z.object({
+    id: z.string(),
+    keyPrefix: z.string(),
+    name: z.string().nullable(),
+    createdAt: z.string().or(z.date()).nullable(),
+});
+
+export const createdApiKeySchema = apiKeySchema.extend({
     key: z.string(),
-    name: z.string(),
-    teamId: z.string(),
-    createdAt: z.string().or(z.date()),
 });
 
 export const espProviders = [
@@ -133,4 +158,10 @@ export const espConfigSchema = z.object({
     lastTestedAt: z.string().or(z.date()).nullable().optional(),
     lastTestStatus: z.string().nullable().optional(),
     lastTestError: z.string().nullable().optional(),
+});
+
+/** General (non-ESP) per-team settings singleton — see settings/general. */
+export const generalSettingsSchema = z.object({
+    mailingAddress: z.string().nullable(),
+    updatedAt: z.string().or(z.date()).nullable().optional(),
 });

@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, teamMembers, teams } from "../db/schema";
 import { createApiKey } from "../apikey/queries";
@@ -6,11 +6,28 @@ import { createApiKey } from "../apikey/queries";
 export type Team = typeof teams.$inferSelect;
 export type TeamMember = typeof teamMembers.$inferSelect;
 
+/** `defaultApiKeySecret` is the one-time plaintext of the team's default API
+ * key — keys are stored hashed, so this is the only moment it exists. Present
+ * only when the team was actually created (not on find-or-create hits). */
+export type CreatedTeam = Team & { defaultApiKeySecret?: string };
+
 export async function getTeam(id: string): Promise<Team | null> {
     const [row] = await db
         .select()
         .from(teams)
         .where(eq(teams.id, id))
+        .limit(1);
+    return row ?? null;
+}
+
+/** Public-id lookup — used at the outermost edges (auth header, route
+ * params, provisioning) that speak the public `teamId`, never the internal
+ * `id`. See `apps/api/AGENTS.md`/`SCHEMA_ID_REFACTOR_PLAN.md` Task B. */
+export async function getTeamByTeamId(teamId: string): Promise<Team | null> {
+    const [row] = await db
+        .select()
+        .from(teams)
+        .where(eq(teams.teamId, teamId))
         .limit(1);
     return row ?? null;
 }
@@ -39,7 +56,7 @@ export async function createTeam({
     ownerAccountId: string;
     name: string;
     externalId?: string;
-}): Promise<Team> {
+}): Promise<CreatedTeam> {
     const [team] = await db
         .insert(teams)
         .values({ ownerAccountId, name, externalId })
@@ -51,9 +68,9 @@ export async function createTeam({
 
     // Every team gets a default API key so it's immediately usable via the
     // REST/MCP surface, mirroring MediaLit's "Apps" ergonomics.
-    await createApiKey(team.id, "Default");
+    const { secret } = await createApiKey(team.id, "Default");
 
-    return team;
+    return { ...team, defaultApiKeySecret: secret };
 }
 
 /**
@@ -73,7 +90,7 @@ export async function findOrCreateTeamByExternalId({
     externalId: string;
     ownerAccountId: string;
     name: string;
-}): Promise<Team> {
+}): Promise<CreatedTeam> {
     const existing = await getTeamByExternalId(externalId);
     if (existing) return existing;
     return createTeam({ ownerAccountId, name, externalId });
@@ -142,56 +159,4 @@ export async function findOrCreateBareAccount(
         .values({ email: normalized, name })
         .returning();
     return account;
-}
-
-const DAY_IN_MILLIS = 24 * 60 * 60 * 1000;
-const MONTH_IN_MILLIS = 30 * DAY_IN_MILLIS;
-
-/**
- * Returns whether the team still has daily/monthly sending quota left,
- * resetting the counters first if the relevant window has elapsed.
- */
-export async function hasMailQuotaRemaining(teamId: string): Promise<boolean> {
-    const team = await getTeam(teamId);
-    if (!team) return false;
-
-    const resetAt = team.countersResetAt?.getTime() ?? 0;
-    const now = Date.now();
-
-    let dailyMailCount = team.dailyMailCount;
-    let monthlyMailCount = team.monthlyMailCount;
-
-    if (now - resetAt > MONTH_IN_MILLIS) {
-        dailyMailCount = 0;
-        monthlyMailCount = 0;
-        await db
-            .update(teams)
-            .set({
-                dailyMailCount,
-                monthlyMailCount,
-                countersResetAt: new Date(),
-            })
-            .where(eq(teams.id, teamId));
-    } else if (now - resetAt > DAY_IN_MILLIS) {
-        dailyMailCount = 0;
-        await db
-            .update(teams)
-            .set({ dailyMailCount, countersResetAt: new Date() })
-            .where(eq(teams.id, teamId));
-    }
-
-    return (
-        dailyMailCount < team.dailyMailLimit &&
-        monthlyMailCount < team.monthlyMailLimit
-    );
-}
-
-export async function incrementMailCount(teamId: string): Promise<void> {
-    await db
-        .update(teams)
-        .set({
-            dailyMailCount: sql`${teams.dailyMailCount} + 1`,
-            monthlyMailCount: sql`${teams.monthlyMailCount} + 1`,
-        })
-        .where(eq(teams.id, teamId));
 }

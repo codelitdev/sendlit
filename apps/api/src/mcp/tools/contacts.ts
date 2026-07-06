@@ -1,31 +1,49 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { customFieldsSchema } from "@sendlit/api-contract";
 import {
     addTagToContact,
     countContacts,
     createContact,
     deleteContact,
     getContactByContactId,
+    getDeliveriesByContact,
     listContacts,
     removeTagFromContact,
     updateContact,
 } from "../../contacts/queries";
+import { getSegment } from "../../contacts/segments-queries";
+import { contactFilterSchema } from "@sendlit/api-contract";
 import { AUTH_ERROR, INTERNAL_ERROR, NOT_FOUND, jsonResult } from "./responses";
 import {
     contactListSchema,
     contactSchema,
+    contactDeliveryListSchema,
     successMessageSchema,
 } from "./schemas";
 import { getTeamId } from "./auth";
+import { omitInternal } from "../../utils/public";
+import { serializeDates } from "../../utils/serialize";
 
 export function registerContactTools(server: McpServer): void {
     server.registerTool(
         "list_contacts",
         {
             description:
-                "Returns a paginated list of contacts (subscribers), optionally filtered by a search term matching email or name.",
+                "Returns a paginated list of contacts (subscribers), optionally filtered by a search term matching email or name, and/or by a saved segment's filter.",
             inputSchema: {
                 q: z.string().optional().describe("Search by email or name"),
+                segmentId: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "Only return contacts currently matching this saved segment's filter",
+                    ),
+                filter: contactFilterSchema
+                    .optional()
+                    .describe(
+                        "Inline contact filter; combines with q and segmentId using AND",
+                    ),
                 offset: z
                     .number()
                     .int()
@@ -44,15 +62,33 @@ export function registerContactTools(server: McpServer): void {
             const teamId = getTeamId(extra);
             if (!teamId) return AUTH_ERROR;
             try {
+                const filters = [];
+                if (args.segmentId) {
+                    const segment = await getSegment(args.segmentId);
+                    if (!segment || segment.teamId !== teamId) return NOT_FOUND;
+                    const parsedSegmentFilter = contactFilterSchema.safeParse(
+                        segment.filter,
+                    );
+                    if (!parsedSegmentFilter.success) return INTERNAL_ERROR;
+                    filters.push(parsedSegmentFilter.data as any);
+                }
+                if (args.filter) {
+                    filters.push(args.filter);
+                }
+                const filter = filters.length ? filters : undefined;
                 const [items, total] = await Promise.all([
                     listContacts({
                         teamId,
                         searchText: args.q,
+                        filter,
                         offset: args.offset,
                     }),
-                    countContacts(teamId),
+                    countContacts(teamId, { searchText: args.q, filter }),
                 ]);
-                return jsonResult({ items, total });
+                return jsonResult({
+                    items: items.map((item) => omitInternal(item)),
+                    total,
+                });
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -63,7 +99,9 @@ export function registerContactTools(server: McpServer): void {
         "get_contact",
         {
             description: "Returns a single contact by its contact ID.",
-            inputSchema: { contactId: z.string().describe("Contact ID") },
+            inputSchema: {
+                contactId: z.string().describe("Contact ID"),
+            },
             outputSchema: contactSchema,
             annotations: {
                 readOnlyHint: true,
@@ -77,7 +115,39 @@ export function registerContactTools(server: McpServer): void {
             try {
                 const contact = await getContactByContactId(args.contactId);
                 if (!contact || contact.teamId !== teamId) return NOT_FOUND;
-                return jsonResult(contact);
+                return jsonResult(omitInternal(contact));
+            } catch {
+                return INTERNAL_ERROR;
+            }
+        },
+    );
+
+    server.registerTool(
+        "get_contact_deliveries",
+        {
+            description:
+                "Returns the broadcasts and sequence emails a contact has received, newest first.",
+            inputSchema: {
+                contactId: z.string().describe("Contact ID"),
+            },
+            outputSchema: contactDeliveryListSchema,
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
+        },
+        async (args: any, extra: any) => {
+            const teamId = getTeamId(extra);
+            if (!teamId) return AUTH_ERROR;
+            try {
+                const contact = await getContactByContactId(args.contactId);
+                if (!contact || contact.teamId !== teamId) return NOT_FOUND;
+                const deliveries = await getDeliveriesByContact(
+                    teamId,
+                    contact.id,
+                );
+                return jsonResult({ items: serializeDates(deliveries) });
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -88,16 +158,15 @@ export function registerContactTools(server: McpServer): void {
         "create_contact",
         {
             description:
-                "Creates a contact (subscriber). If a contact with the same email already exists, the existing contact is returned instead. Any attributes beyond email and name (e.g. company, age, plan, role) must be passed as string key/value pairs in customFields.",
+                "Creates a contact (subscriber). If a contact with the same email already exists, the existing contact is returned instead. Any attributes beyond email and name (e.g. company, age, plan, role) must be passed as scalar or scalar-array values in customFields.",
             inputSchema: {
                 email: z.string().email().describe("Contact's email address"),
                 name: z.string().optional().describe("Contact's display name"),
                 tags: z.array(z.string()).optional().describe("Initial tags"),
-                customFields: z
-                    .record(z.string())
+                customFields: customFieldsSchema
                     .optional()
                     .describe(
-                        "Arbitrary string key/value attributes such as company, age, plan, role, etc. Convert all non-email/name contact attributes to string values here.",
+                        "Arbitrary scalar or scalar-array attributes such as company, age, plan, roles, product ids, etc.",
                     ),
             },
             outputSchema: contactSchema,
@@ -112,7 +181,7 @@ export function registerContactTools(server: McpServer): void {
             if (!teamId) return AUTH_ERROR;
             try {
                 const contact = await createContact({ teamId, ...args });
-                return jsonResult(contact);
+                return jsonResult(omitInternal(contact));
             } catch (err: any) {
                 return {
                     content: [{ type: "text" as const, text: err.message }],
@@ -126,17 +195,15 @@ export function registerContactTools(server: McpServer): void {
         "update_contact",
         {
             description:
-                "Updates a contact's name, tags, subscription, active status, or custom fields. Any attributes beyond the named fields (e.g. company, age, plan, role) must be passed as string key/value pairs in customFields. customFields replaces all existing custom fields — include any you want to keep.",
+                "Updates a contact's name, tags, subscription, or custom fields. customFields accepts scalar or scalar-array values and replaces all existing custom fields — include any you want to keep.",
             inputSchema: {
                 contactId: z.string().describe("Contact ID"),
                 name: z.string().optional(),
-                active: z.boolean().optional(),
-                subscribedToUpdates: z.boolean().optional(),
+                subscribed: z.boolean().optional(),
                 tags: z.array(z.string()).optional(),
-                customFields: z
-                    .record(z.string())
+                customFields: customFieldsSchema
                     .optional()
-                    .describe("Custom key/value fields (replaces existing)"),
+                    .describe("Custom fields (replaces existing)"),
             },
             outputSchema: contactSchema,
             annotations: {
@@ -152,7 +219,7 @@ export function registerContactTools(server: McpServer): void {
             try {
                 const contact = await updateContact(teamId, contactId, patch);
                 if (!contact) return NOT_FOUND;
-                return jsonResult(contact);
+                return jsonResult(omitInternal(contact));
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -182,7 +249,7 @@ export function registerContactTools(server: McpServer): void {
                     args.tag,
                 );
                 if (!contact) return NOT_FOUND;
-                return jsonResult(contact);
+                return jsonResult(omitInternal(contact));
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -212,7 +279,7 @@ export function registerContactTools(server: McpServer): void {
                     args.tag,
                 );
                 if (!contact) return NOT_FOUND;
-                return jsonResult(contact);
+                return jsonResult(omitInternal(contact));
             } catch {
                 return INTERNAL_ERROR;
             }

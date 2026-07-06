@@ -11,8 +11,9 @@ export const sequenceStatus = [
 export const emailActionTypes = ["tag:add", "tag:remove"] as const;
 
 export const sequenceEmailSchema = z.object({
-    id: z.string(),
-    sequenceId: z.string(),
+    // NOTE: intentionally no `id`/`sequenceId` here — `sequence_emails.id` is
+    // internal-only, and its `sequence_id` column holds the *parent*
+    // sequence's internal id (see `db/schema.ts`), not a public identifier.
     emailId: z.string(),
     subject: z.string(),
     content: emailContentSchema,
@@ -26,12 +27,76 @@ export const sequenceEmailSchema = z.object({
     updatedAt: z.string().nullable(),
 });
 
-export const contactFilterConditionSchema = z.object({
-    name: z.enum(["tag", "email", "subscription", "signedUp"]),
-    condition: z.string(),
-    value: z.string(),
+const filterValueLabelSchema = z.object({
     valueLabel: z.string().optional(),
 });
+
+export const contactFilterConditionSchema = z.union([
+    z
+        .object({
+            name: z.literal("email"),
+            condition: z.enum(["is", "contains", "not_contains"]),
+            value: z.string(),
+        })
+        .merge(filterValueLabelSchema),
+    z
+        .object({
+            name: z.literal("tag"),
+            condition: z.enum(["is", "is_not"]),
+            value: z.string(),
+        })
+        .merge(filterValueLabelSchema),
+    z
+        .object({
+            name: z.literal("subscription"),
+            condition: z.literal("is"),
+            value: z.enum(["subscribed", "unsubscribed"]),
+        })
+        .merge(filterValueLabelSchema),
+    z
+        .object({
+            name: z.literal("signedUp"),
+            condition: z.enum(["before", "after", "on"]),
+            value: z
+                .string()
+                .refine((value) => Number.isFinite(Number(value)), {
+                    message: "Expected a millisecond timestamp string",
+                }),
+        })
+        .merge(filterValueLabelSchema),
+    z
+        .object({
+            name: z.literal("customField"),
+            key: z.string().min(1),
+            condition: z.enum([
+                "is",
+                "is_not",
+                "contains",
+                "not_contains",
+                "has",
+                "not_has",
+                "before",
+                "after",
+                "on",
+                "exists",
+                "not_exists",
+            ]),
+            value: z.string().optional(),
+        })
+        .merge(filterValueLabelSchema)
+        .superRefine((filter, ctx) => {
+            if (
+                !["exists", "not_exists"].includes(filter.condition) &&
+                typeof filter.value !== "string"
+            ) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Expected a value for this custom field filter",
+                    path: ["value"],
+                });
+            }
+        }),
+]);
 
 export const contactFilterSchema = z.object({
     aggregator: z.enum(["and", "or"]),
@@ -55,15 +120,17 @@ export const sequenceReportSchema = z.object({
 });
 
 export const sequenceSchema = z.object({
-    id: z.string(),
-    teamId: z.string(),
     sequenceId: z.string(),
     // Plain strings (see `contactSchema.lead`'s comment) — validated on write.
     type: z.string(),
     title: z.string(),
     status: z.string(),
-    fromName: z.string().nullable().optional(),
-    fromEmail: z.string().nullable().optional(),
+    // NOTE: sender identity is intentionally NOT part of the public sequence
+    // shape. Internally a sequence may pin an outbox (`sequences.outbox_id` →
+    // `esp_configs.id`), but esp config is a per-team singleton addressed via
+    // `/settings/esp` with no public id, so exposing the FK would leak an
+    // internal id for no client benefit. Mail is sent with the team's esp
+    // config identity (or platform default) — see settings/esp.
     triggerType: z.string().nullable().optional(),
     triggerData: z.string().nullable().optional(),
     filter: z.any().nullable().optional(),
@@ -89,8 +156,6 @@ export const createSequenceBodySchema = z.object({
 
 export const updateSequenceBodySchema = z.object({
     title: z.string().optional(),
-    fromName: z.string().optional(),
-    fromEmail: z.string().email().optional(),
     triggerType: z.string().optional(),
     triggerData: z.string().optional(),
     filter: contactFilterSchema.optional(),

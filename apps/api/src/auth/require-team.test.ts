@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireTeam } from "./require-team";
 
 const mocks = vi.hoisted(() => ({
+    getTeamByTeamId: vi.fn(),
     getTeamMembership: vi.fn(),
     listTeamsForAccount: vi.fn(),
 }));
 
 vi.mock("../team/queries", () => ({
+    getTeamByTeamId: mocks.getTeamByTeamId,
     getTeamMembership: mocks.getTeamMembership,
     listTeamsForAccount: mocks.listTeamsForAccount,
 }));
@@ -20,8 +22,13 @@ function res() {
 
 describe("requireTeam", () => {
     beforeEach(() => {
+        mocks.getTeamByTeamId.mockReset();
         mocks.getTeamMembership.mockReset();
         mocks.listTeamsForAccount.mockReset();
+        mocks.getTeamByTeamId.mockImplementation(async (teamId: string) => ({
+            id: teamId,
+            teamId,
+        }));
     });
 
     it("passes through API-key requests that already have a team", async () => {
@@ -82,7 +89,7 @@ describe("requireTeam", () => {
 
     it("auto-selects the only team and requires a header for multiple teams", async () => {
         mocks.listTeamsForAccount.mockResolvedValueOnce([
-            { id: "team-1", name: "Solo" },
+            { id: "team-1", teamId: "team-1", name: "Solo" },
         ]);
         const soloReq = { accountId: "account-1", headers: {} } as any;
         const soloNext = vi.fn();
@@ -92,8 +99,8 @@ describe("requireTeam", () => {
         expect(soloNext).toHaveBeenCalled();
 
         mocks.listTeamsForAccount.mockResolvedValueOnce([
-            { id: "team-1", name: "One" },
-            { id: "team-2", name: "Two" },
+            { id: "team-1", teamId: "team-1", name: "One" },
+            { id: "team-2", teamId: "team-2", name: "Two" },
         ]);
         const response = res();
         await requireTeam(
@@ -107,8 +114,8 @@ describe("requireTeam", () => {
             expect.objectContaining({
                 error: "team_required",
                 teams: [
-                    { id: "team-1", name: "One" },
-                    { id: "team-2", name: "Two" },
+                    { teamId: "team-1", name: "One" },
+                    { teamId: "team-2", name: "Two" },
                 ],
             }),
         );

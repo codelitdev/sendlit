@@ -4,92 +4,27 @@ loadDotFile();
 import express from "express";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";
-import { generateOpenApi } from "@ts-rest/open-api";
-import { contract } from "@sendlit/api-contract";
 import logger from "./services/log";
 import { checkDatabaseConnection } from "./db/client";
 import mcpRoutes from "./mcp/routes";
 import contactsRoutes from "./contacts/routes";
+import segmentsRoutes from "./contacts/segments-routes";
 import templatesRoutes from "./templates/routes";
 import sequencesRoutes from "./sequences/routes";
 import espRoutes from "./settings/esp/routes";
+import generalSettingsRoutes from "./settings/general/routes";
 import teamRoutes from "./team/routes";
 import provisioningRoutes from "./provisioning/routes";
 import trackingRoutes from "./tracking/routes";
 import { assertEspEncryptionKeyConfigured } from "./utils/secret-crypto";
 import { createSuperAdminIfMissing } from "./bootstrap";
+import { openApiDocument } from "./openapi";
 
 // Start BullMQ workers
 import "./mail/worker";
 import "./mail/sequence-worker";
 
 import { startAutomation } from "./automation/start";
-
-const openApiDocument = generateOpenApi(
-    contract,
-    {
-        info: {
-            title: "SendLit API",
-            description:
-                "OAuth2 protected REST API for composing, sending and automating email.",
-            version: "0.1.0",
-        },
-        servers: [
-            {
-                url: "{protocol}://{host}",
-                description: "API Server",
-                variables: {
-                    protocol: { default: "https", enum: ["https", "http"] },
-                    host: { default: "api.sendlit.dev" },
-                },
-            },
-        ],
-        tags: [
-            {
-                name: "Contacts",
-                description: "Manage contacts (subscribers) and segmentation.",
-            },
-            { name: "Templates", description: "Reusable email templates." },
-            {
-                name: "Sequences",
-                description:
-                    "Broadcasts (one-off) and sequences (multi-step, event-triggered).",
-            },
-            {
-                name: "Settings",
-                description:
-                    "Per-team settings, including email sending provider (SMTP) configuration and test sends.",
-            },
-            {
-                name: "Teams",
-                description:
-                    "Team management (list/create/rename/delete), per-team API keys, and server-to-server provisioning.",
-            },
-        ],
-        components: {
-            securitySchemes: {
-                apiKeyAuth: {
-                    type: "apiKey",
-                    in: "header",
-                    name: "x-sendlit-apikey",
-                },
-                bearerAuth: {
-                    type: "http",
-                    scheme: "bearer",
-                    bearerFormat: "JWT",
-                },
-            },
-        },
-    },
-    {
-        operationMapper: (operation, route) => ({
-            ...operation,
-            tags: (route.metadata as { tag?: string } | undefined)?.tag
-                ? [(route.metadata as { tag: string }).tag]
-                : operation.tags,
-        }),
-    },
-);
 
 const app = express();
 
@@ -135,9 +70,11 @@ app.use(trackingRoutes);
 app.use(provisioningRoutes);
 
 app.use(contactsRoutes);
+app.use(segmentsRoutes);
 app.use(templatesRoutes);
 app.use(sequencesRoutes);
 app.use(espRoutes);
+app.use(generalSettingsRoutes);
 app.use(teamRoutes);
 
 app.use(

@@ -3,6 +3,7 @@ import { defaultEmail } from "@sendlit/email-editor";
 import {
     createContactBodySchema,
     listContactsQuerySchema,
+    parseContactFilterQueryParam,
     updateContactBodySchema,
 } from "../../../packages/api-contract/src/schemas/contacts";
 import {
@@ -26,6 +27,7 @@ import {
     provisionTeamBodySchema,
     renameTeamBodySchema,
 } from "../../../packages/api-contract/src/schemas/teams";
+import { openApiDocument } from "./openapi";
 
 describe("API input validation schemas", () => {
     it("validates contact create/update bodies and paginated query strings", () => {
@@ -40,25 +42,121 @@ describe("API input validation schemas", () => {
                 email: "reader@example.com",
                 name: "Reader",
                 tags: ["vip"],
-                customFields: { plan: "pro" },
+                customFields: {
+                    plan: "pro",
+                    score: 10,
+                    roles: ["admin", "author"],
+                },
             }).success,
         ).toBe(true);
 
         expect(
             updateContactBodySchema.safeParse({
-                active: "false",
-                subscribedToUpdates: false,
+                subscribed: "false",
             }).success,
         ).toBe(false);
         expect(
             listContactsQuerySchema.parse({
                 offset: "2",
                 rowsPerPage: "25",
+                filter: JSON.stringify({
+                    aggregator: "and",
+                    filters: [
+                        {
+                            name: "email",
+                            condition: "contains",
+                            value: "@example.com",
+                        },
+                    ],
+                }),
             }),
-        ).toEqual({ offset: 2, rowsPerPage: 25 });
+        ).toEqual({
+            offset: 2,
+            rowsPerPage: 25,
+            filter: JSON.stringify({
+                aggregator: "and",
+                filters: [
+                    {
+                        name: "email",
+                        condition: "contains",
+                        value: "@example.com",
+                    },
+                ],
+            }),
+        });
+        expect(
+            parseContactFilterQueryParam(
+                JSON.stringify({
+                    aggregator: "and",
+                    filters: [
+                        {
+                            name: "email",
+                            condition: "contains",
+                            value: "@example.com",
+                        },
+                    ],
+                }),
+            ),
+        ).toMatchObject({
+            success: true,
+            data: {
+                aggregator: "and",
+                filters: [
+                    {
+                        name: "email",
+                        condition: "contains",
+                        value: "@example.com",
+                    },
+                ],
+            },
+        });
+        expect(
+            parseContactFilterQueryParam(
+                JSON.stringify({
+                    aggregator: "and",
+                    filters: [
+                        {
+                            name: "product",
+                            condition: "has",
+                            value: "course-1",
+                        },
+                    ],
+                }),
+            ).success,
+        ).toBe(false);
+        expect(
+            parseContactFilterQueryParam(
+                JSON.stringify({
+                    aggregator: "and",
+                    filters: [
+                        {
+                            name: "customField",
+                            key: "courselit.products",
+                            condition: "has",
+                            value: "course_123",
+                        },
+                    ],
+                }),
+            ).success,
+        ).toBe(true);
+        expect(
+            parseContactFilterQueryParam(
+                JSON.stringify({
+                    aggregator: "and",
+                    filters: [
+                        {
+                            name: "tag",
+                            condition: "contains",
+                            value: "vip",
+                        },
+                    ],
+                }),
+            ).success,
+        ).toBe(false);
         expect(listContactsQuerySchema.safeParse({ offset: "0" }).success).toBe(
             false,
         );
+        expect(parseContactFilterQueryParam("not-json").success).toBe(false);
     });
 
     it("validates template titles and email-editor content shape", () => {
@@ -116,13 +214,27 @@ describe("API input validation schemas", () => {
                     filters: [
                         {
                             name: "tag",
-                            condition: "contains",
+                            condition: "is",
                             value: "vip",
                         },
                     ],
                 },
             }).success,
         ).toBe(true);
+        expect(
+            updateSequenceBodySchema.safeParse({
+                filter: {
+                    aggregator: "and",
+                    filters: [
+                        {
+                            name: "tag",
+                            condition: "contains",
+                            value: "vip",
+                        },
+                    ],
+                },
+            }).success,
+        ).toBe(false);
 
         expect(
             addSequenceEmailBodySchema.safeParse({ templateId: "" }).success,
@@ -211,5 +323,28 @@ describe("API input validation schemas", () => {
                 name: "Tenant 1",
             }).success,
         ).toBe(true);
+    });
+});
+
+describe("OpenAPI authentication metadata", () => {
+    it("declares API key auth globally so Swagger UI sends the header", () => {
+        expect(openApiDocument.components?.securitySchemes).toMatchObject({
+            apiKeyAuth: {
+                type: "apiKey",
+                in: "header",
+                name: "x-sendlit-apikey",
+            },
+            provisioningSecretAuth: {
+                type: "apiKey",
+                in: "header",
+                name: "X-Sendlit-Provisioning-Secret",
+            },
+        });
+        expect(openApiDocument.security).toContainEqual({ apiKeyAuth: [] });
+        expect(
+            openApiDocument.paths["/provisioning/teams"]?.post,
+        ).toMatchObject({
+            security: [{ provisioningSecretAuth: [] }],
+        });
     });
 });

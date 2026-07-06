@@ -1,5 +1,9 @@
 import { initClient } from "@ts-rest/core";
-import { contract } from "@sendlit/api-contract";
+import {
+    contactFilterSchema,
+    contract,
+    type CustomFields,
+} from "@sendlit/api-contract";
 import { ApiError } from "./api-client";
 import type {
     Contact,
@@ -23,6 +27,16 @@ const client = initClient(contract, {
     baseUrl: "/api/proxy",
     baseHeaders: {},
 });
+
+function toApiContactFilter(filter?: ContactFilterWithAggregator) {
+    if (!filter) return undefined;
+
+    const parsedFilter = contactFilterSchema.safeParse(filter);
+    if (!parsedFilter.success) {
+        throw new ApiError(400, "Invalid filter");
+    }
+    return parsedFilter.data;
+}
 
 async function unwrap<T>(
     promise: Promise<{ status: number; body: unknown }>,
@@ -72,7 +86,7 @@ export interface Paginated<T> {
 // ---- Teams ----------------------------------------------------------------
 
 export interface Team {
-    id: string;
+    teamId: string;
     name: string;
     ownerAccountId: string;
     fromName: string | null;
@@ -84,7 +98,6 @@ export interface Team {
 
 export interface ApiKey {
     id: string;
-    teamId: string;
     key: string;
     name: string | null;
     createdAt: string;
@@ -121,14 +134,31 @@ export function createTeamKey(teamId: string, name: string) {
 }
 
 export function deleteTeamKey(teamId: string, key: string) {
-    return unwrap<void>(client.teams.removeKey({ params: { teamId, key } }));
+    return unwrap<void>(
+        client.teams.removeKey({ params: { teamId, keyId: key } }),
+    );
 }
 
 // ---- Contacts ----------------------------------------------------------
 
-export function listContacts(params: { q?: string; offset?: number } = {}) {
+export function listContacts(
+    params: {
+        q?: string;
+        segmentId?: string;
+        filter?: ContactFilterWithAggregator;
+        offset?: number;
+    } = {},
+) {
+    const filter = toApiContactFilter(params.filter);
     return unwrap<Paginated<Contact>>(
-        client.contacts.list({ query: { q: params.q, offset: params.offset } }),
+        client.contacts.list({
+            query: {
+                q: params.q,
+                segmentId: params.segmentId,
+                filter: filter ? JSON.stringify(filter) : undefined,
+                offset: params.offset,
+            },
+        }),
     );
 }
 
@@ -136,7 +166,7 @@ export function createContact(input: {
     email: string;
     name?: string;
     tags?: string[];
-    customFields?: Record<string, string>;
+    customFields?: CustomFields;
 }) {
     return unwrap<Contact>(client.contacts.create({ body: input }));
 }
@@ -261,8 +291,12 @@ export function updateSequence(
         emailsOrder?: string[];
     },
 ) {
+    const { filter, ...rest } = patch;
     return unwrap<Sequence>(
-        client.sequences.update({ params: { sequenceId }, body: patch }),
+        client.sequences.update({
+            params: { sequenceId },
+            body: { ...rest, filter: toApiContactFilter(filter) },
+        }),
     );
 }
 

@@ -50,7 +50,6 @@ export async function seedSequence(
         .insert(schema.sequences)
         .values({
             teamId,
-            sequenceId: `seq-${crypto.randomUUID()}`,
             type,
             status,
             // Broadcasts reach ongoing_sequences via `processRule`, which runs

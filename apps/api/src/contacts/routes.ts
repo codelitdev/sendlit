@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { createExpressEndpoints, initServer } from "@ts-rest/express";
-import { contract } from "@sendlit/api-contract";
+import {
+    contactFilterSchema,
+    contract,
+    parseContactFilterQueryParam,
+} from "@sendlit/api-contract";
 import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import {
@@ -14,7 +18,9 @@ import {
     removeTagFromContact,
     updateContact,
 } from "./queries";
+import { getSegment } from "./segments-queries";
 import { serializeDates } from "../utils/serialize";
+import { omitInternal } from "../utils/public";
 
 const router = Router();
 router.use(requireAuth);
@@ -35,27 +41,61 @@ const impl = s.router(contract.contacts, {
             teamId: (req as any).teamId,
             ...body,
         });
-        return { status: 201, body: serializeDates(contact) };
+        return { status: 201, body: serializeDates(omitInternal(contact)) };
     },
     list: async ({ query, req }) => {
         const teamId = (req as any).teamId;
+
+        const filters = [];
+        if (query.segmentId) {
+            const segment = await getSegment(query.segmentId);
+            if (!segment || segment.teamId !== teamId) {
+                return { status: 404, body: { error: "Segment not found" } };
+            }
+            const parsedSegmentFilter = contactFilterSchema.safeParse(
+                segment.filter,
+            );
+            if (!parsedSegmentFilter.success) {
+                return {
+                    status: 400,
+                    body: { error: "Invalid segment filter" },
+                };
+            }
+            filters.push(parsedSegmentFilter.data as any);
+        }
+        if (query.filter) {
+            const parsedFilter = parseContactFilterQueryParam(query.filter);
+            if (!parsedFilter.success) {
+                return { status: 400, body: { error: "Invalid filter" } };
+            }
+            filters.push(parsedFilter.data as any);
+        }
+        const filter = filters.length ? filters : undefined;
+
         const [items, total] = await Promise.all([
             listContacts({
                 teamId,
                 searchText: query.q,
+                filter,
                 offset: query.offset,
                 rowsPerPage: query.rowsPerPage,
             }),
-            countContacts(teamId),
+            countContacts(teamId, { searchText: query.q, filter }),
         ]);
-        return { status: 200, body: { items: serializeDates(items), total } };
+        return {
+            status: 200,
+            body: {
+                items: serializeDates(items.map((item) => omitInternal(item))),
+                total,
+            },
+        };
     },
     get: async ({ params, req }) => {
         const contact = await getContactByContactId(params.contactId);
         if (!contact || contact.teamId !== (req as any).teamId) {
             return { status: 404, body: { error: "Contact not found" } };
         }
-        return { status: 200, body: serializeDates(contact) };
+        return { status: 200, body: serializeDates(omitInternal(contact)) };
     },
     update: async ({ params, body, req }) => {
         const contact = await updateContact(
@@ -65,7 +105,7 @@ const impl = s.router(contract.contacts, {
         );
         if (!contact)
             return { status: 404, body: { error: "Contact not found" } };
-        return { status: 200, body: serializeDates(contact) };
+        return { status: 200, body: serializeDates(omitInternal(contact)) };
     },
     addTag: async ({ params, req }) => {
         const contact = await addTagToContact(
@@ -75,7 +115,7 @@ const impl = s.router(contract.contacts, {
         );
         if (!contact)
             return { status: 404, body: { error: "Contact not found" } };
-        return { status: 200, body: serializeDates(contact) };
+        return { status: 200, body: serializeDates(omitInternal(contact)) };
     },
     removeTag: async ({ params, req }) => {
         const contact = await removeTagFromContact(
@@ -85,7 +125,7 @@ const impl = s.router(contract.contacts, {
         );
         if (!contact)
             return { status: 404, body: { error: "Contact not found" } };
-        return { status: 200, body: serializeDates(contact) };
+        return { status: 200, body: serializeDates(omitInternal(contact)) };
     },
     deliveries: async ({ params, req }) => {
         const teamId = (req as any).teamId;
@@ -93,10 +133,7 @@ const impl = s.router(contract.contacts, {
         if (!contact || contact.teamId !== teamId) {
             return { status: 404, body: { error: "Contact not found" } };
         }
-        const deliveries = await getDeliveriesByContact(
-            teamId,
-            params.contactId,
-        );
+        const deliveries = await getDeliveriesByContact(teamId, contact.id);
         return { status: 200, body: serializeDates(deliveries) };
     },
     remove: async ({ params, req }) => {

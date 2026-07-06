@@ -49,28 +49,47 @@ export async function getSequenceRowBySequenceId(
     return row ?? null;
 }
 
+function matchingContactsCondition(
+    teamId: string,
+    filter: ContactFilterWithAggregator | null | undefined,
+) {
+    const condition = buildContactFilterCondition(filter);
+    return condition
+        ? and(
+              eq(contacts.teamId, teamId),
+              eq(contacts.subscribed, true),
+              condition,
+          )
+        : and(eq(contacts.teamId, teamId), eq(contacts.subscribed, true));
+}
+
+/** Returns **internal** contact ids — the only kind
+ * `enrollContactsInOngoingSequence` (and the `ongoing_sequences` FK it writes
+ * to) needs. Use `getMatchingPublicContactIds` if you need the public
+ * `contactId`s instead (e.g. for a report/snapshot field like
+ * `sequences.entrants`). */
 export async function getMatchingContactIds(
     teamId: string,
     filter: ContactFilterWithAggregator | null | undefined,
 ): Promise<string[]> {
-    const condition = buildContactFilterCondition(filter);
+    const rows = await db
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(matchingContactsCondition(teamId, filter));
+    return rows.map((r) => r.id);
+}
+
+/** Same matching set as `getMatchingContactIds`, but returns the public
+ * `contactId`s — for report/snapshot fields (e.g. `sequences.entrants`) that
+ * intentionally aren't live FKs. */
+export async function getMatchingPublicContactIds(
+    teamId: string,
+    filter: ContactFilterWithAggregator | null | undefined,
+): Promise<string[]> {
     const rows = await db
         .select({ contactId: contacts.contactId })
         .from(contacts)
-        .where(
-            condition
-                ? and(
-                      eq(contacts.teamId, teamId),
-                      eq(contacts.subscribedToUpdates, true),
-                      eq(contacts.active, true),
-                      condition,
-                  )
-                : and(
-                      eq(contacts.teamId, teamId),
-                      eq(contacts.subscribedToUpdates, true),
-                      eq(contacts.active, true),
-                  ),
-        );
+        .where(matchingContactsCondition(teamId, filter));
     return rows.map((r) => r.contactId);
 }
 
@@ -80,7 +99,9 @@ export async function enrollContactsInOngoingSequence({
     contactIds,
 }: {
     teamId: string;
+    /** Internal `sequences.id`. */
     sequenceId: string;
+    /** Internal `contacts.id`s. */
     contactIds: string[];
 }) {
     if (contactIds.length === 0) return;

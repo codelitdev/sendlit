@@ -31,14 +31,24 @@ import {
     upsertEspConfigBodySchema,
 } from "./schemas/esp";
 import {
+    generalSettingsSchema,
+    updateGeneralSettingsBodySchema,
+} from "./schemas/settings";
+import {
     apiKeySchema,
     createApiKeyBodySchema,
+    createdApiKeySchema,
     createTeamBodySchema,
     provisionTeamBodySchema,
     provisionTeamResponseSchema,
     renameTeamBodySchema,
     teamSchema,
 } from "./schemas/teams";
+import {
+    createSegmentBodySchema,
+    segmentSchema,
+    updateSegmentBodySchema,
+} from "./schemas/segments";
 
 const c = initContract();
 
@@ -65,8 +75,14 @@ const contactsContract = c.router(
             method: "GET",
             path: "/contacts",
             query: listContactsQuerySchema,
-            responses: { 200: paginated(contactSchema) },
+            responses: {
+                200: paginated(contactSchema),
+                400: errorSchema,
+                404: errorSchema,
+            },
             summary: "List contacts",
+            description:
+                "Returns a paginated list of contacts. Pass filter as serialized ContactFilterWithAggregator JSON for inline filtering, or segmentId to only return contacts currently matching that saved segment's filter (404 if the segment doesn't exist). SendLit supports fixed generic contact filters over first-class fields, tags, and custom fields; client-specific concepts should be synced into namespaced tags or customFields. q, filter, and segmentId combine with AND. The response's total reflects the combined filters.",
         },
         get: {
             method: "GET",
@@ -111,6 +127,55 @@ const contactsContract = c.router(
         },
     },
     { metadata: { tag: "Contacts" } },
+);
+
+/**
+ * A saved, named, reusable contact filter — lets a team build a
+ * `ContactFilterWithAggregator` once (see `contacts/segment.ts`) and reuse it
+ * across broadcasts/sequences instead of re-building it inline every time.
+ * Top-level `/segments` resource (matching Klaviyo/SendGrid/Customer.io —
+ * team scope comes from auth, not the URL).
+ */
+const segmentsContract = c.router(
+    {
+        create: {
+            method: "POST",
+            path: "/segments",
+            body: createSegmentBodySchema,
+            responses: { 201: segmentSchema, 409: errorSchema },
+            summary: "Create a saved segment",
+        },
+        list: {
+            method: "GET",
+            path: "/segments",
+            responses: { 200: c.type<z.infer<typeof segmentSchema>[]>() },
+            summary: "List saved segments",
+        },
+        get: {
+            method: "GET",
+            path: "/segments/:segmentId",
+            responses: { 200: segmentSchema, 404: errorSchema },
+            summary: "Get a saved segment",
+        },
+        update: {
+            method: "PATCH",
+            path: "/segments/:segmentId",
+            body: updateSegmentBodySchema,
+            responses: {
+                200: segmentSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Update a saved segment",
+        },
+        remove: {
+            method: "DELETE",
+            path: "/segments/:segmentId",
+            responses: { 204: c.noBody() },
+            summary: "Delete a saved segment",
+        },
+    },
+    { metadata: { tag: "Segments" } },
 );
 
 const templatesContract = c.router(
@@ -306,8 +371,34 @@ const espSettingsContract = c.router(
     { metadata: { tag: "Settings" } },
 );
 
+/** General workspace settings — same per-team singleton shape as ESP
+ * settings (get/upsert via `/settings/general`, no ids exposed). */
+const generalSettingsContract = c.router(
+    {
+        get: {
+            method: "GET",
+            path: "/settings/general",
+            responses: { 200: generalSettingsSchema },
+            summary: "Get the team's general settings",
+            description:
+                "Returns defaults (all-null fields) when nothing has been saved yet.",
+        },
+        update: {
+            method: "PUT",
+            path: "/settings/general",
+            body: updateGeneralSettingsBodySchema,
+            responses: { 200: generalSettingsSchema },
+            summary: "Update the team's general settings",
+            description:
+                "Omitted fields are left unchanged; send an empty string to clear a field.",
+        },
+    },
+    { metadata: { tag: "Settings" } },
+);
+
 const settingsContract = c.router({
     esp: espSettingsContract,
+    general: generalSettingsContract,
 });
 
 const teamsContract = c.router(
@@ -349,14 +440,16 @@ const teamsContract = c.router(
             method: "POST",
             path: "/teams/:teamId/keys",
             body: createApiKeyBodySchema,
-            responses: { 201: apiKeySchema, 404: errorSchema },
+            responses: { 201: createdApiKeySchema, 404: errorSchema },
             summary: "Create a new API key for a team",
+            description:
+                "The response's `key` field is the full secret and is only ever returned once — store it securely. Subsequent listings only expose the key's prefix.",
         },
         removeKey: {
             method: "DELETE",
-            path: "/teams/:teamId/keys/:key",
+            path: "/teams/:teamId/keys/:keyId",
             responses: { 204: c.noBody(), 404: errorSchema },
-            summary: "Revoke an API key",
+            summary: "Revoke an API key by its id",
         },
     },
     { metadata: { tag: "Teams" } },
@@ -384,6 +477,7 @@ const provisioningContract = c.router(
 
 export const contract = c.router({
     contacts: contactsContract,
+    segments: segmentsContract,
     templates: templatesContract,
     sequences: sequencesContract,
     settings: settingsContract,

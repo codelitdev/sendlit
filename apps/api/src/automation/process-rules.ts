@@ -4,7 +4,8 @@ import {
     enrollContactsInOngoingSequence,
     getDueDateRules,
     getMatchingContactIds,
-    getSequenceRowBySequenceId,
+    getMatchingPublicContactIds,
+    getSequenceRowById,
     lockBroadcast,
 } from "./queries";
 import type { ContactFilterWithAggregator } from "../contacts/segment";
@@ -43,11 +44,8 @@ async function processRule(rule: {
     teamId: string;
     sequenceId: string;
 }) {
-    // sequenceId on a rule is the public sequence_id; find its row.
-    const sequenceRow = await getSequenceRowBySequenceId(
-        rule.teamId,
-        rule.sequenceId,
-    );
+    // sequenceId on a rule is now the internal sequences.id; find its row.
+    const sequenceRow = await getSequenceRowById(rule.sequenceId);
     if (!sequenceRow) {
         await deleteRule(rule.ruleId);
         return;
@@ -65,10 +63,14 @@ async function processRule(rule: {
 
     await enrollContactsInOngoingSequence({
         teamId: rule.teamId,
-        sequenceId: sequenceRow.sequenceId,
+        sequenceId: sequenceRow.id,
         contactIds,
     });
 
-    await lockBroadcast(sequenceRow.id, contactIds);
+    const publicContactIds = await getMatchingPublicContactIds(
+        rule.teamId,
+        sequenceRow.filter as ContactFilterWithAggregator | null,
+    );
+    await lockBroadcast(sequenceRow.id, publicContactIds);
     await deleteRule(rule.ruleId);
 }

@@ -2,16 +2,20 @@ import crypto from "crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerContactTools } from "./tools/contacts";
+import { registerSegmentTools } from "./tools/segments";
 import { registerTemplateTools } from "./tools/templates";
 import { registerSequenceTools } from "./tools/sequences";
 import { registerEspTools } from "./tools/esp";
+import { registerGeneralSettingsTools } from "./tools/general-settings";
 import { registerTeamTools } from "./tools/teams";
 
 function registerAllTools(server: McpServer): void {
     registerContactTools(server);
+    registerSegmentTools(server);
     registerTemplateTools(server);
     registerSequenceTools(server);
     registerEspTools(server);
+    registerGeneralSettingsTools(server);
     registerTeamTools(server);
 }
 

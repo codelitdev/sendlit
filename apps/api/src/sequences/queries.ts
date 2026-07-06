@@ -5,8 +5,8 @@ import {
     sequenceEmails,
     emailDeliveries,
     emailEvents,
+    contacts,
 } from "../db/schema";
-import { generateUniqueId } from "../utils/id";
 import { resolveStartingTemplate } from "../templates/queries";
 import {
     addRule,
@@ -56,7 +56,6 @@ export async function createSequence({
         .insert(sequences)
         .values({
             teamId,
-            sequenceId: generateUniqueId(),
             type,
             title: template.title || "Untitled",
             triggerType:
@@ -71,7 +70,6 @@ export async function createSequence({
         .insert(sequenceEmails)
         .values({
             sequenceId: sequence.id,
-            emailId: generateUniqueId(),
             content: (template.content as any) || defaultEmailContent,
             subject:
                 template.title ||
@@ -88,6 +86,28 @@ export async function createSequence({
         .returning();
 
     return hydrate(updated);
+}
+
+/** Looks up a single `sequence_emails` row by its parent's **internal**
+ * `sequences.id` and its own public `emailId` — used by the tracking pixel/
+ * click-redirect handlers, which only have public ids from the decoded JWT
+ * but need the row's internal `id` to write an `email_deliveries`/`email_events`
+ * FK. */
+export async function getSequenceEmailByEmailId(
+    sequenceId: string,
+    emailId: string,
+): Promise<SequenceEmail | null> {
+    const [row] = await db
+        .select()
+        .from(sequenceEmails)
+        .where(
+            and(
+                eq(sequenceEmails.sequenceId, sequenceId),
+                eq(sequenceEmails.emailId, emailId),
+            ),
+        )
+        .limit(1);
+    return row ?? null;
 }
 
 export async function getSequenceBySequenceId(
@@ -143,8 +163,6 @@ export async function updateSequence({
     teamId,
     sequenceId,
     title,
-    fromName,
-    fromEmail,
     triggerType,
     triggerData,
     filter,
@@ -153,8 +171,6 @@ export async function updateSequence({
     teamId: string;
     sequenceId: string;
     title?: string;
-    fromName?: string;
-    fromEmail?: string;
     triggerType?: string;
     triggerData?: string;
     filter?: ContactFilterWithAggregator;
@@ -162,8 +178,6 @@ export async function updateSequence({
 }): Promise<HydratedSequence | null> {
     const patch: Partial<Sequence> = { updatedAt: new Date() };
     if (title !== undefined) patch.title = title;
-    if (fromName !== undefined) patch.fromName = fromName;
-    if (fromEmail !== undefined) patch.fromEmail = fromEmail;
     if (triggerType !== undefined) patch.triggerType = triggerType;
     if (triggerData !== undefined) patch.triggerData = triggerData;
     if (filter !== undefined) patch.filter = filter as any;
@@ -207,7 +221,6 @@ export async function addMailToSequence({
         .insert(sequenceEmails)
         .values({
             sequenceId: sequence.id,
-            emailId: generateUniqueId(),
             content: (template.content as any) || defaultEmailContent,
             subject: template.title || "New email",
             delayInMillis: sequenceDelayBetweenMailsInMillis,
@@ -343,7 +356,10 @@ export async function startSequence({
     }
 
     if (sequence.type === "sequence") {
-        if (!sequence.title || !sequence.triggerType || !sequence.fromName) {
+        // Sender identity is no longer stored per-sequence — the send path
+        // always resolves one (sequence outbox -> team esp config -> team
+        // name/owner email), so only title/trigger completeness is checked.
+        if (!sequence.title || !sequence.triggerType) {
             throw new Error(`${responses.sequence_details_missing}: basics`);
         }
         if (
@@ -365,7 +381,7 @@ export async function startSequence({
 
     await addRule({
         teamId,
-        sequenceId,
+        sequenceId: sequence.id,
         triggerType: sequence.triggerType!,
         triggerData: sequence.triggerData,
         eventDateInMillis:
@@ -405,7 +421,7 @@ export async function pauseSequence({
         throw new Error(responses.mail_already_sent);
     }
 
-    await removeRule({ teamId, sequenceId });
+    await removeRule({ teamId, sequenceId: sequence.id });
 
     const [row] = await db
         .update(sequences)
@@ -416,11 +432,17 @@ export async function pauseSequence({
     return hydrate(row);
 }
 
+/** All of these take the **public** `sequenceId` (unchanged external
+ * signature for their route/mcp-tool callers) and resolve to the internal id
+ * via a join through `sequences`, since `email_deliveries`/`email_events` now
+ * store internal-id FKs. */
+
 export async function getEmailSentCount(sequenceId: string): Promise<number> {
     const [row] = await db
         .select({ value: count() })
         .from(emailDeliveries)
-        .where(eq(emailDeliveries.sequenceId, sequenceId));
+        .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
+        .where(eq(sequences.sequenceId, sequenceId));
     return row?.value ?? 0;
 }
 
@@ -434,9 +456,11 @@ export async function getSubscribers({
     limit?: number;
 }): Promise<string[]> {
     const rows = await db
-        .selectDistinct({ contactId: emailDeliveries.contactId })
+        .selectDistinct({ contactId: contacts.contactId })
         .from(emailDeliveries)
-        .where(eq(emailDeliveries.sequenceId, sequenceId))
+        .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
+        .innerJoin(contacts, eq(contacts.id, emailDeliveries.contactId))
+        .where(eq(sequences.sequenceId, sequenceId))
         .limit(limit)
         .offset((Math.max(page, 1) - 1) * limit);
     return rows.map((r) => r.contactId);
@@ -446,7 +470,8 @@ export async function getSubscribersCount(sequenceId: string): Promise<number> {
     const rows = await db
         .selectDistinct({ contactId: emailDeliveries.contactId })
         .from(emailDeliveries)
-        .where(eq(emailDeliveries.sequenceId, sequenceId));
+        .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
+        .where(eq(sequences.sequenceId, sequenceId));
     return rows.length;
 }
 
@@ -457,9 +482,10 @@ async function countDistinctContactsWithEvent(
     const rows = await db
         .selectDistinct({ contactId: emailEvents.contactId })
         .from(emailEvents)
+        .innerJoin(sequences, eq(sequences.id, emailEvents.sequenceId))
         .where(
             and(
-                eq(emailEvents.sequenceId, sequenceId),
+                eq(sequences.sequenceId, sequenceId),
                 eq(emailEvents.action, action),
             ),
         );

@@ -12,12 +12,15 @@ import {
     sequenceEmails,
     sequences,
 } from "../db/schema";
+import { getTeam } from "../team/queries";
 import {
-    getTeam,
+    getAccount,
     hasMailQuotaRemaining,
     incrementMailCount,
-} from "../team/queries";
-import { getContactByContactId } from "../contacts/queries";
+} from "../account/queries";
+import { getEspConfig, getEspConfigById } from "../settings/esp/queries";
+import { getGeneralSettings } from "../settings/general/queries";
+import { getContactById } from "../contacts/queries";
 import { sendMail } from "../mail/send";
 import { getEmailFrom, getSiteUrl, getUnsubLink } from "../utils/mail";
 import { generatePixelToken } from "../utils/pixel-jwt";
@@ -25,7 +28,7 @@ import logger from "../services/log";
 import {
     countOngoingSequencesForSequence,
     deleteOngoingSequence,
-    getSequenceRowBySequenceId,
+    getSequenceRowById,
     markBroadcastSent,
 } from "./queries";
 import { sequenceBounceLimit } from "../config/constants";
@@ -56,24 +59,24 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
     if (ongoingSequence.nextEmailScheduledTime > Date.now()) return;
 
     try {
-        const hasQuota = await hasMailQuotaRemaining(ongoingSequence.teamId);
+        const sequenceRow = await getSequenceRowById(
+            ongoingSequence.sequenceId,
+        );
+        const contact = await getContactById(ongoingSequence.contactId);
+        const team = await getTeam(ongoingSequence.teamId);
+
+        if (!sequenceRow || !contact || !team) {
+            return cleanUpResources(ongoingSequence);
+        }
+
+        // Quota is account-level, shared across all teams the account owns.
+        const hasQuota = await hasMailQuotaRemaining(team.ownerAccountId);
         if (!hasQuota) {
             logger.warn(
                 { teamId: ongoingSequence.teamId },
                 "Mail quota exceeded, skipping ongoing sequence tick",
             );
             return;
-        }
-
-        const sequenceRow = await getSequenceRowBySequenceId(
-            ongoingSequence.teamId,
-            ongoingSequence.sequenceId,
-        );
-        const contact = await getContactByContactId(ongoingSequence.contactId);
-        const team = await getTeam(ongoingSequence.teamId);
-
-        if (!sequenceRow || !contact || !team) {
-            return cleanUpResources(ongoingSequence);
         }
 
         const emails = await db
@@ -87,7 +90,12 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
             ongoingSequence,
         );
         if (!nextEmail) {
-            return cleanUpResources(ongoingSequence, true, sequenceRow.type);
+            return cleanUpResources(
+                ongoingSequence,
+                true,
+                sequenceRow.type,
+                sequenceRow.sequenceId,
+            );
         }
 
         await attemptMailSending({
@@ -102,7 +110,7 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
             ...ongoingSequence.sentEmailIds,
             nextEmail.emailId,
         ];
-        await incrementMailCount(ongoingSequence.teamId);
+        await incrementMailCount(team.ownerAccountId);
 
         const followUpEmail = getNextPublishedEmail(
             sequenceRow.emailsOrder,
@@ -122,6 +130,7 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
                 },
                 true,
                 sequenceRow.type,
+                sequenceRow.sequenceId,
             );
         }
 
@@ -163,18 +172,20 @@ async function cleanUpResources(
     ongoingSequence: Pick<OngoingSequenceRow, "id" | "sequenceId">,
     completed?: boolean,
     sequenceType?: string,
+    /** Public `sequences.sequenceId`, required whenever `completed` is true. */
+    publicSequenceId?: string,
 ) {
     await deleteOngoingSequence(ongoingSequence.id);
     // Only broadcasts (one-off, single audience snapshot) get marked "completed"
     // once every recipient has been delivered to. Multi-step "sequence" type
     // automations stay "active" indefinitely so future contacts can still be
     // enrolled by their trigger (see `automation/fire-event.ts`).
-    if (completed && sequenceType === "broadcast") {
+    if (completed && sequenceType === "broadcast" && publicSequenceId) {
         const remaining = await countOngoingSequencesForSequence(
             ongoingSequence.sequenceId,
         );
         if (remaining === 0) {
-            await markBroadcastSent(ongoingSequence.sequenceId);
+            await markBroadcastSent(publicSequenceId);
         }
     }
 }
@@ -187,37 +198,52 @@ async function attemptMailSending({
     email,
 }: {
     team: NonNullable<Awaited<ReturnType<typeof getTeam>>>;
-    contact: NonNullable<Awaited<ReturnType<typeof getContactByContactId>>>;
+    contact: NonNullable<Awaited<ReturnType<typeof getContactById>>>;
     sequence: typeof sequences.$inferSelect;
     ongoingSequence: OngoingSequenceRow;
     email: SequenceEmailRow;
 }) {
+    // Sender identity fallback chain: the sequence's pinned outbox (an
+    // esp_configs row via `sequences.outboxId`) → the team's esp config →
+    // team name / owner account email / platform default.
+    const outbox =
+        (sequence.outboxId
+            ? await getEspConfigById(sequence.outboxId)
+            : null) ?? (await getEspConfig(team.id));
+    const ownerAccount = await getAccount(team.ownerAccountId);
     const from = getEmailFrom({
-        name: sequence.fromName || team.fromName || team.name,
+        name: outbox?.fromName || team.name,
         email:
-            sequence.fromEmail ||
-            team.fromEmail ||
+            outbox?.fromEmail ||
+            ownerAccount?.email ||
             process.env.EMAIL_FROM ||
             "",
     });
     const to = contact.email;
     const subject = email.subject;
     const unsubscribeLink = getUnsubLink(contact.unsubscribeToken);
+    const generalSettings = await getGeneralSettings(team.id);
     const templatePayload = {
         subscriber: {
             email: contact.email,
             name: contact.name,
             tags: contact.tags,
         },
-        address: team.mailingAddress || "",
+        address: generalSettings.mailingAddress || "",
         unsubscribe_link: unsubscribeLink,
     };
 
     if (!email.content) return;
 
+    // NOTE: these three must stay **public** ids — they get embedded into the
+    // outgoing email's tracking pixel/links, and `tracking/routes.ts` only
+    // has the decoded token (no other context) to resolve them from, days
+    // later. `ongoingSequence.sequenceId` is the *internal* id at the DB
+    // layer after the FK normalization — use `sequence.sequenceId` (public)
+    // instead.
     const pixelToken = generatePixelToken({
         contactId: contact.contactId,
-        sequenceId: ongoingSequence.sequenceId,
+        sequenceId: sequence.sequenceId,
         emailId: email.emailId,
     });
     const pixelUrl = `${getSiteUrl()}/api/track/open?d=${pixelToken}`;
@@ -246,7 +272,7 @@ async function attemptMailSending({
     const contentWithTrackedLinks = transformLinksForClickTracking(
         renderedHtml,
         contact.contactId,
-        ongoingSequence.sequenceId,
+        sequence.sequenceId,
         email.emailId,
     );
 
@@ -260,9 +286,9 @@ async function attemptMailSending({
         });
         await db.insert(emailDeliveries).values({
             teamId: team.id,
-            sequenceId: sequence.sequenceId,
-            contactId: contact.contactId,
-            emailId: email.emailId,
+            sequenceId: sequence.id,
+            contactId: contact.id,
+            emailId: email.id,
         });
     } catch (err: any) {
         const retryCount = ongoingSequence.retryCount + 1;

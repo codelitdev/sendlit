@@ -51,13 +51,19 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
 export async function seedTeamAndContact(
     db: Awaited<ReturnType<typeof makeTestDb>>,
     overrides: {
+        account?: Partial<typeof schema.accounts.$inferInsert>;
         team?: Partial<typeof schema.teams.$inferInsert>;
         contact?: Partial<typeof schema.contacts.$inferInsert>;
+        espConfig?: Partial<typeof schema.espConfigs.$inferInsert>;
+        settings?: Partial<typeof schema.settings.$inferInsert>;
     } = {},
 ) {
     const [account] = await db
         .insert(schema.accounts)
-        .values({ email: `owner-${crypto.randomUUID()}@example.com` })
+        .values({
+            email: `owner-${crypto.randomUUID()}@example.com`,
+            ...overrides.account,
+        })
         .returning();
 
     const [team] = await db
@@ -65,18 +71,28 @@ export async function seedTeamAndContact(
         .values({
             name: "Test team",
             ownerAccountId: account.id,
-            fromName: "Test Sender",
-            fromEmail: "sender@example.com",
-            mailingAddress: "1 Test St, Testville",
             ...overrides.team,
         })
         .returning();
+
+    await db.insert(schema.espConfigs).values({
+        teamId: team.id,
+        host: "smtp.example.com",
+        fromName: "Test Sender",
+        fromEmail: "sender@example.com",
+        ...overrides.espConfig,
+    });
+
+    await db.insert(schema.settings).values({
+        teamId: team.id,
+        mailingAddress: "1 Test St, Testville",
+        ...overrides.settings,
+    });
 
     const [contact] = await db
         .insert(schema.contacts)
         .values({
             teamId: team.id,
-            contactId: `contact-${crypto.randomUUID()}`,
             email: `reader-${crypto.randomUUID()}@example.com`,
             name: "Ada Lovelace",
             unsubscribeToken: crypto.randomUUID(),

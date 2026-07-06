@@ -7,6 +7,8 @@ import {
     getContactByUnsubscribeToken,
     updateContact,
 } from "../contacts/queries";
+import { getSequenceEmailByEmailId } from "../sequences/queries";
+import { getSequenceRowBySequenceId } from "../automation/queries";
 import { EmailEventAction } from "../config/constants";
 import logger from "../services/log";
 
@@ -36,11 +38,13 @@ router.get("/track/open", async (req: Request, res: Response) => {
 
     if (!payload) return;
     try {
+        const resolved = await resolveEventIds(payload);
+        if (!resolved) return;
         await db.insert(emailEvents).values({
-            teamId: (await findTeamIdForContact(payload.contactId)) || "",
-            sequenceId: payload.sequenceId,
-            contactId: payload.contactId,
-            emailId: payload.emailId,
+            teamId: resolved.teamId,
+            sequenceId: resolved.sequenceId,
+            contactId: resolved.contactId,
+            emailId: resolved.emailId,
             action: EmailEventAction.OPEN,
         });
     } catch (err: any) {
@@ -59,15 +63,18 @@ router.get("/track/click", async (req: Request, res: Response) => {
     const destination = decodeURIComponent(payload.link);
 
     try {
-        await db.insert(emailEvents).values({
-            teamId: (await findTeamIdForContact(payload.contactId)) || "",
-            sequenceId: payload.sequenceId,
-            contactId: payload.contactId,
-            emailId: payload.emailId,
-            action: EmailEventAction.CLICK,
-            link: destination,
-            linkIndex: payload.index,
-        });
+        const resolved = await resolveEventIds(payload);
+        if (resolved) {
+            await db.insert(emailEvents).values({
+                teamId: resolved.teamId,
+                sequenceId: resolved.sequenceId,
+                contactId: resolved.contactId,
+                emailId: resolved.emailId,
+                action: EmailEventAction.CLICK,
+                link: destination,
+                linkIndex: payload.index,
+            });
+        }
     } catch (err: any) {
         logger.error({ error: err.message }, "Failed to record click event");
     }
@@ -85,7 +92,7 @@ router.get(
         if (!contact) return res.status(404).send("Invalid unsubscribe link");
 
         await updateContact(contact.teamId, contact.contactId, {
-            subscribedToUpdates: false,
+            subscribed: false,
         });
 
         res.type("html").send(
@@ -94,9 +101,35 @@ router.get(
     },
 );
 
-async function findTeamIdForContact(contactId: string): Promise<string | null> {
-    const contact = await getContactByContactId(contactId);
-    return contact?.teamId ?? null;
+/** Resolves the public ids decoded from a tracking JWT into the internal ids
+ * `email_events` now requires as FKs. Fails soft (returns `null`) if the
+ * contact/sequence/email was deleted since send — the caller already treats
+ * that the same way a DB error would be treated (log and move on, never 500
+ * a tracking pixel/redirect request). */
+async function resolveEventIds(payload: TeamScopedEvent): Promise<{
+    teamId: string;
+    sequenceId: string;
+    contactId: string;
+    emailId: string;
+} | null> {
+    const contact = await getContactByContactId(payload.contactId);
+    if (!contact) return null;
+
+    const sequence = await getSequenceRowBySequenceId(
+        contact.teamId,
+        payload.sequenceId,
+    );
+    if (!sequence) return null;
+
+    const email = await getSequenceEmailByEmailId(sequence.id, payload.emailId);
+    if (!email) return null;
+
+    return {
+        teamId: contact.teamId,
+        sequenceId: sequence.id,
+        contactId: contact.id,
+        emailId: email.id,
+    };
 }
 
 export default router;

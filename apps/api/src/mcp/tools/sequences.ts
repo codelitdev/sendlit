@@ -31,6 +31,20 @@ import {
     sequenceStatsSchema,
 } from "./schemas";
 import { getTeamId } from "./auth";
+import { omitInternal } from "../../utils/public";
+import type { HydratedSequence } from "../../sequences/queries";
+
+// `sequenceEmails.sequenceId` stores its *parent* sequence's internal `id`
+// (see the file-level doc comment in `db/schema.ts`) — dropped here rather
+// than exposed, since it's an internal join key, not a public ID.
+function toPublicSequence(sequence: HydratedSequence) {
+    return {
+        ...omitInternal(sequence),
+        emails: sequence.emails.map((email) =>
+            omitInternal(email, ["sequenceId"]),
+        ),
+    };
+}
 
 export function registerSequenceTools(server: McpServer): void {
     server.registerTool(
@@ -68,7 +82,10 @@ export function registerSequenceTools(server: McpServer): void {
                     }),
                     countSequences(teamId, args.type),
                 ]);
-                return jsonResult({ items, total });
+                return jsonResult({
+                    items: items.map(toPublicSequence),
+                    total,
+                });
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -97,7 +114,7 @@ export function registerSequenceTools(server: McpServer): void {
                     args.sequenceId,
                 );
                 if (!sequence) return NOT_FOUND;
-                return jsonResult(sequence);
+                return jsonResult(toPublicSequence(sequence));
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -129,7 +146,7 @@ export function registerSequenceTools(server: McpServer): void {
                     type: args.type,
                     templateId: args.templateId,
                 });
-                return jsonResult(sequence);
+                return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
                 return errorResult(err.message);
             }
@@ -140,12 +157,10 @@ export function registerSequenceTools(server: McpServer): void {
         "update_sequence",
         {
             description:
-                "Updates a broadcast/sequence's title, sender identity, trigger (sequences) or audience filter (broadcasts).",
+                "Updates a broadcast/sequence's title, trigger (sequences) or audience filter (broadcasts). Sender identity comes from the team's ESP settings (see update_esp_config).",
             inputSchema: {
                 sequenceId: z.string(),
                 title: z.string().optional(),
-                fromName: z.string().optional(),
-                fromEmail: z.string().email().optional(),
                 triggerType: z
                     .string()
                     .optional()
@@ -185,7 +200,7 @@ export function registerSequenceTools(server: McpServer): void {
                     ...patch,
                 });
                 if (!sequence) return NOT_FOUND;
-                return jsonResult(sequence);
+                return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
                 return errorResult(err.message);
             }
@@ -218,7 +233,7 @@ export function registerSequenceTools(server: McpServer): void {
                     templateId: args.templateId,
                 });
                 if (!sequence) return NOT_FOUND;
-                return jsonResult(sequence);
+                return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
                 return errorResult(err.message);
             }
@@ -278,7 +293,7 @@ export function registerSequenceTools(server: McpServer): void {
                     ...patch,
                 });
                 if (!sequence) return NOT_FOUND;
-                return jsonResult(sequence);
+                return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
                 return errorResult(err.message);
             }
@@ -308,7 +323,7 @@ export function registerSequenceTools(server: McpServer): void {
                     emailId: args.emailId,
                 });
                 if (!sequence) return NOT_FOUND;
-                return jsonResult(sequence);
+                return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
                 return errorResult(err.message);
             }
@@ -336,7 +351,7 @@ export function registerSequenceTools(server: McpServer): void {
                     teamId,
                     sequenceId: args.sequenceId,
                 });
-                return jsonResult(sequence);
+                return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
                 return errorResult(err.message);
             }
@@ -364,7 +379,7 @@ export function registerSequenceTools(server: McpServer): void {
                     teamId,
                     sequenceId: args.sequenceId,
                 });
-                return jsonResult(sequence);
+                return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
                 return errorResult(err.message);
             }

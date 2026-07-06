@@ -7,4 +7,20 @@ SendLit supports OAuth2 and team API keys.
 
 Use OAuth2 for user-authorized app integrations. Use API keys for team-scoped server-to-server integrations.
 
+## API keys
+
+API keys look like `sl_live_...` followed by a random secret, and are sent via the `x-sendlit-apikey` header. The `sl_live_` prefix makes leaked keys detectable by secret scanners, so treat anything matching it as a credential.
+
+Keys are stored hashed (SHA-256), which means:
+
+- The full key is shown **exactly once**, in the response that creates it (`POST /teams/:teamId/keys`, the `create_api_key` MCP tool, or the provisioning call that first creates a team). Store it securely at that moment — it cannot be retrieved later.
+- Key listings only include each key's `keyPrefix` (the first few characters, e.g. `sl_live_a1b2`) so you can tell keys apart.
+- Keys are revoked by their `id` (`DELETE /teams/:teamId/keys/:keyId`), not by the secret.
+
+If a key is lost or leaked, revoke it and create a new one.
+
+## Provisioning
+
 Provisioning endpoints require the dedicated `X-Sendlit-Provisioning-Secret` header and are intended for trusted multi-tenant consumers.
+
+Provisioning is idempotent per `externalId`, but the response's `apiKey` is only present on the call that actually creates the team — persist it then. Re-provisioning an existing team returns the team without a key; if you lost the key, revoke it and mint a new one via the teams API.

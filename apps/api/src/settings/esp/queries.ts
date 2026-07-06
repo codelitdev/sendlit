@@ -28,6 +28,17 @@ export async function getEspConfig(teamId: string): Promise<EspConfig | null> {
     return row ?? null;
 }
 
+/** Internal-id lookup — used by the send path to resolve a sequence's pinned
+ * outbox (`sequences.outboxId`). Never exposed publicly. */
+export async function getEspConfigById(id: string): Promise<EspConfig | null> {
+    const [row] = await db
+        .select()
+        .from(espConfigs)
+        .where(eq(espConfigs.id, id))
+        .limit(1);
+    return row ?? null;
+}
+
 export async function upsertEspConfig(
     teamId: string,
     input: EspConfigInput,

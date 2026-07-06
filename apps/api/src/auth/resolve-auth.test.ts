@@ -7,7 +7,7 @@ vi.mock("../account/queries", () => ({
     getAccount: vi.fn(),
 }));
 vi.mock("../apikey/queries", () => ({
-    getApiKeyUsingKeyId: vi.fn(),
+    getApiKeyBySecret: vi.fn(),
 }));
 
 import {
@@ -32,10 +32,11 @@ function deps(overrides: Partial<AuthDependencies> = {}): AuthDependencies {
             scopes: ["read", "write"],
         })),
         getAccount: vi.fn(async () => account as any),
-        getApiKeyUsingKeyId: vi.fn(async () => ({
+        getApiKeyBySecret: vi.fn(async () => ({
             id: "key-id",
             teamId: "team-1",
-            key: "api-key",
+            keyHash: "hash-of-api-key",
+            keyPrefix: "sl_live_api-",
             name: "Default",
             createdAt: new Date(),
         })),
@@ -65,7 +66,7 @@ describe("resolveAuth", () => {
         expect(authDeps.validateBearerToken).toHaveBeenCalledWith(
             "access-token",
         );
-        expect(authDeps.getApiKeyUsingKeyId).not.toHaveBeenCalled();
+        expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
     });
 
     it("rejects invalid bearer tokens instead of falling back to an API key", async () => {
@@ -82,7 +83,7 @@ describe("resolveAuth", () => {
                 authDeps,
             ),
         ).resolves.toEqual({ status: "invalid_token" });
-        expect(authDeps.getApiKeyUsingKeyId).not.toHaveBeenCalled();
+        expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
     });
 
     it("authenticates API keys from headers or request bodies", async () => {
@@ -112,7 +113,7 @@ describe("resolveAuth", () => {
         await expect(
             resolveAuth(
                 { apiKeyHeader: "wrong" },
-                deps({ getApiKeyUsingKeyId: vi.fn(async () => null) }),
+                deps({ getApiKeyBySecret: vi.fn(async () => null) }),
             ),
         ).resolves.toEqual({ status: "unauthorized" });
     });

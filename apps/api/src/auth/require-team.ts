@@ -1,5 +1,9 @@
 import { NextFunction, Request, Response } from "express";
-import { getTeamMembership, listTeamsForAccount } from "../team/queries";
+import {
+    getTeamByTeamId,
+    getTeamMembership,
+    listTeamsForAccount,
+} from "../team/queries";
 
 function getHeaderValue(value: unknown): string | undefined {
     if (Array.isArray(value)) {
@@ -35,16 +39,21 @@ export async function requireTeam(
 
     const headerTeamId = getHeaderValue(req.headers["x-sendlit-team-id"]);
     if (headerTeamId) {
+        const team = await getTeamByTeamId(headerTeamId);
+        if (!team) {
+            res.status(400).json({
+                error: "invalid_team_id",
+                error_description: "The provided team ID is not valid.",
+            });
+            return;
+        }
         let membership;
         try {
-            membership = await getTeamMembership(
-                headerTeamId,
-                anyReq.accountId,
-            );
+            membership = await getTeamMembership(team.id, anyReq.accountId);
         } catch {
             res.status(400).json({
                 error: "invalid_team_id",
-                error_description: "The provided team ID is not a valid UUID.",
+                error_description: "The provided team ID is not valid.",
             });
             return;
         }
@@ -55,7 +64,7 @@ export async function requireTeam(
             });
             return;
         }
-        anyReq.teamId = headerTeamId;
+        anyReq.teamId = team.id;
         return next();
     }
 
@@ -76,6 +85,6 @@ export async function requireTeam(
         error: "team_required",
         error_description:
             "This account belongs to multiple teams — specify one via the X-Sendlit-Team-Id header.",
-        teams: teams.map((t) => ({ id: t.id, name: t.name })),
+        teams: teams.map((t) => ({ teamId: t.teamId, name: t.name })),
     });
 }

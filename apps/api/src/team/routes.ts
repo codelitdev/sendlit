@@ -5,9 +5,11 @@ import { requireAuth } from "../auth/middleware";
 import {
     createTeam,
     deleteTeam,
+    getTeamByTeamId,
     getTeamMembership,
     listTeamsForAccount,
     renameTeam,
+    type Team,
 } from "./queries";
 import {
     createApiKey,
@@ -47,72 +49,112 @@ async function requireMembership(teamId: string, accountId: string) {
     return getTeamMembership(teamId, accountId);
 }
 
+/** `teams.teamId` is this row's *own* public identifier, not an internal
+ * tenant-FK to another resource — so, unlike `omitInternal()`, only drop
+ * `id`, never `teamId`. */
+function toPublicTeam(team: Team) {
+    const { id: _id, ...publicTeam } = team;
+    return publicTeam;
+}
+
+/** Resolves a route's public `:teamId` param to its internal id, 404-ing if
+ * it doesn't resolve to a team the caller is even a member of. */
+async function resolveTeamParam(teamId: string, accountId: string) {
+    const team = await getTeamByTeamId(teamId);
+    if (!team) return null;
+    const membership = await requireMembership(team.id, accountId);
+    if (!membership) return null;
+    return { team, membership };
+}
+
 const impl = s.router(contract.teams, {
     list: async ({ req }) => {
         const teams = await listTeamsForAccount((req as any).accountId);
-        return { status: 200, body: { items: serializeDates(teams) } };
+        return {
+            status: 200,
+            body: { items: serializeDates(teams.map(toPublicTeam)) },
+        };
     },
     create: async ({ body, req }) => {
-        const team = await createTeam({
+        // The default key's one-time secret is deliberately dropped here (the
+        // contract's team shape has no place for it); browser users mint keys
+        // explicitly via `createKey`, which does return the secret once.
+        const { defaultApiKeySecret: _, ...team } = await createTeam({
             ownerAccountId: (req as any).accountId,
             name: body.name,
         });
-        return { status: 201, body: serializeDates(team) };
+        return { status: 201, body: serializeDates(toPublicTeam(team)) };
     },
     rename: async ({ params, body, req }) => {
-        const membership = await requireMembership(
+        const resolved = await resolveTeamParam(
             params.teamId,
             (req as any).accountId,
         );
-        if (!membership)
+        if (!resolved)
             return { status: 404, body: { error: "Team not found" } };
-        const team = await renameTeam(params.teamId, body.name);
-        return { status: 200, body: serializeDates(team!) };
+        const team = await renameTeam(resolved.team.id, body.name);
+        return { status: 200, body: serializeDates(toPublicTeam(team!)) };
     },
     remove: async ({ params, req }) => {
-        const membership = await requireMembership(
+        const resolved = await resolveTeamParam(
             params.teamId,
             (req as any).accountId,
         );
-        if (!membership)
+        if (!resolved)
             return { status: 404, body: { error: "Team not found" } };
-        if (membership.role !== "owner") {
+        if (resolved.membership.role !== "owner") {
             return {
                 status: 403,
                 body: { error: "Only the team owner can delete it" },
             };
         }
-        await deleteTeam(params.teamId);
+        await deleteTeam(resolved.team.id);
         return { status: 204, body: undefined };
     },
     listKeys: async ({ params, req }) => {
-        const membership = await requireMembership(
+        const resolved = await resolveTeamParam(
             params.teamId,
             (req as any).accountId,
         );
-        if (!membership)
+        if (!resolved)
             return { status: 404, body: { error: "Team not found" } };
-        const keys = await getApiKeysByTeamId(params.teamId);
-        return { status: 200, body: { items: serializeDates(keys) } };
+        const keys = await getApiKeysByTeamId(resolved.team.id);
+        // Strip keyHash (even a hash of a live credential has no business in
+        // an HTTP response) and teamId (an internal FK to `teams.id` — the
+        // caller already knows which team they're scoped to).
+        return {
+            status: 200,
+            body: {
+                items: serializeDates(
+                    keys.map(({ keyHash: _, teamId: _t, ...key }) => key),
+                ),
+            },
+        };
     },
     createKey: async ({ params, body, req }) => {
-        const membership = await requireMembership(
+        const resolved = await resolveTeamParam(
             params.teamId,
             (req as any).accountId,
         );
-        if (!membership)
+        if (!resolved)
             return { status: 404, body: { error: "Team not found" } };
-        const key = await createApiKey(params.teamId, body.name);
-        return { status: 201, body: serializeDates(key) };
+        const {
+            apiKey: { keyHash: _, teamId: _t, ...apiKey },
+            secret,
+        } = await createApiKey(resolved.team.id, body.name);
+        return {
+            status: 201,
+            body: { ...serializeDates(apiKey), key: secret },
+        };
     },
     removeKey: async ({ params, req }) => {
-        const membership = await requireMembership(
+        const resolved = await resolveTeamParam(
             params.teamId,
             (req as any).accountId,
         );
-        if (!membership)
+        if (!resolved)
             return { status: 404, body: { error: "Team not found" } };
-        await deleteApiKey(params.teamId, params.key);
+        await deleteApiKey(resolved.team.id, params.keyId);
         return { status: 204, body: undefined };
     },
 });

@@ -2,8 +2,6 @@ import { z } from "zod";
 import { emailContentSchema } from "./common";
 
 export const emailTemplateSchema = z.object({
-    id: z.string(),
-    teamId: z.string(),
     templateId: z.string(),
     title: z.string(),
     content: emailContentSchema,

@@ -12,6 +12,7 @@ import {
 } from "./queries";
 import { SYSTEM_TEMPLATES } from "./system-templates";
 import { serializeDates } from "../utils/serialize";
+import { omitInternal } from "../utils/public";
 
 const router = Router();
 router.use(requireAuth);
@@ -45,18 +46,27 @@ const restImpl = s.router(restContract, {
             title: body.title,
             content: body.content as any,
         });
-        return { status: 201, body: serializeDates(template) as any };
+        return {
+            status: 201,
+            body: serializeDates(omitInternal(template)) as any,
+        };
     },
     list: async ({ req }) => {
         const templates = await listTemplates((req as any).teamId);
-        return { status: 200, body: serializeDates(templates) as any };
+        return {
+            status: 200,
+            body: serializeDates(templates.map((t) => omitInternal(t))) as any,
+        };
     },
     get: async ({ params, req }) => {
         const template = await getTemplate(params.templateId);
         if (!template || template.teamId !== (req as any).teamId) {
             return { status: 404, body: { error: "Template not found" } };
         }
-        return { status: 200, body: serializeDates(template) as any };
+        return {
+            status: 200,
+            body: serializeDates(omitInternal(template)) as any,
+        };
     },
     update: async ({ params, body, req }) => {
         try {
@@ -68,7 +78,10 @@ const restImpl = s.router(restContract, {
             });
             if (!template)
                 return { status: 404, body: { error: "Template not found" } };
-            return { status: 200, body: serializeDates(template) as any };
+            return {
+                status: 200,
+                body: serializeDates(omitInternal(template)) as any,
+            };
         } catch (err: any) {
             if (err.message === "duplicate_title") {
                 return {

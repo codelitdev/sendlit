@@ -7,16 +7,15 @@ vi.mock("../db/client", async () => {
 });
 
 import { db } from "../db/client";
-import { accounts, teams } from "../db/schema";
+import { accounts } from "../db/schema";
 import { getApiKeysByTeamId } from "../apikey/queries";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
+import { hasMailQuotaRemaining, incrementMailCount } from "../account/queries";
 import {
     createTeam,
     findOrCreateBareAccount,
     findOrCreateTeamByExternalId,
     getTeamMembership,
-    hasMailQuotaRemaining,
-    incrementMailCount,
     listTeamsForAccount,
 } from "./queries";
 
@@ -80,8 +79,8 @@ describe("team queries", () => {
     });
 
     it("enforces and resets mail quota counters", async () => {
-        const { team } = await seedTeamAndContact(tdb, {
-            team: {
+        const { account } = await seedTeamAndContact(tdb, {
+            account: {
                 dailyMailLimit: 1,
                 monthlyMailLimit: 2,
                 dailyMailCount: 0,
@@ -89,25 +88,25 @@ describe("team queries", () => {
             },
         });
 
-        expect(await hasMailQuotaRemaining(team.id)).toBe(true);
-        await incrementMailCount(team.id);
-        expect(await hasMailQuotaRemaining(team.id)).toBe(false);
+        expect(await hasMailQuotaRemaining(account.id)).toBe(true);
+        await incrementMailCount(account.id);
+        expect(await hasMailQuotaRemaining(account.id)).toBe(false);
 
         await tdb
-            .update(teams)
+            .update(accounts)
             .set({
                 countersResetAt: new Date(Date.now() - 31 * 24 * 60 * 60_000),
                 dailyMailCount: 100,
                 monthlyMailCount: 100,
             })
-            .where(eq(teams.id, team.id));
+            .where(eq(accounts.id, account.id));
 
-        expect(await hasMailQuotaRemaining(team.id)).toBe(true);
-        const [resetTeam] = await tdb
+        expect(await hasMailQuotaRemaining(account.id)).toBe(true);
+        const [resetAccount] = await tdb
             .select()
-            .from(teams)
-            .where(eq(teams.id, team.id));
-        expect(resetTeam.dailyMailCount).toBe(0);
-        expect(resetTeam.monthlyMailCount).toBe(0);
+            .from(accounts)
+            .where(eq(accounts.id, account.id));
+        expect(resetAccount.dailyMailCount).toBe(0);
+        expect(resetAccount.monthlyMailCount).toBe(0);
     });
 });

@@ -55,17 +55,33 @@ const openApiDocument = generateOpenApi(
                         },
                     },
                 },
-                ApiKey: {
+                apiKeyAuth: {
                     type: "apiKey",
                     in: "header",
-                    name: "X-API-Key",
+                    name: "x-sendlit-apikey",
+                },
+                provisioningSecretAuth: {
+                    type: "apiKey",
+                    in: "header",
+                    name: "X-Sendlit-Provisioning-Secret",
                 },
             },
         },
-        security: [{ OAuth2: [] }, { ApiKey: [] }],
+        security: [{ OAuth2: [] }, { apiKeyAuth: [] }],
     },
     {
         setOperationId: true,
+        operationMapper: (operation, route) => {
+            const path = (route as { path?: string }).path;
+
+            return {
+                ...operation,
+                security:
+                    path === "/provisioning/teams"
+                        ? [{ provisioningSecretAuth: [] }]
+                        : operation.security,
+            };
+        },
     },
 );
 

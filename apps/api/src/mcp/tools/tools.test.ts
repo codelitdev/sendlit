@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
     countContacts: vi.fn(),
     createContact: vi.fn(),
     getContactByContactId: vi.fn(),
+    getDeliveriesByContact: vi.fn(),
     listContacts: vi.fn(),
     updateContact: vi.fn(),
     addTagToContact: vi.fn(),
@@ -34,7 +35,11 @@ const mocks = vi.hoisted(() => ({
     sendTestMail: vi.fn(),
 
     getTeam: vi.fn(),
+    getTeamByTeamId: vi.fn(),
+    getTeamMembership: vi.fn(),
     listTeamsForAccount: vi.fn(),
+    createTeam: vi.fn(),
+    deleteTeam: vi.fn(),
     renameTeam: vi.fn(),
     createApiKey: vi.fn(),
     deleteApiKey: vi.fn(),
@@ -51,11 +56,20 @@ vi.mock("../../contacts/queries", () => ({
     countContacts: mocks.countContacts,
     createContact: mocks.createContact,
     getContactByContactId: mocks.getContactByContactId,
+    getDeliveriesByContact: mocks.getDeliveriesByContact,
     listContacts: mocks.listContacts,
     updateContact: mocks.updateContact,
     addTagToContact: mocks.addTagToContact,
     removeTagFromContact: mocks.removeTagFromContact,
     deleteContact: mocks.deleteContact,
+}));
+
+vi.mock("../../contacts/segments-queries", () => ({
+    createSegment: vi.fn(),
+    deleteSegment: vi.fn(),
+    getSegment: vi.fn(),
+    listSegments: vi.fn(),
+    updateSegment: vi.fn(),
 }));
 
 vi.mock("../../sequences/queries", () => ({
@@ -93,7 +107,11 @@ vi.mock("../../mail/send", () => ({
 
 vi.mock("../../team/queries", () => ({
     getTeam: mocks.getTeam,
+    getTeamByTeamId: mocks.getTeamByTeamId,
+    getTeamMembership: mocks.getTeamMembership,
     listTeamsForAccount: mocks.listTeamsForAccount,
+    createTeam: mocks.createTeam,
+    deleteTeam: mocks.deleteTeam,
     renameTeam: mocks.renameTeam,
 }));
 
@@ -166,7 +184,9 @@ describe("MCP tool auth helpers and response helpers", () => {
 describe("MCP contact tools", () => {
     it("requires auth and scopes list/create calls to the resolved team", async () => {
         const tools = makeToolRegistry(registerContactTools);
-        mocks.listContacts.mockResolvedValue([{ contactId: "contact-1" }]);
+        const firstContactId = crypto.randomUUID();
+        const secondContactId = crypto.randomUUID();
+        mocks.listContacts.mockResolvedValue([{ contactId: firstContactId }]);
         mocks.countContacts.mockResolvedValue(1);
 
         await expect(
@@ -178,7 +198,7 @@ describe("MCP contact tools", () => {
             tools.get("list_contacts")!.handler({ q: "ada", offset: 2 }, auth),
         ).resolves.toMatchObject({
             structuredContent: {
-                items: [{ contactId: "contact-1" }],
+                items: [{ contactId: firstContactId }],
                 total: 1,
             },
         });
@@ -188,7 +208,7 @@ describe("MCP contact tools", () => {
             offset: 2,
         });
 
-        mocks.createContact.mockResolvedValue({ contactId: "contact-2" });
+        mocks.createContact.mockResolvedValue({ contactId: secondContactId });
         await tools
             .get("create_contact")!
             .handler(
@@ -204,14 +224,53 @@ describe("MCP contact tools", () => {
 
     it("does not leak contacts from another team", async () => {
         const tools = makeToolRegistry(registerContactTools);
+        const contactId = crypto.randomUUID();
         mocks.getContactByContactId.mockResolvedValue({
-            contactId: "contact-1",
+            contactId,
             teamId: "team-2",
         });
 
         await expect(
-            tools.get("get_contact")!.handler({ contactId: "contact-1" }, auth),
+            tools.get("get_contact")!.handler({ contactId }, auth),
         ).resolves.toEqual(NOT_FOUND);
+    });
+
+    it("returns contact deliveries after checking contact ownership", async () => {
+        const tools = makeToolRegistry(registerContactTools);
+        const contactId = crypto.randomUUID();
+        const internalContactId = crypto.randomUUID();
+        mocks.getContactByContactId.mockResolvedValue({
+            id: internalContactId,
+            contactId,
+            teamId: "team-1",
+        });
+        mocks.getDeliveriesByContact.mockResolvedValue([
+            {
+                sequenceId: "seq-1",
+                sequenceTitle: "Welcome",
+                sequenceType: "sequence",
+                emailId: "email-1",
+                createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            },
+        ]);
+
+        await expect(
+            tools.get("get_contact_deliveries")!.handler({ contactId }, auth),
+        ).resolves.toMatchObject({
+            structuredContent: {
+                items: [
+                    {
+                        sequenceId: "seq-1",
+                        sequenceTitle: "Welcome",
+                        emailId: "email-1",
+                    },
+                ],
+            },
+        });
+        expect(mocks.getDeliveriesByContact).toHaveBeenCalledWith(
+            "team-1",
+            internalContactId,
+        );
     });
 });
 
@@ -345,14 +404,62 @@ describe("MCP team and template tools", () => {
         ).resolves.toEqual(AUTH_ERROR);
 
         mocks.listTeamsForAccount.mockResolvedValue([
-            { id: "team-1", name: "Main", ignored: true },
+            { id: "team-1", teamId: "team-1", name: "Main", ignored: true },
         ]);
         await expect(
             tools.get("list_teams")!.handler(auth),
         ).resolves.toMatchObject({
-            structuredContent: { items: [{ id: "team-1", name: "Main" }] },
+            structuredContent: { items: [{ teamId: "team-1", name: "Main" }] },
         });
         expect(mocks.listTeamsForAccount).toHaveBeenCalledWith("account-1");
+    });
+
+    it("creates teams for the authenticated account", async () => {
+        const tools = makeToolRegistry(registerTeamTools);
+        mocks.createTeam.mockResolvedValue({
+            id: "internal-team-2",
+            teamId: "team-2",
+            name: "Second Team",
+            defaultApiKeySecret: "sl_live_secret",
+        });
+
+        await expect(
+            tools.get("create_team")!.handler({ name: "Second Team" }, auth),
+        ).resolves.toMatchObject({
+            structuredContent: {
+                teamId: "team-2",
+                name: "Second Team",
+            },
+        });
+        expect(mocks.createTeam).toHaveBeenCalledWith({
+            ownerAccountId: "account-1",
+            name: "Second Team",
+        });
+    });
+
+    it("only lets team owners delete teams", async () => {
+        const tools = makeToolRegistry(registerTeamTools);
+        mocks.getTeamByTeamId.mockResolvedValue({
+            id: "internal-team-2",
+            teamId: "team-2",
+            name: "Second Team",
+        });
+        mocks.getTeamMembership.mockResolvedValueOnce({ role: "member" });
+
+        await expect(
+            tools.get("delete_team")!.handler({ teamId: "team-2" }, auth),
+        ).resolves.toMatchObject({
+            isError: true,
+        });
+        expect(mocks.deleteTeam).not.toHaveBeenCalled();
+
+        mocks.getTeamMembership.mockResolvedValueOnce({ role: "owner" });
+        await expect(
+            tools.get("delete_team")!.handler({ teamId: "team-2" }, auth),
+        ).resolves.toMatchObject({
+            structuredContent: { message: "Team deleted." },
+        });
+        expect(mocks.deleteTeam).toHaveBeenCalledWith("internal-team-2");
     });
 
     it("keeps template ID inputs non-empty across template tools", () => {

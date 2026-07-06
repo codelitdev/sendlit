@@ -20,6 +20,7 @@ export async function fireEvent({
     teamId: string;
     event: Event;
     eventData?: string;
+    /** Internal `contacts.id` — callers already have the `Contact` row loaded. */
     contactId: string;
 }) {
     const matchingRules = await db
@@ -42,7 +43,7 @@ export async function fireEvent({
             .where(
                 and(
                     eq(sequences.teamId, teamId),
-                    eq(sequences.sequenceId, rule.sequenceId),
+                    eq(sequences.id, rule.sequenceId),
                 ),
             )
             .limit(1);
@@ -51,7 +52,7 @@ export async function fireEvent({
         try {
             await enrollContactsInOngoingSequence({
                 teamId,
-                sequenceId: rule.sequenceId,
+                sequenceId: sequenceRow.id,
                 contactIds: [contactId],
             });
         } catch (err: any) {

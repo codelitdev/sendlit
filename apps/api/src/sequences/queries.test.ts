@@ -9,6 +9,7 @@ vi.mock("../db/client", async () => {
 
 import { db } from "../db/client";
 import {
+    contacts,
     emailDeliveries,
     emailEvents,
     sequences,
@@ -142,6 +143,11 @@ describe("sequence queries", () => {
             .update(sequenceEmails)
             .set({ published: true })
             .where(eq(sequenceEmails.id, sequence.emails[0].id));
+        await updateSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            title: "",
+        });
         await expect(
             startSequence({ teamId: team.id, sequenceId: sequence.sequenceId }),
         ).rejects.toThrow(`${responses.sequence_details_missing}: basics`);
@@ -149,7 +155,7 @@ describe("sequence queries", () => {
         await updateSequence({
             teamId: team.id,
             sequenceId: sequence.sequenceId,
-            fromName: "Sender",
+            title: "Welcome sequence",
         });
         await expect(
             startSequence({ teamId: team.id, sequenceId: sequence.sequenceId }),
@@ -217,62 +223,77 @@ describe("sequence queries", () => {
     });
 
     it("computes subscribers and engagement rates from delivery/event rows", async () => {
-        const { team } = await seedTeamAndContact(tdb);
+        const { team, contact: firstContact } = await seedTeamAndContact(tdb);
+        const [secondContact] = await tdb
+            .insert(contacts)
+            .values({
+                teamId: team.id,
+                email: `reader-${crypto.randomUUID()}@example.com`,
+                name: "Second Contact",
+                unsubscribeToken: crypto.randomUUID(),
+            })
+            .returning();
         const template = await makeTemplate(team.id);
         const sequence = await createSequence({
             teamId: team.id,
             type: "sequence",
             templateId: template.templateId,
         });
+        const secondEmail = await addMailToSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            templateId: template.templateId,
+        });
+        const [firstEmail, secondEmailRow] = secondEmail!.emails;
 
         await tdb.insert(emailDeliveries).values([
             {
                 teamId: team.id,
-                sequenceId: sequence.sequenceId,
-                contactId: "contact-1",
-                emailId: "email-1",
+                sequenceId: sequence.id,
+                contactId: firstContact.id,
+                emailId: firstEmail.id,
             },
             {
                 teamId: team.id,
-                sequenceId: sequence.sequenceId,
-                contactId: "contact-1",
-                emailId: "email-2",
+                sequenceId: sequence.id,
+                contactId: firstContact.id,
+                emailId: secondEmailRow.id,
             },
             {
                 teamId: team.id,
-                sequenceId: sequence.sequenceId,
-                contactId: "contact-2",
-                emailId: "email-1",
+                sequenceId: sequence.id,
+                contactId: secondContact.id,
+                emailId: firstEmail.id,
             },
         ]);
         await tdb.insert(emailEvents).values([
             {
                 teamId: team.id,
-                sequenceId: sequence.sequenceId,
-                contactId: "contact-1",
-                emailId: "email-1",
+                sequenceId: sequence.id,
+                contactId: firstContact.id,
+                emailId: firstEmail.id,
                 action: EmailEventAction.OPEN,
             },
             {
                 teamId: team.id,
-                sequenceId: sequence.sequenceId,
-                contactId: "contact-1",
-                emailId: "email-2",
+                sequenceId: sequence.id,
+                contactId: firstContact.id,
+                emailId: secondEmailRow.id,
                 action: EmailEventAction.OPEN,
             },
             {
                 teamId: team.id,
-                sequenceId: sequence.sequenceId,
-                contactId: "contact-2",
-                emailId: "email-1",
+                sequenceId: sequence.id,
+                contactId: secondContact.id,
+                emailId: firstEmail.id,
                 action: EmailEventAction.CLICK,
             },
         ]);
 
         expect(await getSubscribersCount(sequence.sequenceId)).toBe(2);
         expect(
-            await getSubscribers({ sequenceId: sequence.sequenceId }),
-        ).toEqual(["contact-1", "contact-2"]);
+            (await getSubscribers({ sequenceId: sequence.sequenceId })).sort(),
+        ).toEqual([firstContact.contactId, secondContact.contactId].sort());
         expect(await getSequenceOpenRate(sequence.sequenceId)).toBe(0.5);
         expect(await getSequenceClickThroughRate(sequence.sequenceId)).toBe(
             0.5,

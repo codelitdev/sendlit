@@ -16,6 +16,7 @@ import {
     templateSchema,
 } from "./schemas";
 import { getTeamId } from "./auth";
+import { omitInternal } from "../../utils/public";
 
 export function registerTemplateTools(server: McpServer): void {
     server.registerTool(
@@ -53,7 +54,9 @@ export function registerTemplateTools(server: McpServer): void {
             if (!teamId) return AUTH_ERROR;
             try {
                 const items = await listTemplates(teamId);
-                return jsonResult({ items });
+                return jsonResult({
+                    items: items.map((item) => omitInternal(item)),
+                });
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -78,7 +81,7 @@ export function registerTemplateTools(server: McpServer): void {
             try {
                 const template = await getTemplate(args.templateId);
                 if (!template || template.teamId !== teamId) return NOT_FOUND;
-                return jsonResult(template);
+                return jsonResult(omitInternal(template));
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -112,7 +115,7 @@ export function registerTemplateTools(server: McpServer): void {
                     title: args.title,
                     content: args.content,
                 });
-                return jsonResult(template);
+                return jsonResult(omitInternal(template));
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -146,7 +149,7 @@ export function registerTemplateTools(server: McpServer): void {
                     content: args.content,
                 });
                 if (!template) return NOT_FOUND;
-                return jsonResult(template);
+                return jsonResult(omitInternal(template));
             } catch (err: any) {
                 if (err.message === "duplicate_title") {
                     return {

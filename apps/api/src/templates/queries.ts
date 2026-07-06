@@ -1,7 +1,6 @@
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "../db/client";
 import { emailTemplates } from "../db/schema";
-import { generateUniqueId } from "../utils/id";
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { getSystemTemplate } from "./system-templates";
 
@@ -59,7 +58,6 @@ export async function createTemplate({
         .insert(emailTemplates)
         .values({
             teamId,
-            templateId: generateUniqueId(),
             title: uniqueTitle,
             content,
         })

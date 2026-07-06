@@ -10,7 +10,6 @@ import {
 import { invalidateTeamTransport } from "../../mail/transport";
 import { sendTestMail } from "../../mail/send";
 import { getEmailFrom } from "../../utils/mail";
-import { getTeam } from "../../team/queries";
 import { AUTH_ERROR, errorResult, jsonResult } from "./responses";
 import {
     espConfigSchema,
@@ -161,7 +160,6 @@ export function registerEspTools(server: McpServer): void {
             }
 
             const account = getAuthAccount(extra);
-            const team = await getTeam(teamId);
             const to = args.to || account?.email;
             if (!to) {
                 return jsonResult({
@@ -171,13 +169,8 @@ export function registerEspTools(server: McpServer): void {
             }
 
             const from = getEmailFrom({
-                name:
-                    config.fromName ||
-                    team?.fromName ||
-                    account?.name ||
-                    "SendLit",
-                email:
-                    config.fromEmail || team?.fromEmail || account?.email || "",
+                name: config.fromName || account?.name || "SendLit",
+                email: config.fromEmail || account?.email || "",
             });
 
             try {
