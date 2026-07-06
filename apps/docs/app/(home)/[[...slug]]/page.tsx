@@ -7,17 +7,15 @@ import {
 } from "fumadocs-ui/page";
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import { notFound, redirect } from "next/navigation";
+import { APIPage } from "@/components/api-page";
 import { getMDXComponents } from "@/mdx-components";
 
-const API_REFERENCE_INDEX = "/api-reference/listContacts";
+const API_REFERENCE_INDEX = "/api-reference/contacts/get";
 
 export default async function Page(props: {
     params: Promise<{ slug?: string[] }>;
 }) {
     const params = await props.params;
-    process.stderr.write(
-        `Rendering docs slug: ${(params.slug ?? []).join("/") || "index"}\n`,
-    );
     const slugPath = params.slug?.join("/");
 
     if (slugPath === "api-reference" || slugPath === "rest-api") {
@@ -26,6 +24,18 @@ export default async function Page(props: {
 
     const page = source.getPage(params.slug);
     if (!page) notFound();
+
+    if (page.data.type === "openapi") {
+        return (
+            <DocsPage full>
+                <DocsTitle>{page.data.title}</DocsTitle>
+                <DocsDescription>{page.data.description}</DocsDescription>
+                <DocsBody>
+                    <APIPage {...page.data.getAPIPageProps()} />
+                </DocsBody>
+            </DocsPage>
+        );
+    }
 
     const MDXContent = page.data.body;
 
@@ -54,7 +64,12 @@ export async function generateStaticParams() {
     }
     const bySlug = new Map<string, { slug?: string[] }>();
 
-    for (const param of [{ slug: [] as string[] }, ...params]) {
+    for (const param of [
+        { slug: [] as string[] },
+        ...params,
+        { slug: ["api-reference"] },
+        { slug: ["rest-api"] },
+    ]) {
         bySlug.set((param.slug ?? []).join("/"), param);
     }
 

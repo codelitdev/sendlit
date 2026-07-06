@@ -24,41 +24,41 @@ const openApiDocument = generateOpenApi(
         tags: [
             {
                 name: "Contacts",
-                description: "Manage contacts and segmentation.",
+                description: "Manage contacts (subscribers).",
+            },
+            {
+                name: "Segments",
+                description:
+                    "Saved, named, reusable contact filters - build a filter once, reuse it across broadcasts and sequences.",
             },
             { name: "Templates", description: "Reusable email templates." },
             {
                 name: "Sequences",
                 description:
-                    "Broadcasts and multi-step, event-triggered sequences.",
+                    "Broadcasts (one-off) and sequences (multi-step, event-triggered).",
             },
             {
                 name: "Settings",
                 description:
-                    "Per-team settings, including SMTP configuration and test sends.",
+                    "Per-team settings, including email sending provider (SMTP) configuration and test sends.",
             },
             {
                 name: "Teams",
                 description:
-                    "Team management, API keys, and server-to-server provisioning.",
+                    "Team management (list/create/rename/delete), per-team API keys, and server-to-server provisioning.",
             },
         ],
         components: {
             securitySchemes: {
-                OAuth2: {
-                    type: "oauth2",
-                    flows: {
-                        authorizationCode: {
-                            authorizationUrl: "/oauth/authorize",
-                            tokenUrl: "/oauth/token",
-                            scopes: {},
-                        },
-                    },
-                },
                 apiKeyAuth: {
                     type: "apiKey",
                     in: "header",
                     name: "x-sendlit-apikey",
+                },
+                bearerAuth: {
+                    type: "http",
+                    scheme: "bearer",
+                    bearerFormat: "JWT",
                 },
                 provisioningSecretAuth: {
                     type: "apiKey",
@@ -67,15 +67,17 @@ const openApiDocument = generateOpenApi(
                 },
             },
         },
-        security: [{ OAuth2: [] }, { apiKeyAuth: [] }],
+        security: [{ apiKeyAuth: [] }, { bearerAuth: [] }],
     },
     {
-        setOperationId: true,
         operationMapper: (operation, route) => {
             const path = (route as { path?: string }).path;
 
             return {
                 ...operation,
+                tags: (route.metadata as { tag?: string } | undefined)?.tag
+                    ? [(route.metadata as { tag: string }).tag]
+                    : operation.tags,
                 security:
                     path === "/provisioning/teams"
                         ? [{ provisioningSecretAuth: [] }]
