@@ -1,6 +1,4 @@
-import { Mail, Send } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Send } from "lucide-react";
 import {
     Card,
     CardContent,
@@ -8,11 +6,13 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
+import { LoginForm } from "./login-form";
 
 const ERROR_MESSAGES: Record<string, string> = {
     invalid_state: "Your sign-in session expired. Please try again.",
     token_exchange_failed: "We couldn't complete sign-in. Please try again.",
     access_denied: "Sign-in was cancelled.",
+    oauth_failed: "We couldn't start Google sign-in. Please try again.",
 };
 
 export default async function LoginPage({
@@ -44,16 +44,7 @@ export default async function LoginPage({
                                 "Something went wrong. Please try again."}
                         </p>
                     )}
-                    <Button asChild className="w-full">
-                        <Link href="/api/auth/login">
-                            <Mail className="size-4" />
-                            Continue with email
-                        </Link>
-                    </Button>
-                    <p className="text-center text-xs text-muted-foreground">
-                        Authentication is handled by the SendLit API over OAuth2
-                        (PKCE).
-                    </p>
+                    <LoginForm />
                 </CardContent>
             </Card>
         </div>

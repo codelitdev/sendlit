@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,19 +20,32 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { ApiError } from "@/lib/api-client";
 import { createContact, deleteContact, listContacts } from "@/lib/api";
-import type { Contact } from "@sendlit/email-blocks";
+import { useSegments } from "@/lib/use-segments";
+import {
+    ContactFilterBuilder,
+    type Contact,
+    type ContactFilterWithAggregator,
+} from "@sendlit/email-blocks";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+
+const emptyFilter: ContactFilterWithAggregator = {
+    aggregator: "or",
+    filters: [],
+};
 
 export default function ContactsPage() {
     const [contacts, setContacts] = useState<Contact[] | null>(null);
     const [total, setTotal] = useState(0);
-    const [q, setQ] = useState("");
+    const [filter, setFilter] = useState(emptyFilter);
     const [error, setError] = useState<string | null>(null);
     const [open, setOpen] = useState(false);
+    const { segmentProps, clearSelection } = useSegments(setError);
 
-    async function load(searchText?: string) {
+    async function load(nextFilter: ContactFilterWithAggregator = filter) {
         try {
-            const { items, total } = await listContacts({ q: searchText });
+            const { items, total } = await listContacts({
+                filter: nextFilter.filters.length > 0 ? nextFilter : undefined,
+            });
             setContacts(items);
             setTotal(total);
         } catch (err) {
@@ -45,41 +58,37 @@ export default function ContactsPage() {
     }
 
     useEffect(() => {
-        load();
-    }, []);
+        load(filter);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filter]);
 
     return (
         <ScrollablePage>
             <PageHeader
                 title="Contacts"
-                description={`${total} contact${total === 1 ? "" : "s"}`}
+                description="Your audience, filterable into saved segments."
                 action={
                     <NewContactDialog
                         open={open}
                         onOpenChange={setOpen}
-                        onCreated={() => load(q)}
+                        onCreated={() => load()}
                     />
                 }
             />
 
             {error && <Banner className="mb-4">{error}</Banner>}
 
-            <form
-                className="mb-4 flex max-w-sm gap-2"
-                onSubmit={(e) => {
-                    e.preventDefault();
-                    load(q);
+            <ContactFilterBuilder
+                className="mb-4"
+                value={filter}
+                onChange={(next) => {
+                    setFilter(next);
+                    clearSelection();
                 }}
-            >
-                <Input
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    placeholder="Search by email or name"
-                />
-                <Button type="submit" variant="outline" size="icon">
-                    <Search className="size-4" />
-                </Button>
-            </form>
+                {...segmentProps}
+                count={contacts === null ? undefined : total}
+                countLabel="contacts"
+            />
 
             <Card>
                 <CardContent className="p-0">
@@ -147,12 +156,12 @@ export default function ContactsPage() {
                                         <td className="px-4 py-3">
                                             <Badge
                                                 variant={
-                                                    contact.subscribedToUpdates
+                                                    contact.subscribed
                                                         ? "success"
                                                         : "outline"
                                                 }
                                             >
-                                                {contact.subscribedToUpdates
+                                                {contact.subscribed
                                                     ? "Subscribed"
                                                     : "Unsubscribed"}
                                             </Badge>
@@ -165,7 +174,7 @@ export default function ContactsPage() {
                                                     await deleteContact(
                                                         contact.contactId,
                                                     );
-                                                    load(q);
+                                                    load();
                                                 }}
                                             >
                                                 <Trash2 className="size-4" />

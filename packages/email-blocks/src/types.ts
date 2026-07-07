@@ -24,13 +24,10 @@ export interface ContactFilterWithAggregator {
 }
 
 export interface Contact {
-    id: string;
-    teamId: string;
     contactId: string;
     email: string;
     name?: string | null;
-    active: boolean;
-    subscribedToUpdates: boolean;
+    subscribed: boolean;
     customFields: Record<
         string,
         string | number | boolean | string[] | number[] | boolean[]
@@ -52,8 +49,6 @@ export interface EmailTemplate {
 }
 
 export interface SequenceEmail {
-    id: string;
-    sequenceId: string;
     emailId: string;
     subject: string;
     content: Email;
@@ -76,14 +71,10 @@ export interface SequenceReport {
 }
 
 export interface Sequence {
-    id: string;
-    teamId: string;
     sequenceId: string;
-    type: MailType;
+    type: MailType | string;
     title: string;
-    status: SequenceStatus;
-    fromName?: string | null;
-    fromEmail?: string | null;
+    status: SequenceStatus | string;
     triggerType?: TriggerType | string | null;
     triggerData?: string | null;
     filter?: ContactFilterWithAggregator | null;

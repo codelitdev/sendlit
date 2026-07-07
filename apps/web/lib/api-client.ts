@@ -1,5 +1,11 @@
 "use client";
 
+import {
+    clearTeamIdCookie,
+    isStaleTeamSelectionError,
+    needsTeamSelection,
+} from "./tokens";
+
 export class ApiError extends Error {
     status: number;
     constructor(status: number, message: string) {
@@ -28,14 +34,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const text = await res.text();
     const data = text ? JSON.parse(text) : undefined;
 
-    if (
-        res.status === 409 &&
-        (data?.error === "team_required" || data?.error === "no_team") &&
-        typeof window !== "undefined" &&
-        !window.location.pathname.startsWith("/dashboard/teams")
-    ) {
-        window.location.href = "/dashboard/teams";
-        return new Promise<T>(() => {});
+    if (typeof window !== "undefined") {
+        if (
+            needsTeamSelection(res.status, data?.error) &&
+            !window.location.pathname.startsWith("/dashboard/teams")
+        ) {
+            if (isStaleTeamSelectionError(data?.error)) {
+                clearTeamIdCookie();
+            }
+            window.location.href = "/dashboard/teams";
+            return new Promise<T>(() => {});
+        }
     }
 
     if (!res.ok) {

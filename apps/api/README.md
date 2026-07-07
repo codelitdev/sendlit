@@ -13,7 +13,8 @@ email provider configuration.
 - Email delivery through BullMQ and nodemailer, using a team's configured ESP
   when available.
 - Open and click tracking, plus unsubscribe handling.
-- OAuth2 browser authentication and team-scoped API key authentication.
+- Better Auth session login, OAuth2 bearer-token authentication, and
+  team-scoped API key authentication.
 - An MCP server exposing the same core capabilities for API/MCP clients.
 
 ## Running Locally
@@ -46,16 +47,29 @@ Fetch `GET /openapi.json` for the raw OpenAPI document.
 
 ## Authentication
 
-SendLit supports two authentication modes:
+SendLit supports three authentication modes:
 
-- **OAuth2** for browser/user sessions. OAuth requests resolve the active team
-  through the `X-Sendlit-Team-Id` header. If the account belongs to exactly one
-  team, the header may be omitted.
+- **Better Auth sessions** for the first-party web dashboard. Browser login
+  supports Google and Email OTP. The web app proxies `/api/auth/*` to this API
+  and keeps the Better Auth session cookie httpOnly.
+- **OAuth2 bearer tokens** for delegated REST and MCP clients. Better Auth's
+  OAuth Provider endpoints are exposed under `/api/auth/oauth2/*`, with
+  authorization-server metadata at
+  `/.well-known/oauth-authorization-server` and OIDC metadata at
+  `/.well-known/openid-configuration`.
 - **API keys** for server-to-server, REST, and MCP clients. API keys are scoped
   to one team and are sent with the `x-sendlit-apikey` header.
 
+Session and OAuth requests resolve the active team through the
+`X-Sendlit-Team-Id` header. If the account belongs to exactly one team, the
+header may be omitted.
+
 API keys are stored hashed and cannot be recovered after creation. If a key is
 lost, create a new one and revoke the old key.
+
+When the API runs behind the web BFF or another reverse proxy, set
+`ENABLE_TRUST_PROXY=true` so auth endpoint rate limits can use the real client
+IP from `X-Forwarded-For`.
 
 ## Bootstrap API Key
 
@@ -133,6 +147,15 @@ MCP clients authenticate the same way as REST clients:
 
 - `Authorization: Bearer <token>`
 - `x-sendlit-apikey`
+
+OAuth-capable MCP clients can discover metadata from:
+
+- `GET /.well-known/oauth-protected-resource`
+- `GET /.well-known/oauth-authorization-server`
+- `GET /.well-known/openid-configuration`
+
+OAuth client registration, authorization, token, introspection, revocation, and
+userinfo endpoints are served by Better Auth under `/api/auth/oauth2/*`.
 
 MCP tools live in `src/mcp/tools/*` and cover contacts, templates, sequences,
 ESP settings, teams, and API keys.

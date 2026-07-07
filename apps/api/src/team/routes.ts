@@ -24,17 +24,17 @@ router.use(requireAuth);
 /**
  * Team management is account-level (list/create/rename/delete which teams an
  * account belongs to), not team-scoped \u2014 so, unlike every other router, this
- * one does not run `requireTeam`. It's also restricted to OAuth-authenticated
- * (human/browser) sessions: an API key is intentionally scoped to exactly one
+ * one does not run `requireTeam`. It's also restricted to user-authenticated
+ * sessions: an API key is intentionally scoped to exactly one
  * team, so allowing it to enumerate or manage every team its owning account
  * belongs to would defeat that isolation.
  */
 router.use((req: Request, res: Response, next: NextFunction) => {
-    if ((req as any).authKind !== "oauth") {
+    if (!["oauth", "session"].includes((req as any).authKind)) {
         return res.status(403).json({
-            error: "oauth_required",
+            error: "user_auth_required",
             error_description:
-                "Team management requires an OAuth-authenticated (browser) session, not an API key.",
+                "Team management requires a user-authenticated session, not an API key.",
         });
     }
     next();

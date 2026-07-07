@@ -35,12 +35,7 @@ import {
     type ApiKey,
     type Team,
 } from "@/lib/api";
-
-function getCurrentTeamIdFromCookie(): string | null {
-    if (typeof document === "undefined") return null;
-    const match = document.cookie.match(/(?:^|;\s*)sendlit_team_id=([^;]+)/);
-    return match ? decodeURIComponent(match[1]) : null;
-}
+import { resolveCurrentTeamId } from "@/lib/tokens";
 
 export default function TeamsPage() {
     const [teams, setTeams] = useState<Team[] | undefined>(undefined);
@@ -51,14 +46,12 @@ export default function TeamsPage() {
         try {
             const { items } = await listTeams();
             setTeams(items);
-            const cookieTeamId = getCurrentTeamIdFromCookie();
-            setCurrentTeamId(
-                cookieTeamId || (items.length === 1 ? items[0].teamId : null),
-            );
+            setCurrentTeamId(resolveCurrentTeamId(items));
         } catch (err) {
             setError(
                 err instanceof ApiError ? err.message : "Failed to load teams",
             );
+            setTeams([]);
         }
     }
 
@@ -175,6 +168,7 @@ function TeamCard({
     const [showKeys, setShowKeys] = useState(false);
     const [keys, setKeys] = useState<ApiKey[]>([]);
     const [keysLoaded, setKeysLoaded] = useState(false);
+    const [newKey, setNewKey] = useState<string | null>(null);
     const [newKeyName, setNewKeyName] = useState("");
     const [error, setError] = useState<string | null>(null);
 
@@ -201,7 +195,8 @@ function TeamCard({
     async function addKey() {
         if (!newKeyName.trim()) return;
         try {
-            await createTeamKey(team.teamId, newKeyName.trim());
+            const created = await createTeamKey(team.teamId, newKeyName.trim());
+            setNewKey(created.key);
             setNewKeyName("");
             await loadKeys();
         } catch (err) {
@@ -288,6 +283,34 @@ function TeamCard({
                                 No API keys yet.
                             </p>
                         )}
+                        {newKey && (
+                            <Banner variant="success">
+                                <div className="space-y-2">
+                                    <p>
+                                        New key created. Copy it now; it will
+                                        not be shown again.
+                                    </p>
+                                    <div className="flex items-center gap-2 rounded-md bg-background p-2 font-mono text-xs">
+                                        <span className="min-w-0 flex-1 truncate">
+                                            {newKey}
+                                        </span>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                                navigator.clipboard.writeText(
+                                                    newKey,
+                                                )
+                                            }
+                                        >
+                                            <Copy className="size-3" />
+                                            Copy
+                                        </Button>
+                                    </div>
+                                </div>
+                            </Banner>
+                        )}
                         {keys.map((k) => (
                             <div
                                 key={k.id}
@@ -298,12 +321,12 @@ function TeamCard({
                                         {k.name || "Untitled"}
                                     </div>
                                     <div className="flex items-center gap-1.5 truncate font-mono text-xs text-muted-foreground">
-                                        {k.key}
+                                        {k.keyPrefix}
                                         <button
                                             type="button"
                                             onClick={() =>
                                                 navigator.clipboard.writeText(
-                                                    k.key,
+                                                    k.keyPrefix,
                                                 )
                                             }
                                             className="shrink-0"
@@ -317,7 +340,7 @@ function TeamCard({
                                     variant="ghost"
                                     size="sm"
                                     className="shrink-0 text-destructive"
-                                    onClick={() => removeKey(k.key)}
+                                    onClick={() => removeKey(k.id)}
                                 >
                                     <Trash2 className="size-4" />
                                 </Button>

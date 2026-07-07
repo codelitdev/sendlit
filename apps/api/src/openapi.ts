@@ -7,7 +7,7 @@ export const openApiDocument = generateOpenApi(
         info: {
             title: "SendLit API",
             description:
-                "OAuth2 protected REST API for composing, sending and automating email.",
+                "SendLit REST API for composing, sending and automating email. Authenticate with a team-scoped API key or a Better Auth OAuth2 bearer token.",
             version: "0.1.0",
         },
         servers: [

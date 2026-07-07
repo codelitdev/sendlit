@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, Check, Send, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, Pencil, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,25 +23,27 @@ import { broadcastScheduledFor, presentBroadcastStatus } from "@/lib/broadcast";
 import {
     getSequence,
     getSequenceStats,
+    listContacts,
     pauseSequence,
     startSequence,
     updateSequence,
     updateSequenceEmail,
 } from "@/lib/api";
+import { useSegments } from "@/lib/use-segments";
 import {
     ContactFilterBuilder,
-    EmailEditor,
+    EmailPreview,
+    SequenceAnalytics,
     type ContactFilterWithAggregator,
     type Email,
     type Sequence,
     type SequenceStats,
 } from "@sendlit/email-blocks";
+import { sequenceStatsMetrics } from "@/lib/stats";
 import { Switch } from "@/components/ui/switch";
 
 interface BroadcastMeta {
     title: string;
-    fromName?: string | null;
-    fromEmail?: string | null;
     filter?: ContactFilterWithAggregator | null;
 }
 
@@ -81,6 +83,8 @@ export default function BroadcastEditorPage({
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [scheduleAt, setScheduleAt] = useState("");
     const [working, setWorking] = useState(false);
+    const [audienceCount, setAudienceCount] = useState<number>();
+    const { segmentProps, clearSelection } = useSegments(setError);
 
     async function load() {
         try {
@@ -88,8 +92,6 @@ export default function BroadcastEditorPage({
             setSequence(s);
             setMeta({
                 title: s.title,
-                fromName: s.fromName,
-                fromEmail: s.fromEmail,
                 filter: s.filter,
             });
             const firstEmail = s.emails[0];
@@ -118,6 +120,31 @@ export default function BroadcastEditorPage({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sequenceId]);
 
+    // Live "how many contacts match this audience" count, matching what the
+    // send will actually target (`listContacts` and the sender share the same
+    // filter semantics).
+    // Undefined until the broadcast loads so the effect re-fires even when the
+    // loaded filter serializes the same as "no meta yet".
+    const filterKey = meta ? JSON.stringify(meta.filter ?? null) : undefined;
+    useEffect(() => {
+        if (!meta) return;
+        let stale = false;
+        const filter = meta.filter;
+        listContacts({
+            filter: filter && filter.filters.length > 0 ? filter : undefined,
+        })
+            .then(({ total }) => {
+                if (!stale) setAudienceCount(total);
+            })
+            .catch(() => {
+                if (!stale) setAudienceCount(undefined);
+            });
+        return () => {
+            stale = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterKey]);
+
     /** Persists the meta + email forms; `sendAtMillis` also stamps the
      * broadcast's absolute send time (emails[0].delayInMillis). */
     async function save(sendAtMillis?: number) {
@@ -127,15 +154,14 @@ export default function BroadcastEditorPage({
         try {
             const updated = await updateSequence(sequenceId, {
                 title: meta.title,
-                fromName: meta.fromName || undefined,
-                fromEmail: meta.fromEmail || undefined,
                 filter: meta.filter || undefined,
             });
             const firstEmail = updated.emails[0];
+            // Content is edited on its own full-screen editor route, so this
+            // metadata save must not overwrite it.
             const withEmail = firstEmail
                 ? await updateSequenceEmail(sequenceId, firstEmail.emailId, {
                       subject: email.subject,
-                      content: email.content,
                       published: email.published,
                       ...(sendAtMillis !== undefined
                           ? { delayInMillis: sendAtMillis }
@@ -293,28 +319,17 @@ export default function BroadcastEditorPage({
                 )}
 
                 {stats && (
-                    <div className="mb-6 grid grid-cols-4 gap-4">
-                        <StatCard label="Sent" value={stats.sent} />
-                        <StatCard
-                            label="Recipients"
-                            value={stats.subscribersCount}
-                        />
-                        <StatCard
-                            label="Open rate"
-                            value={`${Math.round(stats.openRate * 100)}%`}
-                        />
-                        <StatCard
-                            label="Click rate"
-                            value={`${Math.round(stats.clickThroughRate * 100)}%`}
-                        />
-                    </div>
+                    <SequenceAnalytics
+                        className="mb-6"
+                        metrics={sequenceStatsMetrics(stats)}
+                    />
                 )}
 
                 <div className="space-y-6">
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-base">
-                                Sender &amp; audience
+                                Details &amp; audience
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -332,48 +347,18 @@ export default function BroadcastEditorPage({
                                     placeholder="e.g. October newsletter"
                                 />
                             </div>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="space-y-1.5">
-                                    <Label htmlFor="broadcast-from-name">
-                                        From name
-                                    </Label>
-                                    <Input
-                                        id="broadcast-from-name"
-                                        value={meta.fromName ?? ""}
-                                        onChange={(e) =>
-                                            setMeta({
-                                                ...meta,
-                                                fromName: e.target.value,
-                                            })
-                                        }
-                                        placeholder="Your name or company"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label htmlFor="broadcast-from-email">
-                                        From email
-                                    </Label>
-                                    <Input
-                                        id="broadcast-from-email"
-                                        type="email"
-                                        value={meta.fromEmail ?? ""}
-                                        onChange={(e) =>
-                                            setMeta({
-                                                ...meta,
-                                                fromEmail: e.target.value,
-                                            })
-                                        }
-                                        placeholder="you@yourdomain.com"
-                                    />
-                                </div>
-                            </div>
                             <div className="space-y-1.5">
                                 <Label>Audience</Label>
                                 <ContactFilterBuilder
                                     value={meta.filter ?? emptyFilter}
-                                    onChange={(filter) =>
-                                        setMeta({ ...meta, filter })
-                                    }
+                                    onChange={(filter) => {
+                                        setMeta({ ...meta, filter });
+                                        clearSelection();
+                                    }}
+                                    disabled={!editable}
+                                    {...segmentProps}
+                                    count={audienceCount}
+                                    countLabel="recipients"
                                 />
                             </div>
                         </CardContent>
@@ -417,12 +402,26 @@ export default function BroadcastEditorPage({
                                     />
                                 </div>
                             </div>
-                            <div className="min-h-0 flex-1 rounded-lg border">
-                                <EmailEditor
-                                    email={email.content}
-                                    onChange={(content) =>
-                                        setEmail({ ...email, content })
-                                    }
+                            <div className="space-y-1.5">
+                                {editable && (
+                                    <div className="flex items-center justify-end">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            asChild
+                                        >
+                                            <Link
+                                                href={`/editor/broadcasts/${sequenceId}`}
+                                            >
+                                                <Pencil className="size-4" />
+                                                Edit content
+                                            </Link>
+                                        </Button>
+                                    </div>
+                                )}
+                                <EmailPreview
+                                    content={email.content}
+                                    minHeight="420px"
                                 />
                             </div>
                         </CardContent>
@@ -504,16 +503,5 @@ export default function BroadcastEditorPage({
                 </Dialog>
             </div>
         </ScrollablePage>
-    );
-}
-
-function StatCard({ label, value }: { label: string; value: string | number }) {
-    return (
-        <Card>
-            <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="text-xl font-semibold">{value}</p>
-            </CardContent>
-        </Card>
     );
 }

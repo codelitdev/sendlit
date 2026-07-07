@@ -1,13 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../oauth/middleware", () => ({
-    validateBearerToken: vi.fn(),
-}));
 vi.mock("../account/queries", () => ({
     getAccount: vi.fn(),
 }));
 vi.mock("../apikey/queries", () => ({
     getApiKeyBySecret: vi.fn(),
+}));
+vi.mock("./better-auth", () => ({
+    auth: {
+        api: {
+            getSession: vi.fn(async () => null),
+        },
+    },
+    ensureSendLitAccountForBetterAuthUserId: vi.fn(),
+    ensureSendLitAccountForUser: vi.fn(),
+    oauthResourceClient: {
+        getActions: vi.fn(() => ({
+            verifyAccessToken: vi.fn(async () => null),
+        })),
+    },
+}));
+vi.mock("better-auth/node", () => ({
+    fromNodeHeaders: vi.fn((headers) => headers),
 }));
 
 import {
@@ -26,11 +40,6 @@ const account = {
 
 function deps(overrides: Partial<AuthDependencies> = {}): AuthDependencies {
     return {
-        validateBearerToken: vi.fn(async () => ({
-            accountId: account.id,
-            clientId: "client-1",
-            scopes: ["read", "write"],
-        })),
         getAccount: vi.fn(async () => account as any),
         getApiKeyBySecret: vi.fn(async () => ({
             id: "key-id",
@@ -40,38 +49,18 @@ function deps(overrides: Partial<AuthDependencies> = {}): AuthDependencies {
             name: "Default",
             createdAt: new Date(),
         })),
+        getBetterAuthSession: vi.fn(async () => null),
+        verifyBetterAuthBearerToken: vi.fn(async () => null),
+        ensureAccountForBetterAuthUserId: vi.fn(async () => account as any),
+        ensureAccountForUser: vi.fn(async () => account as any),
         ...overrides,
     };
 }
 
 describe("resolveAuth", () => {
-    it("authenticates bearer tokens before considering API keys", async () => {
-        const authDeps = deps();
-
-        const auth = await resolveAuth(
-            {
-                authorization: "Bearer access-token",
-                apiKeyHeader: "api-key",
-            },
-            authDeps,
-        );
-
-        expect(auth).toMatchObject({
-            status: "authenticated",
-            kind: "oauth",
-            accountId: account.id,
-            clientId: "client-1",
-            scopes: ["read", "write"],
-        });
-        expect(authDeps.validateBearerToken).toHaveBeenCalledWith(
-            "access-token",
-        );
-        expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
-    });
-
     it("rejects invalid bearer tokens instead of falling back to an API key", async () => {
         const authDeps = deps({
-            validateBearerToken: vi.fn(async () => null),
+            verifyBetterAuthBearerToken: vi.fn(async () => null),
         });
 
         await expect(
@@ -83,6 +72,36 @@ describe("resolveAuth", () => {
                 authDeps,
             ),
         ).resolves.toEqual({ status: "invalid_token" });
+        expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+    });
+
+    it("authenticates Better Auth OAuth bearer tokens before considering API keys", async () => {
+        const authDeps = deps({
+            verifyBetterAuthBearerToken: vi.fn(async () => ({
+                sub: "better-auth-user-1",
+                azp: "mcp-client",
+                scope: "contacts:read templates:write",
+            })),
+        });
+
+        await expect(
+            resolveAuth(
+                {
+                    authorization: "Bearer better-auth-token",
+                    apiKeyHeader: "api-key",
+                },
+                authDeps,
+            ),
+        ).resolves.toMatchObject({
+            status: "authenticated",
+            kind: "oauth",
+            accountId: account.id,
+            clientId: "mcp-client",
+            scopes: ["contacts:read", "templates:write"],
+        });
+        expect(authDeps.ensureAccountForBetterAuthUserId).toHaveBeenCalledWith(
+            "better-auth-user-1",
+        );
         expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
     });
 
@@ -116,6 +135,30 @@ describe("resolveAuth", () => {
                 deps({ getApiKeyBySecret: vi.fn(async () => null) }),
             ),
         ).resolves.toEqual({ status: "unauthorized" });
+    });
+
+    it("authenticates Better Auth web sessions from forwarded cookies", async () => {
+        const authDeps = deps({
+            getBetterAuthSession: vi.fn(async () => ({
+                user: { email: "owner@example.com", name: "Owner" },
+            })),
+        });
+
+        await expect(
+            resolveAuth(
+                { headers: { cookie: "better-auth.session_token=s" } },
+                authDeps,
+            ),
+        ).resolves.toMatchObject({
+            status: "authenticated",
+            kind: "session",
+            accountId: account.id,
+        });
+        expect(authDeps.ensureAccountForUser).toHaveBeenCalledWith({
+            email: "owner@example.com",
+            name: "Owner",
+        });
+        expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
     });
 });
 

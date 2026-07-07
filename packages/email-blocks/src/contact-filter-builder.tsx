@@ -228,7 +228,7 @@ function filterValueLabel(
             year: "numeric",
         });
     }
-    return filter.value;
+    return filter.value ?? "";
 }
 
 function ValueInput({

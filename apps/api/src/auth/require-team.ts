@@ -18,7 +18,7 @@ function getHeaderValue(value: unknown): string | undefined {
  *
  * - API-key requests already have `req.teamId` set by `auth/middleware.ts`
  *   (a key authenticates as exactly one, fixed team) — this is a no-op for them.
- * - OAuth (browser/human) requests pick a team via the `X-Sendlit-Team-Id`
+ * - User-authenticated requests pick a team via the `X-Sendlit-Team-Id`
  *   header, validated against team membership on every call — this is what
  *   lets the web dashboard switch teams instantly, without re-authenticating.
  *   If the header is absent and the account belongs to exactly one team, that

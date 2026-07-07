@@ -1,9 +1,13 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+    oauthProviderAuthServerMetadata,
+    oauthProviderOpenIdConfigMetadata,
+} from "@better-auth/oauth-provider";
 import { mcpAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
-import { oauthRouter } from "../oauth/routes";
+import { auth, oauthResourceClient } from "../auth/better-auth";
 import { createMCPSession } from "./server";
 
 const router = Router();
@@ -75,8 +79,68 @@ function getMcpAuth(req: any) {
     };
 }
 
-router.use(["/.well-known", "/oauth"], mcpCors);
-router.use(oauthRouter);
+function sendFetchResponse(res: any, response: Response) {
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+    return response.text().then((body) => res.send(body));
+}
+
+router.use(["/.well-known"], mcpCors);
+
+router.get(
+    "/.well-known/oauth-authorization-server",
+    mcpCors,
+    async (req, res) => {
+        const response = await oauthProviderAuthServerMetadata(auth)(
+            new Request(
+                `${req.protocol}://${req.get("host")}${req.originalUrl}`,
+                {
+                    headers: req.headers as HeadersInit,
+                },
+            ),
+        );
+        await sendFetchResponse(res, response);
+    },
+);
+
+router.get("/.well-known/openid-configuration", mcpCors, async (req, res) => {
+    const response = await oauthProviderOpenIdConfigMetadata(auth)(
+        new Request(`${req.protocol}://${req.get("host")}${req.originalUrl}`, {
+            headers: req.headers as HeadersInit,
+        }),
+    );
+    await sendFetchResponse(res, response);
+});
+
+router.get(
+    "/.well-known/oauth-protected-resource",
+    mcpCors,
+    async (_req, res) => {
+        const metadata = await oauthResourceClient
+            .getActions()
+            .getProtectedResourceMetadata(
+                {
+                    resource: `${
+                        process.env.API_PUBLIC_URL ||
+                        process.env.BETTER_AUTH_URL ||
+                        "http://localhost:4000"
+                    }/mcp`,
+                    scopes_supported: [
+                        "contacts:read",
+                        "contacts:write",
+                        "templates:read",
+                        "templates:write",
+                        "broadcasts:write",
+                        "sequences:read",
+                        "sequences:write",
+                    ],
+                    bearer_methods_supported: ["header"],
+                },
+                { silenceWarnings: { oidcScopes: true } },
+            );
+        res.json(metadata);
+    },
+);
 
 router.post(
     "/mcp",

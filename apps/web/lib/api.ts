@@ -5,6 +5,11 @@ import {
     type CustomFields,
 } from "@sendlit/api-contract";
 import { ApiError } from "./api-client";
+import {
+    clearTeamIdCookie,
+    isStaleTeamSelectionError,
+    needsTeamSelection,
+} from "./tokens";
 import type {
     Contact,
     ContactFilterWithAggregator,
@@ -48,28 +53,23 @@ async function unwrap<T>(
     }
 
     if (result.status === 401 && typeof window !== "undefined") {
-        const headers = (result as any).headers as Headers | undefined;
-        const sessionExpired =
-            headers?.get("X-Auth-Error") === "session_expired";
-        if (sessionExpired) {
-            window.location.href = "/login";
-            // Never resolves \u2014 the browser is navigating away.
-            return new Promise<T>(() => {});
-        }
-        // Transient 401 (e.g. concurrent refresh race) \u2014 surface as a normal error
-        // so the UI can show a toast/banner without killing the session.
+        window.location.href = "/login";
+        // Never resolves \u2014 the browser is navigating away.
+        return new Promise<T>(() => {});
     }
 
     const errorBody = result.body as { error?: string } | undefined;
-    if (
-        result.status === 409 &&
-        (errorBody?.error === "team_required" ||
-            errorBody?.error === "no_team") &&
-        typeof window !== "undefined" &&
-        !window.location.pathname.startsWith("/dashboard/teams")
-    ) {
-        window.location.href = "/dashboard/teams";
-        return new Promise<T>(() => {});
+    if (typeof window !== "undefined") {
+        if (
+            needsTeamSelection(result.status, errorBody?.error) &&
+            !window.location.pathname.startsWith("/dashboard/teams")
+        ) {
+            if (isStaleTeamSelectionError(errorBody?.error)) {
+                clearTeamIdCookie();
+            }
+            window.location.href = "/dashboard/teams";
+            return new Promise<T>(() => {});
+        }
     }
 
     throw new ApiError(
@@ -88,23 +88,38 @@ export interface Paginated<T> {
 export interface Team {
     teamId: string;
     name: string;
-    ownerAccountId: string;
-    fromName: string | null;
-    fromEmail: string | null;
-    mailingAddress: string | null;
-    createdAt: string;
-    updatedAt: string;
+    ownerAccountId?: string;
+    externalId?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
 }
 
 export interface ApiKey {
     id: string;
+    keyPrefix: string;
+    name?: string | null;
+    createdAt?: string | null;
+}
+
+export interface CreatedApiKey extends ApiKey {
     key: string;
-    name: string | null;
-    createdAt: string;
 }
 
 export function listTeams() {
-    return unwrap<{ items: Team[] }>(client.teams.list());
+    return client.teams.list().then((result) => {
+        if (result.status >= 200 && result.status < 300) {
+            return result.body as { items: Team[] };
+        }
+
+        const errorBody = result.body as
+            | { error?: string; teams?: Pick<Team, "teamId" | "name">[] }
+            | undefined;
+        if (result.status === 409 && errorBody?.teams) {
+            return { items: errorBody.teams };
+        }
+
+        return unwrap<{ items: Team[] }>(Promise.resolve(result));
+    });
 }
 
 export function createTeam(name: string) {
@@ -128,7 +143,7 @@ export function listTeamKeys(teamId: string) {
 }
 
 export function createTeamKey(teamId: string, name: string) {
-    return unwrap<ApiKey>(
+    return unwrap<CreatedApiKey>(
         client.teams.createKey({ params: { teamId }, body: { name } }),
     );
 }
@@ -178,10 +193,7 @@ export function getContact(contactId: string) {
 export function updateContact(
     contactId: string,
     patch: Partial<
-        Pick<
-            Contact,
-            "name" | "active" | "subscribedToUpdates" | "tags" | "customFields"
-        >
+        Pick<Contact, "name" | "subscribed" | "tags" | "customFields">
     >,
 ) {
     return unwrap<Contact>(
@@ -217,6 +229,35 @@ export function getContactDeliveries(contactId: string) {
     return unwrap<ContactDelivery[]>(
         client.contacts.deliveries({ params: { contactId } }),
     );
+}
+
+// ---- Segments --------------------------------------------------------------
+
+export interface Segment {
+    segmentId: string;
+    name: string;
+    filter: ContactFilterWithAggregator;
+    createdAt: string | null;
+    updatedAt: string | null;
+}
+
+export function listSegments() {
+    return unwrap<Segment[]>(client.segments.list());
+}
+
+export function createSegment(input: {
+    name: string;
+    filter: ContactFilterWithAggregator;
+}) {
+    const filter = toApiContactFilter(input.filter);
+    if (!filter) throw new ApiError(400, "Invalid filter");
+    return unwrap<Segment>(
+        client.segments.create({ body: { name: input.name, filter } }),
+    );
+}
+
+export function deleteSegment(segmentId: string) {
+    return unwrap<void>(client.segments.remove({ params: { segmentId } }));
 }
 
 // ---- Templates -----------------------------------------------------------
@@ -283,8 +324,6 @@ export function updateSequence(
     sequenceId: string,
     patch: {
         title?: string;
-        fromName?: string;
-        fromEmail?: string;
         triggerType?: string;
         triggerData?: string;
         filter?: ContactFilterWithAggregator;
@@ -394,5 +433,22 @@ export function deleteEspConfig() {
 export function testEspConfig(to?: string) {
     return unwrap<{ success: boolean; error?: string }>(
         client.settings.esp.test({ body: { to } }),
+    );
+}
+
+// ---- General settings -----------------------------------------------------
+
+export interface GeneralSettings {
+    mailingAddress: string | null;
+    updatedAt?: string | null;
+}
+
+export function getGeneralSettings() {
+    return unwrap<GeneralSettings>(client.settings.general.get());
+}
+
+export function updateGeneralSettings(input: { mailingAddress?: string }) {
+    return unwrap<GeneralSettings>(
+        client.settings.general.update({ body: input }),
     );
 }

@@ -1,11 +1,10 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/tokens";
+
+const BETTER_AUTH_SESSION_COOKIE = "better-auth.session_token";
 
 export default async function Home() {
     const cookieStore = await cookies();
-    const isAuthed =
-        cookieStore.get(ACCESS_TOKEN_COOKIE) ||
-        cookieStore.get(REFRESH_TOKEN_COOKIE);
+    const isAuthed = cookieStore.get(BETTER_AUTH_SESSION_COOKIE);
     redirect(isAuthed ? "/dashboard" : "/login");
 }

@@ -5,7 +5,7 @@ const ALGORITHM = "aes-256-gcm";
 /**
  * Derives a 32-byte AES-256 key from `ESP_CREDENTIALS_ENCRYPTION_KEY`. Accepts
  * either a base64-encoded 32-byte value or a plain string of at least 32
- * bytes (utf8) — matching the flexibility already given to `OAUTH_SIGNING_KEY`.
+ * bytes (utf8) — matching the flexibility used for auth secrets.
  */
 function getKey(): Buffer {
     const raw = process.env.ESP_CREDENTIALS_ENCRYPTION_KEY;

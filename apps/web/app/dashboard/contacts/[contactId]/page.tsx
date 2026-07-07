@@ -118,15 +118,13 @@ export default function ContactDetailPage({
                             <div className="flex items-center gap-3">
                                 <Switch
                                     id="contact-subscribed"
-                                    checked={contact.subscribedToUpdates}
-                                    onCheckedChange={async (
-                                        subscribedToUpdates,
-                                    ) => {
+                                    checked={contact.subscribed}
+                                    onCheckedChange={async (subscribed) => {
                                         setContact(
                                             await updateContact(
                                                 contact.contactId,
                                                 {
-                                                    subscribedToUpdates,
+                                                    subscribed,
                                                 },
                                             ),
                                         );
@@ -226,7 +224,7 @@ function CustomFieldsCard({
     const [newKey, setNewKey] = useState("");
     const [newValue, setNewValue] = useState("");
 
-    async function save(fields: Record<string, string>) {
+    async function save(fields: Contact["customFields"]) {
         const updated = await updateContact(contact.contactId, {
             customFields: fields,
         });
@@ -263,9 +261,16 @@ function CustomFieldsCard({
                         />
                         <Input
                             className="flex-1"
-                            defaultValue={value}
+                            defaultValue={
+                                Array.isArray(value)
+                                    ? value.join(", ")
+                                    : String(value)
+                            }
                             onBlur={async (e) => {
-                                if (e.target.value === value) return;
+                                const stringValue = Array.isArray(value)
+                                    ? value.join(", ")
+                                    : String(value);
+                                if (e.target.value === stringValue) return;
                                 await save({
                                     ...contact.customFields,
                                     [key]: e.target.value,

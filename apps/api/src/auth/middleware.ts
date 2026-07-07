@@ -5,6 +5,7 @@ type AuthResolver = (input: {
     authorization?: unknown;
     apiKeyHeader?: unknown;
     bodyApiKey?: unknown;
+    headers?: Record<string, string | string[] | undefined>;
 }) => Promise<AuthResult>;
 
 type AuthMiddlewareMode = "rest" | "mcp";
@@ -47,6 +48,7 @@ export function createAuthMiddleware(
             authorization: req.headers.authorization,
             apiKeyHeader: req.headers["x-sendlit-apikey"],
             bodyApiKey: req.body?.apikey,
+            headers: req.headers,
         });
 
         if (sendAuthError(res, auth)) return;

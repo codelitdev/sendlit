@@ -22,7 +22,11 @@ import {
     listTemplates,
     type SystemTemplate,
 } from "@/lib/api";
-import { TemplateChooser, type EmailTemplate } from "@sendlit/email-blocks";
+import {
+    EmailPreview,
+    TemplateChooser,
+    type EmailTemplate,
+} from "@sendlit/email-blocks";
 
 export default function TemplatesPage() {
     const router = useRouter();
@@ -85,35 +89,41 @@ export default function TemplatesPage() {
                             className="cursor-pointer transition-shadow hover:shadow-md"
                             onClick={() =>
                                 router.push(
-                                    `/dashboard/templates/${template.templateId}`,
+                                    `/editor/templates/${template.templateId}`,
                                 )
                             }
                         >
-                            <CardContent className="flex items-center justify-between p-4">
-                                <div className="min-w-0">
-                                    <p className="truncate font-medium">
-                                        {template.title}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Updated{" "}
-                                        {new Date(
-                                            template.updatedAt,
-                                        ).toLocaleDateString()}
-                                    </p>
+                            <CardContent className="flex flex-col gap-3 p-4">
+                                <EmailPreview
+                                    content={template.content}
+                                    minHeight="280px"
+                                />
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <p className="truncate font-medium">
+                                            {template.title}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Updated{" "}
+                                            {new Date(
+                                                template.updatedAt,
+                                            ).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            await deleteTemplate(
+                                                template.templateId,
+                                            );
+                                            load();
+                                        }}
+                                    >
+                                        <Trash2 className="size-4" />
+                                    </Button>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={async (e) => {
-                                        e.stopPropagation();
-                                        await deleteTemplate(
-                                            template.templateId,
-                                        );
-                                        load();
-                                    }}
-                                >
-                                    <Trash2 className="size-4" />
-                                </Button>
                             </CardContent>
                         </Card>
                     ))}
@@ -176,7 +186,7 @@ function NewTemplateDialog({
                 content,
             });
             onOpenChange(false);
-            router.push(`/dashboard/templates/${template.templateId}`);
+            router.push(`/editor/templates/${template.templateId}`);
         } catch (err) {
             onError(
                 err instanceof ApiError

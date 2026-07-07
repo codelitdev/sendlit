@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Pause, Play } from "lucide-react";
+import { ArrowLeft, Check, Pause, Pencil, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +33,8 @@ import {
     type SystemTemplate,
 } from "@/lib/api";
 import {
-    EmailEditor,
+    EmailPreview,
+    SequenceAnalytics,
     SequenceEmailList,
     TriggerPicker,
     type Email,
@@ -42,11 +43,10 @@ import {
     type Sequence,
     type SequenceStats,
 } from "@sendlit/email-blocks";
+import { sequenceStatsMetrics } from "@/lib/stats";
 
 interface SequenceMeta {
     title: string;
-    fromName?: string | null;
-    fromEmail?: string | null;
     triggerType?: string | null;
     triggerData?: string | null;
 }
@@ -98,8 +98,6 @@ export default function SequenceEditorPage({
             setSequence(s);
             setMeta({
                 title: s.title,
-                fromName: s.fromName,
-                fromEmail: s.fromEmail,
                 triggerType: s.triggerType,
                 triggerData: s.triggerData,
             });
@@ -166,8 +164,6 @@ export default function SequenceEditorPage({
         try {
             const updated = await updateSequence(sequenceId, {
                 title: meta.title,
-                fromName: meta.fromName || undefined,
-                fromEmail: meta.fromEmail || undefined,
                 triggerType: meta.triggerType || undefined,
                 triggerData: meta.triggerData || undefined,
             });
@@ -184,9 +180,10 @@ export default function SequenceEditorPage({
         setSavingEmail(true);
         setError(null);
         try {
+            // Content is edited on its own full-screen editor route, so this
+            // metadata save must not overwrite it.
             const patch: Parameters<typeof updateSequenceEmail>[2] = {
                 subject: emailDraft.subject,
-                content: emailDraft.content,
                 delayInMillis: emailDraft.delayInMillis,
                 published: emailDraft.published,
             };
@@ -293,21 +290,10 @@ export default function SequenceEditorPage({
                 {error && <Banner className="mb-4">{error}</Banner>}
 
                 {stats && (
-                    <div className="mb-6 grid grid-cols-4 gap-4">
-                        <StatCard label="Sent" value={stats.sent} />
-                        <StatCard
-                            label="Recipients"
-                            value={stats.subscribersCount}
-                        />
-                        <StatCard
-                            label="Open rate"
-                            value={`${Math.round(stats.openRate * 100)}%`}
-                        />
-                        <StatCard
-                            label="Click rate"
-                            value={`${Math.round(stats.clickThroughRate * 100)}%`}
-                        />
-                    </div>
+                    <SequenceAnalytics
+                        className="mb-6"
+                        metrics={sequenceStatsMetrics(stats)}
+                    />
                 )}
 
                 <div className="mb-6">
@@ -339,41 +325,6 @@ export default function SequenceEditorPage({
                                     }
                                     placeholder="e.g. Onboarding drip"
                                 />
-                            </div>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="space-y-1.5">
-                                    <Label htmlFor="sequence-from-name">
-                                        From name
-                                    </Label>
-                                    <Input
-                                        id="sequence-from-name"
-                                        value={meta.fromName ?? ""}
-                                        onChange={(e) =>
-                                            setMeta({
-                                                ...meta,
-                                                fromName: e.target.value,
-                                            })
-                                        }
-                                        placeholder="Your name or company"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label htmlFor="sequence-from-email">
-                                        From email
-                                    </Label>
-                                    <Input
-                                        id="sequence-from-email"
-                                        type="email"
-                                        value={meta.fromEmail ?? ""}
-                                        onChange={(e) =>
-                                            setMeta({
-                                                ...meta,
-                                                fromEmail: e.target.value,
-                                            })
-                                        }
-                                        placeholder="you@yourdomain.com"
-                                    />
-                                </div>
                             </div>
                             <TriggerPicker
                                 triggerType={meta.triggerType}
@@ -568,15 +519,25 @@ export default function SequenceEditorPage({
                                         )}
                                     </div>
 
-                                    <div className="min-h-0 flex-1 rounded-lg border">
-                                        <EmailEditor
-                                            email={emailDraft.content}
-                                            onChange={(content) =>
-                                                setEmailDraft({
-                                                    ...emailDraft,
-                                                    content,
-                                                })
-                                            }
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <Label>Content</Label>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                asChild
+                                            >
+                                                <Link
+                                                    href={`/editor/sequences/${sequenceId}/emails/${selectedEmailId}`}
+                                                >
+                                                    <Pencil className="size-4" />
+                                                    Edit content
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                        <EmailPreview
+                                            content={emailDraft.content}
+                                            minHeight="420px"
                                         />
                                     </div>
                                 </CardContent>
@@ -592,16 +553,5 @@ export default function SequenceEditorPage({
                 </div>
             </div>
         </ScrollablePage>
-    );
-}
-
-function StatCard({ label, value }: { label: string; value: string | number }) {
-    return (
-        <Card>
-            <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="text-xl font-semibold">{value}</p>
-            </CardContent>
-        </Card>
     );
 }
