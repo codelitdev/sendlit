@@ -8,6 +8,7 @@ import { toNodeHandler } from "better-auth/node";
 import logger from "./services/log";
 import { checkDatabaseConnection } from "./db/client";
 import { auth } from "./auth/better-auth";
+import oauthPagesRoutes from "./auth/oauth-pages";
 import mcpRoutes from "./mcp/routes";
 import contactsRoutes from "./contacts/routes";
 import segmentsRoutes from "./contacts/segments-routes";
@@ -34,6 +35,7 @@ app.set("trust proxy", process.env.ENABLE_TRUST_PROXY === "true" ? 1 : false);
 
 app.use(cors());
 app.all("/api/auth/*", toNodeHandler(auth));
+app.use(oauthPagesRoutes);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

@@ -2,9 +2,12 @@ import { getAccount, Account } from "../account/queries";
 import { getApiKeyBySecret, ApiKey } from "../apikey/queries";
 import {
     auth,
+    authIssuer,
     ensureSendLitAccountForBetterAuthUserId,
     ensureSendLitAccountForUser,
+    mcpResourceUrl,
     oauthResourceClient,
+    validOAuthAudiences,
 } from "./better-auth";
 import { fromNodeHeaders } from "better-auth/node";
 
@@ -86,7 +89,29 @@ export type AuthResult =
     | { status: "unauthorized" }
     | { status: "missing" };
 
-export function sendAuthError(res: any, auth: AuthResult): boolean {
+/** `resourceMetadataUrl`, when given, is sent back as a
+ * `WWW-Authenticate: Bearer resource_metadata="..."` challenge (RFC 9728) so
+ * spec-compliant OAuth/MCP clients can discover where to look up this
+ * resource's metadata — and, in turn, learn to request a token with the
+ * matching `resource` parameter instead of an unscoped (opaque) one. See
+ * `mcpProtectedResourceMetadataUrl` in `./better-auth.ts`. */
+export function sendAuthError(
+    res: any,
+    auth: AuthResult,
+    resourceMetadataUrl?: string,
+): boolean {
+    if (
+        resourceMetadataUrl &&
+        (auth.status === "invalid_token" ||
+            auth.status === "missing" ||
+            auth.status === "unauthorized")
+    ) {
+        res.setHeader(
+            "WWW-Authenticate",
+            `Bearer resource_metadata="${resourceMetadataUrl}"`,
+        );
+    }
+
     if (auth.status === "invalid_token") {
         res.status(401).json({
             error: "invalid_token",
@@ -126,21 +151,15 @@ const defaultDependencies: AuthDependencies = {
                 .getActions()
                 .verifyAccessToken(token, {
                     verifyOptions: {
-                        audience:
-                            process.env.API_PUBLIC_URL ||
-                            process.env.BETTER_AUTH_URL ||
-                            "http://localhost:4000",
-                        issuer:
-                            process.env.API_PUBLIC_URL ||
-                            process.env.BETTER_AUTH_URL ||
-                            "http://localhost:4000",
+                        // Must match what the oauth-provider plugin actually
+                        // signs (see the constants' own docs in
+                        // ./better-auth.ts) - a plain base-URL guess here
+                        // rejects every real token with invalid_token.
+                        audience: validOAuthAudiences,
+                        issuer: authIssuer,
                     },
                     resourceMetadataMappings: {
-                        mcp: `${
-                            process.env.API_PUBLIC_URL ||
-                            process.env.BETTER_AUTH_URL ||
-                            "http://localhost:4000"
-                        }/mcp`,
+                        mcp: mcpResourceUrl,
                     },
                 });
         } catch {

@@ -20,7 +20,11 @@ export async function createSuperAdminIfMissing(): Promise<void> {
         const existing = await findAccountByEmail(email.toLowerCase());
         if (existing) return;
 
-        const account = await createAccount(email.toLowerCase());
+        const account = await createAccount(
+            email.toLowerCase(),
+            undefined,
+            /* withDefaultApiKey */ true,
+        );
 
         // Keys are stored hashed, so this log line is the only place the
         // secret ever appears — exactly the "grab it from `docker compose

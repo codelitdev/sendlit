@@ -76,10 +76,10 @@ const impl = s.router(contract.teams, {
         };
     },
     create: async ({ body, req }) => {
-        // The default key's one-time secret is deliberately dropped here (the
-        // contract's team shape has no place for it); browser users mint keys
-        // explicitly via `createKey`, which does return the secret once.
-        const { defaultApiKeySecret: _, ...team } = await createTeam({
+        // No default API key here — the dashboard has no surface to show its
+        // one-time secret at creation time. Users mint keys explicitly via
+        // `createKey`, which does return the secret once.
+        const team = await createTeam({
             ownerAccountId: (req as any).accountId,
             name: body.name,
         });

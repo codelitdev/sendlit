@@ -14,6 +14,35 @@ import { createAccount, findAccountByEmail } from "../account/queries";
 const webClientUrl = process.env.WEB_CLIENT || "http://localhost:3000";
 const apiUrl = process.env.API_PUBLIC_URL || process.env.BETTER_AUTH_URL;
 const authBaseUrl = apiUrl || "http://localhost:4000";
+const authBasePath = "/api/auth";
+
+/** The actual `iss` Better Auth puts on every JWT it signs is
+ * `baseURL + basePath` (i.e. `ctx.context.baseURL`), not just `baseURL` —
+ * confirmed against this server's own `/.well-known/oauth-authorization-server`
+ * (`issuer` there is `http://localhost:4000/api/auth`, not `http://localhost:4000`).
+ * `resolve-auth.ts` must verify against this same value or every bearer
+ * token gets rejected with `invalid_token` regardless of anything else. */
+export const authIssuer = `${authBaseUrl}${authBasePath}`;
+
+/** The MCP resource identifier advertised in protected-resource metadata
+ * (`mcp/routes.ts`). Spec-compliant OAuth/MCP clients request an access
+ * token scoped to this exact `resource`/`aud` value. */
+export const mcpResourceUrl = `${authBaseUrl}/mcp`;
+
+/** Every `resource`/`aud` value the oauth-provider plugin will accept and
+ * therefore every value `resolve-auth.ts` must accept back when verifying —
+ * single source of truth shared between `oauthProvider({ validAudiences })`
+ * below and `resolve-auth.ts`'s bearer verification. */
+export const validOAuthAudiences = [authBaseUrl, mcpResourceUrl];
+
+/** Where an MCP client should discover `mcpResourceUrl`'s protected-resource
+ * metadata (RFC 9728: `<origin>/.well-known/oauth-protected-resource<path>`).
+ * Sent back as the `WWW-Authenticate: Bearer resource_metadata="..."` challenge
+ * on 401s from `/mcp` (see `auth/middleware.ts`) — without this, spec-compliant
+ * clients have no way to discover it and never learn to request a token with
+ * `resource=mcpResourceUrl`, so Better Auth mints an opaque (non-JWT) token
+ * that this API can't verify at all. */
+export const mcpProtectedResourceMetadataUrl = `${authBaseUrl}/.well-known/oauth-protected-resource/mcp`;
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -78,7 +107,7 @@ export async function ensureSendLitAccountForBetterAuthUserId(userId: string) {
 export const auth = betterAuth({
     appName: "SendLit",
     baseURL: authBaseUrl,
-    basePath: "/api/auth",
+    basePath: authBasePath,
     secret: process.env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(db, {
         provider: "pg",
@@ -151,8 +180,11 @@ export const auth = betterAuth({
                     modelName: "authOAuthConsent",
                 },
             },
-            loginPage: `${webClientUrl}/login`,
-            consentPage: `${webClientUrl}/oauth/consent`,
+            // Self-hosted by this API (see ./oauth-pages.ts), not the web
+            // dashboard — so a new MCP/OAuth client can complete its first
+            // authorization even where the web app isn't deployed at all.
+            loginPage: `${authBaseUrl}/oauth/login`,
+            consentPage: `${authBaseUrl}/oauth/consent`,
             allowDynamicClientRegistration: true,
             allowUnauthenticatedClientRegistration: true,
             scopes: [
@@ -168,7 +200,7 @@ export const auth = betterAuth({
                 "sequences:read",
                 "sequences:write",
             ],
-            validAudiences: [authBaseUrl, `${authBaseUrl}/mcp`],
+            validAudiences: validOAuthAudiences,
         }),
     ],
 });

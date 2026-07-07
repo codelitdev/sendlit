@@ -47,15 +47,24 @@ export async function getTeamByExternalId(
  * Creates a team owned by `ownerAccountId` and adds that account as its
  * `owner` member. Every account gets one of these automatically on creation
  * (see `account/queries.ts#createAccount`), and can create more freely.
+ *
+ * `withDefaultApiKey` opts into also minting a "Default" API key for the new
+ * team — only worth doing when the caller has an actual way to hand the
+ * one-time secret to whoever needs it (provisioning's response body,
+ * bootstrap's startup log). Dashboard/MCP-driven team creation has no such
+ * surface, so it defaults to `false`: better to have the user mint a key
+ * explicitly (and see it) than to silently burn one they'll never see.
  */
 export async function createTeam({
     ownerAccountId,
     name,
     externalId,
+    withDefaultApiKey = false,
 }: {
     ownerAccountId: string;
     name: string;
     externalId?: string;
+    withDefaultApiKey?: boolean;
 }): Promise<CreatedTeam> {
     const [team] = await db
         .insert(teams)
@@ -66,10 +75,9 @@ export async function createTeam({
         .insert(teamMembers)
         .values({ teamId: team.id, accountId: ownerAccountId, role: "owner" });
 
-    // Every team gets a default API key so it's immediately usable via the
-    // REST/MCP surface, mirroring MediaLit's "Apps" ergonomics.
-    const { secret } = await createApiKey(team.id, "Default");
+    if (!withDefaultApiKey) return team;
 
+    const { secret } = await createApiKey(team.id, "Default");
     return { ...team, defaultApiKeySecret: secret };
 }
 
@@ -93,7 +101,14 @@ export async function findOrCreateTeamByExternalId({
 }): Promise<CreatedTeam> {
     const existing = await getTeamByExternalId(externalId);
     if (existing) return existing;
-    return createTeam({ ownerAccountId, name, externalId });
+    // Provisioning's response body is the consumer's only way to receive the
+    // key, so this path always mints one (unlike other `createTeam` callers).
+    return createTeam({
+        ownerAccountId,
+        name,
+        externalId,
+        withDefaultApiKey: true,
+    });
 }
 
 export async function renameTeam(

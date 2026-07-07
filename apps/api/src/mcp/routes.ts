@@ -7,7 +7,7 @@ import {
 } from "@better-auth/oauth-provider";
 import { mcpAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
-import { auth, oauthResourceClient } from "../auth/better-auth";
+import { auth, mcpResourceUrl, oauthResourceClient } from "../auth/better-auth";
 import { createMCPSession } from "./server";
 
 const router = Router();
@@ -112,34 +112,43 @@ router.get("/.well-known/openid-configuration", mcpCors, async (req, res) => {
     await sendFetchResponse(res, response);
 });
 
+async function protectedResourceMetadataHandler(_req: any, res: any) {
+    const metadata = await oauthResourceClient
+        .getActions()
+        .getProtectedResourceMetadata(
+            {
+                resource: mcpResourceUrl,
+                scopes_supported: [
+                    "contacts:read",
+                    "contacts:write",
+                    "templates:read",
+                    "templates:write",
+                    "broadcasts:write",
+                    "sequences:read",
+                    "sequences:write",
+                ],
+                bearer_methods_supported: ["header"],
+            },
+            { silenceWarnings: { oidcScopes: true } },
+        );
+    res.json(metadata);
+}
+
+// Registered at both the bare path (some clients look here first) and the
+// RFC 9728-canonical path derived from `mcpResourceUrl`'s own pathname
+// (`<origin>/.well-known/oauth-protected-resource/mcp`) — without the latter,
+// spec-compliant clients silently fail to discover this resource's metadata
+// (confirmed: this is exactly what broke VS Code's MCP OAuth flow) and never
+// learn to request a token scoped with `resource=mcpResourceUrl`.
 router.get(
     "/.well-known/oauth-protected-resource",
     mcpCors,
-    async (_req, res) => {
-        const metadata = await oauthResourceClient
-            .getActions()
-            .getProtectedResourceMetadata(
-                {
-                    resource: `${
-                        process.env.API_PUBLIC_URL ||
-                        process.env.BETTER_AUTH_URL ||
-                        "http://localhost:4000"
-                    }/mcp`,
-                    scopes_supported: [
-                        "contacts:read",
-                        "contacts:write",
-                        "templates:read",
-                        "templates:write",
-                        "broadcasts:write",
-                        "sequences:read",
-                        "sequences:write",
-                    ],
-                    bearer_methods_supported: ["header"],
-                },
-                { silenceWarnings: { oidcScopes: true } },
-            );
-        res.json(metadata);
-    },
+    protectedResourceMetadataHandler,
+);
+router.get(
+    "/.well-known/oauth-protected-resource/mcp",
+    mcpCors,
+    protectedResourceMetadataHandler,
 );
 
 router.post(

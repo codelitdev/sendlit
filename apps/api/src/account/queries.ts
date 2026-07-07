@@ -28,16 +28,17 @@ export async function findAccountByEmail(
 /**
  * Creates a login identity and, as a side effect, a default team owned by it
  * (named after the account) so the account has somewhere to put contacts/
- * templates/sequences immediately — mirrors MediaLit's "every new user gets a
- * default API key" behaviour, just one level deeper now that resources are
- * team-scoped rather than account-scoped.
+ * templates/sequences immediately.
  *
- * `defaultTeamId`/`defaultApiKeySecret` describe that default team; the
- * secret is one-time (keys are stored hashed) — see `team/queries.ts`.
+ * `withDefaultApiKey` is forwarded to `createTeam` — leave it `false` (the
+ * default) for normal signups, where there's no surface to show the user the
+ * one-time secret; pass `true` only for callers that can actually hand it to
+ * someone (e.g. `bootstrap.ts`, which logs it once at startup).
  */
 export async function createAccount(
     email: string,
     name?: string,
+    withDefaultApiKey = false,
 ): Promise<Account & { defaultTeamId: string; defaultApiKeySecret?: string }> {
     const [account] = await db
         .insert(accounts)
@@ -47,6 +48,7 @@ export async function createAccount(
     const team = await createTeam({
         ownerAccountId: account.id,
         name: name ? `${name}'s Team` : "My Team",
+        withDefaultApiKey,
     });
 
     return {

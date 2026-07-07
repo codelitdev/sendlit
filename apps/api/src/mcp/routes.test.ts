@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../auth/better-auth", () => ({
     auth: {},
+    mcpResourceUrl: "http://localhost:4000/mcp",
     oauthResourceClient: {
         getActions: vi.fn(() => ({
             getProtectedResourceMetadata: mocks.getProtectedResourceMetadata,
@@ -106,6 +107,26 @@ describe("MCP OAuth metadata", () => {
             }),
             { silenceWarnings: { oidcScopes: true } },
         );
+    });
+
+    it("also serves protected-resource metadata at the RFC 9728 path derived from the resource's own pathname", async () => {
+        // Without this, spec-compliant MCP clients (confirmed: VS Code) never
+        // discover the resource metadata, never learn to request a
+        // resource-bound token, and Better Auth mints an unverifiable opaque
+        // token instead of a JWT.
+        mocks.getProtectedResourceMetadata.mockResolvedValue({
+            resource: "http://localhost:4000/mcp",
+            authorization_servers: ["http://localhost:4000"],
+            scopes_supported: ["contacts:read"],
+            bearer_methods_supported: ["header"],
+        });
+
+        const res = await request("/.well-known/oauth-protected-resource/mcp");
+
+        expect(res.status).toBe(200);
+        expect(JSON.parse(res.body)).toMatchObject({
+            resource: "http://localhost:4000/mcp",
+        });
     });
 
     it("serves Better Auth authorization-server and OIDC metadata", async () => {

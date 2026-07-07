@@ -420,7 +420,6 @@ describe("MCP team and template tools", () => {
             id: "internal-team-2",
             teamId: "team-2",
             name: "Second Team",
-            defaultApiKeySecret: "sl_live_secret",
         });
 
         await expect(

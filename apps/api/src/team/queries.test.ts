@@ -31,7 +31,7 @@ async function createAccount(email = "owner@example.com") {
 }
 
 describe("team queries", () => {
-    it("creates a team with owner membership and a default API key", async () => {
+    it("creates a team with owner membership and no API key by default", async () => {
         const account = await createAccount();
 
         const team = await createTeam({
@@ -45,6 +45,20 @@ describe("team queries", () => {
         await expect(listTeamsForAccount(account.id)).resolves.toEqual([
             expect.objectContaining({ id: team.id, name: "Main" }),
         ]);
+        await expect(getApiKeysByTeamId(team.id)).resolves.toEqual([]);
+        expect(team.defaultApiKeySecret).toBeUndefined();
+    });
+
+    it("mints a default API key when withDefaultApiKey is requested", async () => {
+        const account = await createAccount();
+
+        const team = await createTeam({
+            ownerAccountId: account.id,
+            name: "Main",
+            withDefaultApiKey: true,
+        });
+
+        expect(team.defaultApiKeySecret).toEqual(expect.any(String));
         await expect(getApiKeysByTeamId(team.id)).resolves.toEqual([
             expect.objectContaining({ teamId: team.id, name: "Default" }),
         ]);

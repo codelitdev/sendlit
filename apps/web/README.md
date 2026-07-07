@@ -14,7 +14,6 @@ This web application provides a user interface for managing email automation bas
 ## Pages
 
 - `/login` — Google and Email OTP sign-in through Better Auth
-- `/oauth/consent` — OAuth consent screen for delegated REST/MCP clients
 - `/dashboard/contacts` (+ `/[contactId]`) — list/create/tag/unsubscribe contacts
 - `/dashboard/templates` (+ `/[templateId]`) — list/create/edit reusable templates
 - `/dashboard/broadcasts` (+ `/[sequenceId]`) — one-off sends: audience filter,

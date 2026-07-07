@@ -64,9 +64,16 @@ secret surfaces exactly once, through whichever surface created it:
 - boot-time super admin (`src/bootstrap.ts`) → logged once so an operator can
   grab it from `docker compose logs`.
 
-Every new team also gets a "Default" key automatically (`createTeam` in
-`src/team/queries.ts`); its one-time secret propagates up as
-`defaultApiKeySecret` on the returned team, and from `createAccount` as well.
+`createTeam` (`src/team/queries.ts`) can also mint a "Default" key as part of
+creating the team, via `withDefaultApiKey: true` — its one-time secret
+propagates up as `defaultApiKeySecret` on the returned team, and from
+`createAccount` as well (which forwards its own `withDefaultApiKey` param).
+This defaults to `false` and is opt-in, precisely because it's only useful to
+callers with an actual way to hand that secret to someone: provisioning
+(response body) and boot-time super admin (startup log). Dashboard-driven
+team creation (signup, `POST /teams`, MCP `create_team`) leaves it `false` —
+otherwise the key would be minted with no way for the user to ever see its
+secret, defeating the whole point of a one-time reveal.
 
 **List** — `GET /teams/:teamId/keys` / MCP `list_api_keys` return `id`,
 `keyPrefix`, `name`, `createdAt`. Never the hash (even a hash of a live

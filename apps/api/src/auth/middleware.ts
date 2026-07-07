@@ -1,5 +1,6 @@
 import { NextFunction, Response } from "express";
 import { AuthResult, resolveAuth, sendAuthError } from "./resolve-auth";
+import { mcpProtectedResourceMetadataUrl } from "./better-auth";
 
 type AuthResolver = (input: {
     authorization?: unknown;
@@ -38,6 +39,7 @@ function applyAuthToRequest(
 export function createAuthMiddleware(
     mode: AuthMiddlewareMode,
     authResolver: AuthResolver = resolveAuth,
+    resourceMetadataUrl?: string,
 ) {
     return async function authMiddleware(
         req: any,
@@ -51,7 +53,7 @@ export function createAuthMiddleware(
             headers: req.headers,
         });
 
-        if (sendAuthError(res, auth)) return;
+        if (sendAuthError(res, auth, resourceMetadataUrl)) return;
         if (auth.status !== "authenticated") return;
 
         applyAuthToRequest(req, auth, mode);
@@ -60,4 +62,12 @@ export function createAuthMiddleware(
 }
 
 export const requireAuth = createAuthMiddleware("rest");
-export const mcpAuth = createAuthMiddleware("mcp");
+// `/mcp` is the only OAuth-protected resource this API exposes today, so its
+// metadata URL is threaded through unconditionally — see
+// `mcpProtectedResourceMetadataUrl` in `./better-auth.ts` for why this is
+// required for spec-compliant MCP/OAuth clients to work at all.
+export const mcpAuth = createAuthMiddleware(
+    "mcp",
+    resolveAuth,
+    mcpProtectedResourceMetadataUrl,
+);
