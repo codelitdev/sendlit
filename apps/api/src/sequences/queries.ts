@@ -372,12 +372,8 @@ export async function startSequence({
         }
     }
 
-    if (sequence.type === "broadcast") {
-        const filter = sequence.filter as ContactFilterWithAggregator | null;
-        if (!filter || !filter.filters || filter.filters.length === 0) {
-            throw new Error(`${responses.sequence_details_missing}: filter`);
-        }
-    }
+    // Broadcasts don't require a filter: an empty/null filter means the
+    // whole audience (buildContactFilterCondition returns no condition).
 
     await addRule({
         teamId,

@@ -141,6 +141,53 @@ describe("processOngoingSequence", () => {
         expect(accountAfter.monthlyMailCount).toBe(1);
     });
 
+    it("applies the email's on-send tag action to the contact", async () => {
+        const { team, contact } = await seedTeamAndContact(tdb);
+        await tdb
+            .update(contacts)
+            .set({ tags: ["existing"] })
+            .where(eq(contacts.id, contact.id));
+        const { sequenceRow } = await seedSequence(tdb, {
+            teamId: team.id,
+            emails: [
+                {
+                    emailId: "email_e1",
+                    actionType: "tag:add",
+                    actionData: { tag: "bol" },
+                },
+                {
+                    emailId: "email_e2",
+                    actionType: "tag:remove",
+                    actionData: { tag: "existing" },
+                    delayInMillis: 0,
+                },
+            ],
+        });
+        const row = await seedOngoingSequence(tdb, {
+            teamId: team.id,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
+        });
+
+        await processOngoingSequence(row.id);
+        let [after] = await tdb
+            .select()
+            .from(contacts)
+            .where(eq(contacts.id, contact.id));
+        expect(after.tags).toEqual(["existing", "bol"]);
+
+        await tdb
+            .update(ongoingSequences)
+            .set({ nextEmailScheduledTime: Date.now() - 1000 })
+            .where(eq(ongoingSequences.id, row.id));
+        await processOngoingSequence(row.id);
+        [after] = await tdb
+            .select()
+            .from(contacts)
+            .where(eq(contacts.id, contact.id));
+        expect(after.tags).toEqual(["bol"]);
+    });
+
     it("renders merge tags, the tracking pixel, and click-tracked links", async () => {
         const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {

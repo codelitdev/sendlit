@@ -20,7 +20,11 @@ import {
 } from "../account/queries";
 import { getEspConfig, getEspConfigById } from "../settings/esp/queries";
 import { getGeneralSettings } from "../settings/general/queries";
-import { getContactById } from "../contacts/queries";
+import {
+    addTagToContact,
+    getContactById,
+    removeTagFromContact,
+} from "../contacts/queries";
 import { sendMail } from "../mail/send";
 import { getEmailFrom, getSiteUrl, getUnsubLink } from "../utils/mail";
 import { generatePixelToken } from "../utils/pixel-jwt";
@@ -290,6 +294,7 @@ async function attemptMailSending({
             contactId: contact.id,
             emailId: email.id,
         });
+        await applyEmailAction({ team, contact, sequence, email });
     } catch (err: any) {
         const retryCount = ongoingSequence.retryCount + 1;
         if (retryCount >= sequenceBounceLimit) {
@@ -325,6 +330,42 @@ async function attemptMailSending({
             "attemptMailSending failed",
         );
         throw err;
+    }
+}
+
+/** Applies the email's on-send action (`tag:add` / `tag:remove`). The mail is
+ * already delivered at this point, so a failure here is logged but never
+ * bubbles up — otherwise the retry loop would send the email again. */
+async function applyEmailAction({
+    team,
+    contact,
+    sequence,
+    email,
+}: {
+    team: NonNullable<Awaited<ReturnType<typeof getTeam>>>;
+    contact: NonNullable<Awaited<ReturnType<typeof getContactById>>>;
+    sequence: typeof sequences.$inferSelect;
+    email: SequenceEmailRow;
+}) {
+    const tag = (email.actionData as { tag?: string } | null)?.tag;
+    if (!email.actionType || !tag) return;
+
+    try {
+        if (email.actionType === "tag:add") {
+            await addTagToContact(team.id, contact.contactId, tag);
+        } else if (email.actionType === "tag:remove") {
+            await removeTagFromContact(team.id, contact.contactId, tag);
+        }
+    } catch (err: any) {
+        logger.error(
+            {
+                error: err.message,
+                sequence_id: sequence.sequenceId,
+                contactId: contact.contactId,
+                actionType: email.actionType,
+            },
+            "applyEmailAction failed",
+        );
     }
 }
 

@@ -23,6 +23,7 @@ import { createContact, deleteContact, listContacts } from "@/lib/api";
 import { useSegments } from "@/lib/use-segments";
 import {
     ContactFilterBuilder,
+    TagEditor,
     type Contact,
     type ContactFilterWithAggregator,
 } from "@sendlit/email-blocks";
@@ -202,6 +203,10 @@ function NewContactDialog({
 }) {
     const [email, setEmail] = useState("");
     const [name, setName] = useState("");
+    const [tags, setTags] = useState<string[]>([]);
+    const [customFields, setCustomFields] = useState<
+        { key: string; value: string }[]
+    >([]);
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
@@ -209,9 +214,22 @@ function NewContactDialog({
         setSubmitting(true);
         setError(null);
         try {
-            await createContact({ email, name: name || undefined });
+            const fields = Object.fromEntries(
+                customFields
+                    .filter(({ key }) => key.trim())
+                    .map(({ key, value }) => [key.trim(), value]),
+            );
+            await createContact({
+                email,
+                name: name || undefined,
+                tags: tags.length > 0 ? tags : undefined,
+                customFields:
+                    Object.keys(fields).length > 0 ? fields : undefined,
+            });
             setEmail("");
             setName("");
+            setTags([]);
+            setCustomFields([]);
             onOpenChange(false);
             onCreated();
         } catch (err) {
@@ -257,6 +275,95 @@ function NewContactDialog({
                             onChange={(e) => setName(e.target.value)}
                             placeholder="Jane Doe"
                         />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Tags</Label>
+                        <TagEditor
+                            tags={tags}
+                            onAdd={(tag) =>
+                                setTags((current) =>
+                                    current.includes(tag)
+                                        ? current
+                                        : [...current, tag],
+                                )
+                            }
+                            onRemove={(tag) =>
+                                setTags((current) =>
+                                    current.filter((item) => item !== tag),
+                                )
+                            }
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Custom fields</Label>
+                        {customFields.map((field, index) => (
+                            <div
+                                key={index}
+                                className="flex items-center gap-2"
+                            >
+                                <Input
+                                    className="w-40 shrink-0"
+                                    value={field.key}
+                                    onChange={(e) =>
+                                        setCustomFields((current) =>
+                                            current.map((item, i) =>
+                                                i === index
+                                                    ? {
+                                                          ...item,
+                                                          key: e.target.value,
+                                                      }
+                                                    : item,
+                                            ),
+                                        )
+                                    }
+                                    placeholder="Field name"
+                                />
+                                <Input
+                                    className="flex-1"
+                                    value={field.value}
+                                    onChange={(e) =>
+                                        setCustomFields((current) =>
+                                            current.map((item, i) =>
+                                                i === index
+                                                    ? {
+                                                          ...item,
+                                                          value: e.target.value,
+                                                      }
+                                                    : item,
+                                            ),
+                                        )
+                                    }
+                                    placeholder="Value"
+                                />
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label="Remove custom field"
+                                    onClick={() =>
+                                        setCustomFields((current) =>
+                                            current.filter(
+                                                (_, i) => i !== index,
+                                            ),
+                                        )
+                                    }
+                                >
+                                    <Trash2 className="size-4" />
+                                </Button>
+                            </div>
+                        ))}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                                setCustomFields((current) => [
+                                    ...current,
+                                    { key: "", value: "" },
+                                ])
+                            }
+                        >
+                            <Plus className="size-4" />
+                            Add field
+                        </Button>
                     </div>
                 </div>
                 <DialogFooter>

@@ -43,6 +43,8 @@ export async function seedSequence(
             subject?: string;
             delayInMillis?: number;
             published?: boolean;
+            actionType?: string;
+            actionData?: Record<string, unknown>;
         }>;
     },
 ) {
@@ -76,6 +78,8 @@ export async function seedSequence(
                 content: emailContent(),
                 delayInMillis: e.delayInMillis ?? 86400000,
                 published: e.published ?? true,
+                actionType: e.actionType,
+                actionData: e.actionData,
             })),
         )
         .returning();

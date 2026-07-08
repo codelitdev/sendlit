@@ -178,7 +178,7 @@ describe("sequence queries", () => {
                 teamId: team.id,
                 sequenceId: broadcast.sequenceId,
             }),
-        ).rejects.toThrow(`${responses.sequence_details_missing}: filter`);
+        ).resolves.toMatchObject({ status: "active" });
     });
 
     it("pauses only active, unsent sequences and preserves active broadcast locks", async () => {

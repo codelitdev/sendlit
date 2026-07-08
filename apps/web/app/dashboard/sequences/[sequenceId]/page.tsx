@@ -36,6 +36,7 @@ import {
     EmailPreview,
     SequenceAnalytics,
     SequenceEmailList,
+    TagEditor,
     TriggerPicker,
     type Email,
     type EmailActionType,
@@ -495,23 +496,31 @@ export default function SequenceEditorPage({
                                         </div>
                                         {emailDraft.actionType && (
                                             <div className="space-y-1.5">
-                                                <Label htmlFor="email-action-data">
-                                                    Tag name
-                                                </Label>
-                                                <Input
-                                                    id="email-action-data"
-                                                    value={
+                                                <Label>Tag name</Label>
+                                                <TagEditor
+                                                    aria-label="Tag name"
+                                                    tags={
                                                         (emailDraft.actionData
-                                                            ?.tag as string) ??
-                                                        ""
+                                                            ?.tag as string)
+                                                            ? [
+                                                                  emailDraft
+                                                                      .actionData
+                                                                      ?.tag as string,
+                                                              ]
+                                                            : []
                                                     }
-                                                    onChange={(e) =>
+                                                    onAdd={(tag) =>
                                                         setEmailDraft({
                                                             ...emailDraft,
                                                             actionData: {
-                                                                tag: e.target
-                                                                    .value,
+                                                                tag,
                                                             },
+                                                        })
+                                                    }
+                                                    onRemove={() =>
+                                                        setEmailDraft({
+                                                            ...emailDraft,
+                                                            actionData: null,
                                                         })
                                                     }
                                                 />
