@@ -8,6 +8,7 @@
     "scripts": {
         "build": "tsc",
         "dev": "nodemon --exec 'node --env-file=.env --import tsx' src/index.ts",
+        "access-token": "tsx --env-file=.env scripts/token.ts",
         "start": "node dist/src/index.js",
         "db:generate": "drizzle-kit generate",
         "db:push": "drizzle-kit push",

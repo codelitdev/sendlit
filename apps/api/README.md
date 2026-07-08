@@ -71,6 +71,34 @@ When the API runs behind the web BFF or another reverse proxy, set
 `ENABLE_TRUST_PROXY=true` so auth endpoint rate limits can use the real client
 IP from `X-Forwarded-For`.
 
+## Local REST Bearer Token
+
+For local REST API testing with `Authorization: Bearer <token>`, run the API
+package helper:
+
+```sh
+pnpm --filter @sendlit/api run access-token email@address.com
+```
+
+The email must already belong to a registered SendLit account and Better Auth
+user. The account must also belong to a team. If the account belongs to more
+than one team, pass the public team ID explicitly:
+
+```sh
+pnpm --filter @sendlit/api run access-token email@address.com --team team_...
+```
+
+The command prints only the access token. Use it in REST requests as:
+
+```sh
+curl http://localhost:4000/contacts \
+  -H "Authorization: Bearer <token>" \
+  -H "X-Sendlit-Team-Id: team_..."
+```
+
+The `X-Sendlit-Team-Id` header is optional only when the account belongs to
+exactly one team.
+
 ## Bootstrap API Key
 
 For local development or self-hosted installs, set `SUPER_ADMIN_EMAIL` before
