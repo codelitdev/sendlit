@@ -41,7 +41,7 @@ export function registerEspTools(server: McpServer): void {
         "get_esp_config",
         {
             description:
-                "Returns the team's configured email sending provider (ESP/SMTP), or null if none is configured yet (mail then sends through the platform default). Never includes the password.",
+                "Returns the team's configured email sending provider (ESP/SMTP), or null if none is configured yet. Teams without ESP cannot send campaign mail. Never includes the password.",
             outputSchema: z.object({ config: espConfigSchema.nullable() }),
             annotations: {
                 readOnlyHint: true,
@@ -115,7 +115,7 @@ export function registerEspTools(server: McpServer): void {
         "delete_esp_config",
         {
             description:
-                "Removes the team's ESP configuration. Future sends fall back to the platform default sender.",
+                "Removes the team's ESP configuration. Future campaign sends fail until a new ESP is configured.",
             outputSchema: successMessageSchema,
             annotations: {
                 readOnlyHint: false,

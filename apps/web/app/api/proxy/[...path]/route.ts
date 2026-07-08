@@ -2,13 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { API_URL } from "@/lib/config";
 import { TEAM_ID_COOKIE } from "@/lib/tokens";
 
-const BETTER_AUTH_SESSION_COOKIE = "better-auth.session_token";
-
 /**
- * Same-origin dashboard proxy. Browser requests carry only the Better Auth
- * httpOnly session cookie; the API resolves that session and enforces team
- * membership. No dashboard access/refresh token pair is minted or refreshed
- * in the BFF.
+ * Same-origin dashboard proxy. Browser requests carry only httpOnly session
+ * cookies; the API resolves those cookies and enforces team membership. No
+ * dashboard access/refresh token pair is minted or refreshed in the BFF.
  */
 async function forward(
     req: NextRequest,
@@ -16,19 +13,6 @@ async function forward(
 ) {
     const { path } = await params;
     const cookieHeader = req.headers.get("cookie");
-    const betterAuthSession = req.cookies.get(
-        BETTER_AUTH_SESSION_COOKIE,
-    )?.value;
-
-    if (!betterAuthSession) {
-        const res = NextResponse.json(
-            { error: "unauthorized" },
-            { status: 401 },
-        );
-        res.headers.set("X-Auth-Error", "session_expired");
-        return res;
-    }
-
     const targetUrl = `${API_URL}/${path.join("/")}${req.nextUrl.search}`;
     const method = req.method;
     const hasBody =

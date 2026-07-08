@@ -1,0 +1,40 @@
+# VCS
+.git
+.gitignore
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Local environment and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Build outputs and caches
+dist
+**/dist
+.next
+**/.next
+coverage
+**/coverage
+.turbo
+**/.turbo
+.eslintcache
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Test and tooling artifacts
+playwright-report
+test-results
+**/playwright-report
+**/test-results
+
+# Editor and OS noise
+.DS_Store
+*.log
+.idea
+.vscode

@@ -42,6 +42,7 @@ COPY --chown=nodeuser:nodejs --from=builder /app/packages/api-contract/dist ./pa
 
 COPY --chown=nodeuser:nodejs --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --chown=nodeuser:nodejs --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --chown=nodeuser:nodejs --from=builder /app/apps/api/drizzle ./apps/api/drizzle
 
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
@@ -49,4 +50,4 @@ USER nodeuser
 
 EXPOSE 3001
 
-CMD ["node", "apps/api/dist/src/index.js"]
+CMD ["node", "apps/api/dist/index.js"]

@@ -12,7 +12,7 @@ export function invalidateTeamTransport(teamId: string): void {
 }
 
 /** Returns the team's own SMTP transporter if they've configured an ESP,
- * or `null` if they haven't (callers should fall back to the platform default). */
+ * or `null` if they haven't. */
 export async function getTeamTransport(
     teamId: string,
 ): Promise<Transporter | null> {

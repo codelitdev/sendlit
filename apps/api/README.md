@@ -10,8 +10,8 @@ email provider configuration.
 - Contact management with tags, subscriptions, and email-based segmentation.
 - Event-driven automation for tag changes, new subscribers, and scheduled
   broadcasts.
-- Email delivery through BullMQ and nodemailer, using a team's configured ESP
-  when available.
+- Email delivery through BullMQ and nodemailer, using each team's configured
+  ESP.
 - Open and click tracking, plus unsubscribe handling.
 - Better Auth session login, OAuth2 bearer-token authentication, and
   team-scoped API key authentication.
@@ -35,6 +35,34 @@ email provider configuration.
 
 The server listens on `PORT` from `.env` (`4000` in `.env.example`; `80` if
 unset).
+
+## Database Migrations In Docker
+
+Production-style Docker deployments should apply the checked-in Drizzle SQL
+migrations before starting the API. The API image includes:
+
+- `apps/api/drizzle` — generated migration SQL and metadata;
+- `apps/api/dist/db/migrate.js` — a one-shot migration runner.
+
+The single-server deployment runs this through a Compose `migrate` service:
+
+```sh
+cd single-server-setup/sendlit
+docker compose up
+```
+
+Startup order:
+
+1. Postgres starts and passes its health check.
+2. `sendlit-migrate` runs `node apps/api/dist/db/migrate.js`.
+3. The migration container exits successfully.
+4. `sendlit-api` starts.
+5. `sendlit-web` starts.
+
+This mirrors an init-container pattern. The API process itself does not apply
+migrations on every boot; it only checks that the database is reachable. For
+local development, continue using `pnpm --filter @sendlit/api db:push` unless
+you are explicitly testing generated migration files.
 
 ## API Reference
 
@@ -163,8 +191,9 @@ Tag and subscriber-added automations are event-driven through
 Each team can configure its own SMTP-compatible ESP, such as SendGrid, Mailgun,
 Postmark, SES, Resend, or a custom SMTP server. Credentials are encrypted at
 rest with AES-256-GCM in `src/utils/secret-crypto.ts` and are never returned to
-clients. If a team has no ESP configured, `src/mail/transport.ts` falls back to
-the platform `EMAIL_HOST` settings.
+clients. Campaign, broadcast, sequence, and ESP test mail require the team to
+have an ESP configured. Platform SMTP environment variables are reserved for
+system email such as login OTPs.
 
 ## MCP Server
 

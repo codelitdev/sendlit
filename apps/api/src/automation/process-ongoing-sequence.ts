@@ -226,7 +226,7 @@ async function attemptMailSending({
 }) {
     // Sender identity fallback chain: the sequence's pinned outbox (an
     // esp_configs row via `sequences.outboxId`) → the team's esp config →
-    // team name / owner account email / platform default.
+    // team name / owner account email.
     const outbox =
         (sequence.outboxId
             ? await getEspConfigById(sequence.outboxId)

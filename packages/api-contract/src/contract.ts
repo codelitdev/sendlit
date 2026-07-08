@@ -352,7 +352,7 @@ const espSettingsContract = c.router(
             path: "/settings/esp",
             responses: { 204: c.noBody() },
             summary:
-                "Remove the team's ESP configuration (falls back to the platform default sender)",
+                "Remove the team's ESP configuration (future campaign sends fail until a new ESP is configured)",
         },
         test: {
             method: "POST",

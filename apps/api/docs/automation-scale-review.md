@@ -71,9 +71,9 @@ would take 1–3 hours.
 **Fix:**
 
 - Worker `concurrency: 10`.
-- `pool: true, maxConnections: 5` on the platform default transporter and on
-  per-team ESP transporters (`mail/transport.ts` — these are already cached per
-  team, so pooling them is safe).
+- `pool: true, maxConnections: 5` on per-team ESP transporters
+  (`mail/transport.ts` — these are already cached per team, so pooling them is
+  safe).
 
 Note: concurrency > 1 makes finding #1's fix a **prerequisite** — without jobId
 dedup + the dueness guard, duplicate jobs for the same row could run

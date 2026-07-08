@@ -22,7 +22,13 @@ describe("BFF proxy auth failures", () => {
         mocks.fetch.mockReset();
     });
 
-    it("marks missing-session requests as session expired", async () => {
+    it("marks upstream 401 responses as session expired", async () => {
+        mocks.fetch.mockResolvedValue(
+            new Response(JSON.stringify({ error: "unauthorized" }), {
+                status: 401,
+                headers: { "Content-Type": "application/json" },
+            }),
+        );
         const { GET } = await import("./route");
 
         const res = await GET(request(), params(["contacts"]));
@@ -30,10 +36,17 @@ describe("BFF proxy auth failures", () => {
         expect(res.status).toBe(401);
         expect(res.headers.get("X-Auth-Error")).toBe("session_expired");
         await expect(res.json()).resolves.toEqual({ error: "unauthorized" });
-        expect(mocks.fetch).not.toHaveBeenCalled();
+        expect(mocks.fetch).toHaveBeenCalledWith(
+            "http://localhost:4000/contacts",
+            expect.objectContaining({
+                headers: expect.not.objectContaining({
+                    Cookie: expect.any(String),
+                }),
+            }),
+        );
     });
 
-    it("forwards Better Auth session cookies upstream", async () => {
+    it("forwards session cookies upstream without parsing them", async () => {
         mocks.fetch.mockResolvedValue(
             new Response(JSON.stringify({ items: [] }), {
                 status: 200,
@@ -43,7 +56,7 @@ describe("BFF proxy auth failures", () => {
         const { GET } = await import("./route");
 
         const res = await GET(
-            request("better-auth.session_token=signed-session"),
+            request("opaque_session_cookie=signed-session"),
             params(["contacts"]),
         );
 
@@ -52,7 +65,32 @@ describe("BFF proxy auth failures", () => {
             "http://localhost:4000/contacts",
             expect.objectContaining({
                 headers: expect.objectContaining({
-                    Cookie: "better-auth.session_token=signed-session",
+                    Cookie: "opaque_session_cookie=signed-session",
+                }),
+            }),
+        );
+    });
+
+    it("forwards secure-prefixed cookies upstream without parsing them", async () => {
+        mocks.fetch.mockResolvedValue(
+            new Response(JSON.stringify({ items: [] }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            }),
+        );
+        const { GET } = await import("./route");
+
+        const res = await GET(
+            request("__Secure-opaque_session_cookie=signed-session"),
+            params(["contacts"]),
+        );
+
+        expect(res.status).toBe(200);
+        expect(mocks.fetch).toHaveBeenCalledWith(
+            "http://localhost:4000/contacts",
+            expect.objectContaining({
+                headers: expect.objectContaining({
+                    Cookie: "__Secure-opaque_session_cookie=signed-session",
                 }),
             }),
         );

@@ -1,20 +1,8 @@
-import { createTransport } from "nodemailer";
 import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
 import { getTeamTransport } from "./transport";
 
-/** Platform default transporter, used when a team hasn't configured
- * their own ESP (see `settings/esp/queries.ts` and `mail/transport.ts`). */
-const defaultTransporter = createTransport({
-    pool: true,
-    maxConnections: 5,
-    host: process.env.EMAIL_HOST,
-    port: +(process.env.EMAIL_PORT || 587),
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-});
+const MISSING_TEAM_ESP_ERROR = "Team ESP is not configured.";
 
 interface MailInput {
     from: string;
@@ -22,17 +10,16 @@ interface MailInput {
     subject: string;
     html: string;
     headers?: Record<string, string>;
-    /** When provided and the team has an ESP configured, mail is sent
-     * through the team's own SMTP connection instead of the platform default. */
-    teamId?: string;
+    /** Required for campaign mail; resolves to the team's configured ESP. */
+    teamId: string;
 }
 
-async function resolveTransporter(teamId?: string) {
-    if (teamId) {
-        const teamTransporter = await getTeamTransport(teamId);
-        if (teamTransporter) return teamTransporter;
+async function resolveTeamTransporter(teamId: string) {
+    const teamTransporter = await getTeamTransport(teamId);
+    if (!teamTransporter) {
+        throw new Error(MISSING_TEAM_ESP_ERROR);
     }
-    return defaultTransporter;
+    return teamTransporter;
 }
 
 export async function sendMail({
@@ -45,7 +32,7 @@ export async function sendMail({
 }: MailInput) {
     try {
         if (process.env.NODE_ENV === "production") {
-            const transporter = await resolveTransporter(teamId);
+            const transporter = await resolveTeamTransporter(teamId);
             await transporter.sendMail({ from, to, subject, html, headers });
         } else {
             // eslint-disable-next-line no-console
@@ -81,6 +68,6 @@ export async function sendTestMail({
     html,
     teamId,
 }: MailInput) {
-    const transporter = await resolveTransporter(teamId);
+    const transporter = await resolveTeamTransporter(teamId);
     await transporter.sendMail({ from, to, subject, html });
 }

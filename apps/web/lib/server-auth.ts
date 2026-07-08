@@ -1,11 +1,8 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-
-const BETTER_AUTH_SESSION_COOKIE = "better-auth.session_token";
+import { hasServerSession } from "./server-session";
 
 /** Server-side auth gate shared by the dashboard and editor layouts. */
 export async function requireAuth() {
-    const cookieStore = await cookies();
-    const isAuthed = cookieStore.get(BETTER_AUTH_SESSION_COOKIE);
+    const isAuthed = await hasServerSession();
     if (!isAuthed) redirect("/login");
 }

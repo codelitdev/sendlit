@@ -542,8 +542,8 @@ export const segments = pgTable(
 
 /** Per-team ESP (Email Service Provider) transport configuration. One row
  * per team — when present, outgoing mail for that team is sent through
- * this SMTP connection instead of the platform's default (`EMAIL_HOST` env
- * vars). `encryptedSecret` holds an AES-256-GCM encrypted JSON blob (see
+ * this SMTP connection; teams without an ESP cannot send campaign mail.
+ * `encryptedSecret` holds an AES-256-GCM encrypted JSON blob (see
  * `utils/secret-crypto.ts`) and is never returned to API clients. This is
  * also the only place sender identity (`fromName`/`fromEmail`) lives —
  * addressed publicly as the per-team `/settings/esp` singleton, so its
@@ -602,9 +602,8 @@ export const sequences = pgTable(
         status: text("status").notNull().default("draft"), // draft|active|paused|completed
         // Which sending identity ("outbox") this sequence uses. Internal-only
         // — never exposed via REST/MCP (esp_configs has no public id; it's a
-        // per-team singleton). null = send via the team default (the team's
-        // esp config if present, else the platform SMTP); non-null = send via
-        // that esp config's fromName/fromEmail.
+        // per-team singleton). null = send via the team's ESP config;
+        // non-null = send via that esp config's fromName/fromEmail.
         outboxId: uuid("outbox_id").references(() => espConfigs.id, {
             onDelete: "set null",
         }),

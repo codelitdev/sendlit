@@ -130,7 +130,7 @@ export const sequenceSchema = z.object({
     // `esp_configs.id`), but esp config is a per-team singleton addressed via
     // `/settings/esp` with no public id, so exposing the FK would leak an
     // internal id for no client benefit. Mail is sent with the team's esp
-    // config identity (or platform default) — see settings/esp.
+    // config identity — see settings/esp.
     triggerType: z.string().nullable().optional(),
     triggerData: z.string().nullable().optional(),
     filter: z.any().nullable().optional(),
