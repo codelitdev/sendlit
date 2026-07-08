@@ -18,7 +18,11 @@
             "default": "./dist/index.mjs"
         },
         "./styles.css": "./dist/index.css",
-        "./blocks": "./dist/blocks"
+        "./blocks": {
+            "types": "./dist/blocks/index.d.ts",
+            "import": "./dist/blocks/index.mjs",
+            "default": "./dist/blocks/index.mjs"
+        }
     },
     "publishConfig": {
         "access": "public"

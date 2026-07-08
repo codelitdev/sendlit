@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { BlockRenderProps, BlockSettingsProps } from "./email-editor";
 
 export interface BlockMetadata {
     name: string;
@@ -10,12 +11,12 @@ export interface BlockMetadata {
     };
 }
 
-export interface BlockComponent {
-    block: any;
-    settings: any;
+export interface BlockComponent<TSettings = any> {
+    block: ComponentType<BlockRenderProps<TSettings>>;
+    settings: ComponentType<BlockSettingsProps<TSettings>>;
     metadata: BlockMetadata;
 }
 
 export interface BlockRegistry {
-    [key: string]: BlockComponent;
+    [key: string]: BlockComponent<any>;
 }

@@ -1,5 +1,5 @@
 import type { EmailBlock, EmailStyle } from "@/types/email-editor";
-import type { ImageBlockSettings } from "./types";
+import type { ImageBlockSettings, Uploader, UploadedImage } from "./types";
 import { SettingsInput } from "@/components/settings/settings-input";
 import { SettingsSelect } from "@/components/settings/settings-select";
 import { SettingsColorPicker } from "@/components/settings/settings-color-picker";
@@ -8,16 +8,18 @@ import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
 
-interface ImageSettingsProps {
+export interface ImageSettingsProps {
     block: Required<EmailBlock> & { settings: ImageBlockSettings };
     style?: EmailStyle;
     updateBlock: (id: string, content: Partial<EmailBlock>) => void;
+    uploader?: Uploader;
 }
 
 export function ImageSettings({
     block,
     style,
     updateBlock,
+    uploader: UploaderComponent,
 }: ImageSettingsProps) {
     const handleSettingChange = (key: string, value: any) => {
         updateBlock(block.id, {
@@ -35,6 +37,15 @@ export function ImageSettings({
         }
     };
 
+    const handleUploadedImageChange = (image: UploadedImage) => {
+        updateBlock(block.id, {
+            settings: {
+                ...block.settings,
+                ...image,
+            },
+        });
+    };
+
     // Helper function to convert px string to number
     const pxToNumber = (
         value: string | undefined,
@@ -48,6 +59,40 @@ export function ImageSettings({
     // Get numeric values from settings
     const borderRadius = pxToNumber(block.settings.borderRadius, 0);
     const borderWidth = pxToNumber(block.settings.borderWidth, 0);
+
+    const uploadButton = (
+        <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={
+                UploaderComponent
+                    ? undefined
+                    : (event) => {
+                          event.preventDefault();
+                          handleImageUpload();
+                      }
+            }
+            title="Browse for image"
+        >
+            <Upload className="h-4 w-4" />
+        </Button>
+    );
+
+    let uploadControl = uploadButton;
+    if (UploaderComponent) {
+        uploadControl = (
+            <UploaderComponent
+                value={{
+                    ...block.settings,
+                    src: block.settings.src || "",
+                }}
+                onChange={handleUploadedImageChange}
+            >
+                {uploadButton}
+            </UploaderComponent>
+        );
+    }
 
     // Sample images
     const sampleImages = [
@@ -112,18 +157,7 @@ export function ImageSettings({
                         placeholder="https://example.com/image.jpg"
                         className="flex-1"
                     />
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={(e) => {
-                            e.preventDefault();
-                            handleImageUpload();
-                        }}
-                        title="Browse for image"
-                    >
-                        <Upload className="h-4 w-4" />
-                    </Button>
+                    {uploadControl}
                 </div>
             </div>
 

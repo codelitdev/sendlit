@@ -1,7 +1,11 @@
 import { X, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmailSettings } from "./email-settings";
-import type { Email, EmailStyle } from "../types/email-editor";
+import type {
+    Email,
+    EmailStyle,
+    RuntimeEmailBlock,
+} from "../types/email-editor";
 import type { BlockRegistry } from "../types/block-registry";
 import type { EmailBlock } from "../types/email-editor";
 
@@ -48,7 +52,8 @@ export function BlockSettingsPanel({
         );
     }
 
-    const block = email.content.find((b) => b.id === blockId);
+    const block = email.content.find((b) => b.id === blockId) as
+        RuntimeEmailBlock | undefined;
 
     if (!block) return null;
 

@@ -75,10 +75,26 @@ export interface CommonBlockSettings {
     paddingX?: `${number}px`;
 }
 
-export interface EmailBlock {
+export interface EmailBlock<TSettings = Record<string, any>> {
     id?: string;
     blockType: string;
-    settings: Record<string, any>;
+    settings: TSettings;
+}
+
+export interface BlockRenderProps<TSettings = Record<string, any>> {
+    block: EmailBlock<TSettings> & { settings: TSettings };
+    style?: EmailStyle;
+    selectedBlockId?: string | null;
+}
+
+export type RuntimeEmailBlock<TSettings = Record<string, any>> = Required<
+    EmailBlock<TSettings>
+> & { id: string; settings: TSettings };
+
+export interface BlockSettingsProps<TSettings = Record<string, any>> {
+    block: RuntimeEmailBlock<TSettings>;
+    style?: EmailStyle;
+    updateBlock: (id: string, content: Partial<EmailBlock>) => void;
 }
 
 export interface EmailMeta {
@@ -90,8 +106,8 @@ export interface EmailMeta {
     };
 }
 
-export interface Email {
+export interface Email<TSettings = Record<string, any>> {
     style: EmailStyle;
     meta: EmailMeta;
-    content: EmailBlock[];
+    content: EmailBlock<TSettings>[];
 }

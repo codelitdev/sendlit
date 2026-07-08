@@ -131,6 +131,7 @@ export function EmailEditor({
     // a new `initialEmail` reference, which would otherwise regenerate all
     // block ids and invalidate `selectedBlockId`.
     const lastEmittedRef = useRef<Email | null>(null);
+    const shouldEmitChangeRef = useRef(false);
 
     // Update email when initialEmail prop changes
     useEffect(() => {
@@ -147,88 +148,81 @@ export function EmailEditor({
         setEmail(getEmailWithBlockIds(initialEmail));
     }, [initialEmail]);
 
-    const updateEmail = useCallback(
-        (newEmail: Email) => {
-            setEmail(newEmail);
-            if (onChange) {
-                const emitted = stripBlockIds(newEmail);
-                lastEmittedRef.current = emitted;
-                onChange(emitted);
-            }
-        },
-        [onChange],
-    );
+    useEffect(() => {
+        if (!shouldEmitChangeRef.current) {
+            return;
+        }
 
-    const updateEmailStyle = useCallback(
-        (styleUpdate: Partial<EmailStyle>) => {
-            setEmail((prevEmail) => {
-                const newEmail = {
-                    ...prevEmail,
-                    style: deepMerge(prevEmail.style, styleUpdate),
-                };
+        shouldEmitChangeRef.current = false;
 
-                if (onChange) {
-                    const emitted = stripBlockIds(newEmail);
-                    lastEmittedRef.current = emitted;
-                    onChange(emitted);
-                }
+        if (!onChange) {
+            return;
+        }
 
-                return newEmail;
-            });
-        },
-        [onChange],
-    );
+        const emitted = stripBlockIds(email);
+        lastEmittedRef.current = emitted;
+        onChange(emitted);
+    }, [email, onChange]);
 
-    const addBlock = useCallback(
-        (blockType: string, index: number) => {
-            const newBlock: EmailBlock = {
-                id: generateId(),
-                blockType,
-                settings: getDefaultSettingsForBlockType(blockType),
+    const updateEmail = useCallback((newEmail: Email) => {
+        shouldEmitChangeRef.current = true;
+        setEmail(newEmail);
+    }, []);
+
+    const updateEmailStyle = useCallback((styleUpdate: Partial<EmailStyle>) => {
+        setEmail((prevEmail) => {
+            const newEmail = {
+                ...prevEmail,
+                style: deepMerge(prevEmail.style, styleUpdate),
             };
 
-            setEmail((prevEmail) => {
-                const newEmail = {
-                    ...prevEmail,
-                    content: [
-                        ...prevEmail.content.slice(0, index),
-                        newBlock,
-                        ...prevEmail.content.slice(index),
-                    ],
-                };
+            shouldEmitChangeRef.current = true;
 
-                if (onChange) {
-                    const emitted = stripBlockIds(newEmail);
-                    lastEmittedRef.current = emitted;
-                    onChange(emitted);
-                }
+            return newEmail;
+        });
+    }, []);
 
-                return newEmail;
-            });
+    const addBlock = useCallback((blockType: string, index: number) => {
+        const newBlock: EmailBlock = {
+            id: generateId(),
+            blockType,
+            settings: getDefaultSettingsForBlockType(blockType),
+        };
 
-            setSelectedBlockId(newBlock.id!);
-        },
-        [onChange],
-    );
+        setEmail((prevEmail) => {
+            const newEmail = {
+                ...prevEmail,
+                content: [
+                    ...prevEmail.content.slice(0, index),
+                    newBlock,
+                    ...prevEmail.content.slice(index),
+                ],
+            };
+
+            shouldEmitChangeRef.current = true;
+
+            return newEmail;
+        });
+
+        setSelectedBlockId(newBlock.id!);
+    }, []);
 
     const updateBlock = useCallback(
         (id: string, content: Partial<EmailBlock>) => {
-            const newEmail = {
-                ...email,
-                content: email.content.map((block) =>
-                    block.id === id ? { ...block, ...content } : block,
-                ),
-            };
+            setEmail((prevEmail) => {
+                const newEmail = {
+                    ...prevEmail,
+                    content: prevEmail.content.map((block) =>
+                        block.id === id ? { ...block, ...content } : block,
+                    ),
+                };
 
-            setEmail(newEmail);
+                shouldEmitChangeRef.current = true;
 
-            if (onChange) {
-                const emitted = stripBlockIds(newEmail);
-                lastEmittedRef.current = emitted;
-                onChange(emitted);
-            }
+                return newEmail;
+            });
         },
-        [email, onChange],
+        [],
     );
 
     // const updateBlockStyle = useCallback(
@@ -258,125 +252,99 @@ export function EmailEditor({
     //     [email, onChange],
     // );
 
-    const deleteBlock = useCallback(
-        (id: string) => {
-            setEmail((prevEmail) => {
-                // Don't allow deleting if there's only one block left
-                if (prevEmail.content.length <= 1) {
-                    return prevEmail;
-                }
+    const deleteBlock = useCallback((id: string) => {
+        setEmail((prevEmail) => {
+            // Don't allow deleting if there's only one block left
+            if (prevEmail.content.length <= 1) {
+                return prevEmail;
+            }
 
-                const newEmail = {
-                    ...prevEmail,
-                    content: prevEmail.content.filter(
-                        (block) => block.id !== id,
-                    ),
-                };
+            const newEmail = {
+                ...prevEmail,
+                content: prevEmail.content.filter((block) => block.id !== id),
+            };
 
-                if (onChange) {
-                    const emitted = stripBlockIds(newEmail);
-                    lastEmittedRef.current = emitted;
-                    onChange(emitted);
-                }
+            shouldEmitChangeRef.current = true;
 
-                return newEmail;
-            });
+            return newEmail;
+        });
 
-            // If the deleted block was selected, clear selection
-            setSelectedBlockId((prevSelectedId) => {
-                if (prevSelectedId === id) {
-                    return null;
-                }
-                return prevSelectedId;
-            });
-        },
-        [onChange],
-    );
+        // If the deleted block was selected, clear selection
+        setSelectedBlockId((prevSelectedId) => {
+            if (prevSelectedId === id) {
+                return null;
+            }
+            return prevSelectedId;
+        });
+    }, []);
 
-    const moveBlock = useCallback(
-        (id: string, direction: "up" | "down") => {
-            setEmail((prevEmail) => {
-                const index = prevEmail.content.findIndex(
-                    (block) => block.id === id,
-                );
-                if (
-                    (direction === "up" && index === 0) ||
-                    (direction === "down" &&
-                        index === prevEmail.content.length - 1)
-                ) {
-                    return prevEmail;
-                }
+    const moveBlock = useCallback((id: string, direction: "up" | "down") => {
+        setEmail((prevEmail) => {
+            const index = prevEmail.content.findIndex(
+                (block) => block.id === id,
+            );
+            if (
+                (direction === "up" && index === 0) ||
+                (direction === "down" && index === prevEmail.content.length - 1)
+            ) {
+                return prevEmail;
+            }
 
-                const newContent = [...prevEmail.content];
-                const [movedBlock] = newContent.splice(index, 1);
-                newContent.splice(
-                    direction === "up" ? index - 1 : index + 1,
-                    0,
-                    movedBlock,
-                );
+            const newContent = [...prevEmail.content];
+            const [movedBlock] = newContent.splice(index, 1);
+            newContent.splice(
+                direction === "up" ? index - 1 : index + 1,
+                0,
+                movedBlock,
+            );
 
-                const newEmail = {
-                    ...prevEmail,
-                    content: newContent,
-                };
+            const newEmail = {
+                ...prevEmail,
+                content: newContent,
+            };
 
-                if (onChange) {
-                    const emitted = stripBlockIds(newEmail);
-                    lastEmittedRef.current = emitted;
-                    onChange(emitted);
-                }
+            shouldEmitChangeRef.current = true;
 
-                return newEmail;
-            });
+            return newEmail;
+        });
 
-            // Set the moving block ID to trigger animation
-            setMovingBlockId(id);
+        // Set the moving block ID to trigger animation
+        setMovingBlockId(id);
 
-            // Clear the moving block ID after animation completes
-            setTimeout(() => {
-                setMovingBlockId(null);
-            }, 350);
-        },
-        [onChange],
-    );
+        // Clear the moving block ID after animation completes
+        setTimeout(() => {
+            setMovingBlockId(null);
+        }, 350);
+    }, []);
 
     const duplicateBlock = useCallback(
         (id: string) => {
-            setEmail((prevEmail) => {
-                const blockToDuplicate = prevEmail.content.find(
-                    (block) => block.id === id,
-                );
-                if (!blockToDuplicate) return prevEmail;
+            const blockToDuplicate = email.content.find(
+                (block) => block.id === id,
+            );
+            if (!blockToDuplicate) return;
 
-                const index = prevEmail.content.findIndex(
-                    (block) => block.id === id,
-                );
-                const duplicatedBlock = {
-                    ...blockToDuplicate,
-                    id: generateId(),
-                };
+            const index = email.content.findIndex((block) => block.id === id);
+            const duplicatedBlock = {
+                ...blockToDuplicate,
+                id: generateId(),
+            };
 
-                const newContent = [...prevEmail.content];
-                newContent.splice(index + 1, 0, duplicatedBlock);
+            const newContent = [...email.content];
+            newContent.splice(index + 1, 0, duplicatedBlock);
 
-                const newEmail = {
-                    ...prevEmail,
-                    content: newContent,
-                };
+            const newEmail = {
+                ...email,
+                content: newContent,
+            };
 
-                if (onChange) {
-                    const emitted = stripBlockIds(newEmail);
-                    lastEmittedRef.current = emitted;
-                    onChange(emitted);
-                }
+            shouldEmitChangeRef.current = true;
+            setEmail(newEmail);
 
-                // Set the selection immediately after creating the duplicated block
-                setSelectedBlockId(duplicatedBlock.id!);
-
-                return newEmail;
-            });
+            // Set the selection immediately after creating the duplicated block
+            setSelectedBlockId(duplicatedBlock.id!);
         },
-        [onChange],
+        [email],
     );
 
     // Separate first, middle, and last blocks

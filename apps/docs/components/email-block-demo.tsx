@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
     ContactFilterBuilder,
     EmailEditor,
@@ -22,6 +22,13 @@ import {
     type SystemTemplateSummary,
     type TriggerOption,
 } from "@sendlit/email-blocks";
+import {
+    ImageBlock,
+    Link,
+    Separator,
+    Text,
+    type UploaderProps,
+} from "@sendlit/email-editor/blocks";
 
 type DemoName =
     | "contact-filter-builder"
@@ -369,6 +376,53 @@ const savedTemplates: EmailTemplate[] = [
     },
 ];
 
+function LocalImageUploader({ children, onChange }: UploaderProps) {
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.currentTarget.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result !== "string") {
+                return;
+            }
+
+            onChange({
+                src: reader.result,
+                alt: file.name,
+            });
+        };
+        reader.readAsDataURL(file);
+        event.currentTarget.value = "";
+    };
+
+    return (
+        <span className="inline-flex" onClick={() => inputRef.current?.click()}>
+            {children}
+            <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                tabIndex={-1}
+                onClick={(event) => event.stopPropagation()}
+                onChange={handleFileChange}
+            />
+        </span>
+    );
+}
+
+const emailEditorBlocks = [
+    Text,
+    Separator,
+    Link,
+    ImageBlock.configure({ uploader: LocalImageUploader }),
+];
+
 export function EmailBlockDemo({ demo }: { demo: DemoName }) {
     const [filter, setFilter] =
         useState<ContactFilterWithAggregator>(initialFilter);
@@ -616,6 +670,7 @@ export function EmailBlockDemo({ demo }: { demo: DemoName }) {
                     <EmailEditor
                         email={editorEmail}
                         onChange={setEditorEmail}
+                        blocks={emailEditorBlocks}
                     />
                 </DemoFrame>
             );

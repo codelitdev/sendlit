@@ -6,5 +6,11 @@ export type {
     EmailMeta,
     EmailStyle,
 } from "./types/email-editor";
+export type {
+    ImageBlockConfig,
+    Uploader,
+    UploaderProps,
+    UploadedImage,
+} from "./blocks/image/types";
 export { renderEmailToHtml } from "./lib/email-renderer";
 export { defaultEmail } from "./lib/default-email";

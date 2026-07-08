@@ -1,3 +1,4 @@
+import type { ComponentType, ReactNode } from "react";
 import type { CommonBlockSettings } from "@/types/email-editor";
 
 export interface ImageBlockSettings extends CommonBlockSettings {
@@ -12,4 +13,19 @@ export interface ImageBlockSettings extends CommonBlockSettings {
     borderStyle?: string;
     borderColor?: string;
     padding?: string;
+}
+
+export type UploadedImage = Partial<ImageBlockSettings> &
+    Pick<ImageBlockSettings, "src">;
+
+export interface UploaderProps {
+    value: UploadedImage;
+    onChange: (image: UploadedImage) => void;
+    children: ReactNode;
+}
+
+export type Uploader = ComponentType<UploaderProps>;
+
+export interface ImageBlockConfig {
+    uploader?: Uploader;
 }

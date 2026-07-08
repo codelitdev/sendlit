@@ -19,7 +19,7 @@ its types without you needing a second dependency.
 
 ## Usage
 
-This is the exact code behind the demo above.
+### Simple editor
 
 ```tsx
 import { useState } from "react";
@@ -33,6 +33,80 @@ function Example() {
     const [email, setEmail] = useState<Email>(defaultTemplateEmail);
 
     return <EmailEditor email={email} onChange={setEmail} />;
+}
+```
+
+### Custom image uploader
+
+Use `blocks` to replace the default image block settings with a wrapper that
+opens your own uploader from the existing image upload button.
+
+```tsx
+import { useRef, useState, type ChangeEvent } from "react";
+import {
+    EmailEditor,
+    defaultTemplateEmail,
+    type Email,
+} from "@sendlit/email-blocks";
+import {
+    ImageBlock,
+    Link,
+    Separator,
+    Text,
+    type UploaderProps,
+} from "@sendlit/email-editor/blocks";
+
+function LocalImageUploader({ children, onChange }: UploaderProps) {
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.currentTarget.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result !== "string") {
+                return;
+            }
+
+            onChange({
+                src: reader.result,
+                alt: file.name,
+            });
+        };
+        reader.readAsDataURL(file);
+        event.currentTarget.value = "";
+    };
+
+    return (
+        <span className="inline-flex" onClick={() => inputRef.current?.click()}>
+            {children}
+            <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                tabIndex={-1}
+                onClick={(event) => event.stopPropagation()}
+                onChange={handleFileChange}
+            />
+        </span>
+    );
+}
+
+const blocks = [
+    Text,
+    Separator,
+    Link,
+    ImageBlock.configure({ uploader: LocalImageUploader }),
+];
+
+function Example() {
+    const [email, setEmail] = useState<Email>(defaultTemplateEmail);
+
+    return <EmailEditor email={email} onChange={setEmail} blocks={blocks} />;
 }
 ```
 
