@@ -11,6 +11,7 @@ import { getSequenceEmailByEmailId } from "../sequences/queries";
 import { getSequenceRowBySequenceId } from "../automation/queries";
 import { EmailEventAction } from "../config/constants";
 import logger from "../services/log";
+import { captureError, captureEvent } from "../observability/posthog";
 
 const router = Router();
 
@@ -47,8 +48,22 @@ router.get("/track/open", async (req: Request, res: Response) => {
             emailId: resolved.emailId,
             action: EmailEventAction.OPEN,
         });
+        captureEvent({
+            event: "email_opened",
+            source: "tracking.open",
+            teamId: resolved.teamId,
+            properties: {
+                sequence_id: resolved.sequenceId,
+                email_id: resolved.emailId,
+            },
+        });
     } catch (err: any) {
         logger.error({ error: err.message }, "Failed to record open event");
+        captureError({
+            error: err,
+            source: "tracking.open",
+            context: { route: "/track/open" },
+        });
     }
 });
 
@@ -74,9 +89,24 @@ router.get("/track/click", async (req: Request, res: Response) => {
                 link: destination,
                 linkIndex: payload.index,
             });
+            captureEvent({
+                event: "email_link_clicked",
+                source: "tracking.click",
+                teamId: resolved.teamId,
+                properties: {
+                    sequence_id: resolved.sequenceId,
+                    email_id: resolved.emailId,
+                    link_index: payload.index,
+                },
+            });
         }
     } catch (err: any) {
         logger.error({ error: err.message }, "Failed to record click event");
+        captureError({
+            error: err,
+            source: "tracking.click",
+            context: { route: "/track/click" },
+        });
     }
 
     res.redirect(destination);
@@ -93,6 +123,11 @@ router.get(
 
         await updateContact(contact.teamId, contact.contactId, {
             subscribed: false,
+        });
+        captureEvent({
+            event: "contact_unsubscribed",
+            source: "tracking.unsubscribe",
+            teamId: contact.teamId,
         });
 
         res.type("html").send(

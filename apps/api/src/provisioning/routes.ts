@@ -8,6 +8,7 @@ import {
     findOrCreateTeamByExternalId,
 } from "../team/queries";
 import logger from "../services/log";
+import { captureError, captureEvent } from "../observability/posthog";
 
 const router = Router();
 
@@ -63,6 +64,16 @@ const impl = s.router(contract.provisioning, {
                 ownerAccountId: account.id,
                 name: body.name,
             });
+            // The API-key secret is only present on the call that created the
+            // team, so it distinguishes a fresh provision from an idempotent
+            // re-run.
+            if (team.defaultApiKeySecret) {
+                captureEvent({
+                    event: "team_provisioned",
+                    source: "provisioning.provision_team",
+                    teamId: team.teamId,
+                });
+            }
             return {
                 status: 200,
                 body: {
@@ -73,6 +84,11 @@ const impl = s.router(contract.provisioning, {
             };
         } catch (err: any) {
             logger.error({ error: err.message }, "Team provisioning failed");
+            captureError({
+                error: err,
+                source: "provisioning.provision_team",
+                severity: "critical",
+            });
             return { status: 500, body: { error: "server_error" } };
         }
     },

@@ -3,6 +3,7 @@ import { db } from "../db/client";
 import { emailTemplates } from "../db/schema";
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { getSystemTemplate } from "./system-templates";
+import { captureEvent } from "../observability/posthog";
 
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
 
@@ -62,6 +63,12 @@ export async function createTemplate({
             content,
         })
         .returning();
+    captureEvent({
+        event: "template_created",
+        source: "templates.create",
+        teamId,
+        properties: { template_id: template.templateId },
+    });
     return template;
 }
 
@@ -125,6 +132,14 @@ export async function updateTemplate({
             ),
         )
         .returning();
+    if (row) {
+        captureEvent({
+            event: "template_updated",
+            source: "templates.update",
+            teamId,
+            properties: { template_id: row.templateId },
+        });
+    }
     return row ?? null;
 }
 
@@ -140,4 +155,10 @@ export async function deleteTemplate(
                 eq(emailTemplates.templateId, templateId),
             ),
         );
+    captureEvent({
+        event: "template_deleted",
+        source: "templates.delete",
+        teamId,
+        properties: { template_id: templateId },
+    });
 }

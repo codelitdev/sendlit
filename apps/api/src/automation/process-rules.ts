@@ -1,4 +1,5 @@
 import logger from "../services/log";
+import { captureError, captureEvent } from "../observability/posthog";
 import {
     deleteRule,
     enrollContactsInOngoingSequence,
@@ -29,10 +30,21 @@ export async function processRules() {
                         { error: err.message, sequence_id: rule.sequenceId },
                         "processRules.rule failed",
                     );
+                    captureError({
+                        error: err,
+                        source: "automation.process_rules.rule",
+                        teamId: rule.teamId,
+                        context: { sequence_id: rule.sequenceId },
+                    });
                 }
             }
         } catch (err: any) {
             logger.error({ error: err.message }, "processRules.loop failed");
+            captureError({
+                error: err,
+                source: "automation.process_rules.loop",
+                severity: "critical",
+            });
         }
 
         await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
@@ -65,6 +77,16 @@ async function processRule(rule: {
         teamId: rule.teamId,
         sequenceId: sequenceRow.id,
         contactIds,
+    });
+
+    captureEvent({
+        event: "broadcast_recipients_enrolled",
+        source: "automation.process_rules",
+        teamId: rule.teamId,
+        properties: {
+            sequence_id: sequenceRow.sequenceId,
+            recipients_count: contactIds.length,
+        },
     });
 
     const publicContactIds = await getMatchingPublicContactIds(

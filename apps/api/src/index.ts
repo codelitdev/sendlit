@@ -22,6 +22,11 @@ import trackingRoutes from "./tracking/routes";
 import { assertEspEncryptionKeyConfigured } from "./utils/secret-crypto";
 import { createSuperAdminIfMissing } from "./bootstrap";
 import { openApiDocument } from "./openapi";
+import {
+    captureError,
+    getTeamId,
+    setupPosthogExpressErrorHandler,
+} from "./observability/posthog";
 
 // Start BullMQ workers
 import "./mail/worker";
@@ -83,6 +88,28 @@ app.use(teamRoutes);
 app.use(
     (
         err: any,
+        req: express.Request,
+        _res: express.Response,
+        next: express.NextFunction,
+    ) => {
+        captureError({
+            error: err,
+            source: "express.uncaught",
+            teamId: getTeamId((req as any)?.user?.teamId),
+            context: {
+                path: req?.path,
+                method: req?.method,
+            },
+        });
+        next(err);
+    },
+);
+
+setupPosthogExpressErrorHandler(app);
+
+app.use(
+    (
+        err: any,
         _req: express.Request,
         res: express.Response,
         _next: express.NextFunction,
@@ -105,6 +132,11 @@ checkConfig()
     })
     .catch((err) => {
         logger.error({ error: err.message }, "Failed to start SendLit API");
+        captureError({
+            error: err,
+            source: "service.startup",
+            teamId: getTeamId(),
+        });
         process.exit(1);
     });
 

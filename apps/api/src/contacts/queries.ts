@@ -14,6 +14,7 @@ import {
 import { generateUniqueId } from "../utils/id";
 import { EventType, itemsPerPage } from "../config/constants";
 import { fireEvent } from "../automation/fire-event";
+import { captureEvent } from "../observability/posthog";
 import {
     buildContactFilterCondition,
     type ContactFilterWithAggregator,
@@ -59,6 +60,12 @@ export async function createContact({
             teamId,
             event: EventType.SUBSCRIBER_ADDED,
             contactId: contact.id,
+        });
+        captureEvent({
+            event: "contact_created",
+            source: "contacts.create",
+            teamId,
+            properties: { contact_id: contact.contactId },
         });
         return contact;
     }
@@ -201,6 +208,14 @@ export async function updateContact(
             customFields: patch.customFields ?? {},
         });
     }
+    if (row) {
+        captureEvent({
+            event: "contact_updated",
+            source: "contacts.update",
+            teamId,
+            properties: { contact_id: row.contactId },
+        });
+    }
     return row ?? null;
 }
 
@@ -225,6 +240,12 @@ export async function addTagToContact(
             event: EventType.TAG_ADDED,
             eventData: tag,
             contactId: row.id,
+        });
+        captureEvent({
+            event: "contact_tag_added",
+            source: "contacts.add_tag",
+            teamId,
+            properties: { contact_id: row.contactId },
         });
     }
     return row ?? null;
@@ -252,6 +273,12 @@ export async function removeTagFromContact(
             eventData: tag,
             contactId: row.id,
         });
+        captureEvent({
+            event: "contact_tag_removed",
+            source: "contacts.remove_tag",
+            teamId,
+            properties: { contact_id: row.contactId },
+        });
     }
     return row ?? null;
 }
@@ -268,6 +295,12 @@ export async function deleteContact(
         .where(
             and(eq(contacts.teamId, teamId), eq(contacts.contactId, contactId)),
         );
+    captureEvent({
+        event: "contact_deleted",
+        source: "contacts.delete",
+        teamId,
+        properties: { contact_id: contactId },
+    });
 }
 
 function scalarValues(

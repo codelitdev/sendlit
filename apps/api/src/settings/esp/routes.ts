@@ -13,6 +13,7 @@ import {
 import { invalidateTeamTransport } from "../../mail/transport";
 import { sendTestMail } from "../../mail/send";
 import { getEmailFrom } from "../../utils/mail";
+import { captureError, captureEvent } from "../../observability/posthog";
 
 const router = Router();
 router.use(requireAuth);
@@ -47,12 +48,30 @@ const impl = s.router(contract.settings.esp, {
         const teamId = (req as any).teamId;
         const config = await upsertEspConfig(teamId, body);
         invalidateTeamTransport(teamId);
+        captureEvent({
+            event: "esp_config_upserted",
+            source: "settings.esp.upsert",
+            teamId,
+            properties: {
+                provider: config.provider,
+                has_password: Boolean(config.encryptedSecret),
+                has_from_email: Boolean(config.fromEmail),
+                has_username: Boolean(config.username),
+                secure: config.secure,
+                port: config.port,
+            },
+        });
         return { status: 200, body: toPublicShape(config)! };
     },
     remove: async ({ req }) => {
         const teamId = (req as any).teamId;
         await deleteEspConfig(teamId);
         invalidateTeamTransport(teamId);
+        captureEvent({
+            event: "esp_config_removed",
+            source: "settings.esp.remove",
+            teamId,
+        });
         return { status: 204, body: undefined };
     },
     test: async ({ body, req }) => {
@@ -91,9 +110,22 @@ const impl = s.router(contract.settings.esp, {
                 teamId,
             });
             await recordEspTestResult(teamId, "success");
+            captureEvent({
+                event: "esp_test_succeeded",
+                source: "settings.esp.test",
+                teamId,
+                properties: { provider: config.provider },
+            });
             return { status: 200, body: { success: true } };
         } catch (err: any) {
             await recordEspTestResult(teamId, "failed", err.message);
+            captureError({
+                error: err,
+                source: "settings.esp.test",
+                teamId,
+                severity: "warning",
+                context: { provider: config.provider },
+            });
             return {
                 status: 502,
                 body: { success: false, error: err.message },

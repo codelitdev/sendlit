@@ -29,6 +29,7 @@ import { sendMail } from "../mail/send";
 import { getEmailFrom, getSiteUrl, getUnsubLink } from "../utils/mail";
 import { generatePixelToken } from "../utils/pixel-jwt";
 import logger from "../services/log";
+import { captureError, captureEvent } from "../observability/posthog";
 import {
     countOngoingSequencesForSequence,
     deleteOngoingSequence,
@@ -80,6 +81,14 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
                 { teamId: ongoingSequence.teamId },
                 "Mail quota exceeded, skipping ongoing sequence tick",
             );
+            captureEvent({
+                event: "mail_quota_exceeded",
+                source: "automation.process_ongoing_sequence",
+                teamId: ongoingSequence.teamId,
+                properties: {
+                    ongoing_sequence_id: ongoingSequence.id,
+                },
+            });
             return;
         }
 
@@ -131,6 +140,7 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
                 {
                     id: ongoingSequence.id,
                     sequenceId: ongoingSequence.sequenceId,
+                    teamId: ongoingSequence.teamId,
                 },
                 true,
                 sequenceRow.type,
@@ -173,7 +183,8 @@ export function getNextPublishedEmail(
 }
 
 async function cleanUpResources(
-    ongoingSequence: Pick<OngoingSequenceRow, "id" | "sequenceId">,
+    ongoingSequence: Pick<OngoingSequenceRow, "id" | "sequenceId"> &
+        Partial<Pick<OngoingSequenceRow, "teamId">>,
     completed?: boolean,
     sequenceType?: string,
     /** Public `sequences.sequenceId`, required whenever `completed` is true. */
@@ -190,6 +201,12 @@ async function cleanUpResources(
         );
         if (remaining === 0) {
             await markBroadcastSent(publicSequenceId);
+            captureEvent({
+                event: "broadcast_sent",
+                source: "automation.process_ongoing_sequence",
+                teamId: ongoingSequence.teamId,
+                properties: { sequence_id: publicSequenceId },
+            });
         }
     }
 }
@@ -366,6 +383,16 @@ async function applyEmailAction({
             },
             "applyEmailAction failed",
         );
+        captureError({
+            error: err,
+            source: "automation.apply_email_action",
+            teamId: team.id,
+            context: {
+                sequence_id: sequence.sequenceId,
+                contact_id: contact.contactId,
+                action_type: email.actionType,
+            },
+        });
     }
 }
 
@@ -412,6 +439,12 @@ function transformLinksForClickTracking(
             { error: error.message },
             "transformLinksForClickTracking failed",
         );
+        captureError({
+            error,
+            source: "automation.click_tracking_transform",
+            severity: "warning",
+            context: { sequence_id: sequenceId, email_id: emailId },
+        });
         return htmlContent;
     }
 }

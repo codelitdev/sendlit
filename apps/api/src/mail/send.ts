@@ -1,5 +1,6 @@
 import { createTransport } from "nodemailer";
 import logger from "../services/log";
+import { captureError, captureEvent } from "../observability/posthog";
 import { getTeamTransport } from "./transport";
 
 /** Platform default transporter, used when a team hasn't configured
@@ -42,15 +43,30 @@ export async function sendMail({
     headers,
     teamId,
 }: MailInput) {
-    if (process.env.NODE_ENV === "production") {
-        const transporter = await resolveTransporter(teamId);
-        await transporter.sendMail({ from, to, subject, html, headers });
-    } else {
-        // eslint-disable-next-line no-console
-        console.log("Mail sent", from, to, subject, new Date());
+    try {
+        if (process.env.NODE_ENV === "production") {
+            const transporter = await resolveTransporter(teamId);
+            await transporter.sendMail({ from, to, subject, html, headers });
+        } else {
+            // eslint-disable-next-line no-console
+            console.log("Mail sent", from, to, subject, new Date());
+        }
+    } catch (error) {
+        captureError({
+            error,
+            source: "mail.send",
+            teamId,
+            severity: "critical",
+        });
+        throw error;
     }
 
     logger.info({ to, subject, teamId }, "Mail sent");
+    captureEvent({
+        event: "email_sent",
+        source: "mail.send",
+        teamId,
+    });
 }
 
 /**

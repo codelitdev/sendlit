@@ -23,6 +23,7 @@ import {
     sequenceDelayBetweenMailsInMillis,
 } from "../config/constants";
 import { responses } from "../config/strings";
+import { captureEvent } from "../observability/posthog";
 import type { ContactFilterWithAggregator } from "../contacts/segment";
 
 export type Sequence = typeof sequences.$inferSelect;
@@ -84,6 +85,17 @@ export async function createSequence({
         .set({ emailsOrder: [email.emailId] })
         .where(eq(sequences.id, sequence.id))
         .returning();
+
+    captureEvent({
+        event: "sequence_created",
+        source: "sequences.create",
+        teamId,
+        properties: {
+            sequence_id: updated.sequenceId,
+            sequence_type: updated.type,
+            template_id: templateId,
+        },
+    });
 
     return hydrate(updated);
 }
@@ -194,6 +206,16 @@ export async function updateSequence({
         )
         .returning();
     if (!row) return null;
+    captureEvent({
+        event: "sequence_updated",
+        source: "sequences.update",
+        teamId,
+        properties: {
+            sequence_id: row.sequenceId,
+            sequence_type: row.type,
+            sequence_status: row.status,
+        },
+    });
     return hydrate(row);
 }
 
@@ -232,6 +254,18 @@ export async function addMailToSequence({
         .set({ emailsOrder: [...sequence.emailsOrder, email.emailId] })
         .where(eq(sequences.id, sequence.id))
         .returning();
+
+    captureEvent({
+        event: "sequence_email_added",
+        source: "sequences.add_mail",
+        teamId,
+        properties: {
+            sequence_id: sequence.sequenceId,
+            sequence_type: sequence.type,
+            email_id: email.emailId,
+            template_id: templateId,
+        },
+    });
 
     return hydrate(row);
 }
@@ -298,6 +332,19 @@ export async function updateMailInSequence({
             ),
         );
 
+    captureEvent({
+        event: "sequence_email_updated",
+        source: "sequences.update_mail",
+        teamId,
+        properties: {
+            sequence_id: sequence.sequenceId,
+            sequence_type: sequence.type,
+            email_id: email.emailId,
+            action_type: actionType,
+            template_id: templateId,
+        },
+    });
+
     return getSequenceBySequenceId(teamId, sequenceId);
 }
 
@@ -334,6 +381,17 @@ export async function deleteMailFromSequence({
             emailsOrder: sequence.emailsOrder.filter((id) => id !== emailId),
         })
         .where(eq(sequences.id, sequence.id));
+
+    captureEvent({
+        event: "sequence_email_deleted",
+        source: "sequences.delete_mail",
+        teamId,
+        properties: {
+            sequence_id: sequence.sequenceId,
+            sequence_type: sequence.type,
+            email_id: emailId,
+        },
+    });
 
     return getSequenceBySequenceId(teamId, sequenceId);
 }
@@ -392,6 +450,16 @@ export async function startSequence({
         .where(eq(sequences.id, sequence.id))
         .returning();
 
+    captureEvent({
+        event: "sequence_started",
+        source: "sequences.start",
+        teamId,
+        properties: {
+            sequence_id: sequence.sequenceId,
+            sequence_type: sequence.type,
+        },
+    });
+
     return hydrate(row);
 }
 
@@ -424,6 +492,16 @@ export async function pauseSequence({
         .set({ status: "paused", updatedAt: new Date() })
         .where(eq(sequences.id, sequence.id))
         .returning();
+
+    captureEvent({
+        event: "sequence_paused",
+        source: "sequences.pause",
+        teamId,
+        properties: {
+            sequence_id: sequence.sequenceId,
+            sequence_type: sequence.type,
+        },
+    });
 
     return hydrate(row);
 }

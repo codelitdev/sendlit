@@ -4,6 +4,7 @@ import { rules, sequences } from "../db/schema";
 import { enrollContactsInOngoingSequence } from "./queries";
 import { Event, EventType } from "../config/constants";
 import logger from "../services/log";
+import { captureError, captureEvent } from "../observability/posthog";
 
 /**
  * Tag/subscriber-based sequence triggers are event driven rather than polled
@@ -55,11 +56,29 @@ export async function fireEvent({
                 sequenceId: sequenceRow.id,
                 contactIds: [contactId],
             });
+            captureEvent({
+                event: "contact_enrolled_in_sequence",
+                source: "automation.fire_event",
+                teamId,
+                properties: {
+                    sequence_id: rule.sequenceId,
+                    event_type: event,
+                },
+            });
         } catch (err: any) {
             logger.error(
                 { error: err.message, sequence_id: rule.sequenceId, contactId },
                 "fireEvent enrollment failed",
             );
+            captureError({
+                error: err,
+                source: "automation.fire_event",
+                teamId,
+                context: {
+                    sequence_id: rule.sequenceId,
+                    event_type: event,
+                },
+            });
         }
     }
 }

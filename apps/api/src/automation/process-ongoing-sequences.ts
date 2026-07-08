@@ -1,4 +1,5 @@
 import logger from "../services/log";
+import { captureError } from "../observability/posthog";
 import sequenceQueue from "../mail/sequence-queue";
 import { getDueOngoingSequences } from "./queries";
 
@@ -23,6 +24,15 @@ export async function enqueueDueOngoingSequences(): Promise<void> {
                 { error: err.message, ongoing_sequence_id: ongoingSequence.id },
                 "processOngoingSequences enqueue failed",
             );
+            captureError({
+                error: err,
+                source: "automation.enqueue_due_sequences",
+                teamId: ongoingSequence.teamId,
+                context: {
+                    ongoing_sequence_id: ongoingSequence.id,
+                    queue_name: "sequence",
+                },
+            });
         }
     }
 }
@@ -48,6 +58,11 @@ export async function processOngoingSequences(): Promise<void> {
                 { error: err.message },
                 "processOngoingSequences loop failed",
             );
+            captureError({
+                error: err,
+                source: "automation.process_ongoing_sequences.loop",
+                severity: "critical",
+            });
         }
 
         await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
