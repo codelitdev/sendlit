@@ -227,8 +227,6 @@ const contactFilterDefinitions: ContactFilterDefinition[] = [
 
 const initialEmails: SequenceEmail[] = [
     {
-        id: "1",
-        sequenceId: "seq_1",
         emailId: "email_1",
         subject: "Welcome to SendLit",
         content: sampleEmail,
@@ -238,8 +236,6 @@ const initialEmails: SequenceEmail[] = [
         updatedAt: now,
     },
     {
-        id: "2",
-        sequenceId: "seq_1",
         emailId: "email_2",
         subject: "Your first campaign checklist",
         content: sampleEmail,
@@ -251,8 +247,6 @@ const initialEmails: SequenceEmail[] = [
         updatedAt: now,
     },
     {
-        id: "3",
-        sequenceId: "seq_1",
         emailId: "email_3",
         subject: "How to improve deliverability",
         content: sampleEmail,
@@ -584,8 +578,6 @@ export function EmailBlockDemo({ demo }: { demo: DemoName }) {
                             if (!template) return;
                             const emailId = `email_${Date.now()}`;
                             const newEmail: SequenceEmail = {
-                                id: emailId,
-                                sequenceId: "seq_1",
                                 emailId,
                                 subject: `New email from "${template.title}"`,
                                 content: template.content,
