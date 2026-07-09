@@ -1,28 +1,42 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultEmail } from "@sendlit/email-editor";
+import { defaultEmail, type Email } from "@sendlit/email-editor";
 import { eq } from "drizzle-orm";
 
 vi.mock("../db/client", async () => {
     const { makeTestDb } = await import("../test/db.js");
     return { db: await makeTestDb() };
 });
+vi.mock("../media/service", () => ({
+    sealMedia: vi.fn((mediaId: string) =>
+        Promise.resolve({
+            mediaId,
+            file: `https://cdn.test/p/${mediaId}/main.webp`,
+        }),
+    ),
+    deleteMedia: vi.fn(),
+}));
 
 import { db } from "../db/client";
 import {
     contacts,
     emailDeliveries,
     emailEvents,
+    media,
+    mediaReferences,
     sequences,
     sequenceEmails,
 } from "../db/schema";
+import { deleteMedia, sealMedia } from "../media/service";
 import { EmailEventAction, EventType } from "../config/constants";
 import { responses } from "../config/strings";
 import { createTemplate } from "../templates/queries";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
+import { defaultEmailContent } from "./helpers";
 import {
     addMailToSequence,
     createSequence,
     deleteMailFromSequence,
+    deleteSequence,
     getSequenceBySequenceId,
     getSequenceClickThroughRate,
     getSequenceOpenRate,
@@ -38,10 +52,27 @@ const tdb = db as unknown as TestDb;
 
 beforeEach(async () => {
     await truncateAll(tdb);
+    vi.clearAllMocks();
 });
 
 async function makeTemplate(teamId: string, title = "Starter") {
     return createTemplate({ teamId, title, content: defaultEmail });
+}
+
+function emailWithImage(mediaId: string): Email {
+    return {
+        ...defaultEmailContent,
+        content: [
+            ...defaultEmailContent.content,
+            {
+                blockType: "image",
+                settings: {
+                    src: `https://cdn.test/i/${mediaId}/main.webp?signature=abc`,
+                    alt: "Hero",
+                },
+            },
+        ],
+    };
 }
 
 describe("sequence queries", () => {
@@ -303,6 +334,166 @@ describe("sequence queries", () => {
                 "00000000-0000-0000-0000-000000000000",
                 sequence.sequenceId,
             ),
+        ).toBeNull();
+    });
+
+    it("seals image media and stores references when a sequence email image block is added", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const template = await makeTemplate(team.id);
+        const sequence = await createSequence({
+            teamId: team.id,
+            type: "sequence",
+            templateId: template.templateId,
+        });
+
+        await updateMailInSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            emailId: sequence.emails[0].emailId,
+            content: emailWithImage("sequence-added-media"),
+        });
+
+        expect(sealMedia).toHaveBeenCalledWith("sequence-added-media");
+        expect(deleteMedia).not.toHaveBeenCalled();
+
+        const [mediaRow] = await tdb.select().from(media);
+        expect(mediaRow).toMatchObject({
+            teamId: team.id,
+            mediaLitId: "sequence-added-media",
+            url: "https://cdn.test/p/sequence-added-media/main.webp",
+        });
+
+        const [reference] = await tdb.select().from(mediaReferences);
+        expect(reference).toMatchObject({
+            teamId: team.id,
+            mediaId: mediaRow.id,
+            resourceType: "SEQUENCE_EMAIL",
+            resourceInternalId: sequence.emails[0].id,
+            resourcePublicId: sequence.emails[0].emailId,
+            parentResourceInternalId: sequence.id,
+            parentResourcePublicId: sequence.sequenceId,
+        });
+    });
+
+    it("removes only the sequence email reference when an image block is removed", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const template = await makeTemplate(team.id);
+        const sequence = await createSequence({
+            teamId: team.id,
+            type: "sequence",
+            templateId: template.templateId,
+        });
+        await updateMailInSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            emailId: sequence.emails[0].emailId,
+            content: emailWithImage("sequence-removed-media"),
+        });
+        vi.clearAllMocks();
+
+        await updateMailInSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            emailId: sequence.emails[0].emailId,
+            content: defaultEmailContent,
+        });
+
+        expect(deleteMedia).not.toHaveBeenCalled();
+        expect(sealMedia).not.toHaveBeenCalled();
+        expect(await tdb.select().from(media)).toHaveLength(1);
+        expect(
+            await tdb
+                .select()
+                .from(mediaReferences)
+                .where(
+                    eq(
+                        mediaReferences.resourceInternalId,
+                        sequence.emails[0].id,
+                    ),
+                ),
+        ).toHaveLength(0);
+    });
+
+    it("removes only media references when a sequence email is deleted", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const template = await makeTemplate(team.id);
+        const sequence = await createSequence({
+            teamId: team.id,
+            type: "sequence",
+            templateId: template.templateId,
+        });
+        const withSecondEmail = await addMailToSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            templateId: template.templateId,
+        });
+        const emailToDelete = withSecondEmail!.emails[0];
+        await updateMailInSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            emailId: emailToDelete.emailId,
+            content: emailWithImage("sequence-email-deleted-media"),
+        });
+        vi.clearAllMocks();
+
+        await deleteMailFromSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            emailId: emailToDelete.emailId,
+        });
+
+        expect(deleteMedia).not.toHaveBeenCalled();
+        expect(sealMedia).not.toHaveBeenCalled();
+        expect(await tdb.select().from(media)).toHaveLength(1);
+        expect(
+            await tdb
+                .select()
+                .from(mediaReferences)
+                .where(
+                    eq(mediaReferences.resourceInternalId, emailToDelete.id),
+                ),
+        ).toHaveLength(0);
+    });
+
+    it("removes only media references when a broadcast is deleted", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const template = await makeTemplate(team.id);
+        const broadcast = await createSequence({
+            teamId: team.id,
+            type: "broadcast",
+            templateId: template.templateId,
+        });
+        await updateMailInSequence({
+            teamId: team.id,
+            sequenceId: broadcast.sequenceId,
+            emailId: broadcast.emails[0].emailId,
+            content: emailWithImage("broadcast-deleted-media"),
+        });
+        vi.clearAllMocks();
+
+        await expect(
+            deleteSequence({
+                teamId: team.id,
+                sequenceId: broadcast.sequenceId,
+            }),
+        ).resolves.toBe(true);
+
+        expect(deleteMedia).not.toHaveBeenCalled();
+        expect(sealMedia).not.toHaveBeenCalled();
+        expect(await tdb.select().from(media)).toHaveLength(1);
+        expect(
+            await tdb
+                .select()
+                .from(mediaReferences)
+                .where(
+                    eq(
+                        mediaReferences.resourceInternalId,
+                        broadcast.emails[0].id,
+                    ),
+                ),
+        ).toHaveLength(0);
+        expect(
+            await getSequenceBySequenceId(team.id, broadcast.sequenceId),
         ).toBeNull();
     });
 });

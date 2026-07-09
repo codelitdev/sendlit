@@ -25,6 +25,9 @@ import {
 import { responses } from "../config/strings";
 import { captureEvent } from "../observability/posthog";
 import type { ContactFilterWithAggregator } from "../contacts/segment";
+import type { Email as EmailContent } from "@sendlit/email-editor";
+import { syncEmailContentMediaReferences } from "../media/email-content";
+import { deleteMediaReferencesForResource } from "../media/queries";
 
 export type Sequence = typeof sequences.$inferSelect;
 export type SequenceEmail = typeof sequenceEmails.$inferSelect;
@@ -67,11 +70,13 @@ export async function createSequence({
         })
         .returning();
 
+    const content = (template.content as EmailContent) || defaultEmailContent;
+
     const [email] = await db
         .insert(sequenceEmails)
         .values({
             sequenceId: sequence.id,
-            content: (template.content as any) || defaultEmailContent,
+            content: content as any,
             subject:
                 template.title ||
                 (type === "broadcast" ? "New broadcast" : "New email"),
@@ -79,6 +84,24 @@ export async function createSequence({
             published: false,
         })
         .returning();
+
+    const reconciledContent = await syncEmailContentMediaReferences({
+        teamId,
+        content,
+        resource: {
+            resourceType: "SEQUENCE_EMAIL",
+            resourceInternalId: email.id,
+            resourcePublicId: email.emailId,
+            parentResourceInternalId: sequence.id,
+            parentResourcePublicId: sequence.sequenceId,
+        },
+    });
+    if (reconciledContent) {
+        await db
+            .update(sequenceEmails)
+            .set({ content: reconciledContent as any, updatedAt: new Date() })
+            .where(eq(sequenceEmails.id, email.id));
+    }
 
     const [updated] = await db
         .update(sequences)
@@ -239,15 +262,35 @@ export async function addMailToSequence({
         throw new Error(responses.item_not_found);
     }
 
+    const content = (template.content as EmailContent) || defaultEmailContent;
+
     const [email] = await db
         .insert(sequenceEmails)
         .values({
             sequenceId: sequence.id,
-            content: (template.content as any) || defaultEmailContent,
+            content: content as any,
             subject: template.title || "New email",
             delayInMillis: sequenceDelayBetweenMailsInMillis,
         })
         .returning();
+
+    const reconciledContent = await syncEmailContentMediaReferences({
+        teamId,
+        content,
+        resource: {
+            resourceType: "SEQUENCE_EMAIL",
+            resourceInternalId: email.id,
+            resourcePublicId: email.emailId,
+            parentResourceInternalId: sequence.id,
+            parentResourcePublicId: sequence.sequenceId,
+        },
+    });
+    if (reconciledContent) {
+        await db
+            .update(sequenceEmails)
+            .set({ content: reconciledContent as any, updatedAt: new Date() })
+            .where(eq(sequenceEmails.id, email.id));
+    }
 
     const [row] = await db
         .update(sequences)
@@ -311,6 +354,18 @@ export async function updateMailInSequence({
 
     if (content) {
         verifyMandatoryTags((content as any).content || []);
+        content =
+            (await syncEmailContentMediaReferences({
+                teamId,
+                content: content as EmailContent,
+                resource: {
+                    resourceType: "SEQUENCE_EMAIL",
+                    resourceInternalId: email.id,
+                    resourcePublicId: email.emailId,
+                    parentResourceInternalId: sequence.id,
+                    parentResourcePublicId: sequence.sequenceId,
+                },
+            })) || content;
     }
 
     const patch: Partial<SequenceEmail> = { updatedAt: new Date() };
@@ -366,6 +421,15 @@ export async function deleteMailFromSequence({
         throw new Error(responses.cannot_delete_last_email);
     }
 
+    const email = sequence.emails.find((item) => item.emailId === emailId);
+    if (email) {
+        await deleteMediaReferencesForResource({
+            teamId,
+            resourceType: "SEQUENCE_EMAIL",
+            resourceInternalId: email.id,
+        });
+    }
+
     await db
         .delete(sequenceEmails)
         .where(
@@ -394,6 +458,46 @@ export async function deleteMailFromSequence({
     });
 
     return getSequenceBySequenceId(teamId, sequenceId);
+}
+
+export async function deleteSequence({
+    teamId,
+    sequenceId,
+}: {
+    teamId: string;
+    sequenceId: string;
+}): Promise<boolean> {
+    const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+    if (!sequence) return false;
+
+    for (const email of sequence.emails) {
+        await deleteMediaReferencesForResource({
+            teamId,
+            resourceType: "SEQUENCE_EMAIL",
+            resourceInternalId: email.id,
+        });
+    }
+
+    await db
+        .delete(sequences)
+        .where(
+            and(
+                eq(sequences.teamId, teamId),
+                eq(sequences.sequenceId, sequenceId),
+            ),
+        );
+
+    captureEvent({
+        event: "sequence_deleted",
+        source: "sequences.delete",
+        teamId,
+        properties: {
+            sequence_id: sequence.sequenceId,
+            sequence_type: sequence.type,
+        },
+    });
+
+    return true;
 }
 
 export async function startSequence({

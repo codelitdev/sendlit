@@ -50,6 +50,13 @@ const mocks = vi.hoisted(() => ({
     getTemplate: vi.fn(),
     listTemplates: vi.fn(),
     updateTemplate: vi.fn(),
+
+    countMedia: vi.fn(),
+    deleteUnusedMedia: vi.fn(),
+    getMediaByMediaId: vi.fn(),
+    listMedia: vi.fn(),
+    listMediaReferences: vi.fn(),
+    updateMediaMetadata: vi.fn(),
 }));
 
 vi.mock("../../contacts/queries", () => ({
@@ -129,6 +136,15 @@ vi.mock("../../templates/queries", () => ({
     updateTemplate: mocks.updateTemplate,
 }));
 
+vi.mock("../../media/queries", () => ({
+    countMedia: mocks.countMedia,
+    deleteUnusedMedia: mocks.deleteUnusedMedia,
+    getMediaByMediaId: mocks.getMediaByMediaId,
+    listMedia: mocks.listMedia,
+    listMediaReferences: mocks.listMediaReferences,
+    updateMediaMetadata: mocks.updateMediaMetadata,
+}));
+
 import { AUTH_ERROR, NOT_FOUND, jsonResult } from "./responses";
 import { getAuthAccount, getTeamId } from "./auth";
 import { registerContactTools } from "./contacts";
@@ -136,6 +152,7 @@ import { registerEspTools } from "./esp";
 import { registerSequenceTools } from "./sequences";
 import { registerTeamTools } from "./teams";
 import { registerTemplateTools } from "./templates";
+import { registerMediaTools } from "./media";
 
 type Tool = {
     config: any;
@@ -474,5 +491,98 @@ describe("MCP team and template tools", () => {
                     .success,
             ).toBe(false);
         }
+    });
+});
+
+describe("MCP media tools", () => {
+    it("lists and updates media within the resolved team", async () => {
+        const tools = makeToolRegistry(registerMediaTools);
+        mocks.listMedia.mockResolvedValue([
+            {
+                id: "internal-media-1",
+                teamId: "team-1",
+                mediaId: "med_1",
+                url: "https://cdn.test/p/media-lit/main.webp",
+                mediaLitId: "media-lit",
+            },
+        ]);
+        mocks.countMedia.mockResolvedValue(1);
+
+        await expect(
+            tools.get("list_media")!.handler({ query: "hero", page: 2 }, auth),
+        ).resolves.toMatchObject({
+            structuredContent: {
+                items: [
+                    {
+                        mediaId: "med_1",
+                        url: "https://cdn.test/p/media-lit/main.webp",
+                    },
+                ],
+                total: 1,
+            },
+        });
+        expect(mocks.listMedia).toHaveBeenCalledWith({
+            teamId: "team-1",
+            query: "hero",
+            page: 2,
+            pageSize: undefined,
+        });
+        expect(mocks.countMedia).toHaveBeenCalledWith({
+            teamId: "team-1",
+            query: "hero",
+        });
+
+        mocks.updateMediaMetadata.mockResolvedValue({
+            id: "internal-media-1",
+            teamId: "team-1",
+            mediaId: "med_1",
+            url: "https://cdn.test/p/media-lit/main.webp",
+            mediaLitId: "media-lit",
+            alt: "Hero",
+        });
+        await tools
+            .get("update_media")!
+            .handler({ mediaId: "med_1", alt: "Hero" }, auth);
+        expect(mocks.updateMediaMetadata).toHaveBeenCalledWith({
+            teamId: "team-1",
+            mediaId: "med_1",
+            alt: "Hero",
+            caption: undefined,
+        });
+    });
+
+    it("blocks deleting in-use media and lists references", async () => {
+        const tools = makeToolRegistry(registerMediaTools);
+        mocks.deleteUnusedMedia.mockResolvedValue("in_use");
+
+        await expect(
+            tools.get("delete_media")!.handler({ mediaId: "med_1" }, auth),
+        ).resolves.toMatchObject({
+            isError: true,
+        });
+        expect(mocks.deleteUnusedMedia).toHaveBeenCalledWith("team-1", "med_1");
+
+        mocks.listMediaReferences.mockResolvedValue([
+            {
+                resourceType: "SEQUENCE_EMAIL",
+                resourcePublicId: "email_1",
+                parentResourcePublicId: "seq_1",
+            },
+        ]);
+        await expect(
+            tools
+                .get("list_media_references")!
+                .handler({ mediaId: "med_1" }, auth),
+        ).resolves.toMatchObject({
+            structuredContent: {
+                items: [
+                    {
+                        resourceType: "SEQUENCE_EMAIL",
+                        resourcePublicId: "email_1",
+                        parentResourcePublicId: "seq_1",
+                    },
+                ],
+            },
+        });
     });
 });

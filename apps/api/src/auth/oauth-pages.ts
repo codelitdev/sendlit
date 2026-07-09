@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import { webClientUrl } from "./better-auth";
 
 /**
  * Self-hosted login/consent screens for Better Auth's OAuth Provider plugin
@@ -34,6 +35,26 @@ function escapeHtml(value: string): string {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+}
+
+/** Safely embeds a string as a JS string literal inside an inline
+ * `<script>` block — escapes `<` so a value like `.../"><script>` can't
+ * break out of the tag, on top of JSON.stringify's own quote escaping. */
+function toScriptLiteral(value: string): string {
+    return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+/** Only ever used for the plain (non-OAuth) `/login` page's `redirect`
+ * param — the OAuth flow's `/oauth/login` never takes one. Restricts it to
+ * the configured web client's own origin so `/login` can't be used as an
+ * open redirect off this API's domain. */
+function isAllowedRedirect(url: string | undefined): url is string {
+    if (!url) return false;
+    try {
+        return new URL(url).origin === new URL(webClientUrl).origin;
+    } catch {
+        return false;
+    }
 }
 
 const SHARED_STYLES = `
@@ -90,9 +111,10 @@ ${body}
 </html>`;
 }
 
-router.get("/oauth/login", (_req, res) => {
-    setFrameProtection(res);
-    const body = `
+/** Shared by `/login` and `/oauth/login` — identical form, only the inline
+ * `<script>` appended after it differs (see each route below). */
+function loginFormMarkup(): string {
+    return `
 <div class="logo">S</div>
 <h1>Sign in to SendLit</h1>
 <p class="sub">We'll email you a one-time code &mdash; no password needed.</p>
@@ -116,8 +138,133 @@ router.get("/oauth/login", (_req, res) => {
 </form>
 
 <div class="divider">or</div>
-<button type="button" class="btn-outline" id="google-submit">Continue with Google</button>
+<button type="button" class="btn-outline" id="google-submit">Continue with Google</button>`;
+}
 
+/** Plain (non-OAuth) login, reached by `apps/web`'s `/login` redirect — see
+ * the "Unified Login Screen" addendum in
+ * `apps/api/docs/replace-oauth-server-with-better-auth.md`. Same page as
+ * `/oauth/login` below; on success it navigates straight to the validated
+ * `redirect` target instead of resuming an OAuth authorization. */
+router.get("/login", (req, res) => {
+    setFrameProtection(res);
+    const requestedRedirect =
+        typeof req.query.redirect === "string" ? req.query.redirect : undefined;
+    const redirectTarget = isAllowedRedirect(requestedRedirect)
+        ? requestedRedirect
+        : `${webClientUrl}/dashboard`;
+    const body = `${loginFormMarkup()}
+<script>
+(function () {
+    var redirectTarget = ${toScriptLiteral(redirectTarget)};
+    var errorCallbackURL = ${toScriptLiteral(
+        `/login?error=oauth_failed&redirect=${encodeURIComponent(redirectTarget)}`,
+    )};
+    var params = new URLSearchParams(location.search);
+    var emailForm = document.getElementById("email-form");
+    var otpForm = document.getElementById("otp-form");
+    var errorEl = document.getElementById("error");
+    var emailInput = document.getElementById("email");
+    var otpInput = document.getElementById("otp");
+    var email = "";
+
+    function showError(message) {
+        errorEl.textContent = message;
+        errorEl.style.display = "block";
+    }
+    function clearError() {
+        errorEl.style.display = "none";
+    }
+    function setPending(form, pending) {
+        var btns = form.querySelectorAll("button");
+        for (var i = 0; i < btns.length; i++) btns[i].disabled = pending;
+    }
+
+    if (params.get("error")) {
+        showError("Could not start Google sign-in. Please try again.");
+    }
+
+    async function postJson(path, body) {
+        var res = await fetch(path, {
+            method: "POST",
+            headers: { "content-type": "application/json", accept: "application/json" },
+            body: JSON.stringify(body),
+        });
+        var data = {};
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok) {
+            throw new Error(data.message || data.error_description || data.error || "Request failed");
+        }
+        return data;
+    }
+
+    emailForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        clearError();
+        setPending(emailForm, true);
+        email = emailInput.value;
+        try {
+            await postJson("/api/auth/email-otp/send-verification-otp", {
+                email: email,
+                type: "sign-in",
+            });
+            emailForm.style.display = "none";
+            otpForm.style.display = "block";
+        } catch (err) {
+            showError(err.message || "Could not send the code.");
+        } finally {
+            setPending(emailForm, false);
+        }
+    });
+
+    otpForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        clearError();
+        setPending(otpForm, true);
+        try {
+            await postJson("/api/auth/sign-in/email-otp", {
+                email: email,
+                otp: otpInput.value,
+                name: email.split("@")[0],
+            });
+            location.assign(redirectTarget);
+        } catch (err) {
+            showError(err.message || "The code is invalid or expired.");
+            setPending(otpForm, false);
+        }
+    });
+
+    document.getElementById("use-different-email").addEventListener("click", function () {
+        otpForm.style.display = "none";
+        emailForm.style.display = "block";
+        clearError();
+    });
+
+    document.getElementById("google-submit").addEventListener("click", async function () {
+        clearError();
+        var btn = document.getElementById("google-submit");
+        btn.disabled = true;
+        try {
+            var data = await postJson("/api/auth/sign-in/social", {
+                provider: "google",
+                callbackURL: redirectTarget,
+                errorCallbackURL: errorCallbackURL,
+            });
+            if (!data.url) throw new Error("Google sign-in is not configured.");
+            location.assign(data.url);
+        } catch (err) {
+            showError(err.message || "Could not start Google sign-in.");
+            btn.disabled = false;
+        }
+    });
+})();
+</script>`;
+    res.type("html").send(layout("Sign in to SendLit", body));
+});
+
+router.get("/oauth/login", (_req, res) => {
+    setFrameProtection(res);
+    const body = `${loginFormMarkup()}
 <script>
 (function () {
     var oauthQuery = location.search.slice(1);

@@ -10,6 +10,7 @@ import {
     CreditCard,
     LogOut,
     Mail,
+    Images,
     Plus,
     Radio,
     Send,
@@ -24,6 +25,7 @@ import {
     SidebarContent,
     SidebarFooter,
     SidebarGroup,
+    SidebarGroupLabel,
     SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
@@ -37,10 +39,14 @@ import { resolveCurrentTeamId } from "@/lib/tokens";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-    { href: "/dashboard/contacts", label: "Contacts", icon: Users },
-    { href: "/dashboard/templates", label: "Templates", icon: Mail },
     { href: "/dashboard/broadcasts", label: "Broadcasts", icon: Radio },
     { href: "/dashboard/sequences", label: "Sequences", icon: Workflow },
+    { href: "/dashboard/contacts", label: "Contacts", icon: Users },
+];
+
+const LIBRARY_NAV = [
+    { href: "/dashboard/templates", label: "Templates", icon: Mail },
+    { href: "/dashboard/media", label: "Media", icon: Images },
 ];
 
 const SECONDARY_NAV = [
@@ -235,6 +241,14 @@ export function AppSidebar() {
                 <SidebarGroup>
                     <SidebarMenu>
                         {NAV.map((item) => (
+                            <SidebarLink key={item.href} item={item} />
+                        ))}
+                    </SidebarMenu>
+                </SidebarGroup>
+                <SidebarGroup>
+                    <SidebarGroupLabel>Library</SidebarGroupLabel>
+                    <SidebarMenu>
+                        {LIBRARY_NAV.map((item) => (
                             <SidebarLink key={item.href} item={item} />
                         ))}
                     </SidebarMenu>

@@ -8,6 +8,7 @@ import { registerSequenceTools } from "./tools/sequences";
 import { registerEspTools } from "./tools/esp";
 import { registerGeneralSettingsTools } from "./tools/general-settings";
 import { registerTeamTools } from "./tools/teams";
+import { registerMediaTools } from "./tools/media";
 
 function registerAllTools(server: McpServer): void {
     registerContactTools(server);
@@ -17,6 +18,7 @@ function registerAllTools(server: McpServer): void {
     registerEspTools(server);
     registerGeneralSettingsTools(server);
     registerTeamTools(server);
+    registerMediaTools(server);
 }
 
 /**

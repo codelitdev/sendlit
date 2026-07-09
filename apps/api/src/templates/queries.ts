@@ -4,6 +4,8 @@ import { emailTemplates } from "../db/schema";
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { getSystemTemplate } from "./system-templates";
 import { captureEvent } from "../observability/posthog";
+import { syncEmailContentMediaReferences } from "../media/email-content";
+import { deleteMediaReferencesForResource } from "../media/queries";
 
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
 
@@ -55,6 +57,7 @@ export async function createTemplate({
     content: EmailContent;
 }): Promise<EmailTemplate> {
     const uniqueTitle = await getUniqueTemplateTitle(teamId, title);
+
     const [template] = await db
         .insert(emailTemplates)
         .values({
@@ -63,6 +66,24 @@ export async function createTemplate({
             content,
         })
         .returning();
+
+    const reconciledContent = await syncEmailContentMediaReferences({
+        teamId,
+        content,
+        resource: {
+            resourceType: "TEMPLATE",
+            resourceInternalId: template.id,
+            resourcePublicId: template.templateId,
+        },
+    });
+    if (reconciledContent) {
+        const [updated] = await db
+            .update(emailTemplates)
+            .set({ content: reconciledContent, updatedAt: new Date() })
+            .where(eq(emailTemplates.id, template.id))
+            .returning();
+        Object.assign(template, updated);
+    }
     captureEvent({
         event: "template_created",
         source: "templates.create",
@@ -101,6 +122,11 @@ export async function updateTemplate({
     title?: string;
     content?: EmailContent;
 }): Promise<EmailTemplate | null> {
+    const existing = content ? await getTemplate(templateId) : null;
+    if (content && (!existing || existing.teamId !== teamId)) {
+        return null;
+    }
+
     if (title) {
         const [clash] = await db
             .select({ templateId: emailTemplates.templateId })
@@ -120,7 +146,18 @@ export async function updateTemplate({
 
     const patch: Partial<EmailTemplate> = { updatedAt: new Date() };
     if (title) patch.title = title;
-    if (content) patch.content = content as any;
+    if (content) {
+        const reconciledContent = await syncEmailContentMediaReferences({
+            teamId,
+            content,
+            resource: {
+                resourceType: "TEMPLATE",
+                resourceInternalId: existing!.id,
+                resourcePublicId: existing!.templateId,
+            },
+        });
+        patch.content = (reconciledContent || content) as any;
+    }
 
     const [row] = await db
         .update(emailTemplates)
@@ -147,6 +184,15 @@ export async function deleteTemplate(
     teamId: string,
     templateId: string,
 ): Promise<void> {
+    const template = await getTemplate(templateId);
+    if (template && template.teamId === teamId) {
+        await deleteMediaReferencesForResource({
+            teamId,
+            resourceType: "TEMPLATE",
+            resourceInternalId: template.id,
+        });
+    }
+
     await db
         .delete(emailTemplates)
         .where(

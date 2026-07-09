@@ -7,6 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Banner } from "@/components/dashboard/banner";
 import { ApiError } from "@/lib/api-client";
 import { EmailEditor, type Email } from "@sendlit/email-blocks";
+import {
+    ImageBlock,
+    Link,
+    Separator,
+    Text,
+    type UploaderProps,
+} from "@sendlit/email-editor/blocks";
+import { EmailImageUploadDialog } from "@/components/dashboard/email-image-upload-dialog";
 
 /** Merge tags the API substitutes when sending (see
  * `apps/api/src/automation/process-ongoing-sequence.ts`). */
@@ -24,6 +32,27 @@ const MERGE_VARIABLES = [
         tag: "{{ unsubscribe_link }}",
         description: "A link to unsubscribe from the marketing emails",
     },
+];
+
+function EmailImageUploader({ children, onChange }: UploaderProps) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <EmailImageUploadDialog
+            open={open}
+            setOpen={setOpen}
+            onSelect={(image) => onChange(image)}
+        >
+            {children}
+        </EmailImageUploadDialog>
+    );
+}
+
+const EMAIL_EDITOR_BLOCKS = [
+    Text,
+    Separator,
+    Link,
+    ImageBlock.configure({ uploader: EmailImageUploader }),
 ];
 
 /**
@@ -140,7 +169,11 @@ export function EmailEditorScreen({
                         </div>
                     )}
                     <div className="min-h-0 flex-1">
-                        <EmailEditor email={content} onChange={setContent} />
+                        <EmailEditor
+                            email={content}
+                            onChange={setContent}
+                            blocks={EMAIL_EDITOR_BLOCKS}
+                        />
                     </div>
                 </main>
             </div>

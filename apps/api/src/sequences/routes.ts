@@ -7,6 +7,7 @@ import {
     addMailToSequence,
     countSequences,
     createSequence,
+    deleteSequence,
     deleteMailFromSequence,
     getEmailSentCount,
     getSequenceBySequenceId,
@@ -131,6 +132,15 @@ const impl = s.router(contract.sequences, {
         } catch (err: any) {
             return { status: 400, body: { error: err.message } };
         }
+    },
+    remove: async ({ params, req }) => {
+        const deleted = await deleteSequence({
+            teamId: (req as any).teamId,
+            sequenceId: params.sequenceId,
+        });
+        if (!deleted)
+            return { status: 404, body: { error: "Sequence not found" } };
+        return { status: 204, body: undefined };
     },
     start: async ({ params, req }) => {
         try {

@@ -61,6 +61,39 @@ export const templateSchema = z.object({
     updatedAt: z.string().or(z.date()),
 });
 
+export const mediaSchema = z.object({
+    mediaId: z.string(),
+    url: z.string(),
+    thumbnailUrl: z.string().nullable().optional(),
+    mediaLitId: z.string(),
+    fileName: z.string().nullable().optional(),
+    mimeType: z.string().nullable().optional(),
+    size: z.number().nullable().optional(),
+    width: z.number().nullable().optional(),
+    height: z.number().nullable().optional(),
+    alt: z.string().nullable().optional(),
+    caption: z.string().nullable().optional(),
+    createdAt: z.string().or(z.date()).nullable().optional(),
+    updatedAt: z.string().or(z.date()).nullable().optional(),
+});
+
+export const mediaListSchema = z.object({
+    items: z.array(mediaSchema),
+    total: z.number(),
+});
+
+export const mediaReferenceSchema = z.object({
+    resourceType: z.enum(["TEMPLATE", "SEQUENCE_EMAIL"]),
+    resourcePublicId: z.string(),
+    parentResourcePublicId: z.string().nullable().optional(),
+    createdAt: z.string().or(z.date()).nullable().optional(),
+    updatedAt: z.string().or(z.date()).nullable().optional(),
+});
+
+export const mediaReferenceListSchema = z.object({
+    items: z.array(mediaReferenceSchema),
+});
+
 export const systemTemplateSchema = z.object({
     templateId: z.string().min(1),
     title: z.string(),

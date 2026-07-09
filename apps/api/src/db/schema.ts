@@ -505,6 +505,83 @@ export const emailTemplates = pgTable(
     }),
 );
 
+export const media = pgTable(
+    "media",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        teamId: uuid("team_id")
+            .notNull()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        mediaId: text("media_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("med")),
+        mediaLitId: text("media_lit_id").notNull(),
+        url: text("url").notNull(),
+        thumbnailUrl: text("thumbnail_url"),
+        fileName: text("file_name"),
+        mimeType: text("mime_type"),
+        size: integer("size"),
+        width: integer("width"),
+        height: integer("height"),
+        alt: text("alt"),
+        caption: text("caption"),
+        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    },
+    (table) => ({
+        mediaIdCheck: publicIdCheck(
+            "media_media_id_check",
+            table.mediaId,
+            "med",
+        ),
+        teamMediaLitIdx: uniqueIndex("media_team_id_media_lit_id_idx").on(
+            table.teamId,
+            table.mediaLitId,
+        ),
+        teamCreatedAtIdx: index("media_team_id_created_at_idx").on(
+            table.teamId,
+            table.createdAt,
+        ),
+    }),
+);
+
+export const mediaReferences = pgTable(
+    "media_references",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        teamId: uuid("team_id")
+            .notNull()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        mediaId: uuid("media_id")
+            .notNull()
+            .references(() => media.id, { onDelete: "cascade" }),
+        resourceType: text("resource_type").notNull(),
+        resourceInternalId: uuid("resource_internal_id").notNull(),
+        resourcePublicId: text("resource_public_id").notNull(),
+        parentResourceInternalId: uuid("parent_resource_internal_id"),
+        parentResourcePublicId: text("parent_resource_public_id"),
+        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    },
+    (table) => ({
+        resourceIdx: index("media_references_resource_idx").on(
+            table.teamId,
+            table.resourceType,
+            table.resourceInternalId,
+        ),
+        mediaIdx: index("media_references_media_id_idx").on(table.mediaId),
+        uniqueResourceMediaIdx: uniqueIndex(
+            "media_references_resource_media_idx",
+        ).on(
+            table.teamId,
+            table.resourceType,
+            table.resourceInternalId,
+            table.mediaId,
+        ),
+    }),
+);
+
 /** A saved, named, reusable contact filter — the persisted form of the
  * `ContactFilterWithAggregator` shape (see `contacts/segment.ts`) that
  * `sequences.filter`/`excludeFilter` already store inline per-broadcast. This

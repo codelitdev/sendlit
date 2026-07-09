@@ -8,3 +8,4 @@ export * from "./schemas/sequences";
 export * from "./schemas/esp";
 export * from "./schemas/settings";
 export * from "./schemas/teams";
+export * from "./schemas/media";

@@ -123,6 +123,8 @@ async function protectedResourceMetadataHandler(_req: any, res: any) {
                     "contacts:write",
                     "templates:read",
                     "templates:write",
+                    "media:read",
+                    "media:write",
                     "broadcasts:write",
                     "sequences:read",
                     "sequences:write",

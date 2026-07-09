@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, teamMembers, teams } from "../db/schema";
 import { createApiKey } from "../apikey/queries";
+import { deleteTeamMediaFiles } from "../media/queries";
 
 export type Team = typeof teams.$inferSelect;
 export type TeamMember = typeof teamMembers.$inferSelect;
@@ -124,6 +125,7 @@ export async function renameTeam(
 }
 
 export async function deleteTeam(teamId: string): Promise<void> {
+    await deleteTeamMediaFiles(teamId);
     await db.delete(teams).where(eq(teams.id, teamId));
 }
 

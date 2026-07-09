@@ -83,6 +83,30 @@ export interface Paginated<T> {
     total: number;
 }
 
+export interface Media {
+    mediaId: string;
+    url: string;
+    thumbnailUrl?: string | null;
+    mediaLitId: string;
+    fileName?: string | null;
+    mimeType?: string | null;
+    size?: number | null;
+    width?: number | null;
+    height?: number | null;
+    alt?: string | null;
+    caption?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+}
+
+export interface MediaReference {
+    resourceType: "TEMPLATE" | "SEQUENCE_EMAIL";
+    resourcePublicId: string;
+    parentResourcePublicId?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+}
+
 // ---- Teams ----------------------------------------------------------------
 
 export interface Team {
@@ -260,6 +284,45 @@ export function deleteSegment(segmentId: string) {
     return unwrap<void>(client.segments.remove({ params: { segmentId } }));
 }
 
+// ---- Media --------------------------------------------------------------
+
+export function listMedia(
+    params: { query?: string; page?: number; pageSize?: number } = {},
+) {
+    return unwrap<Paginated<Media>>(
+        client.media.list({
+            query: {
+                query: params.query,
+                page: params.page,
+                pageSize: params.pageSize,
+            },
+        }),
+    );
+}
+
+export function getMedia(mediaId: string) {
+    return unwrap<Media>(client.media.get({ params: { mediaId } }));
+}
+
+export function updateMediaMetadata(
+    mediaId: string,
+    patch: { alt?: string | null; caption?: string | null },
+) {
+    return unwrap<Media>(
+        client.media.update({ params: { mediaId }, body: patch }),
+    );
+}
+
+export function deleteMedia(mediaId: string) {
+    return unwrap<void>(client.media.remove({ params: { mediaId } }));
+}
+
+export function listMediaReferences(mediaId: string) {
+    return unwrap<{ items: MediaReference[] }>(
+        client.media.references({ params: { mediaId } }),
+    );
+}
+
 // ---- Templates -----------------------------------------------------------
 
 export interface SystemTemplate {
@@ -337,6 +400,10 @@ export function updateSequence(
             body: { ...rest, filter: toApiContactFilter(filter) },
         }),
     );
+}
+
+export function deleteSequence(sequenceId: string) {
+    return unwrap<void>(client.sequences.remove({ params: { sequenceId } }));
 }
 
 export function addSequenceEmail(sequenceId: string, templateId: string) {

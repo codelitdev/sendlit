@@ -1,4 +1,6 @@
 import { requireAuth } from "@/lib/server-auth";
+import { getMaxUploadSizeBytes } from "@/lib/config";
+import { MaxUploadSizeProvider } from "@/components/dashboard/max-upload-size-context";
 
 /**
  * Chrome-free layout for full-screen email editing — no sidebar skeleton, the
@@ -12,5 +14,11 @@ export default async function EditorLayout({
 }) {
     await requireAuth();
 
-    return <div className="h-dvh overflow-hidden">{children}</div>;
+    return (
+        <div className="h-dvh overflow-hidden">
+            <MaxUploadSizeProvider value={getMaxUploadSizeBytes()}>
+                {children}
+            </MaxUploadSizeProvider>
+        </div>
+    );
 }

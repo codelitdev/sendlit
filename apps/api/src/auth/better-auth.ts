@@ -11,10 +11,20 @@ import * as schema from "../db/schema";
 import logger from "../services/log";
 import { createAccount, findAccountByEmail } from "../account/queries";
 
-const webClientUrl = process.env.WEB_CLIENT || "http://localhost:3000";
+export const webClientUrl = process.env.WEB_CLIENT || "http://localhost:3000";
 const apiUrl = process.env.API_PUBLIC_URL || process.env.BETTER_AUTH_URL;
 const authBaseUrl = apiUrl || "http://localhost:4000";
 const authBasePath = "/api/auth";
+
+/** Parent domain shared by `apps/web` and `apps/api` in production (e.g.
+ * `sendlit.example.com`, covering both `app.sendlit.example.com` and
+ * `api.sendlit.example.com`). When set, the session cookie is scoped to this
+ * domain instead of being host-only, so a session established on either
+ * subdomain's login page is valid on both — see the "Unified Login Screen"
+ * addendum in `apps/api/docs/replace-oauth-server-with-better-auth.md`.
+ * Left unset in local dev: `localhost` cookies already aren't port-scoped, so
+ * `apps/web` (3000) and `apps/api` (4000) already share a cookie jar. */
+const authCookieDomain = process.env.AUTH_COOKIE_DOMAIN;
 
 /** The actual `iss` Better Auth puts on every JWT it signs is
  * `baseURL + basePath` (i.e. `ctx.context.baseURL`), not just `baseURL` —
@@ -114,6 +124,14 @@ export const auth = betterAuth({
         schema,
     }),
     trustedOrigins: [webClientUrl, authBaseUrl],
+    advanced: authCookieDomain
+        ? {
+              crossSubDomainCookies: {
+                  enabled: true,
+                  domain: authCookieDomain,
+              },
+          }
+        : undefined,
     user: {
         modelName: "authUser",
     },
@@ -196,6 +214,8 @@ export const auth = betterAuth({
                 "contacts:write",
                 "templates:read",
                 "templates:write",
+                "media:read",
+                "media:write",
                 "broadcasts:write",
                 "sequences:read",
                 "sequences:write",

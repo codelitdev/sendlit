@@ -49,6 +49,13 @@ import {
     segmentSchema,
     updateSegmentBodySchema,
 } from "./schemas/segments";
+import {
+    listMediaQuerySchema,
+    mediaReferenceSchema,
+    mediaSchema,
+    mediaUploadSignatureSchema,
+    updateMediaBodySchema,
+} from "./schemas/media";
 
 const c = initContract();
 
@@ -178,6 +185,64 @@ const segmentsContract = c.router(
     { metadata: { tag: "Segments" } },
 );
 
+const mediaContract = c.router(
+    {
+        list: {
+            method: "GET",
+            path: "/media",
+            query: listMediaQuerySchema,
+            responses: { 200: paginated(mediaSchema) },
+            summary: "List uploaded media",
+            description:
+                "Returns the team's uploaded MediaLit-backed media. Unsplash and external URL images are not stored here.",
+        },
+        presigned: {
+            method: "POST",
+            path: "/media/presigned",
+            body: c.noBody(),
+            responses: { 200: mediaUploadSignatureSchema, 500: errorSchema },
+            summary: "Generate a MediaLit upload signature",
+            description:
+                "Returns a short-lived MediaLit signature and endpoint. Upload image files directly to `${endpoint}/media/create/resumable` with the signature in the `x-medialit-signature` header.",
+        },
+        get: {
+            method: "GET",
+            path: "/media/:mediaId",
+            responses: { 200: mediaSchema, 404: errorSchema },
+            summary: "Get uploaded media",
+        },
+        update: {
+            method: "PATCH",
+            path: "/media/:mediaId",
+            body: updateMediaBodySchema,
+            responses: { 200: mediaSchema, 404: errorSchema },
+            summary: "Update uploaded media metadata",
+        },
+        remove: {
+            method: "DELETE",
+            path: "/media/:mediaId",
+            responses: {
+                204: c.noBody(),
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Delete unused uploaded media",
+            description:
+                "Deletes the MediaLit file and SendLit media row only when no saved email content references it.",
+        },
+        references: {
+            method: "GET",
+            path: "/media/:mediaId/references",
+            responses: {
+                200: itemsList(mediaReferenceSchema),
+                404: errorSchema,
+            },
+            summary: "List uploaded media references",
+        },
+    },
+    { metadata: { tag: "Media" } },
+);
+
 const templatesContract = c.router(
     {
         listSystem: {
@@ -256,6 +321,12 @@ const sequencesContract = c.router(
             body: updateSequenceBodySchema,
             responses: { 200: sequenceSchema, 404: errorSchema },
             summary: "Update a broadcast or sequence",
+        },
+        remove: {
+            method: "DELETE",
+            path: "/sequences/:sequenceId",
+            responses: { 204: c.noBody(), 404: errorSchema },
+            summary: "Delete a broadcast or sequence",
         },
         addEmail: {
             method: "POST",
@@ -478,6 +549,7 @@ const provisioningContract = c.router(
 export const contract = c.router({
     contacts: contactsContract,
     segments: segmentsContract,
+    media: mediaContract,
     templates: templatesContract,
     sequences: sequencesContract,
     settings: settingsContract,

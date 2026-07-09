@@ -12,6 +12,7 @@ import oauthPagesRoutes from "./auth/oauth-pages";
 import mcpRoutes from "./mcp/routes";
 import contactsRoutes from "./contacts/routes";
 import segmentsRoutes from "./contacts/segments-routes";
+import mediaRoutes from "./media/routes";
 import templatesRoutes from "./templates/routes";
 import sequencesRoutes from "./sequences/routes";
 import espRoutes from "./settings/esp/routes";
@@ -79,6 +80,7 @@ app.use(provisioningRoutes);
 
 app.use(contactsRoutes);
 app.use(segmentsRoutes);
+app.use(mediaRoutes);
 app.use(templatesRoutes);
 app.use(sequencesRoutes);
 app.use(espRoutes);

@@ -36,6 +36,7 @@
         "jsdom": "^25.0.1",
         "jsonwebtoken": "^9.0.2",
         "liquidjs": "^10.19.0",
+        "medialit": "0.2.0",
         "nanoid": "^5.1.6",
         "nodemailer": "^9.0.1",
         "pg": "^8.13.1",

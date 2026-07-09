@@ -30,6 +30,11 @@ export const openApiDocument = generateOpenApi(
                 description:
                     "Saved, named, reusable contact filters - build a filter once, reuse it across broadcasts and sequences.",
             },
+            {
+                name: "Media",
+                description:
+                    "Authenticated MediaLit upload signatures for dashboard-owned media.",
+            },
             { name: "Templates", description: "Reusable email templates." },
             {
                 name: "Sequences",
