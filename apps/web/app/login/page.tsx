@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
-import { API_URL, WEB_CLIENT } from "@/lib/config";
+import { API_PUBLIC_URL, WEB_CLIENT } from "@/lib/config";
+import { getDashboardLoginUrl } from "@/lib/login-url";
+
+export const dynamic = "force-dynamic";
 
 /**
  * `apps/api` hosts the only login UI (see the "Unified Login Screen"
@@ -8,6 +11,10 @@ import { API_URL, WEB_CLIENT } from "@/lib/config";
  * bounces the browser there and back.
  */
 export default function LoginPage() {
-    const target = `${API_URL}/login?redirect=${encodeURIComponent(`${WEB_CLIENT}/dashboard`)}`;
-    redirect(target);
+    redirect(
+        getDashboardLoginUrl({
+            apiPublicUrl: API_PUBLIC_URL,
+            webClient: WEB_CLIENT,
+        }),
+    );
 }
