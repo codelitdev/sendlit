@@ -57,6 +57,12 @@ const mocks = vi.hoisted(() => ({
     listMedia: vi.fn(),
     listMediaReferences: vi.fn(),
     updateMediaMetadata: vi.fn(),
+
+    createTransactionalEmail: vi.fn(),
+    getTransactionalEmailByTxeId: vi.fn(),
+    listTransactionalEmails: vi.fn(),
+    countTransactionalEmails: vi.fn(),
+    toPublicTransactionalEmail: vi.fn(),
 }));
 
 vi.mock("../../contacts/queries", () => ({
@@ -145,6 +151,14 @@ vi.mock("../../media/queries", () => ({
     updateMediaMetadata: mocks.updateMediaMetadata,
 }));
 
+vi.mock("../../transactional/queries", () => ({
+    createTransactionalEmail: mocks.createTransactionalEmail,
+    getTransactionalEmailByTxeId: mocks.getTransactionalEmailByTxeId,
+    listTransactionalEmails: mocks.listTransactionalEmails,
+    countTransactionalEmails: mocks.countTransactionalEmails,
+    toPublicTransactionalEmail: mocks.toPublicTransactionalEmail,
+}));
+
 import { AUTH_ERROR, NOT_FOUND, jsonResult } from "./responses";
 import { getAuthAccount, getTeamId } from "./auth";
 import { registerContactTools } from "./contacts";
@@ -153,6 +167,7 @@ import { registerSequenceTools } from "./sequences";
 import { registerTeamTools } from "./teams";
 import { registerTemplateTools } from "./templates";
 import { registerMediaTools } from "./media";
+import { registerTransactionalTools } from "./transactional";
 
 type Tool = {
     config: any;
@@ -583,6 +598,173 @@ describe("MCP media tools", () => {
                     },
                 ],
             },
+        });
+    });
+});
+
+describe("MCP transactional tools", () => {
+    it("requires auth for send_email/get_email/list_emails", async () => {
+        const tools = makeToolRegistry(registerTransactionalTools);
+
+        await expect(
+            tools
+                .get("send_email")!
+                .handler(
+                    { to: "a@example.com", subject: "Hi", html: "<p>hi</p>" },
+                    {},
+                ),
+        ).resolves.toEqual(AUTH_ERROR);
+        expect(mocks.createTransactionalEmail).not.toHaveBeenCalled();
+
+        await expect(
+            tools.get("get_email")!.handler({ txeId: "txe_1" }, {}),
+        ).resolves.toEqual(AUTH_ERROR);
+        expect(mocks.getTransactionalEmailByTxeId).not.toHaveBeenCalled();
+
+        await expect(
+            tools.get("list_emails")!.handler({}, {}),
+        ).resolves.toEqual(AUTH_ERROR);
+        expect(mocks.listTransactionalEmails).not.toHaveBeenCalled();
+    });
+
+    it("sends an email and forwards the resolved team/args", async () => {
+        const tools = makeToolRegistry(registerTransactionalTools);
+        mocks.createTransactionalEmail.mockResolvedValue({
+            txeId: "txe_1",
+            status: "queued",
+        });
+
+        await expect(
+            tools.get("send_email")!.handler(
+                {
+                    to: "reader@example.com",
+                    subject: "Receipt",
+                    html: "<p>Thanks!</p>",
+                    idempotencyKey: "key-1",
+                },
+                auth,
+            ),
+        ).resolves.toMatchObject({
+            structuredContent: { txeId: "txe_1", status: "queued" },
+        });
+        expect(mocks.createTransactionalEmail).toHaveBeenCalledWith(
+            expect.objectContaining({
+                teamId: "team-1",
+                to: "reader@example.com",
+                subject: "Receipt",
+                html: "<p>Thanks!</p>",
+                idempotencyKey: "key-1",
+            }),
+        );
+    });
+
+    it("maps each createTransactionalEmail error to the matching tool message", async () => {
+        const tools = makeToolRegistry(registerTransactionalTools);
+        const cases: Array<[string, string]> = [
+            [
+                "invalid_content",
+                "Provide exactly one of templateId or html; variables requires templateId",
+            ],
+            ["template_not_found", "Template not found"],
+            ["esp_not_configured", "Team ESP is not configured."],
+            ["quota_exceeded", "Mail sending quota exceeded"],
+        ];
+
+        for (const [errorMessage, expectedText] of cases) {
+            mocks.createTransactionalEmail.mockRejectedValueOnce(
+                new Error(errorMessage),
+            );
+            await expect(
+                tools.get("send_email")!.handler(
+                    {
+                        to: "a@example.com",
+                        subject: "Hi",
+                        html: "<p>hi</p>",
+                    },
+                    auth,
+                ),
+            ).resolves.toEqual({
+                content: [{ type: "text", text: expectedText }],
+                isError: true,
+            });
+        }
+    });
+
+    it("rethrows unmapped errors from send_email", async () => {
+        const tools = makeToolRegistry(registerTransactionalTools);
+        mocks.createTransactionalEmail.mockRejectedValueOnce(new Error("boom"));
+
+        await expect(
+            tools
+                .get("send_email")!
+                .handler(
+                    { to: "a@example.com", subject: "Hi", html: "<p>hi</p>" },
+                    auth,
+                ),
+        ).rejects.toThrow("boom");
+    });
+
+    it("returns NOT_FOUND for get_email when the row belongs to another team", async () => {
+        const tools = makeToolRegistry(registerTransactionalTools);
+        mocks.getTransactionalEmailByTxeId.mockResolvedValue({
+            txeId: "txe_1",
+            teamId: "team-2",
+        });
+
+        await expect(
+            tools.get("get_email")!.handler({ txeId: "txe_1" }, auth),
+        ).resolves.toEqual(NOT_FOUND);
+        expect(mocks.toPublicTransactionalEmail).not.toHaveBeenCalled();
+    });
+
+    it("returns the public shape (with html) for an owned email", async () => {
+        const tools = makeToolRegistry(registerTransactionalTools);
+        const row = { txeId: "txe_1", teamId: "team-1", html: "<p>hi</p>" };
+        mocks.getTransactionalEmailByTxeId.mockResolvedValue(row);
+        mocks.toPublicTransactionalEmail.mockReturnValue({
+            txeId: "txe_1",
+            html: "<p>hi</p>",
+        });
+
+        await expect(
+            tools.get("get_email")!.handler({ txeId: "txe_1" }, auth),
+        ).resolves.toMatchObject({
+            structuredContent: { txeId: "txe_1", html: "<p>hi</p>" },
+        });
+        expect(mocks.toPublicTransactionalEmail).toHaveBeenCalledWith(row, {
+            includeHtml: true,
+        });
+    });
+
+    it("scopes list_emails to the resolved team and returns items/total", async () => {
+        const tools = makeToolRegistry(registerTransactionalTools);
+        const row = { txeId: "txe_1", teamId: "team-1" };
+        mocks.listTransactionalEmails.mockResolvedValue([row]);
+        mocks.countTransactionalEmails.mockResolvedValue(1);
+        mocks.toPublicTransactionalEmail.mockReturnValue({ txeId: "txe_1" });
+
+        await expect(
+            tools
+                .get("list_emails")!
+                .handler({ status: "sent", offset: 2 }, auth),
+        ).resolves.toMatchObject({
+            structuredContent: { items: [{ txeId: "txe_1" }], total: 1 },
+        });
+        expect(mocks.listTransactionalEmails).toHaveBeenCalledWith({
+            teamId: "team-1",
+            status: "sent",
+            createdAfter: undefined,
+            createdBefore: undefined,
+            offset: 2,
+            rowsPerPage: undefined,
+        });
+        expect(mocks.countTransactionalEmails).toHaveBeenCalledWith("team-1", {
+            status: "sent",
+            createdAfter: undefined,
+            createdBefore: undefined,
+        });
+        expect(mocks.toPublicTransactionalEmail).toHaveBeenCalledWith(row, {
+            includeHtml: false,
         });
     });
 });

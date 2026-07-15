@@ -844,3 +844,80 @@ export const emailEvents = pgTable("email_events", {
     bounceReason: text("bounce_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
+
+/** A single API-triggered send — the transactional counterpart of
+ * `sequences`/`sequence_emails`, deliberately not modeled as either (see
+ * `docs/transactional-emails.md`): recipients are never required to be
+ * subscribed `contacts`, no unsubscribe/footer is injected, and delivery is
+ * immediate rather than audience-fanned-out. One row per message; the
+ * rendered `html` is snapshotted at send time so the log survives later
+ * template edits/deletes. `toEmail`/`fromEmail` are suffixed `_email` because
+ * `to`/`from` are reserved words in SQL. */
+export const transactionalEmails = pgTable(
+    "transactional_emails",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        teamId: uuid("team_id")
+            .notNull()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        txeId: text("txe_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("txe")),
+        toEmail: text("to_email").notNull(),
+        // Resolved sender identity at enqueue time (team ESP fromName/fromEmail
+        // fallback chain, same as `attemptMailSending`) — never caller-supplied.
+        fromEmail: text("from_email"),
+        replyTo: text("reply_to"),
+        subject: text("subject").notNull(),
+        // Plain text holding the *public* `tpl_` id — same convention as
+        // `sequence_emails.templateId` (not a FK): informational only, never
+        // resolved for reads, and left dangling if the template is later
+        // deleted (harmless — `html`/`subject` are already snapshotted).
+        templateId: text("template_id"),
+        // Rendered snapshot actually sent (post-Liquid for template sends,
+        // verbatim for inline `html` sends) — pre tracking-pixel/click rewrite.
+        html: text("html"),
+        // Liquid merge payload; only meaningful alongside `templateId` (inline
+        // `html` sends are never re-rendered — see PRD's send-pipeline notes).
+        variables: jsonb("variables").notNull().default({}),
+        headers: jsonb("headers"),
+        // Populated opportunistically when `toEmail` matches an existing
+        // contact, purely for analytics — never consulted for suppression;
+        // `contacts.subscribed` does not apply to transactional mail.
+        contactId: uuid("contact_id").references(() => contacts.id, {
+            onDelete: "set null",
+        }),
+        status: text("status").notNull().default("queued"), // queued|sent|failed|bounced
+        error: text("error"),
+        idempotencyKey: text("idempotency_key"),
+        trackOpens: boolean("track_opens").notNull().default(false),
+        trackClicks: boolean("track_clicks").notNull().default(false),
+        openCount: integer("open_count").notNull().default(0),
+        clickCount: integer("click_count").notNull().default(0),
+        sentAt: timestamp("sent_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    },
+    (table) => ({
+        txeIdCheck: publicIdCheck(
+            "transactional_emails_txe_id_check",
+            table.txeId,
+            "txe",
+        ),
+        // Idempotency-key replay lookup — partial, since most sends won't
+        // supply one and NULL is never unique-constrained.
+        teamIdempotencyKeyIdx: uniqueIndex(
+            "transactional_emails_team_id_idempotency_key_idx",
+        )
+            .on(table.teamId, table.idempotencyKey)
+            .where(sql`${table.idempotencyKey} IS NOT NULL`),
+        teamCreatedAtIdx: index(
+            "transactional_emails_team_id_created_at_idx",
+        ).on(table.teamId, table.createdAt),
+        teamStatusIdx: index("transactional_emails_team_id_status_idx").on(
+            table.teamId,
+            table.status,
+        ),
+    }),
+);

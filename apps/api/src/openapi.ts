@@ -42,6 +42,11 @@ export const openApiDocument = generateOpenApi(
                     "Broadcasts (one-off) and sequences (multi-step, event-triggered).",
             },
             {
+                name: "Transactional Emails",
+                description:
+                    "Single API-triggered sends (receipts, password resets, ...) — no audience filter, no unsubscribe footer, delivered immediately.",
+            },
+            {
                 name: "Settings",
                 description:
                     "Per-team settings, including email sending provider (SMTP) configuration and test sends.",

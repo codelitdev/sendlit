@@ -5,6 +5,7 @@ import { registerContactTools } from "./tools/contacts";
 import { registerSegmentTools } from "./tools/segments";
 import { registerTemplateTools } from "./tools/templates";
 import { registerSequenceTools } from "./tools/sequences";
+import { registerTransactionalTools } from "./tools/transactional";
 import { registerEspTools } from "./tools/esp";
 import { registerGeneralSettingsTools } from "./tools/general-settings";
 import { registerTeamTools } from "./tools/teams";
@@ -15,6 +16,7 @@ function registerAllTools(server: McpServer): void {
     registerSegmentTools(server);
     registerTemplateTools(server);
     registerSequenceTools(server);
+    registerTransactionalTools(server);
     registerEspTools(server);
     registerGeneralSettingsTools(server);
     registerTeamTools(server);
@@ -40,7 +42,7 @@ export function createMCPSession(
         name: "SendLit",
         version: "1.0.0",
         description:
-            "SendLit MCP server — compose, send and automate email for a SendLit account. Supports managing contacts and segmentation, reusable email templates, broadcasts/sequences (create, edit, start/pause, and inspect delivery stats), and the account's ESP (SMTP) sending configuration.",
+            "SendLit MCP server — compose, send and automate email for a SendLit account. Supports managing contacts and segmentation, reusable email templates, broadcasts/sequences (create, edit, start/pause, and inspect delivery stats), transactional emails (single API-triggered sends with delivery status polling), and the account's ESP (SMTP) sending configuration.",
     });
     registerAllTools(server);
     server.connect(transport);

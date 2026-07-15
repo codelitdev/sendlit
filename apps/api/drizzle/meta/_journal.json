@@ -36,6 +36,13 @@
             "when": 1783612096073,
             "tag": "0004_famous_wasp",
             "breakpoints": true
+        },
+        {
+            "idx": 5,
+            "version": "7",
+            "when": 1783740383400,
+            "tag": "0005_lucky_mercury",
+            "breakpoints": true
         }
     ]
 }

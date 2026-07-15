@@ -25,6 +25,15 @@ export type SequenceStatus = (typeof sequenceStatus)[number];
 export const emailActionTypes = ["tag:add", "tag:remove"] as const;
 export type EmailActionType = (typeof emailActionTypes)[number];
 
+export const transactionalEmailStatus = [
+    "queued",
+    "sent",
+    "failed",
+    "bounced",
+] as const;
+export type TransactionalEmailStatus =
+    (typeof transactionalEmailStatus)[number];
+
 /**
  * The subset of CourseLit's `Constants.EventType` that makes sense without a
  * course/community platform behind SendLit.

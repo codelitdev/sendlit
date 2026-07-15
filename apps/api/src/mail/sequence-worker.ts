@@ -1,8 +1,8 @@
 import { Worker } from "bullmq";
-import redis from "../services/redis";
 import logger from "../services/log";
 import { processOngoingSequence } from "../automation/process-ongoing-sequence";
 import { captureError } from "../observability/posthog";
+import { registerWorkerEvents, workerOptions } from "./worker-options";
 
 const worker = new Worker(
     "sequence",
@@ -28,9 +28,12 @@ const worker = new Worker(
                     sequence_id: ongoingSequenceId,
                 },
             });
+            throw err;
         }
     },
-    { connection: redis, concurrency: 10 },
+    { ...workerOptions, concurrency: 10 },
 );
+
+registerWorkerEvents(worker, "sequence");
 
 export default worker;

@@ -86,12 +86,13 @@ simultaneously and double-send.
 default). Combined with finding #1, a single 10k broadcast could leave tens of
 thousands of dead job hashes behind.
 
-**Fix:** `defaultJobOptions: { removeOnComplete: true, removeOnFail: 5000 }` on
-the Queue constructor. `removeOnComplete` must be `true` (remove immediately)
-rather than a keep-count: jobs are keyed by ongoing-sequence row id for dedup
-(finding #1), and BullMQ silently ignores an `add` whose jobId still exists in
-the completed set — a lingering completed job would block that row's next email
-tick or retry. Send history lives in logs and `email_deliveries` instead.
+**Fix:** `defaultJobOptions` on the Queue constructor removes completed and
+failed jobs immediately and applies BullMQ attempts/backoff. Removal must be
+immediate rather than a keep-count: jobs are keyed by ongoing-sequence row id
+for dedup (finding #1), and BullMQ silently ignores an `add` whose jobId still
+exists in a terminal set — a lingering completed or failed job would block that
+row's next email tick or scheduler retry. Send history lives in logs and
+`email_deliveries` instead.
 
 ### 4. No index on `next_email_scheduled_time` — **Fixed**
 

@@ -10,6 +10,7 @@ import {
     CreditCard,
     LogOut,
     Mail,
+    MailCheck,
     Images,
     Plus,
     Radio,
@@ -42,6 +43,11 @@ const NAV = [
     { href: "/dashboard/broadcasts", label: "Broadcasts", icon: Radio },
     { href: "/dashboard/sequences", label: "Sequences", icon: Workflow },
     { href: "/dashboard/contacts", label: "Contacts", icon: Users },
+    {
+        href: "/dashboard/transactional",
+        label: "Transactional",
+        icon: MailCheck,
+    },
 ];
 
 const LIBRARY_NAV = [

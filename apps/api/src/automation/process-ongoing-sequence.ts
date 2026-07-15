@@ -1,10 +1,5 @@
-import { Liquid } from "liquidjs";
-import { JSDOM } from "jsdom";
 import { eq } from "drizzle-orm";
-import {
-    renderEmailToHtml,
-    type Email as EmailType,
-} from "@sendlit/email-editor";
+import { type Email as EmailType } from "@sendlit/email-editor";
 import { db } from "../db/client";
 import {
     emailDeliveries,
@@ -26,6 +21,11 @@ import {
     removeTagFromContact,
 } from "../contacts/queries";
 import { sendMail } from "../mail/send";
+import {
+    appendTrackingPixel,
+    renderEmailContent,
+    transformLinksForClickTracking,
+} from "../mail/render";
 import { getEmailFrom, getSiteUrl, getUnsubLink } from "../utils/mail";
 import { generatePixelToken } from "../utils/pixel-jwt";
 import logger from "../services/log";
@@ -37,8 +37,6 @@ import {
     markBroadcastSent,
 } from "./queries";
 import { sequenceBounceLimit } from "../config/constants";
-
-const liquidEngine = new Liquid();
 
 type OngoingSequenceRow = typeof ongoingSequences.$inferSelect;
 type SequenceEmailRow = typeof sequenceEmails.$inferSelect;
@@ -269,32 +267,26 @@ async function attemptMailSending({
     });
     const pixelUrl = `${getSiteUrl()}/api/track/open?d=${pixelToken}`;
     const content = email.content as EmailType;
-    const emailContentWithPixel: EmailType = {
-        ...content,
-        content: [
-            ...content.content,
-            {
-                blockType: "image",
-                settings: {
-                    src: pixelUrl,
-                    width: "1px",
-                    height: "1px",
-                    alt: "",
-                },
-            },
-        ],
-    };
+    const emailContentWithPixel = appendTrackingPixel(content, pixelUrl);
 
-    const renderedHtml = await liquidEngine.parseAndRender(
-        await renderEmailToHtml({ email: emailContentWithPixel }),
-        templatePayload,
-    );
+    const renderedHtml = await renderEmailContent({
+        content: emailContentWithPixel,
+        variables: templatePayload,
+    });
 
     const contentWithTrackedLinks = transformLinksForClickTracking(
         renderedHtml,
-        contact.contactId,
-        sequence.sequenceId,
-        email.emailId,
+        (originalUrl, index) => {
+            const linkToken = generatePixelToken({
+                contactId: contact.contactId,
+                sequenceId: sequence.sequenceId,
+                emailId: email.emailId,
+                index,
+                link: encodeURIComponent(originalUrl),
+            });
+            return `${getSiteUrl()}/api/track/click?d=${linkToken}`;
+        },
+        { sequence_id: sequence.sequenceId, email_id: email.emailId },
     );
 
     try {
@@ -393,58 +385,5 @@ async function applyEmailAction({
                 action_type: email.actionType,
             },
         });
-    }
-}
-
-function transformLinksForClickTracking(
-    htmlContent: string,
-    contactId: string,
-    sequenceId: string,
-    emailId: string,
-): string {
-    try {
-        const dom = new JSDOM(htmlContent);
-        const document = dom.window.document;
-        const links = document.querySelectorAll("a");
-
-        links.forEach((link, index) => {
-            const originalUrl = link.getAttribute("href");
-            if (!originalUrl) return;
-            if (
-                originalUrl.includes("/api/track") ||
-                originalUrl.includes("/unsubscribe") ||
-                originalUrl.startsWith("mailto:") ||
-                originalUrl.startsWith("tel:") ||
-                originalUrl.startsWith("#")
-            ) {
-                return;
-            }
-
-            const linkToken = generatePixelToken({
-                contactId,
-                sequenceId,
-                emailId,
-                index,
-                link: encodeURIComponent(originalUrl),
-            });
-            link.setAttribute(
-                "href",
-                `${getSiteUrl()}/api/track/click?d=${linkToken}`,
-            );
-        });
-
-        return dom.serialize();
-    } catch (error: any) {
-        logger.error(
-            { error: error.message },
-            "transformLinksForClickTracking failed",
-        );
-        captureError({
-            error,
-            source: "automation.click_tracking_transform",
-            severity: "warning",
-            context: { sequence_id: sequenceId, email_id: emailId },
-        });
-        return htmlContent;
     }
 }

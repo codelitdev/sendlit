@@ -56,6 +56,13 @@ import {
     mediaUploadSignatureSchema,
     updateMediaBodySchema,
 } from "./schemas/media";
+import {
+    listTransactionalEmailsQuerySchema,
+    sendEmailBodySchema,
+    sendEmailResponseSchema,
+    transactionalEmailDetailSchema,
+    transactionalEmailSchema,
+} from "./schemas/transactional";
 
 const c = initContract();
 
@@ -393,6 +400,47 @@ const sequencesContract = c.router(
 );
 
 /**
+ * Single API-triggered sends — the transactional counterpart of
+ * `sequencesContract` (see `docs/transactional-emails.md` for why this is a
+ * separate resource rather than a `sequences` variant). `send` is
+ * fire-and-forget (`202`); `get`/`list` are how a caller polls status or a
+ * dashboard log page reads the send history.
+ */
+const transactionalContract = c.router(
+    {
+        send: {
+            method: "POST",
+            path: "/emails",
+            body: sendEmailBodySchema,
+            responses: {
+                202: sendEmailResponseSchema,
+                400: errorSchema,
+                422: errorSchema,
+                429: errorSchema,
+            },
+            summary: "Send a transactional email",
+        },
+        get: {
+            method: "GET",
+            path: "/emails/:txeId",
+            responses: {
+                200: transactionalEmailDetailSchema,
+                404: errorSchema,
+            },
+            summary: "Get a transactional email",
+        },
+        list: {
+            method: "GET",
+            path: "/emails",
+            query: listTransactionalEmailsQuerySchema,
+            responses: { 200: paginated(transactionalEmailSchema) },
+            summary: "List transactional emails",
+        },
+    },
+    { metadata: { tag: "Transactional Emails" } },
+);
+
+/**
  * ESP configuration is a per-team *setting* (a singleton, get/upsert/remove/
  * test — never a list, never multiple per team), not a resource collection
  * like contacts/templates/sequences, so it's nested under `settings` rather
@@ -552,6 +600,7 @@ export const contract = c.router({
     media: mediaContract,
     templates: templatesContract,
     sequences: sequencesContract,
+    transactional: transactionalContract,
     settings: settingsContract,
     teams: teamsContract,
     provisioning: provisioningContract,

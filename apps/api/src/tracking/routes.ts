@@ -9,6 +9,10 @@ import {
 } from "../contacts/queries";
 import { getSequenceEmailByEmailId } from "../sequences/queries";
 import { getSequenceRowBySequenceId } from "../automation/queries";
+import {
+    incrementTransactionalEmailClickCount,
+    incrementTransactionalEmailOpenCount,
+} from "../transactional/queries";
 import { EmailEventAction } from "../config/constants";
 import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
@@ -27,19 +31,49 @@ interface TeamScopedEvent {
     emailId: string;
     index?: number;
     link?: string;
+    [key: string]: unknown;
+}
+
+/** Transactional pixel/click tokens carry `type: "txe"` (see
+ * `mail/worker.ts#processTransactionalJob`); campaign tokens carry no `type`
+ * field at all, so a plain truthiness check on `payload.type` is enough to
+ * route between the two without disturbing tokens already embedded in mail
+ * delivered before this branch existed. */
+interface TransactionalScopedEvent {
+    type: "txe";
+    txeId: string;
+    index?: number;
+    link?: string;
+    [key: string]: unknown;
+}
+
+function isTransactionalPayload(
+    payload: Record<string, unknown>,
+): payload is TransactionalScopedEvent {
+    return payload.type === "txe";
 }
 
 // Open-tracking pixel embedded in outgoing mail.
 router.get("/track/open", async (req: Request, res: Response) => {
     const token = String(req.query.d || "");
-    const payload = verifyPixelToken<TeamScopedEvent>(token);
+    const payload = verifyPixelToken<Record<string, unknown>>(token);
 
     res.set("Content-Type", "image/gif");
     res.send(TRANSPARENT_GIF);
 
     if (!payload) return;
     try {
-        const resolved = await resolveEventIds(payload);
+        if (isTransactionalPayload(payload)) {
+            await incrementTransactionalEmailOpenCount(payload.txeId);
+            captureEvent({
+                event: "transactional_email_opened",
+                source: "tracking.open",
+                properties: { txe_id: payload.txeId },
+            });
+            return;
+        }
+
+        const resolved = await resolveEventIds(payload as TeamScopedEvent);
         if (!resolved) return;
         await db.insert(emailEvents).values({
             teamId: resolved.teamId,
@@ -70,35 +104,47 @@ router.get("/track/open", async (req: Request, res: Response) => {
 // Click-tracking redirect embedded in outgoing mail links.
 router.get("/track/click", async (req: Request, res: Response) => {
     const token = String(req.query.d || "");
-    const payload = verifyPixelToken<TeamScopedEvent>(token);
+    const payload = verifyPixelToken<Record<string, unknown>>(token);
     if (!payload || !payload.link) {
         return res.status(400).send("Invalid tracking link");
     }
 
-    const destination = decodeURIComponent(payload.link);
+    const destination = decodeURIComponent(payload.link as string);
 
     try {
-        const resolved = await resolveEventIds(payload);
-        if (resolved) {
-            await db.insert(emailEvents).values({
-                teamId: resolved.teamId,
-                sequenceId: resolved.sequenceId,
-                contactId: resolved.contactId,
-                emailId: resolved.emailId,
-                action: EmailEventAction.CLICK,
-                link: destination,
-                linkIndex: payload.index,
-            });
+        if (isTransactionalPayload(payload)) {
+            await incrementTransactionalEmailClickCount(payload.txeId);
             captureEvent({
-                event: "email_link_clicked",
+                event: "transactional_email_link_clicked",
                 source: "tracking.click",
-                teamId: resolved.teamId,
                 properties: {
-                    sequence_id: resolved.sequenceId,
-                    email_id: resolved.emailId,
+                    txe_id: payload.txeId,
                     link_index: payload.index,
                 },
             });
+        } else {
+            const resolved = await resolveEventIds(payload as TeamScopedEvent);
+            if (resolved) {
+                await db.insert(emailEvents).values({
+                    teamId: resolved.teamId,
+                    sequenceId: resolved.sequenceId,
+                    contactId: resolved.contactId,
+                    emailId: resolved.emailId,
+                    action: EmailEventAction.CLICK,
+                    link: destination,
+                    linkIndex: payload.index as number | undefined,
+                });
+                captureEvent({
+                    event: "email_link_clicked",
+                    source: "tracking.click",
+                    teamId: resolved.teamId,
+                    properties: {
+                        sequence_id: resolved.sequenceId,
+                        email_id: resolved.emailId,
+                        link_index: payload.index,
+                    },
+                });
+            }
         }
     } catch (err: any) {
         logger.error({ error: err.message }, "Failed to record click event");

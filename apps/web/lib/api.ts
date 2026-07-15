@@ -519,3 +519,56 @@ export function updateGeneralSettings(input: { mailingAddress?: string }) {
         client.settings.general.update({ body: input }),
     );
 }
+
+// ---- Transactional emails --------------------------------------------------
+
+export interface TransactionalEmail {
+    txeId: string;
+    to: string;
+    from: string | null;
+    replyTo: string | null;
+    subject: string;
+    templateId: string | null;
+    variables: Record<string, any>;
+    status: "queued" | "sent" | "failed" | "bounced";
+    error: string | null;
+    trackOpens: boolean;
+    trackClicks: boolean;
+    openCount: number;
+    clickCount: number;
+    sentAt: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+}
+
+export interface TransactionalEmailDetail extends TransactionalEmail {
+    html: string | null;
+}
+
+export function listTransactionalEmails(
+    params: {
+        status?: TransactionalEmail["status"];
+        createdAfter?: number;
+        createdBefore?: number;
+        offset?: number;
+        itemsPerPage?: number;
+    } = {},
+) {
+    return unwrap<Paginated<TransactionalEmail>>(
+        client.transactional.list({
+            query: {
+                status: params.status,
+                createdAfter: params.createdAfter,
+                createdBefore: params.createdBefore,
+                offset: params.offset,
+                itemsPerPage: params.itemsPerPage,
+            },
+        }),
+    );
+}
+
+export function getTransactionalEmail(txeId: string) {
+    return unwrap<TransactionalEmailDetail>(
+        client.transactional.get({ params: { txeId } }),
+    );
+}
