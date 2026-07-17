@@ -38,7 +38,9 @@ GET /.well-known/openid-configuration
 
 OAuth authorization, consent, token, introspection, revocation, and userinfo endpoints are provided under `/api/auth/oauth2/*`.
 
-API keys always select one fixed team. OAuth and dashboard-session clients that can access multiple teams must provide `X-Sendlit-Team-Id`; clients with exactly one team may omit it.
+API keys always select one fixed team. Dashboard-session clients that can access multiple teams must provide `X-Sendlit-Team-Id`; clients with exactly one team may omit it.
+
+OAuth clients (including MCP clients like Claude) have no way to send a custom header during authorization, so a multi-team account instead picks a team as part of the OAuth flow itself: after login, and before the consent screen, the account is shown a "select a team" step (mirroring how apps like Notion resolve their own multi-workspace ambiguity). The chosen team is baked into the issued access token and used for every subsequent request — no header needed. Accounts with exactly one team skip this step entirely.
 
 ## Available tools
 

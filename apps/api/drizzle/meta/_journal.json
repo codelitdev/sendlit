@@ -78,6 +78,13 @@
             "when": 1784227186841,
             "tag": "0010_glorious_wonder_man",
             "breakpoints": true
+        },
+        {
+            "idx": 11,
+            "version": "7",
+            "when": 1784317157498,
+            "tag": "0011_little_shooting_star",
+            "breakpoints": true
         }
     ]
 }

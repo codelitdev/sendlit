@@ -1,6 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { accounts, teamMembers, teams } from "../db/schema";
+import {
+    accounts,
+    oauthPostLoginTeamSelections,
+    teamMembers,
+    teams,
+} from "../db/schema";
 import { createApiKey } from "../apikey/queries";
 import { deleteTeamMediaFiles } from "../media/queries";
 
@@ -153,6 +158,38 @@ export async function getTeamMembership(
         )
         .limit(1);
     return row ?? null;
+}
+
+/** Persists the team an OAuth end-user picked on the post-login "select a
+ * team" screen, keyed by their Better Auth session — see
+ * `db/schema.ts#oauthPostLoginTeamSelections`. Upserts so re-visiting the
+ * picker (e.g. to switch teams before finishing consent) overwrites the
+ * prior choice rather than erroring. */
+export async function setOAuthTeamSelection(
+    sessionId: string,
+    teamId: string,
+): Promise<void> {
+    await db
+        .insert(oauthPostLoginTeamSelections)
+        .values({ sessionId, teamId })
+        .onConflictDoUpdate({
+            target: oauthPostLoginTeamSelections.sessionId,
+            set: { teamId, updatedAt: new Date() },
+        });
+}
+
+/** Returns the internal team id picked for this session, or `null` if the
+ * user hasn't been through the picker (yet, or ever — single-team accounts
+ * never see it). */
+export async function getOAuthTeamSelection(
+    sessionId: string,
+): Promise<string | null> {
+    const [row] = await db
+        .select({ teamId: oauthPostLoginTeamSelections.teamId })
+        .from(oauthPostLoginTeamSelections)
+        .where(eq(oauthPostLoginTeamSelections.sessionId, sessionId))
+        .limit(1);
+    return row?.teamId ?? null;
 }
 
 /** Find-or-create an account by email without the "give it a default team"

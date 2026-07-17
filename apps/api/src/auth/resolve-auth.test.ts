@@ -6,6 +6,9 @@ vi.mock("../account/queries", () => ({
 vi.mock("../apikey/queries", () => ({
     getApiKeyBySecret: vi.fn(),
 }));
+vi.mock("../team/queries", () => ({
+    getTeamMembership: vi.fn(),
+}));
 vi.mock("./better-auth", () => ({
     auth: {
         api: {
@@ -53,6 +56,7 @@ function deps(overrides: Partial<AuthDependencies> = {}): AuthDependencies {
         verifyBetterAuthBearerToken: vi.fn(async () => null),
         ensureAccountForBetterAuthUserId: vi.fn(async () => account as any),
         ensureAccountForUser: vi.fn(async () => account as any),
+        getTeamMembership: vi.fn(async () => null),
         ...overrides,
     };
 }
@@ -103,6 +107,75 @@ describe("resolveAuth", () => {
             "better-auth-user-1",
         );
         expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+    });
+
+    it("resolves teamId from a verified team_id claim (multi-team OAuth account)", async () => {
+        const authDeps = deps({
+            verifyBetterAuthBearerToken: vi.fn(async () => ({
+                sub: "better-auth-user-1",
+                azp: "mcp-client",
+                scope: "contacts:read",
+                team_id: "team-abc",
+            })),
+            getTeamMembership: vi.fn(async () => ({
+                id: "membership-1",
+                teamId: "team-abc",
+                accountId: account.id,
+                role: "owner",
+                createdAt: new Date(),
+            })),
+        });
+
+        await expect(
+            resolveAuth({ authorization: "Bearer token" }, authDeps),
+        ).resolves.toMatchObject({
+            status: "authenticated",
+            kind: "oauth",
+            teamId: "team-abc",
+        });
+        expect(authDeps.getTeamMembership).toHaveBeenCalledWith(
+            "team-abc",
+            account.id,
+        );
+    });
+
+    it("drops a team_id claim whose membership no longer holds", async () => {
+        const authDeps = deps({
+            verifyBetterAuthBearerToken: vi.fn(async () => ({
+                sub: "better-auth-user-1",
+                azp: "mcp-client",
+                scope: "contacts:read",
+                team_id: "team-revoked",
+            })),
+            getTeamMembership: vi.fn(async () => null),
+        });
+
+        const result = await resolveAuth(
+            { authorization: "Bearer token" },
+            authDeps,
+        );
+        expect(result).toMatchObject({
+            status: "authenticated",
+            kind: "oauth",
+        });
+        expect((result as any).teamId).toBeUndefined();
+    });
+
+    it("leaves teamId undefined when the token carries no team_id claim", async () => {
+        const authDeps = deps({
+            verifyBetterAuthBearerToken: vi.fn(async () => ({
+                sub: "better-auth-user-1",
+                azp: "mcp-client",
+                scope: "contacts:read",
+            })),
+        });
+
+        const result = await resolveAuth(
+            { authorization: "Bearer token" },
+            authDeps,
+        );
+        expect((result as any).teamId).toBeUndefined();
+        expect(authDeps.getTeamMembership).not.toHaveBeenCalled();
     });
 
     it("authenticates API keys from headers or request bodies", async () => {

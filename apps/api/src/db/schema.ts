@@ -362,6 +362,30 @@ export const authOAuthConsent = pgTable(
     }),
 );
 
+/** The team an OAuth end-user picked on the post-login "select a team" screen
+ * (`/oauth/select-team`, shown only when their account belongs to more than
+ * one team — mirrors Notion's workspace picker). One row per Better Auth
+ * session, written when the user submits their choice and read back by
+ * `oauthProvider`'s `postLogin.consentReferenceId` hook (see
+ * `auth/better-auth.ts`), which threads it through as the OAuth `referenceId`
+ * so it ends up on the minted access token's `team_id` claim
+ * (`customAccessTokenClaims`). Without this, a generic OAuth/MCP client has no
+ * way to tell SendLit which team to scope its requests to — there is no
+ * standard OAuth mechanism for it, and the custom `X-Sendlit-Team-Id` header
+ * only works for clients SendLit itself controls (the web dashboard). */
+export const oauthPostLoginTeamSelections = pgTable(
+    "oauth_post_login_team_selections",
+    {
+        sessionId: text("session_id")
+            .primaryKey()
+            .references(() => authSession.id, { onDelete: "cascade" }),
+        teamId: uuid("team_id")
+            .notNull()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    },
+);
+
 /** A key authenticates as exactly one team — never an account directly — so a
  * team can hand out several independently-revocable keys (e.g. one for a
  * CourseLit integration, another for a Zapier zap) without any of them being

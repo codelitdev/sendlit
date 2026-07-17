@@ -1,5 +1,6 @@
 import { getAccount, Account } from "../account/queries";
 import { getApiKeyBySecret, ApiKey } from "../apikey/queries";
+import { getTeamMembership } from "../team/queries";
 import {
     auth,
     authIssuer,
@@ -15,6 +16,11 @@ type BearerJwtPayload = {
     sub?: string;
     azp?: string;
     scope?: string;
+    /** Set only when the token was minted after the user picked a team on
+     * `/oauth/select-team` (multi-team accounts only — see
+     * `customAccessTokenClaims` in `./better-auth.ts`). Re-validated as live
+     * team membership below before being trusted. */
+    team_id?: string;
 };
 
 export type AuthInput = {
@@ -40,6 +46,13 @@ export type AuthDependencies = {
         email: string;
         name?: string | null;
     }) => Promise<Account>;
+    /** Live re-check for a bearer token's `team_id` claim — an access token
+     * can outlive a membership change (removal from a team), so the claim is
+     * trusted only once this confirms it still holds. */
+    getTeamMembership: (
+        teamId: string,
+        accountId: string,
+    ) => Promise<unknown | null>;
 };
 
 export type AuthResult =
@@ -50,20 +63,13 @@ export type AuthResult =
           accountId: string;
           clientId: string;
           scopes: string[];
-          /** Not resolved here — a bearer-token account may belong to
-           * several teams. See `auth/require-team.ts`, which resolves it from
-           * an explicit header (falling back to the account's sole team, if
-           * it only has one). */
-          teamId?: undefined;
-      }
-    | {
-          status: "authenticated";
-          kind: "oauth";
-          account: Account;
-          accountId: string;
-          clientId: string;
-          scopes: string[];
-          teamId?: undefined;
+          /** Resolved here only when the access token carries a `team_id`
+           * claim (a multi-team account that went through
+           * `/oauth/select-team`) *and* that membership still checks out.
+           * Otherwise left undefined — see `auth/require-team.ts`, which
+           * falls back to an explicit `X-Sendlit-Team-Id` header or the
+           * account's sole team, if it only has one. */
+          teamId?: string;
       }
     | {
           status: "authenticated";
@@ -168,6 +174,7 @@ const defaultDependencies: AuthDependencies = {
     },
     ensureAccountForBetterAuthUserId: ensureSendLitAccountForBetterAuthUserId,
     ensureAccountForUser: ensureSendLitAccountForUser,
+    getTeamMembership,
 };
 
 function getHeaderValue(value: unknown): string | undefined {
@@ -195,6 +202,19 @@ export async function resolveAuth(
             );
             if (!account) return { status: "unauthorized" };
 
+            const teamId = claims.team_id
+                ? await (async () => {
+                      const membership = await dependencies.getTeamMembership(
+                          claims.team_id!,
+                          account.id,
+                      );
+                      // A membership can be revoked after the token was
+                      // minted — an unverifiable claim is dropped, not
+                      // trusted, and falls back to require-team.ts below.
+                      return membership ? claims.team_id : undefined;
+                  })()
+                : undefined;
+
             return {
                 status: "authenticated",
                 kind: "oauth",
@@ -205,6 +225,7 @@ export async function resolveAuth(
                     typeof claims.scope === "string"
                         ? claims.scope.split(/\s+/).filter(Boolean)
                         : [],
+                teamId,
             };
         }
     }
