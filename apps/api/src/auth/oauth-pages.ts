@@ -1,22 +1,45 @@
-import { Router, Response } from "express";
-import { webClientUrl } from "./better-auth";
+import express, { Router, Response } from "express";
+import { fromNodeHeaders } from "better-auth/node";
+import {
+    auth,
+    ensureSendLitAccountForBetterAuthUserId,
+    webClientUrl,
+} from "./better-auth";
+import {
+    getOAuthTeamSelection,
+    getTeamByTeamId,
+    getTeamMembership,
+    listTeamsForAccount,
+    setOAuthTeamSelection,
+    type Team,
+} from "../team/queries";
 
 /**
  * Self-hosted login/consent screens for Better Auth's OAuth Provider plugin
- * (`loginPage`/`consentPage` in `./better-auth.ts`). Rendered directly by
- * this API — not `apps/web` — so a brand-new MCP/OAuth client can complete
- * its first-time authorization (login + consent) even if the web dashboard
- * isn't deployed at all. This mirrors how the pre-Better-Auth custom OAuth2
- * server worked (see `git log` for the removed `src/oauth/authorize-page.ts`):
- * plain server-rendered HTML, no frontend framework dependency.
+ * (`loginPage`/`consentPage`/`postLogin.page` in `./better-auth.ts`). Rendered
+ * directly by this API — not `apps/web` — so a brand-new MCP/OAuth client can
+ * complete its first-time authorization (login + team selection + consent)
+ * even if the web dashboard isn't deployed at all. This mirrors how the
+ * pre-Better-Auth custom OAuth2 server worked (see `git log` for the removed
+ * `src/oauth/authorize-page.ts`): plain server-rendered HTML, no frontend
+ * framework dependency.
  *
- * Both pages are thin shells: all the real work (OTP send/verify, Google
+ * These pages are thin shells: all the real work (OTP send/verify, Google
  * sign-in, consent recording, token issuance) happens via `fetch` calls to
  * the same-origin `/api/auth/*` endpoints already mounted in `index.ts`.
  * Every submission forwards the current page's full query string back as
  * `oauth_query` — Better Auth signs that string when it first redirects here
  * and re-verifies the signature on every follow-up call, which is what lets
- * it resume the in-flight authorization after login/consent completes.
+ * it resume the in-flight authorization after login/team-selection/consent
+ * completes.
+ *
+ * `/oauth/select-team` (GET renders the picker, POST records the choice) is
+ * the odd one out: it isn't a Better Auth-owned page at all, just a plain
+ * session-authenticated Express route this file also happens to host,
+ * because `postLogin.page` in `./better-auth.ts` needs *some* URL to send a
+ * multi-team account to between login and consent — see that file's
+ * `resolveOAuthTeamSelection` for how the choice recorded here ends up on
+ * the minted access token.
  */
 const router = Router();
 
@@ -90,8 +113,14 @@ button:disabled { opacity: .6; cursor: not-allowed; }
 .scope-badge { border: 1px solid #262626; background: #181818; border-radius: 6px; padding: 4px 8px; font-size: 12px; color: #a3a3a3; }
 .client-box { border: 1px solid #262626; background: #181818; border-radius: 8px; padding: 12px; margin-bottom: 20px; }
 .client-name { font-size: 14px; font-weight: 500; word-break: break-all; }
+.team-name { font-size: 13px; color: #a3a3a3; margin-top: 4px; }
 .actions { display: flex; gap: 8px; }
 .actions button { margin-top: 0; }
+.team-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; max-height: 320px; overflow-y: auto; }
+.team-option { display: flex; align-items: center; gap: 10px; border: 1px solid #262626; background: #181818; border-radius: 8px; padding: 12px 14px; cursor: pointer; }
+.team-option:has(input:checked) { border-color: #8c7a6b; box-shadow: 0 0 0 2px rgba(140,122,107,.2); }
+.team-option input { width: auto; margin: 0; }
+.team-option span { font-size: 14px; }
 `;
 
 function layout(title: string, body: string): string {
@@ -372,7 +401,209 @@ router.get("/oauth/login", (_req, res) => {
     res.type("html").send(layout("Sign in to SendLit", body));
 });
 
-router.get("/oauth/consent", (req, res) => {
+/** Fetches the caller's Better Auth session directly from the request
+ * headers — same mechanism `resolve-auth.ts` uses for cookie-based session
+ * auth, reused here because these two routes aren't behind `requireAuth`
+ * (they're part of the OAuth interaction flow, reached by redirect, not by
+ * an API caller that already has a bearer token). */
+async function getRequestSession(req: any) {
+    return auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+}
+
+/** True once an account has more than one team — the only case where a
+ * choice is actually meaningful. Mirrors `resolveOAuthTeamSelection` in
+ * `./better-auth.ts`, which is what actually gates whether this page is
+ * ever reached. */
+function needsTeamSelection(teams: Team[]): boolean {
+    return teams.length > 1;
+}
+
+router.get("/oauth/select-team", async (req, res) => {
+    setFrameProtection(res);
+    const session = await getRequestSession(req);
+    const oauthQuery = req.originalUrl.split("?")[1] || "";
+    if (!session?.user) {
+        // Shouldn't happen — `postLogin.page` only redirects here right
+        // after login — but if the session cookie is missing or expired by
+        // the time this loads, resume through login with the same query.
+        res.redirect(`/oauth/login?${oauthQuery}`);
+        return;
+    }
+
+    const account = await ensureSendLitAccountForBetterAuthUserId(
+        session.user.id,
+    );
+    const teams = account ? await listTeamsForAccount(account.id) : [];
+    if (!needsTeamSelection(teams)) {
+        // Nothing to pick (account only has one team, or none) — this
+        // shouldn't normally be reachable since `shouldRedirect` already
+        // checks this, but resuming straight to consent (via the same
+        // `oauth2/continue` call the picker below would otherwise make) is
+        // the safe fallback rather than showing an empty picker. `continue`
+        // is POST-only, so this can't be a plain redirect.
+        const body = `
+<div class="logo">S</div>
+<h1>Continuing&hellip;</h1>
+<div class="error" id="error"></div>
+<script>
+(function () {
+    var oauthQuery = ${toScriptLiteral(oauthQuery)};
+    fetch("/api/auth/oauth2/continue", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ postLogin: true, oauth_query: oauthQuery }),
+    })
+        .then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (data) {
+                return { ok: res.ok, data: data };
+            });
+        })
+        .then(function (r) {
+            var url = r.data.url || r.data.redirect_uri;
+            if (!r.ok || !url) throw new Error(r.data.error_description || "Could not continue.");
+            location.assign(url);
+        })
+        .catch(function (err) {
+            var errorEl = document.getElementById("error");
+            errorEl.textContent = err.message || "Could not continue.";
+            errorEl.style.display = "block";
+        });
+})();
+</script>`;
+        res.type("html").send(layout("Continuing…", body));
+        return;
+    }
+
+    // The picker only ever hands the *public* team handle to the browser —
+    // `t.id` is the internal surrogate key and, per the convention documented
+    // on `db/schema.ts`'s ID section, never leaves the server. The POST
+    // handler below translates it back via `getTeamByTeamId`, same as any
+    // other outer-edge entrypoint (route params, `X-Sendlit-Team-Id`).
+    const teamOptions = teams
+        .map(
+            (t, i) => `<label class="team-option">
+    <input type="radio" name="team" value="${escapeHtml(t.teamId)}"${i === 0 ? " checked" : ""}>
+    <span>${escapeHtml(t.name)}</span>
+</label>`,
+        )
+        .join("\n");
+
+    const body = `
+<div class="logo">S</div>
+<h1>Select a team</h1>
+<p class="sub">Choose which SendLit team to grant access to.</p>
+<div class="error" id="error"></div>
+
+<form id="team-form">
+    <div class="team-list">
+${teamOptions}
+    </div>
+    <button type="submit" class="btn-primary">Continue</button>
+</form>
+
+<script>
+(function () {
+    var oauthQuery = location.search.slice(1);
+    var form = document.getElementById("team-form");
+    var errorEl = document.getElementById("error");
+
+    function showError(message) {
+        errorEl.textContent = message;
+        errorEl.style.display = "block";
+    }
+
+    async function postJson(path, body) {
+        var res = await fetch(path, {
+            method: "POST",
+            headers: { "content-type": "application/json", accept: "application/json" },
+            body: JSON.stringify(body),
+        });
+        var data = {};
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok) {
+            throw new Error(data.message || data.error_description || data.error || "Request failed");
+        }
+        return data;
+    }
+
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        errorEl.style.display = "none";
+        var selected = form.querySelector('input[name="team"]:checked');
+        if (!selected) {
+            showError("Choose a team to continue.");
+            return;
+        }
+        var btn = form.querySelector("button");
+        btn.disabled = true;
+        try {
+            await postJson("/oauth/select-team", { teamId: selected.value });
+            var data = await postJson("/api/auth/oauth2/continue", {
+                postLogin: true,
+                oauth_query: oauthQuery,
+            });
+            var url = data.url || data.redirect_uri;
+            if (!url) throw new Error("No redirect URL returned");
+            location.assign(url);
+        } catch (err) {
+            showError(err.message || "Could not continue.");
+            btn.disabled = false;
+        }
+    });
+})();
+</script>`;
+    res.type("html").send(layout("Select a team", body));
+});
+
+router.post("/oauth/select-team", express.json(), async (req, res) => {
+    setFrameProtection(res);
+    const session = await getRequestSession(req);
+    if (!session?.user) {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+    }
+
+    const account = await ensureSendLitAccountForBetterAuthUserId(
+        session.user.id,
+    );
+    if (!account) {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+    }
+
+    const publicTeamId =
+        typeof req.body?.teamId === "string" ? req.body.teamId : undefined;
+    if (!publicTeamId) {
+        res.status(400).json({
+            error: "invalid_request",
+            error_description: "teamId is required",
+        });
+        return;
+    }
+
+    const team = await getTeamByTeamId(publicTeamId);
+    if (!team) {
+        res.status(400).json({
+            error: "invalid_team_id",
+            error_description: "The provided team ID is not valid.",
+        });
+        return;
+    }
+
+    const membership = await getTeamMembership(team.id, account.id);
+    if (!membership) {
+        res.status(403).json({
+            error: "not_a_team_member",
+            error_description: "You are not a member of this team.",
+        });
+        return;
+    }
+
+    await setOAuthTeamSelection(session.session.id, team.id);
+    res.json({ ok: true });
+});
+
+router.get("/oauth/consent", async (req, res) => {
     setFrameProtection(res);
     const clientId =
         typeof req.query.client_id === "string"
@@ -384,6 +615,29 @@ router.get("/oauth/consent", (req, res) => {
         .map((s) => `<span class="scope-badge">${escapeHtml(s)}</span>`)
         .join("");
 
+    // Purely informational — shows which team is about to be granted access,
+    // mirroring how Notion's own consent screen keeps the picked workspace
+    // visible through to the final step. The actual team was already
+    // recorded via `/oauth/select-team` (or there's only one, and no
+    // selection was ever needed); this never changes what gets granted.
+    const session = await getRequestSession(req);
+    let teamName: string | undefined;
+    if (session?.user) {
+        const account = await ensureSendLitAccountForBetterAuthUserId(
+            session.user.id,
+        );
+        if (account) {
+            const [teams, selectedTeamId] = await Promise.all([
+                listTeamsForAccount(account.id),
+                getOAuthTeamSelection(session.session.id),
+            ]);
+            const team = needsTeamSelection(teams)
+                ? teams.find((t) => t.id === selectedTeamId)
+                : teams[0];
+            teamName = team?.name;
+        }
+    }
+
     const body = `
 <div class="logo">S</div>
 <h1>Authorize SendLit access</h1>
@@ -392,6 +646,7 @@ router.get("/oauth/consent", (req, res) => {
 
 <div class="client-box">
     <div class="client-name">${escapeHtml(clientId)}</div>
+    ${teamName ? `<div class="team-name">Team: ${escapeHtml(teamName)}</div>` : ""}
     ${scopes.length ? `<div class="scopes">${scopeBadges}</div>` : ""}
 </div>
 

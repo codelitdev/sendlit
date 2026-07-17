@@ -28,6 +28,13 @@ function applyAuthToRequest(
         req.teamId = auth.teamId;
     } else {
         req.accountId = auth.accountId;
+        // A multi-team account's OAuth token may already carry a verified
+        // team (picked on `/oauth/select-team` — see `resolve-auth.ts`).
+        // Leaving it unset here falls through to `require-team.ts`'s header
+        // / sole-team resolution, same as before this existed.
+        if (auth.kind === "oauth" && auth.teamId) {
+            req.teamId = auth.teamId;
+        }
     }
 
     if (mode === "mcp" && auth.kind === "oauth") {
