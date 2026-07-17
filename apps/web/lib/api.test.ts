@@ -16,7 +16,7 @@ vi.mock("@ts-rest/core", async (importOriginal) => {
     };
 });
 
-function installWindow(pathname = "/dashboard/sequences") {
+function installWindow(pathname = "/sequences") {
     const location = { href: pathname, pathname };
     vi.stubGlobal("window", { location });
     return location;

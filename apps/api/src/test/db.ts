@@ -77,6 +77,8 @@ export async function seedTeamAndContact(
 
     await db.insert(schema.espConfigs).values({
         teamId: team.id,
+        name: "Default ESP",
+        isDefault: true,
         host: "smtp.example.com",
         fromName: "Test Sender",
         fromEmail: "sender@example.com",

@@ -21,23 +21,7 @@ export async function processRules() {
     // eslint-disable-next-line no-constant-condition
     while (true) {
         try {
-            const dueRules = await getDueDateRules();
-            for (const rule of dueRules) {
-                try {
-                    await processRule(rule);
-                } catch (err: any) {
-                    logger.error(
-                        { error: err.message, sequence_id: rule.sequenceId },
-                        "processRules.rule failed",
-                    );
-                    captureError({
-                        error: err,
-                        source: "automation.process_rules.rule",
-                        teamId: rule.teamId,
-                        context: { sequence_id: rule.sequenceId },
-                    });
-                }
-            }
+            await processDueRulesOnce();
         } catch (err: any) {
             logger.error({ error: err.message }, "processRules.loop failed");
             captureError({
@@ -51,7 +35,29 @@ export async function processRules() {
     }
 }
 
-async function processRule(rule: {
+/** One scheduler pass, extracted so recovery and per-rule isolation are
+ * executable without entering the perpetual production polling loop. */
+export async function processDueRulesOnce(): Promise<void> {
+    const dueRules = await getDueDateRules();
+    for (const rule of dueRules) {
+        try {
+            await processRule(rule);
+        } catch (err: any) {
+            logger.error(
+                { error: err.message, sequence_id: rule.sequenceId },
+                "processRules.rule failed",
+            );
+            captureError({
+                error: err,
+                source: "automation.process_rules.rule",
+                teamId: rule.teamId,
+                context: { sequence_id: rule.sequenceId },
+            });
+        }
+    }
+}
+
+export async function processRule(rule: {
     ruleId: string;
     teamId: string;
     sequenceId: string;

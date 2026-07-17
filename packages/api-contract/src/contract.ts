@@ -25,9 +25,11 @@ import {
     updateSequenceEmailBodySchema,
 } from "./schemas/sequences";
 import {
+    createEspConfigBodySchema,
     espConfigSchema,
     testEspConfigBodySchema,
     testEspConfigResponseSchema,
+    updateEspConfigBodySchema,
     upsertEspConfigBodySchema,
 } from "./schemas/esp";
 import {
@@ -63,6 +65,21 @@ import {
     transactionalEmailDetailSchema,
     transactionalEmailSchema,
 } from "./schemas/transactional";
+import { overviewSchema } from "./schemas/overview";
+import {
+    feedbackConnectionSchema,
+    testFeedbackConnectionResponseSchema,
+    upsertFeedbackConnectionBodySchema,
+} from "./schemas/feedback";
+import {
+    deliveryEventSchema,
+    listDeliveryEventsQuerySchema,
+} from "./schemas/delivery-events";
+import {
+    listSuppressionsQuerySchema,
+    releaseSuppressionBodySchema,
+    suppressionSchema,
+} from "./schemas/suppressions";
 
 const c = initContract();
 
@@ -326,7 +343,11 @@ const sequencesContract = c.router(
             method: "PATCH",
             path: "/sequences/:sequenceId",
             body: updateSequenceBodySchema,
-            responses: { 200: sequenceSchema, 404: errorSchema },
+            responses: {
+                200: sequenceSchema,
+                400: errorSchema,
+                404: errorSchema,
+            },
             summary: "Update a broadcast or sequence",
         },
         remove: {
@@ -371,7 +392,11 @@ const sequencesContract = c.router(
             method: "POST",
             path: "/sequences/:sequenceId/start",
             body: c.noBody(),
-            responses: { 200: sequenceSchema, 400: errorSchema },
+            responses: {
+                200: sequenceSchema,
+                400: errorSchema,
+                422: errorSchema,
+            },
             summary: "Start a broadcast or activate a sequence",
         },
         pause: {
@@ -441,11 +466,13 @@ const transactionalContract = c.router(
 );
 
 /**
- * ESP configuration is a per-team *setting* (a singleton, get/upsert/remove/
- * test — never a list, never multiple per team), not a resource collection
- * like contacts/templates/sequences, so it's nested under `settings` rather
- * than sitting as a sibling top-level group. This is also where future
- * per-team settings (e.g. default sending identity, branding) should live.
+ * Backward-compatible singleton alias over the team's *default* user-managed
+ * ESP (get/upsert/remove/test) — the pre-multi-ESP shape, kept so existing
+ * integrations don't break. New integrations should prefer the collection
+ * contract below (`espCollectionContract`, `/settings/esps`), which supports
+ * multiple team-scoped configurations. Both are nested under `settings`
+ * rather than sitting as a sibling top-level group, alongside future
+ * per-team settings (e.g. branding).
  */
 const espSettingsContract = c.router(
     {
@@ -469,7 +496,7 @@ const espSettingsContract = c.router(
         remove: {
             method: "DELETE",
             path: "/settings/esp",
-            responses: { 204: c.noBody() },
+            responses: { 204: c.noBody(), 409: errorSchema },
             summary:
                 "Remove the team's ESP configuration (future campaign sends fail until a new ESP is configured)",
         },
@@ -485,6 +512,60 @@ const espSettingsContract = c.router(
             summary: "Send a test email through the team's configured ESP",
             description:
                 "Sends to the given address, or the current user's own email if omitted. Always attempts real delivery.",
+        },
+    },
+    { metadata: { tag: "Settings" } },
+);
+
+const espCollectionContract = c.router(
+    {
+        list: {
+            method: "GET",
+            path: "/settings/esps",
+            responses: { 200: itemsList(espConfigSchema) },
+            summary: "List the team's user-managed ESP configurations",
+        },
+        create: {
+            method: "POST",
+            path: "/settings/esps",
+            body: createEspConfigBodySchema,
+            responses: { 201: espConfigSchema },
+            summary: "Create a user-managed ESP configuration",
+        },
+        get: {
+            method: "GET",
+            path: "/settings/esps/:espId",
+            responses: { 200: espConfigSchema, 404: errorSchema },
+            summary: "Get a user-managed ESP configuration",
+        },
+        update: {
+            method: "PATCH",
+            path: "/settings/esps/:espId",
+            body: updateEspConfigBodySchema,
+            responses: { 200: espConfigSchema, 404: errorSchema },
+            summary: "Update a user-managed ESP configuration",
+        },
+        remove: {
+            method: "DELETE",
+            path: "/settings/esps/:espId",
+            responses: {
+                204: c.noBody(),
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Remove a user-managed ESP configuration",
+        },
+        test: {
+            method: "POST",
+            path: "/settings/esps/:espId/test",
+            body: testEspConfigBodySchema,
+            responses: {
+                200: testEspConfigResponseSchema,
+                400: errorSchema,
+                404: errorSchema,
+                502: testEspConfigResponseSchema,
+            },
+            summary: "Send a test email through a user-managed ESP",
         },
     },
     { metadata: { tag: "Settings" } },
@@ -517,6 +598,7 @@ const generalSettingsContract = c.router(
 
 const settingsContract = c.router({
     esp: espSettingsContract,
+    esps: espCollectionContract,
     general: generalSettingsContract,
 });
 
@@ -594,6 +676,144 @@ const provisioningContract = c.router(
     { metadata: { tag: "Teams" } },
 );
 
+const overviewContract = c.router(
+    {
+        get: {
+            method: "GET",
+            path: "/overview",
+            responses: { 200: overviewSchema },
+            summary: "Get team overview metrics",
+        },
+    },
+    { metadata: { tag: "Overview" } },
+);
+
+/**
+ * A user-managed ESP's delivery-feedback (bounce/complaint webhook)
+ * configuration — a collection-aware subresource keyed by `espId`, never a
+ * `/settings/esp/feedback` singleton alias (see
+ * `docs/bounces-and-complaints.md#10-configuration-and-web-ux`). Only
+ * providers with a reviewed adapter (`feedbackCapableProviders`) can be
+ * configured; every route validates the ESP belongs to the active team and
+ * never exposes a platform (deployment-managed) connection.
+ */
+const feedbackContract = c.router(
+    {
+        get: {
+            method: "GET",
+            path: "/settings/esps/:espId/feedback",
+            responses: {
+                200: feedbackConnectionSchema.nullable(),
+                404: errorSchema,
+            },
+            summary: "Get a user ESP's delivery-feedback connection",
+            description:
+                "Returns null when feedback hasn't been configured for this ESP yet.",
+        },
+        upsert: {
+            method: "PUT",
+            path: "/settings/esps/:espId/feedback",
+            body: upsertFeedbackConnectionBodySchema,
+            responses: {
+                200: feedbackConnectionSchema,
+                400: errorSchema,
+                404: errorSchema,
+            },
+            summary:
+                "Create or rotate a user ESP's delivery-feedback connection",
+            description:
+                "Creates the connection (and its stable webhook URL) on first call; a later call rotates the credential without changing the URL. The provider is always the ESP's current provider, not client-writable.",
+        },
+        rotate: {
+            method: "POST",
+            path: "/settings/esps/:espId/feedback/rotate",
+            body: upsertFeedbackConnectionBodySchema,
+            responses: {
+                200: feedbackConnectionSchema,
+                400: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Rotate an existing feedback connection's credential",
+            description:
+                "Same effect as PUT, but fails with 404 if no connection exists yet. The previous credential remains valid for 24h so in-flight provider retries aren't lost.",
+        },
+        test: {
+            method: "POST",
+            path: "/settings/esps/:espId/feedback/test",
+            body: c.noBody(),
+            responses: {
+                200: testFeedbackConnectionResponseSchema,
+                404: errorSchema,
+            },
+            summary: "Verify a feedback connection's stored credential",
+        },
+        remove: {
+            method: "DELETE",
+            path: "/settings/esps/:espId/feedback",
+            responses: { 204: c.noBody(), 404: errorSchema },
+            summary: "Disable a user ESP's delivery-feedback connection",
+        },
+    },
+    { metadata: { tag: "Settings" } },
+);
+
+/** Read-only normalized delivery-event history — see
+ * `docs/bounces-and-complaints.md#5-canonical-delivery-events`. */
+const deliveryEventsContract = c.router(
+    {
+        list: {
+            method: "GET",
+            path: "/delivery-events",
+            query: listDeliveryEventsQuerySchema,
+            responses: { 200: paginated(deliveryEventSchema) },
+            summary: "List normalized delivery events for the team",
+        },
+        get: {
+            method: "GET",
+            path: "/delivery-events/:eventId",
+            responses: { 200: deliveryEventSchema, 404: errorSchema },
+            summary: "Get a single normalized delivery event",
+        },
+    },
+    { metadata: { tag: "Delivery" } },
+);
+
+/** Per-workspace do-not-send list — see
+ * `docs/bounces-and-complaints.md#8-suppression-model`. Workspace-wide and
+ * route-independent; intentionally has no ESP filter that changes
+ * enforcement semantics. */
+const suppressionsContract = c.router(
+    {
+        list: {
+            method: "GET",
+            path: "/suppressions",
+            query: listSuppressionsQuerySchema,
+            responses: { 200: paginated(suppressionSchema) },
+            summary: "List the team's suppressed recipients",
+        },
+        get: {
+            method: "GET",
+            path: "/suppressions/:suppressionId",
+            responses: { 200: suppressionSchema, 404: errorSchema },
+            summary: "Get a single suppression",
+        },
+        release: {
+            method: "POST",
+            path: "/suppressions/:suppressionId/release",
+            body: releaseSuppressionBodySchema,
+            responses: {
+                200: suppressionSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Release an active suppression",
+            description:
+                "A workspace owner may release hard_bounce, repeated_soft_bounce, and manual suppressions only. Complaint suppressions cannot be released through this endpoint (409 suppression_not_releasable) — see the PRD's reactivation policy.",
+        },
+    },
+    { metadata: { tag: "Delivery" } },
+);
+
 export const contract = c.router({
     contacts: contactsContract,
     segments: segmentsContract,
@@ -604,6 +824,10 @@ export const contract = c.router({
     settings: settingsContract,
     teams: teamsContract,
     provisioning: provisioningContract,
+    overview: overviewContract,
+    feedback: feedbackContract,
+    deliveryEvents: deliveryEventsContract,
+    suppressions: suppressionsContract,
 });
 
 export type Contract = typeof contract;

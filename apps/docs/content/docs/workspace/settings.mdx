@@ -1,0 +1,13 @@
+---
+title: Settings
+description: Configure sending identity and email service providers.
+---
+
+Settings has two areas:
+
+- **General** stores the team mailing address used for sender compliance and unsubscribe-related email requirements.
+- **ESP** configures one or more email service providers and marks one as the default.
+
+SendLit supports custom SMTP, SendGrid, Mailgun, Postmark, Amazon SES, Resend, and other custom providers. Provider credentials are write-only: stored secrets are never returned by the API.
+
+Use **Test connection** after adding a provider. A provider must be configured before broadcasts or active sequences can deliver mail.

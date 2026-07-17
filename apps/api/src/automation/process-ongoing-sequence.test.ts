@@ -6,7 +6,9 @@ vi.mock("../db/client", async () => {
     return { db: await makeTestDb() };
 });
 vi.mock("../mail/send", () => ({
-    sendMail: vi.fn().mockResolvedValue(undefined),
+    sendMail: vi
+        .fn()
+        .mockResolvedValue({ messageId: null, providerResponse: null }),
 }));
 
 import { db } from "../db/client";
@@ -24,6 +26,7 @@ import {
     getNextPublishedEmail,
     processOngoingSequence,
 } from "./process-ongoing-sequence";
+import { addOrStrengthenSuppression } from "../delivery-feedback/suppression-queries";
 
 const tdb = db as unknown as TestDb;
 const mockedSendMail = vi.mocked(sendMail);
@@ -31,7 +34,10 @@ const mockedSendMail = vi.mocked(sendMail);
 beforeEach(async () => {
     await truncateAll(tdb);
     mockedSendMail.mockClear();
-    mockedSendMail.mockResolvedValue(undefined);
+    mockedSendMail.mockResolvedValue({
+        messageId: null,
+        providerResponse: null,
+    });
 });
 
 describe("getNextPublishedEmail", () => {
@@ -137,8 +143,42 @@ describe("processOngoingSequence", () => {
             .select()
             .from(accounts)
             .where(eq(accounts.id, account.id));
-        expect(accountAfter.dailyMailCount).toBe(1);
-        expect(accountAfter.monthlyMailCount).toBe(1);
+        expect(accountAfter.dailyMailCount).toBe(0);
+        expect(accountAfter.monthlyMailCount).toBe(0);
+    });
+
+    it("skips a suppressed recipient without sending or recording a delivery", async () => {
+        const { team, contact } = await seedTeamAndContact(tdb);
+        const { sequenceRow } = await seedSequence(tdb, {
+            teamId: team.id,
+            emails: [{ emailId: "email_e1", subject: "First" }],
+        });
+        await addOrStrengthenSuppression({
+            teamId: team.id,
+            recipientEmail: contact.email,
+            reason: "complaint",
+            actorType: "system",
+        });
+        const row = await seedOngoingSequence(tdb, {
+            teamId: team.id,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
+        });
+
+        await processOngoingSequence(row.id);
+
+        expect(mockedSendMail).not.toHaveBeenCalled();
+        const deliveries = await tdb
+            .select()
+            .from(emailDeliveries)
+            .where(eq(emailDeliveries.contactId, contact.id));
+        expect(deliveries).toHaveLength(0);
+        // Treated as handled (not retried) — the sequence still advances.
+        const [after] = await tdb
+            .select()
+            .from(ongoingSequences)
+            .where(eq(ongoingSequences.id, row.id));
+        expect(after).toBeUndefined();
     });
 
     it("applies the email's on-send tag action to the contact", async () => {
@@ -234,6 +274,64 @@ describe("processOngoingSequence", () => {
         expect(mockedSendMail).toHaveBeenCalledTimes(1);
     });
 
+    it("atomically claims a due row so concurrent workers send only once", async () => {
+        const { team, contact } = await seedTeamAndContact(tdb);
+        const { sequenceRow } = await seedSequence(tdb, {
+            teamId: team.id,
+            emails: [{ emailId: "email_e1" }],
+        });
+        const row = await seedOngoingSequence(tdb, {
+            teamId: team.id,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
+        });
+        let releaseSend!: () => void;
+        mockedSendMail.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    releaseSend = () =>
+                        resolve({ messageId: null, providerResponse: null });
+                }),
+        );
+
+        const first = processOngoingSequence(row.id);
+        await vi.waitFor(() => expect(mockedSendMail).toHaveBeenCalledOnce());
+        const concurrent = processOngoingSequence(row.id);
+        await concurrent;
+
+        expect(mockedSendMail).toHaveBeenCalledOnce();
+        releaseSend();
+        await first;
+        expect(mockedSendMail).toHaveBeenCalledOnce();
+    });
+
+    it("recovers an expired worker claim but leaves a live claim alone", async () => {
+        const { team, contact } = await seedTeamAndContact(tdb);
+        const { sequenceRow } = await seedSequence(tdb, {
+            teamId: team.id,
+            emails: [{ emailId: "email_e1" }],
+        });
+        const row = await seedOngoingSequence(tdb, {
+            teamId: team.id,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
+        });
+        await tdb
+            .update(ongoingSequences)
+            .set({ processingStartedAt: new Date() })
+            .where(eq(ongoingSequences.id, row.id));
+
+        await processOngoingSequence(row.id);
+        expect(mockedSendMail).not.toHaveBeenCalled();
+
+        await tdb
+            .update(ongoingSequences)
+            .set({ processingStartedAt: new Date(Date.now() - 11 * 60_000) })
+            .where(eq(ongoingSequences.id, row.id));
+        await processOngoingSequence(row.id);
+        expect(mockedSendMail).toHaveBeenCalledOnce();
+    });
+
     it("completes a broadcast: deletes the row and marks the sequence sent", async () => {
         const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
@@ -263,7 +361,7 @@ describe("processOngoingSequence", () => {
         expect((seqAfter.report as any).broadcast.sentAt).toBeTypeOf("number");
     });
 
-    it("skips sending when the team's mail quota is exhausted", async () => {
+    it("sends through a user ESP when platform quota is exhausted", async () => {
         const { team, contact } = await seedTeamAndContact(tdb, {
             account: { dailyMailLimit: 5, dailyMailCount: 5 },
         });
@@ -279,13 +377,46 @@ describe("processOngoingSequence", () => {
 
         await processOngoingSequence(row.id);
 
-        expect(mockedSendMail).not.toHaveBeenCalled();
-        // Row stays put so a later poll retries once quota resets.
+        expect(mockedSendMail).toHaveBeenCalledOnce();
         const remaining = await tdb
             .select()
             .from(ongoingSequences)
             .where(eq(ongoingSequences.id, row.id));
-        expect(remaining).toHaveLength(1);
+        expect(remaining).toHaveLength(0);
+    });
+
+    it("fails closed and never falls back when the pinned ESP disappears", async () => {
+        const { team, contact } = await seedTeamAndContact(tdb);
+        const { sequenceRow } = await seedSequence(tdb, {
+            teamId: team.id,
+            emails: [{ emailId: "email_e1" }],
+        });
+        // The pinned outbox no longer exists (FK `ON DELETE SET NULL` — see
+        // `db/schema.ts#sequences.outboxId`), simulating an ESP deleted after
+        // the sequence was started, while `deliveryRoute` is still "custom".
+        await tdb
+            .update(sequences)
+            .set({ outboxId: null })
+            .where(eq(sequences.id, sequenceRow.id));
+        const row = await seedOngoingSequence(tdb, {
+            teamId: team.id,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
+        });
+
+        await expect(processOngoingSequence(row.id)).rejects.toThrow(
+            "Team ESP is not configured.",
+        );
+
+        expect(mockedSendMail).not.toHaveBeenCalled();
+        const [after] = await tdb
+            .select()
+            .from(ongoingSequences)
+            .where(eq(ongoingSequences.id, row.id));
+        // The ESP-existence guard throws before the retry-tracking path, so
+        // the row is left untouched rather than treated as a transient send
+        // failure — never silently retried through a different transport.
+        expect(after.retryCount).toBe(0);
     });
 
     it("cascade-deletes the ongoing_sequences row when its contact is deleted", async () => {

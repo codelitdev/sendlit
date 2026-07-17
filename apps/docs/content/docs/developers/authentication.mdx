@@ -19,6 +19,12 @@ Keys are stored hashed (SHA-256), which means:
 
 If a key is lost or leaked, revoke it and create a new one.
 
+## Dashboard sign-in
+
+The web dashboard uses email OTP sign-in. The session is separate from team API keys: use the dashboard session for interactive administration and an API key for server-to-server requests.
+
+![SendLit sign-in screen](/screenshots/sign-in.png)
+
 ## Provisioning
 
 Provisioning endpoints require the dedicated `X-Sendlit-Provisioning-Secret` header and are intended for trusted multi-tenant consumers.

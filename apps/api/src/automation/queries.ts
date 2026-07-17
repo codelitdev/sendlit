@@ -1,4 +1,4 @@
-import { and, count, eq, lt, sql } from "drizzle-orm";
+import { and, count, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { contacts, ongoingSequences, rules, sequences } from "../db/schema";
 import { EventType, sequenceBounceLimit } from "../config/constants";
@@ -156,8 +156,49 @@ export async function getDueOngoingSequences() {
             and(
                 lt(ongoingSequences.nextEmailScheduledTime, currentTime),
                 lt(ongoingSequences.retryCount, sequenceBounceLimit),
+                or(
+                    isNull(ongoingSequences.processingStartedAt),
+                    lt(
+                        ongoingSequences.processingStartedAt,
+                        new Date(currentTime - PROCESSING_LEASE_MS),
+                    ),
+                ),
             ),
         );
+}
+
+const PROCESSING_LEASE_MS = 10 * 60 * 1000;
+
+/** Atomically claims a due delivery row. The expiring lease recovers work
+ * after a worker process dies while preventing two live workers from sending
+ * the same sequence email concurrently. */
+export async function claimOngoingSequence(id: string) {
+    const now = new Date();
+    const [row] = await db
+        .update(ongoingSequences)
+        .set({ processingStartedAt: now, updatedAt: now })
+        .where(
+            and(
+                eq(ongoingSequences.id, id),
+                lt(ongoingSequences.nextEmailScheduledTime, Date.now() + 1),
+                or(
+                    isNull(ongoingSequences.processingStartedAt),
+                    lt(
+                        ongoingSequences.processingStartedAt,
+                        new Date(Date.now() - PROCESSING_LEASE_MS),
+                    ),
+                ),
+            ),
+        )
+        .returning();
+    return row ?? null;
+}
+
+export async function releaseOngoingSequenceClaim(id: string): Promise<void> {
+    await db
+        .update(ongoingSequences)
+        .set({ processingStartedAt: null, updatedAt: new Date() })
+        .where(eq(ongoingSequences.id, id));
 }
 
 export async function deleteOngoingSequence(id: string) {

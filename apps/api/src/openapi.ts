@@ -56,6 +56,11 @@ export const openApiDocument = generateOpenApi(
                 description:
                     "Team management (list/create/rename/delete), per-team API keys, and server-to-server provisioning.",
             },
+            {
+                name: "Delivery",
+                description:
+                    "Normalized bounce/complaint delivery events and the per-workspace suppression (do-not-send) list. See docs/bounces-and-complaints.md.",
+            },
         ],
         components: {
             securitySchemes: {

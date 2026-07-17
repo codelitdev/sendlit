@@ -13,7 +13,7 @@ import { createAccount, findAccountByEmail } from "../account/queries";
 
 export const webClientUrl = process.env.WEB_CLIENT || "http://localhost:3000";
 const apiUrl = process.env.API_PUBLIC_URL || process.env.BETTER_AUTH_URL;
-const authBaseUrl = apiUrl || "http://localhost:4000";
+const authBaseUrl = apiUrl || "http://localhost:5000";
 const authBasePath = "/api/auth";
 
 /** Parent domain shared by `apps/web` and `apps/api` in production (e.g.
@@ -29,7 +29,7 @@ const authCookieDomain = process.env.AUTH_COOKIE_DOMAIN;
 /** The actual `iss` Better Auth puts on every JWT it signs is
  * `baseURL + basePath` (i.e. `ctx.context.baseURL`), not just `baseURL` —
  * confirmed against this server's own `/.well-known/oauth-authorization-server`
- * (`issuer` there is `http://localhost:4000/api/auth`, not `http://localhost:4000`).
+ * (`issuer` there is `http://localhost:5000/api/auth`, not `http://localhost:5000`).
  * `resolve-auth.ts` must verify against this same value or every bearer
  * token gets rejected with `invalid_token` regardless of anything else. */
 export const authIssuer = `${authBaseUrl}${authBasePath}`;

@@ -31,7 +31,12 @@ const mocks = vi.hoisted(() => ({
     upsertEspConfig: vi.fn(),
     deleteEspConfig: vi.fn(),
     recordEspTestResult: vi.fn(),
+    listEspConfigs: vi.fn(),
+    createEspConfig: vi.fn(),
+    getEspConfigByEspId: vi.fn(),
+    updateEspConfig: vi.fn(),
     invalidateTeamTransport: vi.fn(),
+    invalidateEspTransport: vi.fn(),
     sendTestMail: vi.fn(),
 
     getTeam: vi.fn(),
@@ -108,10 +113,15 @@ vi.mock("../../settings/esp/queries", () => ({
     upsertEspConfig: mocks.upsertEspConfig,
     deleteEspConfig: mocks.deleteEspConfig,
     recordEspTestResult: mocks.recordEspTestResult,
+    listEspConfigs: mocks.listEspConfigs,
+    createEspConfig: mocks.createEspConfig,
+    getEspConfigByEspId: mocks.getEspConfigByEspId,
+    updateEspConfig: mocks.updateEspConfig,
 }));
 
 vi.mock("../../mail/transport", () => ({
     invalidateTeamTransport: mocks.invalidateTeamTransport,
+    invalidateEspTransport: mocks.invalidateEspTransport,
 }));
 
 vi.mock("../../mail/send", () => ({
@@ -423,6 +433,134 @@ describe("MCP ESP tools", () => {
         });
         expect(mocks.sendTestMail).not.toHaveBeenCalled();
     });
+
+    it("lists user-managed ESP configurations", async () => {
+        const tools = makeToolRegistry(registerEspTools);
+        mocks.listEspConfigs.mockResolvedValue([
+            { espId: "esp_1", name: "Primary", isDefault: true },
+            { espId: "esp_2", name: "Backup", isDefault: false },
+        ]);
+
+        const result = await tools.get("list_esps")!.handler(auth);
+
+        expect(mocks.listEspConfigs).toHaveBeenCalledWith("team-1");
+        expect(result.structuredContent).toMatchObject({
+            items: [
+                { espId: "esp_1", isDefault: true },
+                { espId: "esp_2", isDefault: false },
+            ],
+        });
+    });
+
+    it("creates a named user-managed ESP configuration", async () => {
+        const tools = makeToolRegistry(registerEspTools);
+        mocks.createEspConfig.mockResolvedValue({
+            espId: "esp_2",
+            name: "Backup",
+            isDefault: false,
+            provider: "smtp",
+            host: "smtp.example.com",
+            port: 587,
+            secure: false,
+        });
+
+        const result = await tools.get("create_esp")!.handler(
+            {
+                name: "Backup",
+                provider: "smtp",
+                host: "smtp.example.com",
+                port: 587,
+                secure: false,
+            },
+            auth,
+        );
+
+        expect(mocks.createEspConfig).toHaveBeenCalledWith("team-1", {
+            name: "Backup",
+            provider: "smtp",
+            host: "smtp.example.com",
+            port: 587,
+            secure: false,
+        });
+        expect(mocks.invalidateTeamTransport).toHaveBeenCalledWith("team-1");
+        expect(result.structuredContent).toMatchObject({ espId: "esp_2" });
+    });
+
+    it("returns NOT_FOUND when getting an unknown espId", async () => {
+        const tools = makeToolRegistry(registerEspTools);
+        mocks.getEspConfigByEspId.mockResolvedValue(null);
+
+        const result = await tools
+            .get("get_esp")!
+            .handler({ espId: "esp_missing" }, auth);
+
+        expect(result).toBe(NOT_FOUND);
+    });
+
+    it("updates a user-managed ESP and invalidates its transport", async () => {
+        const tools = makeToolRegistry(registerEspTools);
+        mocks.updateEspConfig.mockResolvedValue({
+            id: "internal-2",
+            espId: "esp_2",
+            name: "Backup",
+            isDefault: true,
+        });
+
+        const result = await tools
+            .get("update_esp")!
+            .handler({ espId: "esp_2", isDefault: true }, auth);
+
+        expect(mocks.updateEspConfig).toHaveBeenCalledWith("team-1", "esp_2", {
+            isDefault: true,
+        });
+        expect(mocks.invalidateEspTransport).toHaveBeenCalledWith(
+            "team-1",
+            "internal-2",
+        );
+        expect(mocks.invalidateTeamTransport).toHaveBeenCalledWith("team-1");
+        expect(result.structuredContent).toMatchObject({ espId: "esp_2" });
+    });
+
+    it("surfaces esp_in_use as a friendly error when deleting", async () => {
+        const tools = makeToolRegistry(registerEspTools);
+        mocks.getEspConfigByEspId.mockResolvedValue({
+            id: "internal-2",
+            espId: "esp_2",
+            isDefault: false,
+        });
+        mocks.deleteEspConfig.mockRejectedValue(new Error("esp_in_use"));
+
+        const result = await tools
+            .get("delete_esp")!
+            .handler({ espId: "esp_2" }, auth);
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("in use");
+    });
+
+    it("tests a specific ESP by espId", async () => {
+        const tools = makeToolRegistry(registerEspTools);
+        mocks.getEspConfigByEspId.mockResolvedValue({
+            id: "internal-2",
+            teamId: "team-1",
+            espId: "esp_2",
+            provider: "smtp",
+            fromName: null,
+            fromEmail: null,
+        });
+        mocks.sendTestMail.mockResolvedValue(undefined);
+
+        const result = await tools
+            .get("test_esp")!
+            .handler({ espId: "esp_2", to: "dest@example.com" }, auth);
+
+        expect(mocks.getEspConfigByEspId).toHaveBeenCalledWith(
+            "team-1",
+            "esp_2",
+        );
+        expect(mocks.sendTestMail).toHaveBeenCalled();
+        expect(result.structuredContent).toMatchObject({ success: true });
+    });
 });
 
 describe("MCP team and template tools", () => {
@@ -667,7 +805,7 @@ describe("MCP transactional tools", () => {
             ],
             ["template_not_found", "Template not found"],
             ["esp_not_configured", "Team ESP is not configured."],
-            ["quota_exceeded", "Mail sending quota exceeded"],
+            ["esp_not_found", "ESP not found"],
         ];
 
         for (const [errorMessage, expectedText] of cases) {

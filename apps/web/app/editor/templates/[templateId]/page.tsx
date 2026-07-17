@@ -40,7 +40,7 @@ export default function TemplateEditorPage({
 
     return (
         <EmailEditorScreen
-            exitFallbackHref="/dashboard/templates"
+            exitFallbackHref="/templates"
             screenTitle="Editing template"
             saveLabel="Save template"
             initialContent={content}

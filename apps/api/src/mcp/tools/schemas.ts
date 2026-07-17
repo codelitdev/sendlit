@@ -4,6 +4,7 @@ import {
     mailTypes,
     sequenceStatus,
     emailActionTypes,
+    feedbackCapableProviders,
 } from "../../config/constants";
 
 export const emailContentSchema = z.object({
@@ -120,6 +121,7 @@ export const sequenceSchema = z.object({
     type: z.enum(mailTypes),
     title: z.string(),
     status: z.enum(sequenceStatus),
+    espId: z.string().nullable(),
     triggerType: z.string().nullable().optional(),
     triggerData: z.string().nullable().optional(),
     filter: z.record(z.any()).nullable().optional(),
@@ -180,6 +182,9 @@ export const espProviders = [
 ] as const;
 
 export const espConfigSchema = z.object({
+    espId: z.string(),
+    name: z.string(),
+    isDefault: z.boolean(),
     provider: z.enum(espProviders),
     host: z.string(),
     port: z.number(),
@@ -193,8 +198,78 @@ export const espConfigSchema = z.object({
     lastTestError: z.string().nullable().optional(),
 });
 
+export const espConfigListSchema = z.object({
+    items: z.array(espConfigSchema),
+});
+
 /** General (non-ESP) per-team settings singleton — see settings/general. */
 export const generalSettingsSchema = z.object({
     mailingAddress: z.string().nullable(),
     updatedAt: z.string().or(z.date()).nullable().optional(),
+});
+
+// ---- Bounce and complaint processing (docs/bounces-and-complaints.md) -----
+
+// Re-exported from the single source of truth so the MCP surface can never
+// drift from the registered adapters (see `config/constants.ts`).
+export { feedbackCapableProviders };
+
+export const feedbackConnectionSchema = z.object({
+    connectionId: z.string(),
+    espId: z.string(),
+    provider: z.string(),
+    webhookUrl: z.string(),
+    hasCredential: z.boolean(),
+    status: z.enum([
+        "pending",
+        "healthy",
+        "stale",
+        "error",
+        "retiring",
+        "disabled",
+    ]),
+    lastReceivedAt: z.string().or(z.date()).nullable().optional(),
+    lastVerifiedAt: z.string().or(z.date()).nullable().optional(),
+    lastErrorCode: z.string().nullable().optional(),
+});
+
+export const deliveryEventSchema = z.object({
+    eventId: z.string(),
+    provider: z.string(),
+    espId: z.string().nullable(),
+    deliveryRoute: z.enum(["custom", "platform"]).nullable(),
+    messageId: z.string().nullable(),
+    recipientEmail: z.string().nullable(),
+    eventType: z.string(),
+    bounceClass: z.string().nullable().optional(),
+    reason: z.string().nullable().optional(),
+    occurredAt: z.string().or(z.date()),
+    receivedAt: z.string().or(z.date()),
+});
+
+export const deliveryEventListSchema = z.object({
+    items: z.array(deliveryEventSchema),
+    total: z.number(),
+});
+
+export const suppressionSchema = z.object({
+    suppressionId: z.string(),
+    recipientEmail: z.string().nullable(),
+    reason: z.enum([
+        "hard_bounce",
+        "complaint",
+        "repeated_soft_bounce",
+        "provider_suppression",
+        "manual",
+    ]),
+    active: z.boolean(),
+    firstSuppressedAt: z.string().or(z.date()),
+    lastSuppressedAt: z.string().or(z.date()),
+    releasedAt: z.string().or(z.date()).nullable().optional(),
+    releaseReason: z.string().nullable().optional(),
+});
+
+export const suppressionListSchema = z.object({
+    items: z.array(suppressionSchema),
+    total: z.number(),
 });

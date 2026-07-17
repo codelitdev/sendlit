@@ -18,7 +18,9 @@ import {
     updateSequenceEmailBodySchema,
 } from "../../../packages/api-contract/src/schemas/sequences";
 import {
+    createEspConfigBodySchema,
     testEspConfigBodySchema,
+    updateEspConfigBodySchema,
     upsertEspConfigBodySchema,
 } from "../../../packages/api-contract/src/schemas/esp";
 import {
@@ -27,9 +29,43 @@ import {
     provisionTeamBodySchema,
     renameTeamBodySchema,
 } from "../../../packages/api-contract/src/schemas/teams";
+import { upsertFeedbackConnectionBodySchema } from "../../../packages/api-contract/src/schemas/feedback";
+import { listDeliveryEventsQuerySchema } from "../../../packages/api-contract/src/schemas/delivery-events";
+import {
+    listSuppressionsQuerySchema,
+    releaseSuppressionBodySchema,
+} from "../../../packages/api-contract/src/schemas/suppressions";
 import { openApiDocument } from "./openapi";
+import { transactionalEmailSchema } from "../../../packages/api-contract/src/schemas/transactional";
 
 describe("API input validation schemas", () => {
+    it("validates create and partial-update bodies for user ESPs", () => {
+        expect(
+            createEspConfigBodySchema.safeParse({
+                name: "Marketing",
+                provider: "smtp",
+                host: "smtp.example.com",
+                port: 587,
+                secure: false,
+            }).success,
+        ).toBe(true);
+        expect(
+            createEspConfigBodySchema.safeParse({
+                name: "",
+                provider: "smtp",
+                host: "smtp.example.com",
+                port: 587,
+                secure: false,
+            }).success,
+        ).toBe(false);
+        expect(
+            updateEspConfigBodySchema.safeParse({ isDefault: false }).success,
+        ).toBe(false);
+        expect(
+            updateEspConfigBodySchema.safeParse({ isDefault: true }).success,
+        ).toBe(true);
+    });
+
     it("validates contact create/update bodies and paginated query strings", () => {
         expect(
             createContactBodySchema.safeParse({
@@ -326,6 +362,89 @@ describe("API input validation schemas", () => {
     });
 });
 
+describe("bounce/complaint feedback and suppression schemas", () => {
+    it("keeps the suppressed transactional status in REST and MCP output schemas", () => {
+        const parsed = transactionalEmailSchema.safeParse({
+            txeId: "txe_123",
+            to: "reader@example.com",
+            from: "sender@example.com",
+            replyTo: null,
+            subject: "Receipt",
+            templateId: null,
+            variables: {},
+            status: "suppressed",
+            error: null,
+            trackOpens: false,
+            trackClicks: false,
+            openCount: 0,
+            clickCount: 0,
+            sentAt: null,
+            createdAt: null,
+            updatedAt: null,
+        });
+
+        expect(parsed.success).toBe(true);
+    });
+
+    it("validates feedback connection upsert bodies", () => {
+        expect(
+            upsertFeedbackConnectionBodySchema.safeParse({
+                credential: "whsec_abc123",
+            }).success,
+        ).toBe(true);
+        expect(
+            upsertFeedbackConnectionBodySchema.safeParse({ credential: "" })
+                .success,
+        ).toBe(false);
+        expect(upsertFeedbackConnectionBodySchema.safeParse({}).success).toBe(
+            false,
+        );
+    });
+
+    it("validates delivery-event list query filters", () => {
+        expect(
+            listDeliveryEventsQuerySchema.safeParse({
+                eventType: "hard_bounce",
+                deliveryRoute: "custom",
+            }).success,
+        ).toBe(true);
+        expect(
+            listDeliveryEventsQuerySchema.safeParse({
+                eventType: "not_a_real_type",
+            }).success,
+        ).toBe(false);
+        expect(
+            listDeliveryEventsQuerySchema.safeParse({
+                deliveryRoute: "platform",
+            }).success,
+        ).toBe(true);
+    });
+
+    it("validates suppression list filters and release bodies", () => {
+        expect(
+            listSuppressionsQuerySchema.safeParse({ active: "true" }).success,
+        ).toBe(true);
+        expect(
+            listSuppressionsQuerySchema.safeParse({ reason: "complaint" })
+                .success,
+        ).toBe(true);
+        expect(
+            listSuppressionsQuerySchema.safeParse({ reason: "bogus_reason" })
+                .success,
+        ).toBe(false);
+
+        expect(releaseSuppressionBodySchema.safeParse({}).success).toBe(true);
+        expect(
+            releaseSuppressionBodySchema.safeParse({
+                explanation: "mailbox confirmed fixed",
+            }).success,
+        ).toBe(true);
+        expect(
+            releaseSuppressionBodySchema.safeParse({ explanation: "" }).success,
+        ).toBe(false);
+    });
+});
+
 describe("OpenAPI authentication metadata", () => {
     it("declares API key auth globally so Swagger UI sends the header", () => {
         expect(openApiDocument.components?.securitySchemes).toMatchObject({
@@ -346,5 +465,24 @@ describe("OpenAPI authentication metadata", () => {
         ).toMatchObject({
             security: [{ provisioningSecretAuth: [] }],
         });
+    });
+
+    it("generates paths for the feedback, delivery-events, and suppressions routes", () => {
+        expect(
+            openApiDocument.paths["/settings/esps/{espId}/feedback"]?.get,
+        ).toBeTruthy();
+        expect(
+            openApiDocument.paths["/settings/esps/{espId}/feedback"]?.put,
+        ).toBeTruthy();
+        expect(
+            openApiDocument.paths["/settings/esps/{espId}/feedback/rotate"]
+                ?.post,
+        ).toBeTruthy();
+        expect(openApiDocument.paths["/delivery-events"]?.get).toBeTruthy();
+        expect(openApiDocument.paths["/suppressions"]?.get).toBeTruthy();
+        expect(
+            openApiDocument.paths["/suppressions/{suppressionId}/release"]
+                ?.post,
+        ).toBeTruthy();
     });
 });

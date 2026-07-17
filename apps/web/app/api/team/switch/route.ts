@@ -11,9 +11,15 @@ import { TEAM_ID_COOKIE } from "@/lib/tokens";
 export async function POST(req: NextRequest) {
     const form = await req.formData();
     const teamId = String(form.get("teamId") || "");
-    const redirectTo = String(form.get("redirectTo") || "/dashboard");
+    const redirectTo = String(form.get("redirectTo") || "/");
 
-    const res = NextResponse.redirect(new URL(redirectTo, req.url));
+    const requestUrl = new URL(req.url);
+    const requestedRedirect = new URL(redirectTo, requestUrl);
+    const redirectUrl =
+        requestedRedirect.origin === requestUrl.origin
+            ? requestedRedirect
+            : new URL("/", requestUrl);
+    const res = NextResponse.redirect(redirectUrl);
     if (teamId) {
         const isProd = process.env.NODE_ENV === "production";
         // Not httpOnly, deliberately: this is just a "which team am I looking

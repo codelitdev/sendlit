@@ -48,7 +48,8 @@ suppression/footer bypasses threaded through the campaign send loop.
 1. `POST /emails`: send a single message to a single recipient, authenticated
    by team (API key or session), rendered from a stored template + variables
    or inline content, dispatched immediately.
-2. Per-message status a caller can query (`queued | sent | failed | bounced`),
+2. Per-message status a caller can query
+   (`queued | sent | failed | bounced | suppressed`),
    with a list endpoint backing both API consumers and the dashboard log page.
 3. Idempotent sends: a caller retrying after a timeout must not double-send.
 4. Retries with backoff on transient ESP failures (the current `mail` worker
@@ -91,7 +92,7 @@ transactional_emails
   variables         jsonb NOT NULL DEFAULT {}   -- liquid merge payload
   headers           jsonb
   contact_id        uuid FK -> contacts.id ON DELETE SET NULL  -- analytics link only
-  status            text NOT NULL DEFAULT 'queued'  -- queued | sent | failed | bounced
+  status            text NOT NULL DEFAULT 'queued'  -- queued | sent | failed | bounced | suppressed
   error             text
   idempotency_key   text
   track_opens       boolean NOT NULL DEFAULT false
@@ -179,16 +180,13 @@ Validation / behavior:
   unique index, not check-then-insert — two concurrent retries of the same
   key must yield one row and one enqueued job (the `jobId` dedupe is the
   second belt).
-- `422` when the team has no ESP config (mirrors the campaign path's
+- `422` when the team has no user-managed ESP config (mirrors the campaign path's
   `MISSING_TEAM_ESP_ERROR`, but surfaced at request time instead of dying in
   the worker).
-- `429` when `hasMailQuotaRemaining(team.ownerAccountId)` is false —
-  transactional mail shares the account-level daily/monthly counters — or
-  when the per-team request rate limit is exceeded (see
-  [Rate limiting](#rate-limiting)). The two are distinguishable: the
-  rate-limit response carries `Retry-After`/`RateLimit-*` headers (back off
-  seconds), the quota response's body says the sending allowance is exhausted
-  (back off until the daily/monthly window resets).
+- `429` only when the per-team request rate limit is exceeded (see
+  [Rate limiting](#rate-limiting)). User-managed ESP delivery does not consume
+  SendLit account quota; quota is reserved for a future platform delivery
+  route.
 
 ### `GET /emails/:txeId` → `200`
 
@@ -304,8 +302,7 @@ const transactionalContract = c.router(
             responses: {
                 202: sendEmailResponseSchema,
                 400: errorSchema, // validation or template/render failure
-                422: errorSchema, // team has no ESP configured
-                429: errorSchema, // quota exhausted or rate limited
+                422: errorSchema, // team has no user ESP configured
             },
             summary: "Send a transactional email",
         },
@@ -343,17 +340,24 @@ directly (no separate sketch needed — `db/schema.ts` conventions: `genId`,
 
 ```
 POST /emails
-  └─ validate → resolve ESP + quota → render → insert row (queued) → enqueue
+  └─ validate → resolve and pin user ESP → render → insert row (queued) → enqueue
                                                  BullMQ "mail" queue
                                                  priority: 1, attempts: 3,
                                                  exponential backoff
   worker (mail/worker.ts)
   └─ load row → apply tracking rewrites (if opted in) → sendMail()
-       ├─ success → status='sent', sent_at=now(), incrementMailCount()
+       ├─ success → status='sent', sent_at=now()
        ├─ permanent SMTP rejection (5xx) → status='bounced' (no retry)
        └─ transient failure → retry w/ backoff; attempts exhausted →
           status='failed', error=<message>
 ```
+
+Before transport submission the worker atomically acquires a ten-minute
+database lease on the still-`queued` row. The lease prevents concurrent BullMQ
+workers from submitting the same message while allowing a later worker to
+recover a claim left by a dead process. Transient failures and terminal
+transitions clear the lease. The campaign delivery worker uses the same lease
+pattern on `ongoing_sequences`.
 
 Details:
 
@@ -395,18 +399,15 @@ Details:
     anything else rethrows so retry/backoff applies, and the final attempt
     (`job.attemptsMade + 1 >= job.opts.attempts`) marks the row `failed`.
 
-3. **Quota**: checked at request time (`429`) and incremented on successful
-   send (`incrementMailCount`) — the same account-level counters campaigns
-   use. A message that passes the request-time check but exhausts quota
-   before the worker runs is sent anyway; the window is seconds and the
-   counters are soft limits, matching the campaign path's check-then-send
-   looseness.
+3. **Quota**: user-managed ESPs bypass SendLit account quota and do not
+   increment its counters. A future platform delivery route will own quota
+   enforcement; its provider configuration is deployment-level, not stored in
+   `esp_configs`.
 
-4. **Dev behavior**: `sendMail` only performs real delivery when
-   `NODE_ENV === "production"` (it logs otherwise) — so in dev the row is
-   marked `sent` without actual delivery, consistent with how campaigns
-   behave. `sendTestMail` remains the "really send it" escape hatch for ESP
-   verification.
+4. **Dev behavior**: `sendMail` validates the pinned ESP in every environment,
+   then only performs real delivery when `NODE_ENV === "production"` (it logs
+   otherwise). `sendTestMail` remains the "really send it" escape hatch for
+   ESP verification.
 
 5. **Sender identity**: same fallback chain as `attemptMailSending` — the
    team's `esp_configs.fromName/fromEmail` → team name / owner account
@@ -418,13 +419,9 @@ Details:
 
 Three layers, answering different questions:
 
-1. **Volume quota — "how much mail may this account send?" (exists, reused).**
-   The account-level `dailyMailLimit`/`monthlyMailLimit` counters
-   (`account/queries.ts`): checked at `POST /emails` time (`429`), incremented
-   by the worker on successful send. Shared with campaigns — a large
-   broadcast eats into transactional headroom and vice versa, acceptable for
-   v1 since both bill to the same account. Soft limit (check-then-send), as
-   on the campaign path.
+1. **Volume quota — future platform delivery only.** The account-level
+   `dailyMailLimit`/`monthlyMailLimit` counters are retained for SendLit-hosted
+   delivery. User-managed ESP sends do not check or increment them.
 
 2. **Request rate limit — "how fast may this caller hit the endpoint?"
    (new).** Reuse `express-rate-limit` as `mcp/routes.ts` and
@@ -518,11 +515,11 @@ A read-only activity log in the dashboard (Postmark's "Activity" / Resend's
    into `contract.ts`.
 4. **Routes + queries**: `src/transactional/{routes,queries}.ts`, mounted in
    `index.ts`; team-keyed `express-rate-limit`, idempotency, validation,
-   quota, render, insert, enqueue.
+   user-ESP pinning, render, insert, enqueue.
 5. **Worker changes**: `"transactional"` job handling in `mail/worker.ts`
    (load row, tracking rewrites, status updates, 5xx→`bounced` via
-   `UnrecoverableError`, rethrow-for-retry, `failed` on last attempt, quota
-   increment on success); priority/attempts/backoff options at enqueue.
+   `UnrecoverableError`, rethrow-for-retry, and `failed` on the last attempt);
+   priority/attempts/backoff options at enqueue.
 6. **Tracking**: discriminated pixel token + branch in `tracking/routes.ts`.
 7. **MCP tools + OpenAPI tag.**
 8. **Web UI**: `lib/api.ts` wrappers, sidebar entry, list page, `[txeId]`

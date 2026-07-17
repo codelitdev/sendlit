@@ -19,6 +19,8 @@ import * as schema from "../db/schema";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
 import { emailContent } from "../test/fixtures";
 import { createTemplate } from "../templates/queries";
+import { createEspConfig } from "../settings/esp/queries";
+import { addOrStrengthenSuppression } from "../delivery-feedback/suppression-queries";
 import {
     countTransactionalEmails,
     createTransactionalEmail,
@@ -208,7 +210,32 @@ describe("createTransactionalEmail resolution errors", () => {
         ).rejects.toThrow("esp_not_configured");
     });
 
-    it("throws quota_exceeded once the owning account's quota is used up", async () => {
+    it("rejects a suppressed recipient without creating a row or enqueuing", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        await addOrStrengthenSuppression({
+            teamId: team.id,
+            recipientEmail: "bounced@example.com",
+            reason: "hard_bounce",
+            actorType: "system",
+        });
+
+        await expect(
+            createTransactionalEmail({
+                teamId: team.id,
+                to: "Bounced@Example.com",
+                subject: "Hi",
+                html: "<p>hi</p>",
+            }),
+        ).rejects.toThrow("recipient_suppressed");
+
+        const rows = await db
+            .select()
+            .from(schema.transactionalEmails)
+            .where(eq(schema.transactionalEmails.teamId, team.id));
+        expect(rows).toHaveLength(0);
+    });
+
+    it("does not apply platform quota to a user-managed ESP", async () => {
         const { team } = await seedTeamAndContact(tdb, {
             account: { dailyMailLimit: 0 },
         });
@@ -220,7 +247,56 @@ describe("createTransactionalEmail resolution errors", () => {
                 subject: "Hi",
                 html: "<p>hi</p>",
             }),
-        ).rejects.toThrow("quota_exceeded");
+        ).resolves.toMatchObject({ status: "queued" });
+    });
+
+    it("pins an explicitly selected ESP and rejects a foreign or missing espId", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const other = await seedTeamAndContact(tdb);
+        const secondEsp = await createEspConfig(team.id, {
+            name: "Marketing",
+            provider: "smtp",
+            host: "marketing.example.com",
+            port: 587,
+            secure: false,
+            fromEmail: "marketing@example.com",
+        });
+        const foreignEsp = await createEspConfig(other.team.id, {
+            name: "Other team's ESP",
+            provider: "smtp",
+            host: "other.example.com",
+            port: 587,
+            secure: false,
+        });
+
+        const row = await createTransactionalEmail({
+            teamId: team.id,
+            to: "a@example.com",
+            subject: "Hi",
+            html: "<p>hi</p>",
+            espId: secondEsp.espId,
+        });
+        expect(row.outboxId).toBe(secondEsp.id);
+        expect(row.fromEmail).toContain("marketing@example.com");
+
+        await expect(
+            createTransactionalEmail({
+                teamId: team.id,
+                to: "a@example.com",
+                subject: "Hi",
+                html: "<p>hi</p>",
+                espId: foreignEsp.espId,
+            }),
+        ).rejects.toThrow("esp_not_found");
+        await expect(
+            createTransactionalEmail({
+                teamId: team.id,
+                to: "a@example.com",
+                subject: "Hi",
+                html: "<p>hi</p>",
+                espId: "esp_does_not_exist",
+            }),
+        ).rejects.toThrow("esp_not_found");
     });
 });
 
@@ -322,6 +398,11 @@ describe("idempotency replay", () => {
             .from(schema.transactionalEmails)
             .where(eq(schema.transactionalEmails.idempotencyKey, "key-1"));
         expect(rows).toHaveLength(1);
+        const outbound = await db
+            .select()
+            .from(schema.outboundMessages)
+            .where(eq(schema.outboundMessages.transactionalEmailId, a.id));
+        expect(outbound).toHaveLength(1);
     });
 
     it("returns the original row on a sequential replay without re-enqueuing", async () => {

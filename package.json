@@ -8,7 +8,7 @@
         "lint": "eslint packages apps --quiet",
         "prettier": "prettier --write packages apps *.md",
         "prepare": "husky",
-        "test": "pnpm --filter @sendlit/api test"
+        "test": "pnpm --filter @sendlit/api test && pnpm --filter @sendlit/web test && pnpm --filter @sendlit/email-editor test && pnpm --filter @sendlit/email-blocks test"
     },
     "keywords": [],
     "author": "",

@@ -51,6 +51,22 @@ describe("sendMail", () => {
         );
     });
 
+    it("fails closed without an ESP outside production too", async () => {
+        process.env.NODE_ENV = "test";
+        getTeamTransportMock.mockResolvedValue(null);
+        const { sendMail } = await import("./send.js");
+
+        await expect(
+            sendMail({
+                from: "Sender <sender@example.com>",
+                to: "contact@example.com",
+                subject: "Hello",
+                html: "<p>Hello</p>",
+                teamId: "team-1",
+            }),
+        ).rejects.toThrow("Team ESP is not configured.");
+    });
+
     it("sends through the team's configured ESP", async () => {
         getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
         const { sendMail } = await import("./send.js");

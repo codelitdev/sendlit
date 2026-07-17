@@ -14,11 +14,11 @@ This web application provides a user interface for managing email automation bas
 ## Pages
 
 - `/login` — Google and Email OTP sign-in through Better Auth
-- `/dashboard/contacts` (+ `/[contactId]`) — list/create/tag/unsubscribe contacts
-- `/dashboard/templates` (+ `/[templateId]`) — list/create/edit reusable templates
-- `/dashboard/broadcasts` (+ `/[sequenceId]`) — one-off sends: audience filter,
+- `/contacts` (+ `/[contactId]`) — list/create/tag/unsubscribe contacts
+- `/templates` (+ `/[templateId]`) — list/create/edit reusable templates
+- `/broadcasts` (+ `/[sequenceId]`) — one-off sends: audience filter,
   sender, content, start/pause, delivery stats
-- `/dashboard/sequences` (+ `/[sequenceId]`) — multi-step, event-triggered
+- `/sequences` (+ `/[sequenceId]`) — multi-step, event-triggered
   automations: trigger, per-email content/delay/tag-action, start/pause, stats
 
 ## Running

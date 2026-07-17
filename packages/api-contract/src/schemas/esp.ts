@@ -14,6 +14,9 @@ export const espProviders = [
  * clients, only a `hasPassword` boolean (see
  * `apps/api/src/settings/esp/routes.ts`'s `toPublicShape`). */
 export const espConfigSchema = z.object({
+    espId: z.string(),
+    name: z.string(),
+    isDefault: z.boolean(),
     // Plain string, not the enum — the DB column is unconstrained text and
     // validated on write (see `upsertEspConfigBodySchema`).
     provider: z.string(),
@@ -41,6 +44,28 @@ export const upsertEspConfigBodySchema = z.object({
     fromName: z.string().optional(),
     fromEmail: z.string().email().optional(),
 });
+
+export const createEspConfigBodySchema = upsertEspConfigBodySchema.extend({
+    name: z.string().trim().min(1).max(100),
+    isDefault: z.boolean().optional(),
+});
+
+export const updateEspConfigBodySchema = z
+    .object({
+        name: z.string().trim().min(1).max(100).optional(),
+        provider: z.enum(espProviders).optional(),
+        host: z.string().min(1).optional(),
+        port: z.number().int().min(1).max(65535).optional(),
+        secure: z.boolean().optional(),
+        username: z.string().optional(),
+        password: z.string().optional(),
+        fromName: z.string().optional(),
+        fromEmail: z.union([z.string().email(), z.literal("")]).optional(),
+        isDefault: z.literal(true).optional(),
+    })
+    .refine((body) => Object.keys(body).length > 0, {
+        message: "At least one field is required",
+    });
 
 export const testEspConfigBodySchema = z.object({
     to: z.string().email().optional(),

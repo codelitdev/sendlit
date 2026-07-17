@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Check, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -83,10 +89,24 @@ export function EmailEditorScreen({
     header?: ReactNode;
 }) {
     const router = useRouter();
-    const [content, setContent] = useState(initialContent);
+    // The editor already owns the interactive document state. Keeping its
+    // latest value in a ref avoids re-rendering this full-screen shell (and
+    // passing a new `email` prop back to the editor) on every keystroke.
+    // `save` always reads the current document from this ref.
+    const contentRef = useRef(initialContent);
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+
+    // A real external content change (for example, navigating to another
+    // template without unmounting this screen) remains the source of truth.
+    useEffect(() => {
+        contentRef.current = initialContent;
+    }, [initialContent]);
+
+    const handleContentChange = useCallback((nextContent: Email) => {
+        contentRef.current = nextContent;
+    }, []);
 
     function exit() {
         if (window.history.length > 1) {
@@ -100,7 +120,7 @@ export function EmailEditorScreen({
         setSaving(true);
         setError(null);
         try {
-            await onSave(content);
+            await onSave(contentRef.current);
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
         } catch (err) {
@@ -170,8 +190,8 @@ export function EmailEditorScreen({
                     )}
                     <div className="min-h-0 flex-1">
                         <EmailEditor
-                            email={content}
-                            onChange={setContent}
+                            email={initialContent}
+                            onChange={handleContentChange}
                             blocks={EMAIL_EDITOR_BLOCKS}
                         />
                     </div>

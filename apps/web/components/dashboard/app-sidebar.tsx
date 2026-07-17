@@ -5,9 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
     BadgeCheck,
-    Bell,
     ChevronsUpDown,
-    CreditCard,
+    Home,
     LogOut,
     Mail,
     MailCheck,
@@ -16,6 +15,7 @@ import {
     Radio,
     Send,
     Settings,
+    ShieldAlert,
     Sparkles,
     Users,
     Workflow,
@@ -32,6 +32,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
     SidebarRail,
+    useSidebar,
 } from "@/components/ui/sidebar";
 import { Banner } from "@/components/dashboard/banner";
 import { ApiError } from "@/lib/api-client";
@@ -40,23 +41,24 @@ import { resolveCurrentTeamId } from "@/lib/tokens";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-    { href: "/dashboard/broadcasts", label: "Broadcasts", icon: Radio },
-    { href: "/dashboard/sequences", label: "Sequences", icon: Workflow },
-    { href: "/dashboard/contacts", label: "Contacts", icon: Users },
-    {
-        href: "/dashboard/transactional",
-        label: "Transactional",
-        icon: MailCheck,
-    },
+    { href: "/", label: "Home", icon: Home },
+    { href: "/broadcasts", label: "Broadcasts", icon: Radio },
+    { href: "/sequences", label: "Sequences", icon: Workflow },
+    { href: "/contacts", label: "Contacts", icon: Users },
 ];
 
 const LIBRARY_NAV = [
-    { href: "/dashboard/templates", label: "Templates", icon: Mail },
-    { href: "/dashboard/media", label: "Media", icon: Images },
+    { href: "/templates", label: "Templates", icon: Mail },
+    { href: "/media", label: "Media", icon: Images },
 ];
 
 const SECONDARY_NAV = [
-    { href: "/dashboard/settings", label: "Settings", icon: Settings },
+    { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const ACTIVITY_NAV = [
+    { href: "/transactional", label: "Transactional log", icon: MailCheck },
+    { href: "/suppressions", label: "Suppressions", icon: ShieldAlert },
 ];
 
 interface CurrentAccount {
@@ -75,13 +77,17 @@ function SidebarLink({
     item: { href: string; label: string; icon: React.ComponentType<any> };
 }) {
     const pathname = usePathname();
+    const { isMobile, setOpenMobile } = useSidebar();
     const active =
         pathname === item.href || pathname.startsWith(`${item.href}/`);
 
     return (
         <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={active}>
-                <Link href={item.href}>
+                <Link
+                    href={item.href}
+                    onClick={() => isMobile && setOpenMobile(false)}
+                >
                     <item.icon />
                     <span>{item.label}</span>
                 </Link>
@@ -194,7 +200,7 @@ export function AppSidebar() {
                                         <input
                                             type="hidden"
                                             name="redirectTo"
-                                            value="/dashboard"
+                                            value="/"
                                         />
                                         <button
                                             type="submit"
@@ -227,7 +233,7 @@ export function AppSidebar() {
                                 className="w-full justify-start text-muted-foreground"
                                 asChild
                             >
-                                <Link href="/dashboard/teams">
+                                <Link href="/teams">
                                     <Plus className="size-4" />
                                     Add team
                                 </Link>
@@ -255,6 +261,14 @@ export function AppSidebar() {
                     <SidebarGroupLabel>Library</SidebarGroupLabel>
                     <SidebarMenu>
                         {LIBRARY_NAV.map((item) => (
+                            <SidebarLink key={item.href} item={item} />
+                        ))}
+                    </SidebarMenu>
+                </SidebarGroup>
+                <SidebarGroup>
+                    <SidebarGroupLabel>Activity</SidebarGroupLabel>
+                    <SidebarMenu>
+                        {ACTIVITY_NAV.map((item) => (
                             <SidebarLink key={item.href} item={item} />
                         ))}
                     </SidebarMenu>
@@ -298,35 +312,21 @@ export function AppSidebar() {
                                     </div>
                                 </div>
                                 <div className="border-t p-1">
-                                    <button
-                                        type="button"
+                                    <Link
+                                        href="/account?tab=billing"
                                         className="flex h-9 w-full items-center gap-2 rounded-sm px-2 text-sm hover:bg-accent hover:text-accent-foreground"
                                     >
                                         <Sparkles className="size-4" />
                                         Upgrade to Pro
-                                    </button>
+                                    </Link>
                                 </div>
                                 <div className="border-t p-1">
                                     <Link
-                                        href="/dashboard/settings"
+                                        href="/account"
                                         className="flex h-9 items-center gap-2 rounded-sm px-2 text-sm hover:bg-accent hover:text-accent-foreground"
                                     >
                                         <BadgeCheck className="size-4" />
                                         Account
-                                    </Link>
-                                    <Link
-                                        href="/dashboard/settings"
-                                        className="flex h-9 items-center gap-2 rounded-sm px-2 text-sm hover:bg-accent hover:text-accent-foreground"
-                                    >
-                                        <CreditCard className="size-4" />
-                                        Billing
-                                    </Link>
-                                    <Link
-                                        href="/dashboard/settings"
-                                        className="flex h-9 items-center gap-2 rounded-sm px-2 text-sm hover:bg-accent hover:text-accent-foreground"
-                                    >
-                                        <Bell className="size-4" />
-                                        Notifications
                                     </Link>
                                 </div>
                                 <form

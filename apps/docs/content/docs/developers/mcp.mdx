@@ -1,0 +1,122 @@
+---
+title: MCP server
+description: Connect MCP clients to SendLit email operations.
+---
+
+SendLit exposes the same team-scoped email capabilities through a Model Context Protocol (MCP) server. MCP clients connect to the Streamable HTTP endpoint:
+
+```text
+https://api.sendlit.com/mcp
+```
+
+For a local installation, replace the origin with the API origin configured in your environment, for example `http://localhost:5000/mcp`.
+
+## Connect and authenticate
+
+The endpoint accepts JSON-RPC over HTTP. A client creates a session with the MCP `initialize` request, then sends later requests with the returned `Mcp-Session-Id` header. The server also supports JSON responses for clients that do not use server-sent events.
+
+Authenticate with one of these headers:
+
+```http
+Authorization: Bearer <oauth-access-token>
+```
+
+or:
+
+```http
+x-sendlit-apikey: sl_live_...
+```
+
+OAuth-capable clients should discover the protected-resource metadata before starting authorization:
+
+```text
+GET /.well-known/oauth-protected-resource
+GET /.well-known/oauth-protected-resource/mcp
+GET /.well-known/oauth-authorization-server
+GET /.well-known/openid-configuration
+```
+
+OAuth authorization, consent, token, introspection, revocation, and userinfo endpoints are provided under `/api/auth/oauth2/*`.
+
+API keys always select one fixed team. OAuth and dashboard-session clients that can access multiple teams must provide `X-Sendlit-Team-Id`; clients with exactly one team may omit it.
+
+## Available tools
+
+### Contacts and segments
+
+- `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`
+- `add_contact_tag`, `remove_contact_tag`, `get_contact_deliveries`
+- `list_segments`, `get_segment`, `create_segment`, `update_segment`, `delete_segment`
+
+Segments save reusable filters over contact fields, tags, subscription state, signup date, and custom fields.
+
+### Templates and media
+
+- `list_system_templates`, `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`
+- `list_media`, `get_media`, `update_media`, `delete_media`, `list_media_references`
+
+Templates and media are scoped to the selected team. System templates are available for discovery but are not team-owned.
+
+### Broadcasts and sequences
+
+Broadcasts use the sequence resource with one email and an audience filter. Sequence tools include:
+
+- `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`
+- `add_sequence_email`, `update_sequence_email`, `delete_sequence_email`
+- `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_subscribers`
+
+Use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.
+
+### Transactional email
+
+- `send_email` sends one API-triggered email.
+- `get_email` retrieves one delivery record.
+- `list_emails` lists transactional delivery records.
+
+Transactional sends are separate from broadcasts and sequences; they do not enroll a contact or use a campaign audience.
+
+### Sending configuration
+
+- `get_general_settings`, `update_general_settings`
+- `get_esp_config`, `update_esp_config`, `delete_esp_config`, `send_test_email`
+- `list_esps`, `create_esp`, `get_esp`, `update_esp`, `delete_esp`, `test_esp`
+
+The ESP tools manage the team’s sending providers and default provider. Secrets are accepted for writes but are not returned in read responses.
+
+### Teams and API keys
+
+- `list_teams`, `create_team`, `rename_team`, `delete_team`
+- `list_api_keys`, `create_api_key`, `delete_api_key`
+
+The full API key secret is returned only by `create_api_key`. Store it immediately; it cannot be recovered from a later listing.
+
+### Delivery feedback and suppressions
+
+- `get_esp_feedback_connection`, `upsert_esp_feedback_connection`, `test_esp_feedback_connection`, `delete_esp_feedback_connection`
+- `list_delivery_events`, `get_delivery_event`
+- `list_suppressions`, `get_suppression`, `release_suppression`
+
+Delivery-feedback connections are supported only for providers with a reviewed asynchronous feedback adapter. Releasing a SendLit suppression does not remove a provider-native suppression, and complaint suppressions are not releasable through the owner API.
+
+## Example client configuration
+
+The exact configuration shape depends on the MCP client. For clients that support a URL-based MCP server entry, use:
+
+```json
+{
+  "mcpServers": {
+    "sendlit": {
+      "url": "https://api.sendlit.com/mcp",
+      "headers": {
+        "x-sendlit-apikey": "${SENDLIT_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Prefer the client’s secure secret-store or environment-variable mechanism. Do not paste a live API key into a checked-in configuration file.
+
+## Operational limits
+
+The MCP endpoint is rate limited to 60 requests per minute. A missing or invalid credential returns an HTTP 401 response; an unknown `Mcp-Session-Id` returns an MCP session-not-found error. Start a new MCP session when a client’s session has expired or been closed.

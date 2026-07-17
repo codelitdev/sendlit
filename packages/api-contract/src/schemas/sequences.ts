@@ -125,12 +125,7 @@ export const sequenceSchema = z.object({
     type: z.string(),
     title: z.string(),
     status: z.string(),
-    // NOTE: sender identity is intentionally NOT part of the public sequence
-    // shape. Internally a sequence may pin an outbox (`sequences.outbox_id` →
-    // `esp_configs.id`), but esp config is a per-team singleton addressed via
-    // `/settings/esp` with no public id, so exposing the FK would leak an
-    // internal id for no client benefit. Mail is sent with the team's esp
-    // config identity — see settings/esp.
+    espId: z.string().nullable(),
     triggerType: z.string().nullable().optional(),
     triggerData: z.string().nullable().optional(),
     filter: z.any().nullable().optional(),
@@ -152,6 +147,7 @@ export const listSequencesQuerySchema = z.object({
 export const createSequenceBodySchema = z.object({
     type: z.enum(mailTypes),
     templateId: z.string().min(1),
+    espId: z.string().min(1).optional(),
 });
 
 export const updateSequenceBodySchema = z.object({
@@ -160,6 +156,8 @@ export const updateSequenceBodySchema = z.object({
     triggerData: z.string().optional(),
     filter: contactFilterSchema.optional(),
     emailsOrder: z.array(z.string()).optional(),
+    /** `null` clears the selection so the default is resolved on next start. */
+    espId: z.string().min(1).nullable().optional(),
 });
 
 export const addSequenceEmailBodySchema = z.object({

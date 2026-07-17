@@ -72,6 +72,7 @@ const impl = s.router(contract.transactional, {
                 idempotencyKey: body.idempotencyKey,
                 trackOpens: body.trackOpens,
                 trackClicks: body.trackClicks,
+                espId: body.espId,
             });
             return {
                 status: 202,
@@ -113,10 +114,16 @@ const impl = s.router(contract.transactional, {
                         status: 422,
                         body: { error: "Team ESP is not configured." },
                     };
-                case "quota_exceeded":
+                case "esp_not_found":
+                    return { status: 422, body: { error: "ESP not found" } };
+                case "recipient_suppressed":
+                    // Stable error code per docs/bounces-and-complaints.md's
+                    // "Error codes are stable strings" — unlike the
+                    // human-readable messages above, API clients are
+                    // expected to branch on this value programmatically.
                     return {
-                        status: 429,
-                        body: { error: "Mail sending quota exceeded" },
+                        status: 422,
+                        body: { error: "recipient_suppressed" },
                     };
                 default:
                     throw err;

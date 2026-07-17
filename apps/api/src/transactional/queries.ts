@@ -1,21 +1,24 @@
-import { and, count, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { db } from "../db/client";
 import { transactionalEmails } from "../db/schema";
 import { getTeam } from "../team/queries";
-import { getAccount, hasMailQuotaRemaining } from "../account/queries";
-import { getEspConfig } from "../settings/esp/queries";
+import { getAccount } from "../account/queries";
+import { resolveEspConfig } from "../settings/esp/queries";
 import { getTemplate } from "../templates/queries";
 import { findContactByEmail } from "../contacts/queries";
 import { renderEmailContent } from "../mail/render";
 import { addTransactionalMailJob } from "../mail/queue";
 import { getEmailFrom } from "../utils/mail";
+import { normalizeEmail } from "../utils/email";
 import {
     itemsPerPage,
     type TransactionalEmailStatus,
 } from "../config/constants";
 import { captureEvent } from "../observability/posthog";
 import { serializeDates } from "../utils/serialize";
+import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
+import { createCustomRouteOutboundMessage } from "../delivery-feedback/outbound-send";
 
 export type TransactionalEmail = typeof transactionalEmails.$inferSelect;
 export type { TransactionalEmailStatus };
@@ -174,9 +177,10 @@ export async function countTransactionalEmails(
  *
  * Throws a plain `Error` whose `message` is one of: `invalid_content`,
  * `invalid_headers`, `template_not_found`, `render_failed`,
- * `esp_not_configured`, `quota_exceeded` — callers map these to the PRD's
- * `400`/`422`/`429` responses (see
- * `docs/transactional-emails.md#post-emails--202-accepted`).
+ * `esp_not_configured`, `esp_not_found`, `recipient_suppressed` — callers
+ * map these to the PRD's `400`/`422` responses (see
+ * `docs/transactional-emails.md#post-emails--202-accepted` and
+ * `docs/bounces-and-complaints.md#8-suppression-model`).
  */
 export async function createTransactionalEmail({
     teamId,
@@ -190,6 +194,7 @@ export async function createTransactionalEmail({
     idempotencyKey,
     trackOpens = false,
     trackClicks = false,
+    espId,
 }: {
     teamId: string;
     to: string;
@@ -202,6 +207,7 @@ export async function createTransactionalEmail({
     idempotencyKey?: string;
     trackOpens?: boolean;
     trackClicks?: boolean;
+    espId?: string;
 }): Promise<TransactionalEmail> {
     if (!!templateId === !!html) {
         throw new Error("invalid_content");
@@ -224,15 +230,24 @@ export async function createTransactionalEmail({
         if (existing) return existing;
     }
 
+    const normalizedTo = normalizeEmail(to);
+    // Checked before any DB writes/enqueue — a suppressed recipient must
+    // produce no row and no queue job (PRD: "does not enqueue"). Rechecked
+    // again immediately before transport in the worker to close the race
+    // with a bounce/complaint that arrives after this request is accepted.
+    if (await isRecipientSuppressed(teamId, normalizedTo)) {
+        throw new Error("recipient_suppressed");
+    }
+
     const team = await getTeam(teamId);
     if (!team) throw new Error("esp_not_configured");
 
-    const espConfig = await getEspConfig(teamId);
-    if (!espConfig) throw new Error("esp_not_configured");
+    const espConfig = await resolveEspConfig(teamId, espId);
+    if (!espConfig) {
+        throw new Error(espId ? "esp_not_found" : "esp_not_configured");
+    }
 
     const ownerAccount = await getAccount(team.ownerAccountId);
-    const hasQuota = await hasMailQuotaRemaining(team.ownerAccountId);
-    if (!hasQuota) throw new Error("quota_exceeded");
 
     let renderedHtml: string;
     let resolvedTemplateId: string | null = null;
@@ -269,11 +284,12 @@ export async function createTransactionalEmail({
             "",
     });
 
-    const normalizedTo = to.toLowerCase().trim();
     const contact = await findContactByEmail(teamId, normalizedTo);
 
     const insertValues = {
         teamId,
+        deliveryRoute: "custom",
+        outboxId: espConfig.id,
         toEmail: normalizedTo,
         fromEmail: from,
         replyTo: replyTo ?? null,
@@ -320,13 +336,27 @@ export async function createTransactionalEmail({
             .returning();
     }
 
+    // Outbound ledger row must exist before transport submission (which
+    // happens later, in the worker) — see
+    // docs/bounces-and-complaints.md#1-outbound-message-ledger.
+    await createCustomRouteOutboundMessage({
+        teamId,
+        espConfigId: espConfig.id,
+        provider: espConfig.provider,
+        sourceType: "transactional",
+        submissionKey: `transactional:${row.id}`,
+        transactionalEmailId: row.id,
+        recipientEmail: to,
+        normalizedRecipient: normalizedTo,
+    });
+
     await addTransactionalMailJob({ transactionalEmailId: row.id });
 
     captureEvent({
         event: "transactional_email_queued",
         source: "transactional.send",
         teamId,
-        properties: { txe_id: row.txeId },
+        properties: { txe_id: row.txeId, esp_id: espConfig.espId },
     });
 
     return row;
@@ -352,7 +382,12 @@ export async function markTransactionalEmailSent(
 ): Promise<TransactionalEmail | null> {
     const [row] = await db
         .update(transactionalEmails)
-        .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
+        .set({
+            status: "sent",
+            sentAt: new Date(),
+            processingStartedAt: null,
+            updatedAt: new Date(),
+        })
         .where(eq(transactionalEmails.id, id))
         .returning();
     return row ?? null;
@@ -364,7 +399,12 @@ export async function markTransactionalEmailFailed(
 ): Promise<TransactionalEmail | null> {
     const [row] = await db
         .update(transactionalEmails)
-        .set({ status: "failed", error, updatedAt: new Date() })
+        .set({
+            status: "failed",
+            error,
+            processingStartedAt: null,
+            updatedAt: new Date(),
+        })
         .where(eq(transactionalEmails.id, id))
         .returning();
     return row ?? null;
@@ -376,10 +416,85 @@ export async function markTransactionalEmailBounced(
 ): Promise<TransactionalEmail | null> {
     const [row] = await db
         .update(transactionalEmails)
-        .set({ status: "bounced", error, updatedAt: new Date() })
+        .set({
+            status: "bounced",
+            error,
+            processingStartedAt: null,
+            updatedAt: new Date(),
+        })
         .where(eq(transactionalEmails.id, id))
         .returning();
     return row ?? null;
+}
+
+/** A queued job that becomes suppressed between enqueue and transport (a
+ * bounce/complaint arrived in the meantime) exits idempotently as
+ * `suppressed`, not `failed` — see
+ * `docs/bounces-and-complaints.md#8-suppression-model`. Only transitions a
+ * still-`queued` row, so a duplicate delivery of the same job can't
+ * re-suppress an already-terminal row. */
+export async function markTransactionalEmailSuppressed(
+    id: string,
+): Promise<TransactionalEmail | null> {
+    const [row] = await db
+        .update(transactionalEmails)
+        .set({
+            status: "suppressed",
+            processingStartedAt: null,
+            updatedAt: new Date(),
+        })
+        .where(
+            and(
+                eq(transactionalEmails.id, id),
+                eq(transactionalEmails.status, "queued"),
+            ),
+        )
+        .returning();
+    return row ?? null;
+}
+
+const PROCESSING_LEASE_MS = 10 * 60 * 1000;
+
+export async function claimTransactionalEmailForSending(id: string) {
+    const now = new Date();
+    const [row] = await db
+        .update(transactionalEmails)
+        .set({
+            processingStartedAt: now,
+            updatedAt: now,
+        })
+        .where(
+            and(
+                eq(transactionalEmails.id, id),
+                eq(transactionalEmails.status, "queued"),
+                or(
+                    isNull(transactionalEmails.processingStartedAt),
+                    lt(
+                        transactionalEmails.processingStartedAt,
+                        new Date(Date.now() - PROCESSING_LEASE_MS),
+                    ),
+                ),
+            ),
+        )
+        .returning();
+    return row ?? null;
+}
+
+export async function releaseTransactionalEmailClaim(
+    id: string,
+): Promise<void> {
+    await db
+        .update(transactionalEmails)
+        .set({
+            processingStartedAt: null,
+            updatedAt: new Date(),
+        })
+        .where(
+            and(
+                eq(transactionalEmails.id, id),
+                eq(transactionalEmails.status, "queued"),
+            ),
+        );
 }
 
 export async function incrementTransactionalEmailOpenCount(

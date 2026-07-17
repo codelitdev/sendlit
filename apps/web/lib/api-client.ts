@@ -37,12 +37,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (typeof window !== "undefined") {
         if (
             needsTeamSelection(res.status, data?.error) &&
-            !window.location.pathname.startsWith("/dashboard/teams")
+            !window.location.pathname.startsWith("/teams")
         ) {
             if (isStaleTeamSelectionError(data?.error)) {
                 clearTeamIdCookie();
             }
-            window.location.href = "/dashboard/teams";
+            window.location.href = "/teams";
             return new Promise<T>(() => {});
         }
     }

@@ -1,6 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 
 const workerOnMock = vi.hoisted(() => vi.fn());
+const outboundMocks = vi.hoisted(() => ({ markAccepted: vi.fn() }));
 
 vi.mock("../db/client", async () => {
     const { makeTestDb } = await import("../test/db.js");
@@ -10,6 +12,14 @@ vi.mock("../db/client", async () => {
 vi.mock("./send", () => ({
     sendMail: vi.fn(),
 }));
+
+vi.mock("../delivery-feedback/outbound-queries", async (importOriginal) => {
+    const actual =
+        await importOriginal<
+            typeof import("../delivery-feedback/outbound-queries")
+        >();
+    return { ...actual, markOutboundAccepted: outboundMocks.markAccepted };
+});
 
 // The real `Worker` constructor would try to open a connection to Redis
 // (unavailable in tests). Mocking it lets us capture the processor function
@@ -39,6 +49,8 @@ import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
 import { sendMail } from "./send";
 import { getAccount } from "../account/queries";
 import { getTransactionalEmailById } from "../transactional/queries";
+import { addOrStrengthenSuppression } from "../delivery-feedback/suppression-queries";
+import { createCustomRouteOutboundMessage } from "../delivery-feedback/outbound-send";
 import "./worker";
 
 const tdb = db as unknown as TestDb;
@@ -76,6 +88,10 @@ async function seedQueuedEmail(
     teamId: string,
     overrides: Partial<typeof schema.transactionalEmails.$inferInsert> = {},
 ) {
+    const [outbox] = await tdb
+        .select({ id: schema.espConfigs.id })
+        .from(schema.espConfigs)
+        .where(eq(schema.espConfigs.teamId, teamId));
     const [row] = await tdb
         .insert(schema.transactionalEmails)
         .values({
@@ -85,6 +101,7 @@ async function seedQueuedEmail(
             subject: "Hi",
             html: "<p>hi</p>",
             status: "queued",
+            outboxId: outbox?.id,
             ...overrides,
         })
         .returning();
@@ -94,6 +111,7 @@ async function seedQueuedEmail(
 beforeEach(async () => {
     await truncateAll(tdb);
     vi.clearAllMocks();
+    outboundMocks.markAccepted.mockResolvedValue(undefined);
 });
 
 describe("mail worker — transactional job processing", () => {
@@ -174,10 +192,13 @@ describe("mail worker — transactional job processing", () => {
         expect(updated?.error).toBe("mailbox unavailable");
     });
 
-    it("marks the row sent and increments the owning account's mail count on success", async () => {
+    it("marks the row sent without incrementing platform quota", async () => {
         const { team, account } = await seedTeamAndContact(tdb);
         const row = await seedQueuedEmail(team.id);
-        sendMailMock.mockResolvedValueOnce(undefined);
+        sendMailMock.mockResolvedValueOnce({
+            messageId: null,
+            providerResponse: null,
+        });
 
         const before = await getAccount(account.id);
 
@@ -194,10 +215,113 @@ describe("mail worker — transactional job processing", () => {
         expect(updated?.sentAt).toBeInstanceOf(Date);
 
         const after = await getAccount(account.id);
-        expect(after?.dailyMailCount).toBe((before?.dailyMailCount ?? 0) + 1);
-        expect(after?.monthlyMailCount).toBe(
-            (before?.monthlyMailCount ?? 0) + 1,
+        expect(after?.dailyMailCount).toBe(before?.dailyMailCount);
+        expect(after?.monthlyMailCount).toBe(before?.monthlyMailCount);
+    });
+
+    it("atomically claims a queued email so concurrent workers send only once", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const row = await seedQueuedEmail(team.id);
+        let releaseSend!: () => void;
+        sendMailMock.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    releaseSend = () =>
+                        resolve({ messageId: null, providerResponse: null });
+                }),
         );
+        const job = makeJob({ data: { transactionalEmailId: row.id } });
+
+        const first = processor(job);
+        await vi.waitFor(() => expect(sendMailMock).toHaveBeenCalledOnce());
+        await processor(job);
+
+        expect(sendMailMock).toHaveBeenCalledOnce();
+        releaseSend();
+        await first;
+        expect((await getTransactionalEmailById(row.id))?.status).toBe("sent");
+    });
+
+    it("releases a transient claim so the BullMQ retry can send", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const row = await seedQueuedEmail(team.id);
+        sendMailMock
+            .mockRejectedValueOnce(new Error("connection reset"))
+            .mockResolvedValueOnce({ messageId: null, providerResponse: null });
+        const firstAttempt = makeJob({
+            data: { transactionalEmailId: row.id },
+            attemptsMade: 0,
+            opts: { attempts: 3 },
+        });
+
+        await expect(processor(firstAttempt)).rejects.toThrow(
+            "connection reset",
+        );
+        await expect(
+            processor({ ...firstAttempt, attemptsMade: 1 } as Job),
+        ).resolves.toBeUndefined();
+
+        expect(sendMailMock).toHaveBeenCalledTimes(2);
+        expect((await getTransactionalEmailById(row.id))?.status).toBe("sent");
+    });
+
+    it("recovers an expired processing claim but leaves a live claim alone", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const row = await seedQueuedEmail(team.id, {
+            processingStartedAt: new Date(),
+        });
+        sendMailMock.mockResolvedValue({
+            messageId: null,
+            providerResponse: null,
+        });
+        const job = makeJob({ data: { transactionalEmailId: row.id } });
+
+        await processor(job);
+        expect(sendMailMock).not.toHaveBeenCalled();
+
+        await tdb
+            .update(schema.transactionalEmails)
+            .set({ processingStartedAt: new Date(Date.now() - 11 * 60_000) })
+            .where(eq(schema.transactionalEmails.id, row.id));
+        await processor(job);
+
+        expect(sendMailMock).toHaveBeenCalledOnce();
+        expect((await getTransactionalEmailById(row.id))?.status).toBe("sent");
+    });
+
+    it("does not resend after SMTP and status persistence succeed but ledger projection fails", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const row = await seedQueuedEmail(team.id);
+        const [esp] = await tdb
+            .select()
+            .from(schema.espConfigs)
+            .where(eq(schema.espConfigs.teamId, team.id));
+        await createCustomRouteOutboundMessage({
+            teamId: team.id,
+            espConfigId: esp.id,
+            provider: esp.provider,
+            sourceType: "transactional",
+            submissionKey: `transactional:${row.id}`,
+            transactionalEmailId: row.id,
+            recipientEmail: row.toEmail,
+            normalizedRecipient: row.toEmail,
+        });
+        sendMailMock.mockResolvedValue({
+            messageId: "provider-message",
+            providerResponse: "provider-message",
+        });
+        outboundMocks.markAccepted.mockRejectedValueOnce(
+            new Error("ledger projection unavailable"),
+        );
+        const job = makeJob({ data: { transactionalEmailId: row.id } });
+
+        await expect(processor(job)).rejects.toThrow(
+            "ledger projection unavailable",
+        );
+        expect((await getTransactionalEmailById(row.id))?.status).toBe("sent");
+
+        await expect(processor(job)).resolves.toBeUndefined();
+        expect(sendMailMock).toHaveBeenCalledOnce();
     });
 
     it("is a no-op when the row doesn't exist", async () => {
@@ -206,6 +330,43 @@ describe("mail worker — transactional job processing", () => {
         });
 
         await expect(processor(job)).resolves.toBeUndefined();
+        expect(sendMailMock).not.toHaveBeenCalled();
+    });
+
+    it("fails a queued email whose pinned user ESP is missing", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const row = await seedQueuedEmail(team.id, { outboxId: null });
+
+        await expect(
+            processor(makeJob({ data: { transactionalEmailId: row.id } })),
+        ).resolves.toBeUndefined();
+
+        const updated = await getTransactionalEmailById(row.id);
+        expect(updated).toMatchObject({
+            status: "failed",
+            error: "Team ESP is not configured.",
+        });
+        expect(sendMailMock).not.toHaveBeenCalled();
+    });
+
+    it("exits idempotently as suppressed when the recipient was suppressed after enqueue", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const row = await seedQueuedEmail(team.id, {
+            toEmail: "late-bounce@example.com",
+        });
+        await addOrStrengthenSuppression({
+            teamId: team.id,
+            recipientEmail: "late-bounce@example.com",
+            reason: "complaint",
+            actorType: "system",
+        });
+
+        await expect(
+            processor(makeJob({ data: { transactionalEmailId: row.id } })),
+        ).resolves.toBeUndefined();
+
+        const updated = await getTransactionalEmailById(row.id);
+        expect(updated?.status).toBe("suppressed");
         expect(sendMailMock).not.toHaveBeenCalled();
     });
 

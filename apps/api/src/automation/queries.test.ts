@@ -94,6 +94,8 @@ describe("getDueOngoingSequences", () => {
         const dueContact = await seedContact(team.id);
         const futureContact = await seedContact(team.id);
         const bouncedContact = await seedContact(team.id);
+        const claimedContact = await seedContact(team.id);
+        const staleClaimContact = await seedContact(team.id);
         await tdb.insert(ongoingSequences).values([
             {
                 ...base,
@@ -111,10 +113,24 @@ describe("getDueOngoingSequences", () => {
                 nextEmailScheduledTime: Date.now() - 1000,
                 retryCount: 3, // sequenceBounceLimit default
             },
+            {
+                ...base,
+                contactId: claimedContact.id,
+                nextEmailScheduledTime: Date.now() - 1000,
+                processingStartedAt: new Date(),
+            },
+            {
+                ...base,
+                contactId: staleClaimContact.id,
+                nextEmailScheduledTime: Date.now() - 1000,
+                processingStartedAt: new Date(Date.now() - 11 * 60_000),
+            },
         ]);
 
         const due = await getDueOngoingSequences();
-        expect(due.map((r) => r.contactId)).toEqual([dueContact.id]);
+        expect(due.map((r) => r.contactId).sort()).toEqual(
+            [dueContact.id, staleClaimContact.id].sort(),
+        );
     });
 });
 

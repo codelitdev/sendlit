@@ -1,8 +1,8 @@
 import { DEFAULT_MAX_UPLOAD_SIZE_BYTES } from "@/lib/media-limits";
 
-export const API_URL = process.env.API_URL || "http://localhost:4000";
+export const API_URL = process.env.API_URL || "http://localhost:5000";
 export const API_PUBLIC_URL =
-    process.env.API_PUBLIC_URL || "http://localhost:4000";
+    process.env.API_PUBLIC_URL || "http://localhost:5000";
 
 /** This app's own public origin — sent to `apps/api`'s hosted login page
  * (`GET /login?redirect=...`) as where to bounce the browser back to after

@@ -36,6 +36,21 @@ async function proxyAuth(req: NextRequest, path: string[]) {
         );
     }
 
+    if (
+        req.method === "POST" &&
+        path.length === 1 &&
+        path[0] === "sign-out" &&
+        upstream.ok
+    ) {
+        const response = NextResponse.redirect(new URL("/login", req.url), {
+            status: 303,
+        });
+        for (const cookie of upstream.headers.getSetCookie()) {
+            response.headers.append("set-cookie", cookie);
+        }
+        return response;
+    }
+
     return new NextResponse(upstream.body, {
         status: upstream.status,
         statusText: upstream.statusText,

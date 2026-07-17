@@ -5,6 +5,7 @@ export const transactionalEmailStatus = [
     "sent",
     "failed",
     "bounced",
+    "suppressed",
 ] as const;
 
 /** Public row shape — internal `id`/`teamId` are omitted (`omitInternal`),
@@ -76,6 +77,7 @@ export const sendEmailBodySchema = z
         idempotencyKey: z.string().min(1).max(256).optional(),
         trackOpens: z.boolean().optional(),
         trackClicks: z.boolean().optional(),
+        espId: z.string().min(1).optional(),
     })
     .refine((body) => !!body.templateId !== !!body.html, {
         message: "Provide exactly one of templateId or html",

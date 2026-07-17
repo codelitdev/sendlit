@@ -1,0 +1,96 @@
+name: sendlit
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sendlit}
+      POSTGRES_USER: ${POSTGRES_USER:-sendlit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  init:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: .env
+    environment: &api-environment
+      NODE_ENV: production
+      PORT: 4000
+      DB_CONNECTION_STRING: postgresql://${POSTGRES_USER:-sendlit}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-sendlit}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      PIXEL_SIGNING_SECRET: ${PIXEL_SIGNING_SECRET:?Set PIXEL_SIGNING_SECRET in .env}
+      ESP_CREDENTIALS_ENCRYPTION_KEY: ${ESP_CREDENTIALS_ENCRYPTION_KEY:?Set ESP_CREDENTIALS_ENCRYPTION_KEY in .env}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:?Set SUPER_ADMIN_EMAIL in .env}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+      WEB_CLIENT: ${WEB_CLIENT:-http://localhost:3000}
+      PROTOCOL: ${PROTOCOL:-http}
+      DOMAIN: ${DOMAIN:-localhost:4000}
+      ENABLE_TRUST_PROXY: ${ENABLE_TRUST_PROXY:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["/bin/sh", "-c", "node apps/api/dist/db/migrate.js && node apps/api/dist/bootstrap-cli.js"]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment: *api-environment
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    ports:
+      - "${API_PORT:-4000}:4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4000
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+      WEB_CLIENT: ${WEB_CLIENT:-http://localhost:3000}
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10485760}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  postgres-data:
+  redis-data:

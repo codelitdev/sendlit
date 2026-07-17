@@ -1,0 +1,13 @@
+---
+title: API keys
+description: Authenticate team-scoped server-to-server integrations.
+---
+
+Create and revoke keys from the dashboard’s Teams page or the Teams API. Send a key with the `x-sendlit-apikey` header:
+
+```bash
+curl https://api.sendlit.com/contacts \
+  -H 'x-sendlit-apikey: sl_live_…'
+```
+
+Keys are hashed at rest and the complete secret is returned only by the create operation. Store it in a secret manager, never commit it, and rotate it after suspected exposure. A key resolves exactly one team; pass `X-Sendlit-Team-Id` only when the authenticated identity can access multiple teams and the endpoint supports explicit team selection.

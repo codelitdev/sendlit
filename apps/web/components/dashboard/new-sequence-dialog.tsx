@@ -10,12 +10,16 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Banner } from "@/components/dashboard/banner";
+import { EspPicker } from "@/components/dashboard/esp-picker";
 import { ApiError } from "@/lib/api-client";
 import {
     createSequence,
+    listEsps,
     listSystemTemplates,
     listTemplates,
+    type EspConfig,
     type SystemTemplate,
 } from "@/lib/api";
 import { TemplateChooser, type EmailTemplate } from "@sendlit/email-blocks";
@@ -35,17 +39,21 @@ export function NewSequenceDialog({
         [],
     );
     const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+    const [esps, setEsps] = useState<EspConfig[]>([]);
+    const [espId, setEspId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
         if (!open) return;
+        setEspId(null);
         setLoading(true);
-        Promise.all([listSystemTemplates(), listTemplates()])
-            .then(([system, own]) => {
+        Promise.all([listSystemTemplates(), listTemplates(), listEsps()])
+            .then(([system, own, espResult]) => {
                 setSystemTemplates(system);
                 setTemplates(own);
+                setEsps(espResult.items);
             })
             .catch((err) =>
                 setError(
@@ -64,6 +72,7 @@ export function NewSequenceDialog({
             const sequence = await createSequence({
                 type,
                 templateId: choice.templateId,
+                espId: espId ?? undefined,
             });
             setOpen(false);
             onCreated(sequence.sequenceId);
@@ -89,6 +98,17 @@ export function NewSequenceDialog({
                     <DialogTitle>{label}</DialogTitle>
                 </DialogHeader>
                 {error && <Banner>{error}</Banner>}
+                {esps.length > 1 && (
+                    <div className="space-y-1.5">
+                        <Label>Send via</Label>
+                        <EspPicker
+                            esps={esps}
+                            value={espId}
+                            onChange={setEspId}
+                            disabled={submitting}
+                        />
+                    </div>
+                )}
                 <TemplateChooser
                     systemTemplates={systemTemplates}
                     templates={templates}

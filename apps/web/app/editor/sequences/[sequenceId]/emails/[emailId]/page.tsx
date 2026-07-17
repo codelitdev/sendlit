@@ -13,7 +13,7 @@ export default function SequenceEmailEditorPage({
         <SequenceEmailEditor
             sequenceId={sequenceId}
             emailId={emailId}
-            exitFallbackHref={`/dashboard/sequences/${sequenceId}`}
+            exitFallbackHref={`/sequences/${sequenceId}`}
         />
     );
 }

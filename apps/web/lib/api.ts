@@ -62,12 +62,12 @@ async function unwrap<T>(
     if (typeof window !== "undefined") {
         if (
             needsTeamSelection(result.status, errorBody?.error) &&
-            !window.location.pathname.startsWith("/dashboard/teams")
+            !window.location.pathname.startsWith("/teams")
         ) {
             if (isStaleTeamSelectionError(errorBody?.error)) {
                 clearTeamIdCookie();
             }
-            window.location.href = "/dashboard/teams";
+            window.location.href = "/teams";
             return new Promise<T>(() => {});
         }
     }
@@ -375,7 +375,11 @@ export function listSequences(type: MailType) {
     );
 }
 
-export function createSequence(input: { type: MailType; templateId: string }) {
+export function createSequence(input: {
+    type: MailType;
+    templateId: string;
+    espId?: string;
+}) {
     return unwrap<Sequence>(client.sequences.create({ body: input }));
 }
 
@@ -391,6 +395,10 @@ export function updateSequence(
         triggerData?: string;
         filter?: ContactFilterWithAggregator;
         emailsOrder?: string[];
+        /** `undefined` leaves the current selection unchanged; `null` clears
+         * it so the team's default ESP resolves at start. Only settable while
+         * the sequence/broadcast is still `draft` or `paused`. */
+        espId?: string | null;
     },
 ) {
     const { filter, ...rest } = patch;
@@ -455,12 +463,31 @@ export function getSequenceStats(sequenceId: string) {
     );
 }
 
+export interface Overview {
+    activeSequences: number;
+    ongoingContacts: number;
+    scheduledBroadcasts: number;
+    mail: { sent: number; queued: number; failed: number; bounced: number };
+    quota: {
+        dailyUsed: number;
+        dailyLimit: number;
+        monthlyUsed: number;
+        monthlyLimit: number;
+    };
+}
+export function getOverview() {
+    return unwrap<Overview>(client.overview.get());
+}
+
 // ---- ESP (email sending provider) ----------------------------------------
 
 export type EspProvider =
     "smtp" | "sendgrid" | "mailgun" | "postmark" | "ses" | "resend" | "custom";
 
 export interface EspConfig {
+    espId: string;
+    name: string;
+    isDefault: boolean;
     provider: EspProvider;
     host: string;
     port: number;
@@ -475,11 +502,7 @@ export interface EspConfig {
     updatedAt: string;
 }
 
-export function getEspConfig() {
-    return unwrap<EspConfig | null>(client.settings.esp.get());
-}
-
-export function updateEspConfig(input: {
+export interface EspConnectionInput {
     provider: EspProvider;
     host: string;
     port: number;
@@ -489,7 +512,15 @@ export function updateEspConfig(input: {
     password?: string;
     fromName?: string;
     fromEmail?: string;
-}) {
+}
+
+/** Backward-compatible singleton alias over the team's default ESP — prefer
+ * the collection functions below (`listEsps`/`createEsp`/...) for new UI. */
+export function getEspConfig() {
+    return unwrap<EspConfig | null>(client.settings.esp.get());
+}
+
+export function updateEspConfig(input: EspConnectionInput) {
     return unwrap<EspConfig>(client.settings.esp.upsert({ body: input }));
 }
 
@@ -500,6 +531,201 @@ export function deleteEspConfig() {
 export function testEspConfig(to?: string) {
     return unwrap<{ success: boolean; error?: string }>(
         client.settings.esp.test({ body: { to } }),
+    );
+}
+
+// ---- ESP collection (multiple user-managed ESPs per team) -----------------
+
+export function listEsps() {
+    return unwrap<{ items: EspConfig[] }>(client.settings.esps.list());
+}
+
+export function createEsp(
+    input: EspConnectionInput & { name: string; isDefault?: boolean },
+) {
+    return unwrap<EspConfig>(client.settings.esps.create({ body: input }));
+}
+
+export function getEsp(espId: string) {
+    return unwrap<EspConfig>(client.settings.esps.get({ params: { espId } }));
+}
+
+export function updateEsp(
+    espId: string,
+    patch: Partial<EspConnectionInput> & {
+        name?: string;
+        /** A default can only be replaced by promoting another ESP. */
+        isDefault?: true;
+    },
+) {
+    return unwrap<EspConfig>(
+        client.settings.esps.update({ params: { espId }, body: patch }),
+    );
+}
+
+/** Throws `ApiError(409, ...)` when the ESP is referenced by an
+ * active/paused sequence or a queued transactional email. */
+export function deleteEsp(espId: string) {
+    return unwrap<void>(client.settings.esps.remove({ params: { espId } }));
+}
+
+export function testEsp(espId: string, to?: string) {
+    return unwrap<{ success: boolean; error?: string }>(
+        client.settings.esps.test({ params: { espId }, body: { to } }),
+    );
+}
+
+// ---- Bounce/complaint delivery feedback ------------------------------------
+
+/** Providers with a reviewed webhook adapter — see
+ * `docs/bounces-and-complaints.md`. Only these can configure feedback. */
+export const feedbackCapableProviders: EspProvider[] = [
+    "resend",
+    "postmark",
+    "sendgrid",
+    "mailgun",
+];
+
+export type FeedbackConnectionStatus =
+    "pending" | "healthy" | "stale" | "error" | "retiring" | "disabled";
+
+export interface FeedbackConnection {
+    connectionId: string;
+    espId: string;
+    provider: string;
+    webhookUrl: string;
+    hasCredential: boolean;
+    status: FeedbackConnectionStatus;
+    lastReceivedAt?: string | null;
+    lastVerifiedAt?: string | null;
+    lastErrorCode?: string | null;
+}
+
+export function getEspFeedback(espId: string) {
+    return unwrap<FeedbackConnection | null>(
+        client.feedback.get({ params: { espId } }),
+    );
+}
+
+export function upsertEspFeedback(
+    espId: string,
+    input: { credential: string; expectedTopicArn?: string },
+) {
+    return unwrap<FeedbackConnection>(
+        client.feedback.upsert({ params: { espId }, body: input }),
+    );
+}
+
+export function rotateEspFeedback(
+    espId: string,
+    input: { credential: string; expectedTopicArn?: string },
+) {
+    return unwrap<FeedbackConnection>(
+        client.feedback.rotate({ params: { espId }, body: input }),
+    );
+}
+
+export function testEspFeedback(espId: string) {
+    return unwrap<{ success: boolean; error?: string }>(
+        client.feedback.test({ params: { espId } }),
+    );
+}
+
+export function deleteEspFeedback(espId: string) {
+    return unwrap<void>(client.feedback.remove({ params: { espId } }));
+}
+
+export type DeliveryEventType =
+    | "accepted"
+    | "delivered"
+    | "delayed"
+    | "soft_bounce"
+    | "hard_bounce"
+    | "failed"
+    | "complaint"
+    | "suppressed"
+    | "rejected"
+    | "unknown";
+
+export interface DeliveryEvent {
+    eventId: string;
+    provider: string;
+    espId: string | null;
+    deliveryRoute: "custom" | "platform" | null;
+    messageId: string | null;
+    recipientEmail: string | null;
+    eventType: DeliveryEventType;
+    bounceClass?: "permanent" | "transient" | "undetermined" | null;
+    reason?: string | null;
+    occurredAt: string;
+    receivedAt: string;
+}
+
+export function listDeliveryEvents(
+    params: {
+        espId?: string;
+        eventType?: DeliveryEventType;
+        offset?: number;
+        itemsPerPage?: number;
+    } = {},
+) {
+    return unwrap<Paginated<DeliveryEvent>>(
+        client.deliveryEvents.list({ query: params }),
+    );
+}
+
+export type SuppressionReason =
+    | "hard_bounce"
+    | "complaint"
+    | "repeated_soft_bounce"
+    | "provider_suppression"
+    | "manual";
+
+export interface Suppression {
+    suppressionId: string;
+    recipientEmail: string | null;
+    reason: SuppressionReason;
+    active: boolean;
+    firstSuppressedAt: string;
+    lastSuppressedAt: string;
+    releasedAt?: string | null;
+    releaseReason?: string | null;
+}
+
+const ownerReleasableSuppressionReasons: SuppressionReason[] = [
+    "hard_bounce",
+    "repeated_soft_bounce",
+    "manual",
+];
+
+export function isSuppressionOwnerReleasable(
+    reason: SuppressionReason,
+): boolean {
+    return ownerReleasableSuppressionReasons.includes(reason);
+}
+
+export function listSuppressions(
+    params: {
+        active?: boolean;
+        reason?: SuppressionReason;
+        offset?: number;
+        itemsPerPage?: number;
+    } = {},
+) {
+    return unwrap<Paginated<Suppression>>(
+        client.suppressions.list({ query: params }),
+    );
+}
+
+export function releaseSuppression(
+    suppressionId: string,
+    explanation?: string,
+) {
+    return unwrap<Suppression>(
+        client.suppressions.release({
+            params: { suppressionId },
+            body: { explanation },
+        }),
     );
 }
 

@@ -1,0 +1,2 @@
+ALTER TABLE "esp_feedback_connections" ADD COLUMN "previous_encrypted_credentials" text;--> statement-breakpoint
+ALTER TABLE "esp_feedback_connections" ADD COLUMN "previous_credential_expires_at" timestamp with time zone;

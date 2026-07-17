@@ -617,34 +617,52 @@ export const segments = pgTable(
     }),
 );
 
-/** Per-team ESP (Email Service Provider) transport configuration. One row
- * per team — when present, outgoing mail for that team is sent through
- * this SMTP connection; teams without an ESP cannot send campaign mail.
+/** User-managed ESP (Email Service Provider) transport configuration. Teams
+ * may create multiple rows and choose one default sending identity.
  * `encryptedSecret` holds an AES-256-GCM encrypted JSON blob (see
  * `utils/secret-crypto.ts`) and is never returned to API clients. This is
- * also the only place sender identity (`fromName`/`fromEmail`) lives —
- * addressed publicly as the per-team `/settings/esp` singleton, so its
- * internal `id` is never exposed (no `<domain>_id` needed). */
-export const espConfigs = pgTable("esp_configs", {
-    id: uuid("id").$defaultFn(genId).primaryKey(),
-    teamId: uuid("team_id")
-        .notNull()
-        .unique()
-        .references(() => teams.id, { onDelete: "cascade" }),
-    provider: text("provider").notNull().default("smtp"),
-    host: text("host").notNull(),
-    port: integer("port").notNull().default(587),
-    secure: boolean("secure").notNull().default(false),
-    username: text("username"),
-    encryptedSecret: text("encrypted_secret"),
-    fromName: text("from_name"),
-    fromEmail: text("from_email"),
-    lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
-    lastTestStatus: text("last_test_status"), // success | failed
-    lastTestError: text("last_test_error"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+ * also the only place a user-managed sender identity (`fromName`/`fromEmail`)
+ * lives. Platform delivery configuration is deployment-level and is never
+ * persisted here. */
+export const espConfigs = pgTable(
+    "esp_configs",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        teamId: uuid("team_id")
+            .notNull()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        espId: text("esp_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("esp")),
+        name: text("name").notNull(),
+        isDefault: boolean("is_default").notNull().default(false),
+        provider: text("provider").notNull().default("smtp"),
+        host: text("host").notNull(),
+        port: integer("port").notNull().default(587),
+        secure: boolean("secure").notNull().default(false),
+        username: text("username"),
+        encryptedSecret: text("encrypted_secret"),
+        fromName: text("from_name"),
+        fromEmail: text("from_email"),
+        lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
+        lastTestStatus: text("last_test_status"), // success | failed
+        lastTestError: text("last_test_error"),
+        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    },
+    (table) => ({
+        espIdCheck: publicIdCheck(
+            "esp_configs_esp_id_check",
+            table.espId,
+            "esp",
+        ),
+        teamIdx: index("esp_configs_team_id_idx").on(table.teamId),
+        teamDefaultIdx: uniqueIndex("esp_configs_team_id_default_idx")
+            .on(table.teamId)
+            .where(sql`${table.isDefault} = true`),
+    }),
+);
 
 /** Per-team general workspace settings ("settings.general") — a per-team
  * singleton like `esp_configs`, addressed via the team (`/settings/general`),
@@ -677,10 +695,10 @@ export const sequences = pgTable(
         type: text("type").notNull(), // 'broadcast' | 'sequence'
         title: text("title").notNull().default(""),
         status: text("status").notNull().default("draft"), // draft|active|paused|completed
-        // Which sending identity ("outbox") this sequence uses. Internal-only
-        // — never exposed via REST/MCP (esp_configs has no public id; it's a
-        // per-team singleton). null = send via the team's ESP config;
-        // non-null = send via that esp config's fromName/fromEmail.
+        // Resolved at activation. Drafts may leave this null; active custom
+        // delivery must pin a user-owned outbox. `platform` is reserved for a
+        // future deployment-level transport and never references esp_configs.
+        deliveryRoute: text("delivery_route"), // custom | platform
         outboxId: uuid("outbox_id").references(() => espConfigs.id, {
             onDelete: "set null",
         }),
@@ -792,6 +810,9 @@ export const ongoingSequences = pgTable(
         }).notNull(),
         retryCount: integer("retry_count").notNull().default(0),
         sentEmailIds: text("sent_email_ids").array().notNull().default([]),
+        processingStartedAt: timestamp("processing_started_at", {
+            withTimezone: true,
+        }),
         createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
     },
@@ -864,6 +885,10 @@ export const transactionalEmails = pgTable(
             .notNull()
             .unique()
             .$defaultFn(() => genPublicId("txe")),
+        deliveryRoute: text("delivery_route").notNull().default("custom"),
+        outboxId: uuid("outbox_id").references(() => espConfigs.id, {
+            onDelete: "set null",
+        }),
         toEmail: text("to_email").notNull(),
         // Resolved sender identity at enqueue time (team ESP fromName/fromEmail
         // fallback chain, same as `attemptMailSending`) — never caller-supplied.
@@ -889,6 +914,9 @@ export const transactionalEmails = pgTable(
             onDelete: "set null",
         }),
         status: text("status").notNull().default("queued"), // queued|sent|failed|bounced
+        processingStartedAt: timestamp("processing_started_at", {
+            withTimezone: true,
+        }),
         error: text("error"),
         idempotencyKey: text("idempotency_key"),
         trackOpens: boolean("track_opens").notNull().default(false),
@@ -919,5 +947,371 @@ export const transactionalEmails = pgTable(
             table.teamId,
             table.status,
         ),
+    }),
+);
+
+/** Provider-specific webhook security/health lifecycle for one feedback
+ * connection — deliberately not columns on `esp_configs`, since secrets and
+ * health status churn independently of SMTP connection settings (see
+ * `docs/bounces-and-complaints.md#2-feedback-connection`). A `custom`
+ * connection is pinned to one team-owned `espConfigId`; a future `platform`
+ * connection (never created by this phase) has null `teamId`/`espConfigId`
+ * and is deployment-managed, never returned through team ESP APIs. */
+export const espFeedbackConnections = pgTable(
+    "esp_feedback_connections",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        connectionId: text("connection_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("whc")),
+        scope: text("scope").notNull(), // custom | platform
+        teamId: uuid("team_id").references(() => teams.id, {
+            onDelete: "cascade",
+        }),
+        espConfigId: uuid("esp_config_id").references(() => espConfigs.id, {
+            onDelete: "set null",
+        }),
+        provider: text("provider").notNull(),
+        encryptedCredentials: text("encrypted_credentials"),
+        // Rotation accepts both the current and immediately previous
+        // credential for up to 24h so an in-flight provider retry signed
+        // with the old secret isn't rejected (PRD's "Feedback connection"
+        // rotation requirement). Cleared once expired.
+        previousEncryptedCredentials: text("previous_encrypted_credentials"),
+        previousCredentialExpiresAt: timestamp(
+            "previous_credential_expires_at",
+            { withTimezone: true },
+        ),
+        // SES: the SNS TopicArn this connection expects notifications from.
+        expectedTopicArn: text("expected_topic_arn"),
+        status: text("status").notNull().default("pending"),
+        lastReceivedAt: timestamp("last_received_at", { withTimezone: true }),
+        lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+        lastErrorCode: text("last_error_code"),
+        disabledAt: timestamp("disabled_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    },
+    (table) => ({
+        connectionIdCheck: publicIdCheck(
+            "esp_feedback_connections_connection_id_check",
+            table.connectionId,
+            "whc",
+        ),
+        teamIdx: index("esp_feedback_connections_team_id_idx").on(table.teamId),
+        // At most one non-retired connection per user ESP — a provider
+        // change retires the old row (status -> retiring) and inserts a new
+        // one rather than mutating provider in place.
+        espConfigActiveIdx: uniqueIndex(
+            "esp_feedback_connections_esp_config_active_idx",
+        )
+            .on(table.espConfigId)
+            .where(
+                sql`${table.espConfigId} is not null and ${table.status} not in ('retiring', 'disabled')`,
+            ),
+    }),
+);
+
+/** One row per (recipient) submission across broadcasts, sequences, and
+ * transactional sends — the common ledger `docs/bounces-and-complaints.md`
+ * requires so a later provider webhook can correlate back to a workspace,
+ * source, and pinned ESP regardless of which pipeline sent it. Created
+ * before transport and updated with the transport result; the current
+ * `deliveryStatus`/`feedbackStatus` are a projection maintained by
+ * `feedback/projection.ts`, kept separate from the immutable
+ * `emailDeliveryEvents` log so retries/out-of-order events can't corrupt it. */
+export const outboundMessages = pgTable(
+    "outbound_messages",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        messageId: text("message_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("msg")),
+        teamId: uuid("team_id")
+            .notNull()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        deliveryRoute: text("delivery_route").notNull(), // custom | platform
+        espConfigId: uuid("esp_config_id").references(() => espConfigs.id, {
+            onDelete: "set null",
+        }),
+        feedbackConnectionId: uuid("feedback_connection_id").references(
+            () => espFeedbackConnections.id,
+            { onDelete: "set null" },
+        ),
+        sourceType: text("source_type").notNull(), // campaign | transactional
+        // Stable application-level submission identity. Retries reuse the
+        // same ledger row and RFC Message-ID rather than creating a second
+        // provider-correlatable message.
+        submissionKey: text("submission_key").unique(),
+        // Exactly one of these two is populated, matching `sourceType`.
+        campaignDeliveryId: uuid("campaign_delivery_id").references(
+            () => emailDeliveries.id,
+            { onDelete: "set null" },
+        ),
+        transactionalEmailId: uuid("transactional_email_id").references(
+            () => transactionalEmails.id,
+            { onDelete: "set null" },
+        ),
+        recipientEmail: text("recipient_email").notNull(),
+        normalizedRecipient: text("normalized_recipient").notNull(),
+        // Snapshot of the pinned ESP's provider at send time — never
+        // resolved from the team's *current* default, so historical
+        // correlation survives a later default switch.
+        provider: text("provider"),
+        rfcMessageId: text("rfc_message_id"),
+        providerMessageId: text("provider_message_id"),
+        deliveryStatus: text("delivery_status").notNull().default("queued"),
+        feedbackStatus: text("feedback_status").notNull().default("none"),
+        acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+        deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+        bouncedAt: timestamp("bounced_at", { withTimezone: true }),
+        complainedAt: timestamp("complained_at", { withTimezone: true }),
+        lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    },
+    (table) => ({
+        messageIdCheck: publicIdCheck(
+            "outbound_messages_message_id_check",
+            table.messageId,
+            "msg",
+        ),
+        teamCreatedAtIdx: index("outbound_messages_team_id_created_at_idx").on(
+            table.teamId,
+            table.createdAt,
+        ),
+        connectionProviderMsgIdx: index(
+            "outbound_messages_connection_provider_msg_idx",
+        ).on(table.feedbackConnectionId, table.providerMessageId),
+        recipientHistoryIdx: index(
+            "outbound_messages_team_id_recipient_created_at_idx",
+        ).on(table.teamId, table.normalizedRecipient, table.createdAt),
+    }),
+);
+
+/** Durable, authenticated inbox for raw provider webhook bodies — a request
+ * is inserted here and committed *before* the HTTP response is sent, so an
+ * acknowledged provider retry can never be lost even if BullMQ/Redis is
+ * briefly unavailable (see `docs/bounces-and-complaints.md#4-durable-receipt-inbox`).
+ * `teamId` is only ever populated from a `custom` connection — a platform
+ * receipt may bundle multiple workspaces in one payload, so team ownership
+ * is assigned later, per normalized event, from a uniquely matched
+ * `outboundMessages` row. */
+export const espWebhookReceipts = pgTable(
+    "esp_webhook_receipts",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        receiptId: text("receipt_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("whr")),
+        connectionId: uuid("connection_id")
+            .notNull()
+            .references(() => espFeedbackConnections.id, {
+                onDelete: "cascade",
+            }),
+        teamId: uuid("team_id").references(() => teams.id, {
+            onDelete: "cascade",
+        }),
+        provider: text("provider").notNull(),
+        providerRequestId: text("provider_request_id"),
+        bodySha256: text("body_sha256").notNull(),
+        // Encrypted raw payload (AES-256-GCM, same utility as ESP
+        // credentials) — required on receipt, set null only once the
+        // 30-day raw-retention purge runs (see PRD's privacy/retention).
+        encryptedPayload: text("encrypted_payload"),
+        // Allowlisted non-secret headers only — never Authorization,
+        // Cookie, or signature headers.
+        safeHeaders: jsonb("safe_headers").notNull().default({}),
+        status: text("status").notNull().default("pending"),
+        processingAttempts: integer("processing_attempts").notNull().default(0),
+        nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+        lastErrorCode: text("last_error_code"),
+        receivedAt: timestamp("received_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        processedAt: timestamp("processed_at", { withTimezone: true }),
+    },
+    (table) => ({
+        receiptIdCheck: publicIdCheck(
+            "esp_webhook_receipts_receipt_id_check",
+            table.receiptId,
+            "whr",
+        ),
+        // The pending-receipt poller's recovery query and the worker's
+        // claim query both filter on this pair.
+        statusNextAttemptIdx: index(
+            "esp_webhook_receipts_status_next_attempt_idx",
+        ).on(table.status, table.nextAttemptAt),
+        connectionRequestIdx: index(
+            "esp_webhook_receipts_connection_id_provider_request_id_idx",
+        ).on(table.connectionId, table.providerRequestId),
+    }),
+);
+
+/** One immutable row per canonical provider event, derived from a receipt by
+ * a provider adapter — the event log `docs/bounces-and-complaints.md`
+ * requires to keep retries/out-of-order delivery from corrupting the
+ * `outboundMessages` projection. Never updated after insert. */
+export const emailDeliveryEvents = pgTable(
+    "email_delivery_events",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        eventId: text("event_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("evt")),
+        receiptId: uuid("receipt_id")
+            .notNull()
+            .references(() => espWebhookReceipts.id, { onDelete: "cascade" }),
+        connectionId: uuid("connection_id")
+            .notNull()
+            .references(() => espFeedbackConnections.id, {
+                onDelete: "cascade",
+            }),
+        // Null until a platform event is uniquely correlated — see
+        // `outboundMessageId` note below and the PRD's correlation section.
+        teamId: uuid("team_id").references(() => teams.id, {
+            onDelete: "cascade",
+        }),
+        outboundMessageId: uuid("outbound_message_id").references(
+            () => outboundMessages.id,
+            { onDelete: "set null" },
+        ),
+        provider: text("provider").notNull(),
+        // Deterministic per-adapter idempotency key (e.g. `sg_event_id`, or
+        // a composed key when the provider doesn't guarantee one) — see
+        // each adapter's "stable event key" requirement in the PRD.
+        providerEventKey: text("provider_event_key").notNull(),
+        providerMessageId: text("provider_message_id"),
+        recipientEmail: text("recipient_email"),
+        normalizedRecipient: text("normalized_recipient"),
+        eventType: text("event_type").notNull(),
+        bounceClass: text("bounce_class"),
+        smtpCode: integer("smtp_code"),
+        enhancedStatusCode: text("enhanced_status_code"),
+        reason: text("reason"),
+        remoteMta: text("remote_mta"),
+        occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+        receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+        metadata: jsonb("metadata").notNull().default({}),
+    },
+    (table) => ({
+        eventIdCheck: publicIdCheck(
+            "email_delivery_events_event_id_check",
+            table.eventId,
+            "evt",
+        ),
+        // Event idempotency: replaying the same provider event twice must
+        // insert nothing the second time.
+        connectionEventKeyIdx: uniqueIndex(
+            "email_delivery_events_connection_id_provider_event_key_idx",
+        ).on(table.connectionId, table.providerEventKey),
+        teamOccurredAtIdx: index(
+            "email_delivery_events_team_id_occurred_at_idx",
+        ).on(table.teamId, table.occurredAt),
+        outboundMessageIdx: index(
+            "email_delivery_events_outbound_message_id_idx",
+        ).on(table.outboundMessageId),
+    }),
+);
+
+/** Per-workspace do-not-send list — deliberately not derived from
+ * `contacts.subscribed` or the latest message status, so it survives
+ * contact deletion/reimport and stays route-independent (any pinned custom
+ * ESP, and eventually the platform route, must all respect it). One row per
+ * `(teamId, recipientHash)`; repeated signals update `lastSuppressedAt` and
+ * keep the strongest `reason` (see `suppressionReasonStrength`). */
+export const emailSuppressions = pgTable(
+    "email_suppressions",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        suppressionId: text("suppression_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("sup")),
+        teamId: uuid("team_id")
+            .notNull()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        // Presented/normalized address — both nulled out (HMAC retained) by
+        // a recipient privacy-erasure deletion; see PRD's retention section.
+        recipientEmail: text("recipient_email"),
+        normalizedRecipient: text("normalized_recipient"),
+        recipientHash: text("recipient_hash").notNull(),
+        hashKeyVersion: integer("hash_key_version").notNull(),
+        reason: text("reason").notNull(),
+        sourceEventId: uuid("source_event_id").references(
+            () => emailDeliveryEvents.id,
+            { onDelete: "set null" },
+        ),
+        active: boolean("active").notNull().default(true),
+        firstSuppressedAt: timestamp("first_suppressed_at", {
+            withTimezone: true,
+        })
+            .notNull()
+            .defaultNow(),
+        lastSuppressedAt: timestamp("last_suppressed_at", {
+            withTimezone: true,
+        })
+            .notNull()
+            .defaultNow(),
+        releasedAt: timestamp("released_at", { withTimezone: true }),
+        releasedBy: uuid("released_by").references(() => accounts.id, {
+            onDelete: "set null",
+        }),
+        releaseReason: text("release_reason"),
+        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    },
+    (table) => ({
+        suppressionIdCheck: publicIdCheck(
+            "email_suppressions_suppression_id_check",
+            table.suppressionId,
+            "sup",
+        ),
+        teamHashIdx: uniqueIndex(
+            "email_suppressions_team_id_recipient_hash_idx",
+        ).on(table.teamId, table.recipientHash),
+        teamActiveIdx: index("email_suppressions_team_id_active_idx").on(
+            table.teamId,
+            table.active,
+        ),
+    }),
+);
+
+/** Append-only audit trail for every suppression create/reason-change/
+ * release/reactivate — required so a permitted release is always
+ * attributable (PRD acceptance criterion: "every permitted release is
+ * audited"). Never updated or deleted by application code. */
+export const emailSuppressionActions = pgTable(
+    "email_suppression_actions",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        teamId: uuid("team_id")
+            .notNull()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        suppressionId: uuid("suppression_id")
+            .notNull()
+            .references(() => emailSuppressions.id, { onDelete: "cascade" }),
+        sourceEventId: uuid("source_event_id").references(
+            () => emailDeliveryEvents.id,
+            { onDelete: "set null" },
+        ),
+        action: text("action").notNull(), // created | reason_changed | released | reactivated
+        actorType: text("actor_type").notNull(), // system | workspace_user | sendlit_operator
+        actorUserId: uuid("actor_user_id").references(() => accounts.id, {
+            onDelete: "set null",
+        }),
+        explanation: text("explanation"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        suppressionActionsIdx: index(
+            "email_suppression_actions_suppression_id_created_at_idx",
+        ).on(table.suppressionId, table.createdAt),
     }),
 );

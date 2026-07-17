@@ -7,3 +7,5 @@ process.env.DOMAIN ||= "sendlit.test";
 process.env.EMAIL_FROM ||= "platform@sendlit.test";
 process.env.ESP_CREDENTIALS_ENCRYPTION_KEY ||=
     "test-esp-secret-key-with-at-least-32-bytes";
+process.env.SUPPRESSION_HASH_KEY ||=
+    "test-suppression-hash-key-with-at-least-32-bytes";

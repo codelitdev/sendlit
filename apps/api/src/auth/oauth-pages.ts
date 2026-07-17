@@ -152,7 +152,7 @@ router.get("/login", (req, res) => {
         typeof req.query.redirect === "string" ? req.query.redirect : undefined;
     const redirectTarget = isAllowedRedirect(requestedRedirect)
         ? requestedRedirect
-        : `${webClientUrl}/dashboard`;
+        : `${webClientUrl}/`;
     const body = `${loginFormMarkup()}
 <script>
 (function () {

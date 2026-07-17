@@ -10,6 +10,7 @@ import { registerEspTools } from "./tools/esp";
 import { registerGeneralSettingsTools } from "./tools/general-settings";
 import { registerTeamTools } from "./tools/teams";
 import { registerMediaTools } from "./tools/media";
+import { registerDeliveryFeedbackTools } from "./tools/delivery-feedback";
 
 function registerAllTools(server: McpServer): void {
     registerContactTools(server);
@@ -21,6 +22,7 @@ function registerAllTools(server: McpServer): void {
     registerGeneralSettingsTools(server);
     registerTeamTools(server);
     registerMediaTools(server);
+    registerDeliveryFeedbackTools(server);
 }
 
 /**

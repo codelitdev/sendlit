@@ -8,12 +8,8 @@ import {
     sequences,
 } from "../db/schema";
 import { getTeam } from "../team/queries";
-import {
-    getAccount,
-    hasMailQuotaRemaining,
-    incrementMailCount,
-} from "../account/queries";
-import { getEspConfig, getEspConfigById } from "../settings/esp/queries";
+import { getAccount } from "../account/queries";
+import { getEspConfigById } from "../settings/esp/queries";
 import { getGeneralSettings } from "../settings/general/queries";
 import {
     addTagToContact,
@@ -32,11 +28,17 @@ import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
 import {
     countOngoingSequencesForSequence,
+    claimOngoingSequence,
     deleteOngoingSequence,
     getSequenceRowById,
     markBroadcastSent,
+    releaseOngoingSequenceClaim,
 } from "./queries";
 import { sequenceBounceLimit } from "../config/constants";
+import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
+import { createCustomRouteOutboundMessage } from "../delivery-feedback/outbound-send";
+import { markOutboundAccepted } from "../delivery-feedback/outbound-queries";
+import { normalizeEmail } from "../utils/email";
 
 type OngoingSequenceRow = typeof ongoingSequences.$inferSelect;
 type SequenceEmailRow = typeof sequenceEmails.$inferSelect;
@@ -49,17 +51,8 @@ type SequenceEmailRow = typeof sequenceEmails.$inferSelect;
  * schedules the following email (or cleans up once the sequence is done).
  */
 export async function processOngoingSequence(ongoingSequenceId: string) {
-    const [ongoingSequence] = await db
-        .select()
-        .from(ongoingSequences)
-        .where(eq(ongoingSequences.id, ongoingSequenceId))
-        .limit(1);
+    const ongoingSequence = await claimOngoingSequence(ongoingSequenceId);
     if (!ongoingSequence) return;
-
-    // A stale/duplicate job (or a concurrent worker) may arrive after another
-    // run already sent this tick's email and advanced the schedule. Without
-    // this guard the next email would go out immediately, skipping its delay.
-    if (ongoingSequence.nextEmailScheduledTime > Date.now()) return;
 
     try {
         const sequenceRow = await getSequenceRowById(
@@ -70,24 +63,6 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
 
         if (!sequenceRow || !contact || !team) {
             return cleanUpResources(ongoingSequence);
-        }
-
-        // Quota is account-level, shared across all teams the account owns.
-        const hasQuota = await hasMailQuotaRemaining(team.ownerAccountId);
-        if (!hasQuota) {
-            logger.warn(
-                { teamId: ongoingSequence.teamId },
-                "Mail quota exceeded, skipping ongoing sequence tick",
-            );
-            captureEvent({
-                event: "mail_quota_exceeded",
-                source: "automation.process_ongoing_sequence",
-                teamId: ongoingSequence.teamId,
-                properties: {
-                    ongoing_sequence_id: ongoingSequence.id,
-                },
-            });
-            return;
         }
 
         const emails = await db
@@ -121,8 +96,6 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
             ...ongoingSequence.sentEmailIds,
             nextEmail.emailId,
         ];
-        await incrementMailCount(team.ownerAccountId);
-
         const followUpEmail = getNextPublishedEmail(
             sequenceRow.emailsOrder,
             emails,
@@ -132,7 +105,7 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
         if (!followUpEmail) {
             await db
                 .update(ongoingSequences)
-                .set({ sentEmailIds })
+                .set({ sentEmailIds, processingStartedAt: null })
                 .where(eq(ongoingSequences.id, ongoingSequence.id));
             return cleanUpResources(
                 {
@@ -153,10 +126,12 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
                 nextEmailScheduledTime:
                     ongoingSequence.nextEmailScheduledTime +
                     followUpEmail.delayInMillis,
+                processingStartedAt: null,
                 updatedAt: new Date(),
             })
             .where(eq(ongoingSequences.id, ongoingSequence.id));
     } catch (err: any) {
+        await releaseOngoingSequenceClaim(ongoingSequenceId);
         logger.error(
             { error: err.message, ongoing_sequence_id: ongoingSequenceId },
             "processOngoingSequence failed",
@@ -222,13 +197,11 @@ async function attemptMailSending({
     ongoingSequence: OngoingSequenceRow;
     email: SequenceEmailRow;
 }) {
-    // Sender identity fallback chain: the sequence's pinned outbox (an
-    // esp_configs row via `sequences.outboxId`) → the team's esp config →
-    // team name / owner account email.
-    const outbox =
-        (sequence.outboxId
-            ? await getEspConfigById(sequence.outboxId)
-            : null) ?? (await getEspConfig(team.id));
+    if (sequence.deliveryRoute !== "custom" || !sequence.outboxId) {
+        throw new Error("Team ESP is not configured.");
+    }
+    const outbox = await getEspConfigById(sequence.outboxId, team.id);
+    if (!outbox) throw new Error("Team ESP is not configured.");
     const ownerAccount = await getAccount(team.ownerAccountId);
     const from = getEmailFrom({
         name: outbox?.fromName || team.name,
@@ -253,6 +226,28 @@ async function attemptMailSending({
     };
 
     if (!email.content) return;
+
+    // Recheck immediately before rendering/transport — closes the race
+    // between scheduling and a bounce/complaint received in the meantime.
+    // A suppressed recipient is treated as handled (advances the sequence,
+    // like a normal send) but never counted as sent — see
+    // docs/bounces-and-complaints.md#8-suppression-model.
+    if (await isRecipientSuppressed(team.id, to)) {
+        logger.info(
+            { sequence_id: sequence.sequenceId, contactId: contact.contactId },
+            "skipped suppressed recipient",
+        );
+        captureEvent({
+            event: "email_send_suppressed",
+            source: "automation.attempt_mail_sending",
+            teamId: team.id,
+            properties: {
+                sequence_id: sequence.sequenceId,
+                sequence_type: sequence.type,
+            },
+        });
+        return;
+    }
 
     // NOTE: these three must stay **public** ids — they get embedded into the
     // outgoing email's tracking pixel/links, and `tracking/routes.ts` only
@@ -290,18 +285,39 @@ async function attemptMailSending({
     );
 
     try {
-        await sendMail({
+        // Outbound ledger row must exist before transport submission — see
+        // docs/bounces-and-complaints.md#1-outbound-message-ledger.
+        const { outbound, rfcMessageId } =
+            await createCustomRouteOutboundMessage({
+                teamId: team.id,
+                espConfigId: outbox.id,
+                provider: outbox.provider,
+                sourceType: "campaign",
+                submissionKey: `campaign:${ongoingSequence.id}:${email.id}`,
+                recipientEmail: to,
+                normalizedRecipient: normalizeEmail(to),
+            });
+        const result = await sendMail({
             from,
             to,
             subject,
             html: contentWithTrackedLinks,
             teamId: team.id,
+            espConfigId: outbox.id,
+            messageId: rfcMessageId,
         });
-        await db.insert(emailDeliveries).values({
-            teamId: team.id,
-            sequenceId: sequence.id,
-            contactId: contact.id,
-            emailId: email.id,
+        const [delivery] = await db
+            .insert(emailDeliveries)
+            .values({
+                teamId: team.id,
+                sequenceId: sequence.id,
+                contactId: contact.id,
+                emailId: email.id,
+            })
+            .returning();
+        await markOutboundAccepted(outbound.id, {
+            providerMessageId: result.providerResponse,
+            campaignDeliveryId: delivery.id,
         });
         await applyEmailAction({ team, contact, sequence, email });
     } catch (err: any) {

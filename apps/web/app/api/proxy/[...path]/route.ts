@@ -19,8 +19,12 @@ async function forward(
         method !== "GET" && method !== "HEAD" && method !== "DELETE";
     const body = hasBody ? await req.text() : undefined;
     const forwardedFor = req.headers.get("x-forwarded-for");
-    const isTeamManagementRoute = path[0] === "teams";
-    const teamId = isTeamManagementRoute
+    // The collection route lists/creates teams and must resolve without an
+    // active team. Nested routes (for example `/teams/:teamId/keys`) manage
+    // resources scoped to a team and therefore need the selected team header
+    // when the account belongs to more than one team.
+    const isTeamCollectionRoute = path.length === 1 && path[0] === "teams";
+    const teamId = isTeamCollectionRoute
         ? undefined
         : req.cookies.get(TEAM_ID_COOKIE)?.value;
 

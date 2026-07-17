@@ -68,6 +68,7 @@ export function registerTransactionalTools(server: McpServer): void {
                     ),
                 trackOpens: z.boolean().optional(),
                 trackClicks: z.boolean().optional(),
+                espId: z.string().min(1).optional(),
             },
             outputSchema: transactionalEmailSchema.pick({
                 txeId: true,
@@ -95,6 +96,7 @@ export function registerTransactionalTools(server: McpServer): void {
                     idempotencyKey: args.idempotencyKey,
                     trackOpens: args.trackOpens,
                     trackClicks: args.trackClicks,
+                    espId: args.espId,
                 });
                 return jsonResult({ txeId: row.txeId, status: row.status });
             } catch (err: any) {
@@ -113,8 +115,12 @@ export function registerTransactionalTools(server: McpServer): void {
                         return errorResult("Template rendering failed");
                     case "esp_not_configured":
                         return errorResult("Team ESP is not configured.");
-                    case "quota_exceeded":
-                        return errorResult("Mail sending quota exceeded");
+                    case "esp_not_found":
+                        return errorResult("ESP not found");
+                    case "recipient_suppressed":
+                        return errorResult(
+                            "This address is suppressed after a prior hard bounce or complaint and cannot receive mail from this team.",
+                        );
                     default:
                         throw err;
                 }

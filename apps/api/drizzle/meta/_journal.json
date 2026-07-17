@@ -43,6 +43,41 @@
             "when": 1783740383400,
             "tag": "0005_lucky_mercury",
             "breakpoints": true
+        },
+        {
+            "idx": 6,
+            "version": "7",
+            "when": 1784214692205,
+            "tag": "0006_sturdy_jackpot",
+            "breakpoints": true
+        },
+        {
+            "idx": 7,
+            "version": "7",
+            "when": 1784222862314,
+            "tag": "0007_peaceful_plazm",
+            "breakpoints": true
+        },
+        {
+            "idx": 8,
+            "version": "7",
+            "when": 1784223976178,
+            "tag": "0008_nosy_scarlet_witch",
+            "breakpoints": true
+        },
+        {
+            "idx": 9,
+            "version": "7",
+            "when": 1784227051813,
+            "tag": "0009_open_gambit",
+            "breakpoints": true
+        },
+        {
+            "idx": 10,
+            "version": "7",
+            "when": 1784227186841,
+            "tag": "0010_glorious_wonder_man",
+            "breakpoints": true
         }
     ]
 }

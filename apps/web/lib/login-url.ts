@@ -7,5 +7,5 @@ export function getDashboardLoginUrl({
     apiPublicUrl,
     webClient,
 }: LoginUrlInput): string {
-    return `${apiPublicUrl}/login?redirect=${encodeURIComponent(`${webClient}/dashboard`)}`;
+    return `${apiPublicUrl}/login?redirect=${encodeURIComponent(`${webClient}/`)}`;
 }

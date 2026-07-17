@@ -39,7 +39,7 @@ import type { HydratedSequence } from "../../sequences/queries";
 // than exposed, since it's an internal join key, not a public ID.
 function toPublicSequence(sequence: HydratedSequence) {
     return {
-        ...omitInternal(sequence),
+        ...omitInternal(sequence, ["outboxId", "deliveryRoute"]),
         emails: sequence.emails.map((email) =>
             omitInternal(email, ["sequenceId"]),
         ),
@@ -129,6 +129,7 @@ export function registerSequenceTools(server: McpServer): void {
             inputSchema: {
                 type: z.enum(mailTypes),
                 templateId: z.string().min(1),
+                espId: z.string().min(1).optional(),
             },
             outputSchema: sequenceSchema,
             annotations: {
@@ -145,6 +146,7 @@ export function registerSequenceTools(server: McpServer): void {
                     teamId,
                     type: args.type,
                     templateId: args.templateId,
+                    espId: args.espId,
                 });
                 return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
@@ -157,7 +159,7 @@ export function registerSequenceTools(server: McpServer): void {
         "update_sequence",
         {
             description:
-                "Updates a broadcast/sequence's title, trigger (sequences) or audience filter (broadcasts). Sender identity comes from the team's ESP settings (see update_esp_config).",
+                "Updates a broadcast/sequence's title, trigger, audience filter, or selected user ESP.",
             inputSchema: {
                 sequenceId: z.string(),
                 title: z.string().optional(),
@@ -181,6 +183,7 @@ export function registerSequenceTools(server: McpServer): void {
                         "Audience filter for broadcasts (tag/email/subscription/signedUp)",
                     ),
                 emailsOrder: z.array(z.string()).optional(),
+                espId: z.string().min(1).nullable().optional(),
             },
             outputSchema: sequenceSchema,
             annotations: {

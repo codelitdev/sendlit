@@ -1,0 +1,16 @@
+---
+title: Teams
+description: Isolate contacts, sending configuration, and API access by workspace.
+---
+
+A team is SendLit’s tenant boundary. Contacts, templates, broadcasts, sequences, media, sending providers, API keys, mailing address, and quota belong to a team.
+
+## Create and switch teams
+
+Use the team switcher in the dashboard header to move between existing teams. Create a team from **Add team**. The selected team is also the default scope for dashboard API calls.
+
+## API keys
+
+Manage keys from the Teams page or through the Teams API. Keys are team-scoped and shown in full only once when created. Store the secret immediately; if it is lost or exposed, revoke it and create a replacement.
+
+For multi-tenant provisioning, use the provisioning endpoint with `X-Sendlit-Provisioning-Secret` instead of sharing a dashboard key.

@@ -1,4 +1,5 @@
 import { defaultEmail } from "@sendlit/email-editor";
+import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { makeTestDb } from "./db";
 
@@ -48,12 +49,18 @@ export async function seedSequence(
         }>;
     },
 ) {
+    const [outbox] = await db
+        .select({ id: schema.espConfigs.id })
+        .from(schema.espConfigs)
+        .where(eq(schema.espConfigs.teamId, teamId));
     const [sequenceRow] = await db
         .insert(schema.sequences)
         .values({
             teamId,
             type,
             status,
+            deliveryRoute: outbox ? "custom" : null,
+            outboxId: outbox?.id ?? null,
             // Broadcasts reach ongoing_sequences via `processRule`, which runs
             // `lockBroadcast` and thus guarantees `report.broadcast` exists
             // before any delivery — `markBroadcastSent`'s jsonb_set relies on

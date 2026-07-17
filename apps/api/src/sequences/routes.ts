@@ -39,7 +39,7 @@ const s = initServer();
 // rather than exposed, since it's an internal join key, not a public ID.
 function toBody(sequence: HydratedSequence): any {
     return serializeDates({
-        ...omitInternal(sequence),
+        ...omitInternal(sequence, ["outboxId", "deliveryRoute"]),
         emails: sequence.emails.map((email) =>
             omitInternal(email, ["sequenceId"]),
         ),
@@ -81,14 +81,18 @@ const impl = s.router(contract.sequences, {
         return { status: 200, body: toBody(sequence) };
     },
     update: async ({ params, body, req }) => {
-        const sequence = await updateSequence({
-            teamId: (req as any).teamId,
-            sequenceId: params.sequenceId,
-            ...body,
-        } as any);
-        if (!sequence)
-            return { status: 404, body: { error: "Sequence not found" } };
-        return { status: 200, body: toBody(sequence) };
+        try {
+            const sequence = await updateSequence({
+                teamId: (req as any).teamId,
+                sequenceId: params.sequenceId,
+                ...body,
+            } as any);
+            if (!sequence)
+                return { status: 404, body: { error: "Sequence not found" } };
+            return { status: 200, body: toBody(sequence) };
+        } catch (err: any) {
+            return { status: 400, body: { error: err.message } };
+        }
     },
     addEmail: async ({ params, body, req }) => {
         try {
@@ -150,7 +154,12 @@ const impl = s.router(contract.sequences, {
             });
             return { status: 200, body: toBody(sequence) };
         } catch (err: any) {
-            return { status: 400, body: { error: err.message } };
+            return err.message === "esp_not_configured"
+                ? {
+                      status: 422,
+                      body: { error: "Team ESP is not configured." },
+                  }
+                : { status: 400, body: { error: err.message } };
         }
     },
     pause: async ({ params, req }) => {

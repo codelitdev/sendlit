@@ -9,6 +9,9 @@ export const metadata: Metadata = {
     },
     description:
         "Documentation for SendLit email marketing, automation, APIs, and email blocks.",
+    icons: {
+        icon: "/icon.svg",
+    },
 };
 
 export default function RootLayout({

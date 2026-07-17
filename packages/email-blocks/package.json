@@ -1,6 +1,6 @@
 {
     "name": "@sendlit/email-blocks",
-    "version": "0.1.0",
+    "version": "0.1.0-alpha.0",
     "description": "Headless, ready-to-use blocks for composing your own email workflows powered by SendLit",
     "author": "SendLit",
     "license": "MIT",
@@ -23,7 +23,7 @@
         "access": "public"
     },
     "scripts": {
-        "test": "echo \"Error: run tests from root\" && exit 1",
+        "test": "vitest run",
         "clean": "rimraf dist/",
         "prepublishOnly": "pnpm run build",
         "build": "tsup",
@@ -42,7 +42,8 @@
         "tailwindcss-animate": "^1.0.7",
         "tsup": "6.6.0",
         "typescript": "^4.9.5",
-        "typescript-eslint": "^7.4.0"
+        "typescript-eslint": "^7.4.0",
+        "vitest": "^4.1.9"
     },
     "dependencies": {
         "@radix-ui/react-alert-dialog": "^1.1.11",
@@ -55,13 +56,13 @@
         "@radix-ui/react-slot": "^1.2.3",
         "@radix-ui/react-switch": "^1.2.5",
         "@radix-ui/react-tooltip": "^1.2.7",
+        "@sendlit/email-editor": "workspace:*",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
         "lucide-react": "^0.544.0",
         "tailwind-merge": "^3.3.1",
-        "tw-animate-css": "^1.2.8",
-        "@sendlit/email-editor": "workspace:*"
+        "tw-animate-css": "^1.2.8"
     },
     "peerDependencies": {
         "react": "^19.2.0"

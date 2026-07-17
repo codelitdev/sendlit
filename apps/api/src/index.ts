@@ -21,7 +21,13 @@ import generalSettingsRoutes from "./settings/general/routes";
 import teamRoutes from "./team/routes";
 import provisioningRoutes from "./provisioning/routes";
 import trackingRoutes from "./tracking/routes";
+import overviewRoutes from "./overview/routes";
+import feedbackRoutes from "./delivery-feedback/feedback-routes";
+import espWebhookRoutes from "./delivery-feedback/webhook-route";
+import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
+import suppressionsRoutes from "./delivery-feedback/suppressions-routes";
 import { assertEspEncryptionKeyConfigured } from "./utils/secret-crypto";
+import { assertSuppressionHashKeyConfigured } from "./delivery-feedback/suppression-hash";
 import { createSuperAdminIfMissing } from "./bootstrap";
 import { openApiDocument } from "./openapi";
 import {
@@ -33,8 +39,11 @@ import {
 // Start BullMQ workers
 import "./mail/worker";
 import "./mail/sequence-worker";
+import "./delivery-feedback/feedback-worker";
 
 import { startAutomation } from "./automation/start";
+import { startFeedbackReceiptPoller } from "./delivery-feedback/poller";
+import { startRetentionLoop } from "./delivery-feedback/retention-loop";
 
 const app = express();
 
@@ -43,6 +52,10 @@ app.set("trust proxy", process.env.ENABLE_TRUST_PROXY === "true" ? 1 : false);
 app.use(cors());
 app.all("/api/auth/*", toNodeHandler(auth));
 app.use(oauthPagesRoutes);
+// Mounted before global body parsing: this route needs the unmodified raw
+// request bytes for provider signature verification and has no
+// session/API-key concept at all — see delivery-feedback/webhook-route.ts.
+app.use(espWebhookRoutes);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -88,6 +101,10 @@ app.use(transactionalRoutes);
 app.use(espRoutes);
 app.use(generalSettingsRoutes);
 app.use(teamRoutes);
+app.use(overviewRoutes);
+app.use(feedbackRoutes);
+app.use(deliveryEventsRoutes);
+app.use(suppressionsRoutes);
 
 app.use(
     (
@@ -133,6 +150,8 @@ checkConfig()
             logger.info(`SendLit API running at ${port}`);
         });
         startAutomation();
+        startFeedbackReceiptPoller();
+        startRetentionLoop();
     })
     .catch((err) => {
         logger.error({ error: err.message }, "Failed to start SendLit API");
@@ -159,4 +178,5 @@ async function checkConfig() {
         throw new Error("PIXEL_SIGNING_SECRET is not set");
     }
     assertEspEncryptionKeyConfigured();
+    assertSuppressionHashKeyConfigured();
 }

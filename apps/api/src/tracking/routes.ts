@@ -105,11 +105,16 @@ router.get("/track/open", async (req: Request, res: Response) => {
 router.get("/track/click", async (req: Request, res: Response) => {
     const token = String(req.query.d || "");
     const payload = verifyPixelToken<Record<string, unknown>>(token);
-    if (!payload || !payload.link) {
+    if (!payload || typeof payload.link !== "string" || !payload.link) {
         return res.status(400).send("Invalid tracking link");
     }
 
-    const destination = decodeURIComponent(payload.link as string);
+    let destination: string;
+    try {
+        destination = decodeURIComponent(payload.link);
+    } catch {
+        return res.status(400).send("Invalid tracking link");
+    }
 
     try {
         if (isTransactionalPayload(payload)) {

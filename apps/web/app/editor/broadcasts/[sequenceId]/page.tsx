@@ -12,7 +12,7 @@ export default function BroadcastEmailEditorPage({
     return (
         <SequenceEmailEditor
             sequenceId={sequenceId}
-            exitFallbackHref={`/dashboard/broadcasts/${sequenceId}`}
+            exitFallbackHref={`/broadcasts/${sequenceId}`}
         />
     );
 }

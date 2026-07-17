@@ -2,7 +2,7 @@
 
 - Don't duplicate stuff over and over. Re-use existing code and libraries.
 - While making changes to the `apps/api` directory, make sure the REST API documentation and MCP server are updated as well.
-- For UI components, use shadcn/ui exclusively.
+- For UI components, use shadcn/ui exclusively. Always use Shadcn CLI for installing components. Never hand roll standard Shadcn components. Prefer shadcn/ui components over browser-native components.
 
 ## Architecture Tips
 

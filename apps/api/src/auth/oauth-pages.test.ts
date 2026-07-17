@@ -60,23 +60,21 @@ describe("Hosted login pages", () => {
     }
 
     describe("GET /login", () => {
-        it("defaults to the web client's dashboard when no redirect is given", async () => {
+        it("defaults to the web client root when no redirect is given", async () => {
             const res = await request("/login");
 
             expect(res.status).toBe(200);
-            expect(redirectTargetFrom(res.body)).toBe(
-                "http://localhost:3000/dashboard",
-            );
+            expect(redirectTargetFrom(res.body)).toBe("http://localhost:3000/");
         });
 
         it("honors a redirect on the web client's own origin", async () => {
             const res = await request(
                 "/login?redirect=" +
-                    encodeURIComponent("http://localhost:3000/dashboard/foo"),
+                    encodeURIComponent("http://localhost:3000/sequences/foo"),
             );
 
             expect(redirectTargetFrom(res.body)).toBe(
-                "http://localhost:3000/dashboard/foo",
+                "http://localhost:3000/sequences/foo",
             );
         });
 
@@ -86,9 +84,7 @@ describe("Hosted login pages", () => {
                     encodeURIComponent("http://evil.com/steal"),
             );
 
-            expect(redirectTargetFrom(res.body)).toBe(
-                "http://localhost:3000/dashboard",
-            );
+            expect(redirectTargetFrom(res.body)).toBe("http://localhost:3000/");
         });
 
         it("rejects a malformed redirect instead of throwing", async () => {
@@ -97,9 +93,7 @@ describe("Hosted login pages", () => {
             );
 
             expect(res.status).toBe(200);
-            expect(redirectTargetFrom(res.body)).toBe(
-                "http://localhost:3000/dashboard",
-            );
+            expect(redirectTargetFrom(res.body)).toBe("http://localhost:3000/");
         });
 
         it("sets anti-clickjacking headers", async () => {

@@ -42,7 +42,7 @@ describe("server session validation", () => {
 
         await expect(hasServerSession()).resolves.toBe(true);
         expect(mocks.fetch).toHaveBeenCalledWith(
-            "http://localhost:4000/api/auth/get-session",
+            "http://localhost:5000/api/auth/get-session",
             {
                 headers: { Cookie: "opaque_session_cookie=signed-session" },
                 cache: "no-store",
@@ -60,6 +60,17 @@ describe("server session validation", () => {
                 headers: { "Content-Type": "application/json" },
             }),
         );
+
+        const { hasServerSession } = await import("./server-session");
+
+        await expect(hasServerSession()).resolves.toBe(false);
+    });
+
+    it("fails closed when the auth API is unreachable", async () => {
+        mocks.cookies.mockResolvedValue({
+            toString: () => "opaque_session_cookie=signed-session",
+        });
+        mocks.fetch.mockRejectedValue(new TypeError("fetch failed"));
 
         const { hasServerSession } = await import("./server-session");
 

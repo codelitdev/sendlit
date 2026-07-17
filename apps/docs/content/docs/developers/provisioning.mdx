@@ -1,0 +1,10 @@
+---
+title: Provisioning teams
+description: Create SendLit teams for external tenants.
+---
+
+Provisioning is for trusted multi-tenant platform integrations. Call the provisioning endpoint with `X-Sendlit-Provisioning-Secret` and an idempotent `externalId` for the source tenant.
+
+The first successful creation returns the team and its plaintext API key. Persist that key immediately: subsequent calls for the same `externalId` return the existing team without returning the secret again. If the key is lost, create a replacement through the Teams API.
+
+Do not use `SUPER_ADMIN_EMAIL` as a production provisioning mechanism; it is only a local/self-host bootstrap convenience.
