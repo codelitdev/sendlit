@@ -28,6 +28,7 @@ import {
     type ContactFilterWithAggregator,
 } from "@sendlit/email-blocks";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 
 const emptyFilter: ContactFilterWithAggregator = {
     aggregator: "or",
@@ -41,6 +42,8 @@ export default function ContactsPage() {
     const [error, setError] = useState<string | null>(null);
     const [open, setOpen] = useState(false);
     const { segmentProps, clearSelection } = useSegments(setError);
+
+    useSetBreadcrumb([{ label: "Contacts" }]);
 
     async function load(nextFilter: ContactFilterWithAggregator = filter) {
         try {

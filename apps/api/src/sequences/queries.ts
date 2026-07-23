@@ -94,10 +94,13 @@ export async function createSequence({
             sequenceId: sequence.id,
             content: content as any,
             subject:
-                template.title ||
-                (type === "broadcast" ? "New broadcast" : "New email"),
+                type === "broadcast"
+                    ? sequence.title
+                    : template.title || "New email",
             delayInMillis: 0,
-            published: false,
+            // Broadcasts always send their single email, so it's published
+            // by definition; drip/automation emails start unpublished.
+            published: type === "broadcast",
         })
         .returning();
 
@@ -258,6 +261,19 @@ export async function updateSequence({
         )
         .returning();
     if (!row) return null;
+
+    // Broadcasts have a single email whose subject always mirrors the
+    // broadcast's title, so the composer doesn't need a separate subject field.
+    if (row.type === "broadcast" && title !== undefined) {
+        const broadcastEmail = current.emails[0];
+        if (broadcastEmail) {
+            await db
+                .update(sequenceEmails)
+                .set({ subject: title, updatedAt: new Date() })
+                .where(eq(sequenceEmails.id, broadcastEmail.id));
+        }
+    }
+
     captureEvent({
         event: "sequence_updated",
         source: "sequences.update",
@@ -398,11 +414,18 @@ export async function updateMailInSequence({
     }
 
     const patch: Partial<SequenceEmail> = { updatedAt: new Date() };
-    if (subject !== undefined) patch.subject = subject;
+    // Broadcasts always mirror the sequence title as their subject and are
+    // always published, so those fields aren't independently editable.
+    if (sequence.type === "broadcast") {
+        patch.subject = sequence.title;
+        patch.published = true;
+    } else {
+        if (subject !== undefined) patch.subject = subject;
+        if (published !== undefined) patch.published = published;
+    }
     if (content !== undefined) patch.content = content as any;
     if (delayInMillis !== undefined) patch.delayInMillis = delayInMillis;
     if (templateId !== undefined) patch.templateId = templateId;
-    if (published !== undefined) patch.published = published;
     if (actionType !== undefined) patch.actionType = actionType;
     if (actionData !== undefined) patch.actionData = actionData as any;
 

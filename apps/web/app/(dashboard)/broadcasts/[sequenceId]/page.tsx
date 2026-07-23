@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, Check, Pencil, Send, X } from "lucide-react";
+import { CalendarClock, Check, Pencil, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,7 +43,7 @@ import {
     type SequenceStats,
 } from "@sendlit/email-blocks";
 import { sequenceStatsMetrics } from "@/lib/stats";
-import { Switch } from "@/components/ui/switch";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 
 interface BroadcastMeta {
     title: string;
@@ -52,10 +52,8 @@ interface BroadcastMeta {
 }
 
 interface BroadcastEmailDraft {
-    subject: string;
     content: Email;
     delayInMillis: number;
-    published: boolean;
 }
 
 const emptyFilter: ContactFilterWithAggregator = {
@@ -91,6 +89,11 @@ export default function BroadcastEditorPage({
     const [esps, setEsps] = useState<EspConfig[]>([]);
     const { segmentProps, clearSelection } = useSegments(setError);
 
+    useSetBreadcrumb([
+        { label: "Broadcasts", href: "/broadcasts" },
+        { label: sequence?.title || "Untitled broadcast" },
+    ]);
+
     useEffect(() => {
         listEsps()
             .then(({ items }) => setEsps(items))
@@ -109,10 +112,8 @@ export default function BroadcastEditorPage({
             const firstEmail = s.emails[0];
             if (firstEmail) {
                 setEmail({
-                    subject: firstEmail.subject,
                     content: firstEmail.content,
                     delayInMillis: firstEmail.delayInMillis,
-                    published: firstEmail.published,
                 });
             }
             if (s.status !== "draft") {
@@ -175,16 +176,19 @@ export default function BroadcastEditorPage({
             });
             const firstEmail = updated.emails[0];
             // Content is edited on its own full-screen editor route, so this
-            // metadata save must not overwrite it.
-            const withEmail = firstEmail
-                ? await updateSequenceEmail(sequenceId, firstEmail.emailId, {
-                      subject: email.subject,
-                      published: email.published,
-                      ...(sendAtMillis !== undefined
-                          ? { delayInMillis: sendAtMillis }
-                          : {}),
-                  })
-                : updated;
+            // metadata save must not overwrite it. Subject and published are
+            // derived server-side from the broadcast's title/type, so only
+            // the send time needs to be pushed here.
+            const withEmail =
+                firstEmail && sendAtMillis !== undefined
+                    ? await updateSequenceEmail(
+                          sequenceId,
+                          firstEmail.emailId,
+                          {
+                              delayInMillis: sendAtMillis,
+                          },
+                      )
+                    : updated;
             setSequence(withEmail);
             if (sendAtMillis !== undefined) {
                 setEmail({ ...email, delayInMillis: sendAtMillis });
@@ -259,15 +263,7 @@ export default function BroadcastEditorPage({
 
     return (
         <ScrollablePage>
-            <div className="max-w-3xl">
-                <Link
-                    href="/broadcasts"
-                    className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                >
-                    <ArrowLeft className="size-3.5" />
-                    Back to broadcasts
-                </Link>
-
+            <div>
                 <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-center gap-3">
                         <h1 className="text-2xl font-semibold tracking-tight">
@@ -395,65 +391,24 @@ export default function BroadcastEditorPage({
                     </Card>
 
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="flex-row items-center justify-between">
                             <CardTitle className="text-base">Content</CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-4">
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="space-y-1.5">
-                                    <Label htmlFor="broadcast-subject">
-                                        Subject
-                                    </Label>
-                                    <Input
-                                        id="broadcast-subject"
-                                        value={email.subject}
-                                        onChange={(e) =>
-                                            setEmail({
-                                                ...email,
-                                                subject: e.target.value,
-                                            })
-                                        }
-                                        placeholder="Your subject line"
-                                    />
-                                </div>
-                                <div className="flex items-center justify-between gap-4 sm:justify-start">
-                                    <Label
-                                        htmlFor="broadcast-published"
-                                        className="flex-1 sm:flex-none"
+                            {editable && (
+                                <Button size="sm" variant="outline" asChild>
+                                    <Link
+                                        href={`/editor/broadcasts/${sequenceId}`}
                                     >
-                                        Published
-                                    </Label>
-                                    <Switch
-                                        id="broadcast-published"
-                                        checked={email.published}
-                                        onCheckedChange={(published) =>
-                                            setEmail({ ...email, published })
-                                        }
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-1.5">
-                                {editable && (
-                                    <div className="flex items-center justify-end">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            asChild
-                                        >
-                                            <Link
-                                                href={`/editor/broadcasts/${sequenceId}`}
-                                            >
-                                                <Pencil className="size-4" />
-                                                Edit content
-                                            </Link>
-                                        </Button>
-                                    </div>
-                                )}
-                                <EmailPreview
-                                    content={email.content}
-                                    minHeight="420px"
-                                />
-                            </div>
+                                        <Pencil className="size-4" />
+                                        Edit content
+                                    </Link>
+                                </Button>
+                            )}
+                        </CardHeader>
+                        <CardContent>
+                            <EmailPreview
+                                content={email.content}
+                                minHeight="420px"
+                            />
                         </CardContent>
                     </Card>
                 </div>

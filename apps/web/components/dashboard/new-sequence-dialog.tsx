@@ -93,7 +93,7 @@ export function NewSequenceDialog({
                     {label}
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+            <DialogContent className="max-h-[80vh] overflow-y-auto sm:!max-w-5xl">
                 <DialogHeader>
                     <DialogTitle>{label}</DialogTitle>
                 </DialogHeader>

@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Pause, Pencil, Play } from "lucide-react";
+import { Check, Pause, Pencil, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +48,7 @@ import {
     type SequenceStats,
 } from "@sendlit/email-blocks";
 import { sequenceStatsMetrics } from "@/lib/stats";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 
 interface SequenceMeta {
     title: string;
@@ -97,6 +98,11 @@ export default function SequenceEditorPage({
     const [templates, setTemplates] = useState<EmailTemplate[]>([]);
     const [templatesLoading, setTemplatesLoading] = useState(false);
     const [esps, setEsps] = useState<EspConfig[]>([]);
+
+    useSetBreadcrumb([
+        { label: "Sequences", href: "/sequences" },
+        { label: sequence?.title || "Untitled sequence" },
+    ]);
 
     async function load(selectId?: string) {
         try {
@@ -270,14 +276,6 @@ export default function SequenceEditorPage({
     return (
         <ScrollablePage>
             <div className="max-w-5xl">
-                <Link
-                    href="/sequences"
-                    className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                >
-                    <ArrowLeft className="size-3.5" />
-                    Back to sequences
-                </Link>
-
                 <div className="mb-6 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <h1 className="text-2xl font-semibold tracking-tight">

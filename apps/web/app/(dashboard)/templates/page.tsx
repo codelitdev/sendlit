@@ -199,7 +199,7 @@ function NewTemplateDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+            <DialogContent className="max-h-[80vh] overflow-y-auto sm:!max-w-5xl">
                 <DialogHeader>
                     <DialogTitle>New template</DialogTitle>
                 </DialogHeader>

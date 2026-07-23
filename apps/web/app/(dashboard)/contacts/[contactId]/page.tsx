@@ -2,8 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Mail, Plus, Trash2, X } from "lucide-react";
+import { Mail, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +23,7 @@ import {
 } from "@/lib/api";
 import { TagEditor, type Contact } from "@sendlit/email-blocks";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 
 export default function ContactDetailPage({
     params,
@@ -37,6 +37,11 @@ export default function ContactDetailPage({
         null,
     );
     const [error, setError] = useState<string | null>(null);
+
+    useSetBreadcrumb([
+        { label: "Contacts", href: "/contacts" },
+        { label: contact?.name || contact?.email || "Contact" },
+    ]);
 
     async function load() {
         try {
@@ -67,14 +72,6 @@ export default function ContactDetailPage({
     return (
         <ScrollablePage>
             <div className="max-w-2xl">
-                <Link
-                    href="/contacts"
-                    className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                >
-                    <ArrowLeft className="size-3.5" />
-                    Back to contacts
-                </Link>
-
                 <PageHeader
                     title={contact.name || contact.email}
                     description={contact.email}

@@ -7,3 +7,7 @@
 ## Architecture Tips
 
 - Always lean towards industry standards in the bulk emailing services domain while working on features. You can consider Mailchimp, Klaviyo, SendGrid, ActiveCampaign, or other popular email marketing platforms.
+
+## Branch management
+
+- Never push on your own. Leave it to the human.

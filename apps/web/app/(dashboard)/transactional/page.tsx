@@ -15,6 +15,7 @@ import {
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
 import { listTransactionalEmails, type TransactionalEmail } from "@/lib/api";
 
@@ -50,6 +51,8 @@ export default function TransactionalPage() {
     const [status, setStatus] = useState("all");
     const [error, setError] = useState<string | null>(null);
     const [loadingMore, setLoadingMore] = useState(false);
+
+    useSetBreadcrumb([{ label: "Transactional" }]);
 
     // Fetches the first `pageCount` pages worth of items in one request
     // (rather than appending page-by-page), matching the media page's

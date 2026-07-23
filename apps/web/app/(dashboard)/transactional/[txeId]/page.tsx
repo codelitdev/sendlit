@@ -1,13 +1,12 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
 import {
     getTransactionalEmail,
@@ -37,6 +36,11 @@ export default function TransactionalDetailPage({
     const [email, setEmail] = useState<TransactionalEmailDetail | null>(null);
     const [error, setError] = useState<string | null>(null);
 
+    useSetBreadcrumb([
+        { label: "Transactional log", href: "/transactional" },
+        { label: email?.subject || "Email" },
+    ]);
+
     async function load() {
         try {
             setEmail(await getTransactionalEmail(txeId));
@@ -63,14 +67,6 @@ export default function TransactionalDetailPage({
     return (
         <ScrollablePage>
             <div className="max-w-3xl">
-                <Link
-                    href="/transactional"
-                    className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                >
-                    <ArrowLeft className="size-3.5" />
-                    Back to transactional emails
-                </Link>
-
                 <PageHeader
                     title={email.subject}
                     description={email.to}

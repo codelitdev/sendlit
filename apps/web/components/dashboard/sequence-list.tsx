@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { NewSequenceDialog } from "@/components/dashboard/new-sequence-dialog";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
 import { presentBroadcastStatus } from "@/lib/broadcast";
 import { listSequences, pauseSequence, startSequence } from "@/lib/api";
@@ -41,6 +42,8 @@ export function SequenceListPage({
     const router = useRouter();
     const [sequences, setSequences] = useState<Sequence[] | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    useSetBreadcrumb([{ label: title }]);
 
     async function load() {
         try {
