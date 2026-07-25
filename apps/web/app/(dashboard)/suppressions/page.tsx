@@ -34,6 +34,7 @@ import {
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
 import {
     isSuppressionOwnerReleasable,
@@ -74,6 +75,7 @@ const REASON_BADGE_VARIANT: Record<
 };
 
 export default function SuppressionsPage() {
+    useSetBreadcrumb([{ label: "Suppressions" }]);
     const [items, setItems] = useState<Suppression[] | null>(null);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);

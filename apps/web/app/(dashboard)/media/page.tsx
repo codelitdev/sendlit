@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
 import {
     deleteMedia,
@@ -33,6 +34,7 @@ type MediaWithReferences = Media & { references: MediaReference[] };
 const PAGE_SIZE = 50;
 
 export default function MediaPage() {
+    useSetBreadcrumb([{ label: "Media" }]);
     const [items, setItems] = useState<MediaWithReferences[] | null>(null);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);

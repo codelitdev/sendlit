@@ -126,7 +126,7 @@ export default function ContactDetailPage({
 
     return (
         <ScrollablePage>
-            <div className="max-w-2xl">
+            <div className="w-full">
                 <PageHeader
                     title={contact.name || contact.email}
                     description={contact.email}

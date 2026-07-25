@@ -66,7 +66,7 @@ export default function TransactionalDetailPage({
 
     return (
         <ScrollablePage>
-            <div className="max-w-3xl">
+            <div className="w-full">
                 <PageHeader
                     title={email.subject}
                     description={email.to}

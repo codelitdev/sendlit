@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CreditCard, Sparkles, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { Button } from "@/components/ui/codelit/button";
 import {
     Card,
@@ -35,6 +36,7 @@ function isAccountTab(value: string | null): value is AccountTab {
 }
 
 export default function AccountPage() {
+    useSetBreadcrumb([{ label: "Account" }]);
     const router = useRouter();
     const searchParams = useSearchParams();
     const tabParam = searchParams.get("tab");
@@ -119,7 +121,7 @@ export default function AccountPage() {
 
     return (
         <ScrollablePage>
-            <div className="max-w-3xl">
+            <div className="w-full">
                 <PageHeader
                     title="Account"
                     description="Manage your profile, plan, and billing."

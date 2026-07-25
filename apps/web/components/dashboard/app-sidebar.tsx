@@ -139,9 +139,11 @@ export function AppSidebar() {
                 <NavMain label="Activity" items={ACTIVITY_NAV} />
             </SidebarContent>
 
-            <SidebarFooter>
+            <SidebarFooter className="p-0">
                 <NavMain items={SECONDARY_NAV} />
-                <NavUser user={account} />
+                <div className="p-2">
+                    <NavUser user={account} />
+                </div>
             </SidebarFooter>
 
             <SidebarRail />

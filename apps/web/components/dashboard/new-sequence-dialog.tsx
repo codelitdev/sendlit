@@ -122,6 +122,7 @@ export function NewSequenceDialog({
                     </div>
                 )}
                 <TemplateChooser
+                    className="mt-8"
                     purpose="marketing"
                     systemTemplates={systemTemplates}
                     templates={templates}

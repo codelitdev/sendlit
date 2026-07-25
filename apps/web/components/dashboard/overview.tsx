@@ -17,6 +17,7 @@ import {
     listEsps,
     type Overview,
 } from "@/lib/api";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 
 interface SetupStatus {
     hasEsp: boolean;
@@ -24,6 +25,7 @@ interface SetupStatus {
 }
 
 export function OverviewDashboard() {
+    useSetBreadcrumb([{ label: "Overview" }]);
     const [data, setData] = useState<Overview | null>(null);
     const [setup, setSetup] = useState<SetupStatus | null>(null);
     const [rangeDays, setRangeDays] = useState(7);
@@ -72,7 +74,7 @@ export function OverviewDashboard() {
         href: string;
     }[];
     return (
-        <main className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
+        <main className="w-full space-y-6 p-4 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-semibold">Overview</h1>

@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
 import {
     createTeam,
@@ -39,6 +40,7 @@ import {
 import { resolveCurrentTeamId } from "@/lib/tokens";
 
 export default function TeamsPage() {
+    useSetBreadcrumb([{ label: "Teams" }]);
     const [teams, setTeams] = useState<Team[] | undefined>(undefined);
     const [currentTeamId, setCurrentTeamId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export default function TeamsPage() {
 
     return (
         <ScrollablePage>
-            <div className="max-w-3xl">
+            <div className="w-full">
                 <PageHeader
                     title="Teams"
                     description="Everything — contacts, templates, broadcasts, sequences, ESP config, API keys — is scoped to a team. Create as many as you need; switch between them any time."

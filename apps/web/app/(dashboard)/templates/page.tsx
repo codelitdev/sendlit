@@ -16,6 +16,7 @@ import {
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -47,6 +48,7 @@ const TEMPLATE_PREVIEW_CONTEXT = {
 };
 
 export default function TemplatesPage() {
+    useSetBreadcrumb([{ label: "Templates" }]);
     const router = useRouter();
     const [templates, setTemplates] = useState<EmailTemplate[] | null>(null);
     const [error, setError] = useState<string | null>(null);

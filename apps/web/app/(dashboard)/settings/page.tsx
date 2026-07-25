@@ -58,6 +58,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
 import {
     createEsp,
@@ -96,6 +97,7 @@ function isSettingsTab(value: string | null): value is SettingsTab {
 }
 
 export default function SettingsPage() {
+    useSetBreadcrumb([{ label: "Settings" }]);
     const router = useRouter();
     const searchParams = useSearchParams();
     const selectedTab = isSettingsTab(searchParams.get("tab"))
@@ -233,7 +235,7 @@ export default function SettingsPage() {
 
     return (
         <ScrollablePage>
-            <div className="max-w-4xl">
+            <div className="w-full">
                 <PageHeader
                     title="Settings"
                     description="Manage workspace defaults, compliance details, and email delivery configuration."
@@ -268,7 +270,7 @@ export default function SettingsPage() {
                     </TabsList>
 
                     <TabsContent value="general">
-                        <div className="max-w-xl">
+                        <div>
                             {generalSettings &&
                                 !generalSettings.mailingAddress?.trim() && (
                                     <Banner className="mb-4">

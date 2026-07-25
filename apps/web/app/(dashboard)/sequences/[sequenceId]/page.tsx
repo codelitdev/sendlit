@@ -287,7 +287,7 @@ export default function SequenceEditorPage({
 
     return (
         <ScrollablePage>
-            <div className="max-w-5xl">
+            <div className="w-full">
                 <div className="mb-6 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <h1 className="text-2xl font-semibold tracking-tight">
