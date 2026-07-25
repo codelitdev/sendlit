@@ -8,6 +8,14 @@ import { EditorLayout } from "./layout/editor-layout";
 import type { EmailBlock, Email, EmailStyle } from "../types/email-editor";
 import type { BlockRegistry } from "../types/block-registry";
 import { defaultEmail } from "../lib/default-email";
+import {
+    canDeleteBlock,
+    canDuplicateBlock,
+    canInsertAfter,
+    canMoveBlock,
+    getDefaultBlockSettings,
+    resolveInsertionIndex,
+} from "../lib/block-policy";
 import "../index.css";
 
 // Simple ID generator
@@ -59,63 +67,18 @@ function stripBlockIds(email: Email): Email {
     };
 }
 
-function getDefaultSettingsForBlockType(
-    blockType: string,
-): Record<string, any> {
-    const commonSettings = {};
-
-    switch (blockType) {
-        case "text":
-            return {
-                ...commonSettings,
-                content: "New text block",
-            };
-        case "separator":
-            return {
-                ...commonSettings,
-                color: "#e2e8f0",
-                thickness: "1px",
-                style: "solid",
-                marginY: "16px",
-            };
-        case "image":
-            return {
-                ...commonSettings,
-                src: "",
-                alt: "Image",
-                alignment: "left",
-                width: "auto",
-                height: "auto",
-                maxWidth: "100%",
-                borderRadius: "0px",
-                padding: "16px",
-            };
-        case "link":
-            return {
-                ...commonSettings,
-                text: "Link Text",
-                url: "#",
-                alignment: "left",
-                textColor: "#0284c7",
-                fontSize: "16px",
-                textDecoration: "underline",
-                isButton: false,
-            };
-        default:
-            return {} as Record<string, any>;
-    }
-}
-
 interface EmailEditorProps {
     initialEmail?: Email;
     onChange?: (email: Email) => void;
     blockRegistry: BlockRegistry;
+    renderContext?: unknown;
 }
 
 export function EmailEditor({
     initialEmail,
     onChange,
     blockRegistry,
+    renderContext,
 }: EmailEditorProps) {
     const [email, setEmail] = useState<Email>(
         getEmailWithBlockIds(initialEmail || defaultEmail),
@@ -188,24 +151,32 @@ export function EmailEditor({
 
     const addBlock = useCallback(
         (blockType: string, index: number) => {
+            const insertionIndex = resolveInsertionIndex(
+                blockType,
+                index,
+                emailRef.current.content,
+                blockRegistry,
+            );
+            if (insertionIndex === null) return;
+
             const newBlock: EmailBlock = {
                 id: generateId(),
                 blockType,
-                settings: getDefaultSettingsForBlockType(blockType),
+                settings: getDefaultBlockSettings(blockType, blockRegistry),
             };
             const newEmail = {
                 ...emailRef.current,
                 content: [
-                    ...emailRef.current.content.slice(0, index),
+                    ...emailRef.current.content.slice(0, insertionIndex),
                     newBlock,
-                    ...emailRef.current.content.slice(index),
+                    ...emailRef.current.content.slice(insertionIndex),
                 ],
             };
 
             commitEmail(newEmail);
             setSelectedBlockId(newBlock.id!);
         },
-        [commitEmail],
+        [blockRegistry, commitEmail],
     );
 
     const updateBlock = useCallback(
@@ -250,10 +221,10 @@ export function EmailEditor({
 
     const deleteBlock = useCallback(
         (id: string) => {
-            // Don't allow deleting if there's only one block left
-            if (emailRef.current.content.length <= 1) {
-                return;
-            }
+            const block = emailRef.current.content.find(
+                (candidate) => candidate.id === id,
+            );
+            if (!block || !canDeleteBlock(block, blockRegistry)) return;
 
             const newEmail = {
                 ...emailRef.current,
@@ -272,21 +243,24 @@ export function EmailEditor({
                 return prevSelectedId;
             });
         },
-        [commitEmail],
+        [blockRegistry, commitEmail],
     );
 
     const moveBlock = useCallback(
         (id: string, direction: "up" | "down") => {
-            const index = emailRef.current.content.findIndex(
-                (block) => block.id === id,
-            );
             if (
-                (direction === "up" && index === 0) ||
-                (direction === "down" &&
-                    index === emailRef.current.content.length - 1)
+                !canMoveBlock(
+                    emailRef.current.content,
+                    id,
+                    direction,
+                    blockRegistry,
+                )
             ) {
                 return;
             }
+            const index = emailRef.current.content.findIndex(
+                (block) => block.id === id,
+            );
 
             const newContent = [...emailRef.current.content];
             const [movedBlock] = newContent.splice(index, 1);
@@ -309,7 +283,7 @@ export function EmailEditor({
                 setMovingBlockId(null);
             }, 350);
         },
-        [commitEmail],
+        [blockRegistry, commitEmail],
     );
 
     const duplicateBlock = useCallback(
@@ -317,7 +291,12 @@ export function EmailEditor({
             const blockToDuplicate = emailRef.current.content.find(
                 (block) => block.id === id,
             );
-            if (!blockToDuplicate) return;
+            if (
+                !blockToDuplicate ||
+                !canDuplicateBlock(blockToDuplicate, blockRegistry)
+            ) {
+                return;
+            }
 
             const index = emailRef.current.content.findIndex(
                 (block) => block.id === id,
@@ -340,13 +319,8 @@ export function EmailEditor({
             // Set the selection immediately after creating the duplicated block
             setSelectedBlockId(duplicatedBlock.id!);
         },
-        [commitEmail],
+        [blockRegistry, commitEmail],
     );
-
-    // Separate first, middle, and last blocks
-    const [first, ...remaining] = email.content;
-    const last = remaining.pop();
-    const middleBlocks = remaining;
 
     // Email editor content - mirroring the HTML email structure
     const editorContent = (
@@ -395,17 +369,14 @@ export function EmailEditor({
                     )}
 
                     <div>
-                        {/* First Block - Fixed */}
-                        {first && (
+                        {email.content.map((block, index) => (
                             <BlockWrapper
-                                key={first.id}
-                                block={first as Required<EmailBlock>}
-                                index={0}
-                                isFirst={true}
-                                isLast={false}
-                                isFixed={true}
+                                key={block.id}
+                                block={block as Required<EmailBlock>}
+                                index={index}
                                 style={email.style}
                                 blockRegistry={blockRegistry}
+                                renderContext={renderContext}
                                 selectedBlockId={selectedBlockId}
                                 setSelectedBlockId={setSelectedBlockId}
                                 deleteBlock={deleteBlock}
@@ -413,55 +384,29 @@ export function EmailEditor({
                                 duplicateBlock={duplicateBlock}
                                 movingBlockId={movingBlockId}
                                 addBlock={addBlock}
-                                totalBlocks={email.content.length}
+                                canDelete={canDeleteBlock(block, blockRegistry)}
+                                canDuplicate={canDuplicateBlock(
+                                    block,
+                                    blockRegistry,
+                                )}
+                                canMoveUp={canMoveBlock(
+                                    email.content,
+                                    block.id!,
+                                    "up",
+                                    blockRegistry,
+                                )}
+                                canMoveDown={canMoveBlock(
+                                    email.content,
+                                    block.id!,
+                                    "down",
+                                    blockRegistry,
+                                )}
+                                canAddBelow={canInsertAfter(
+                                    block,
+                                    blockRegistry,
+                                )}
                             />
-                        )}
-
-                        {/* Middle Blocks - Movable */}
-                        {middleBlocks.map(
-                            (block: EmailBlock, index: number) => (
-                                <BlockWrapper
-                                    key={block.id}
-                                    block={block as Required<EmailBlock>}
-                                    index={index + 1}
-                                    isFirst={false}
-                                    isLast={false}
-                                    isFixed={false}
-                                    style={email.style}
-                                    blockRegistry={blockRegistry}
-                                    selectedBlockId={selectedBlockId}
-                                    setSelectedBlockId={setSelectedBlockId}
-                                    deleteBlock={deleteBlock}
-                                    moveBlock={moveBlock}
-                                    duplicateBlock={duplicateBlock}
-                                    movingBlockId={movingBlockId}
-                                    addBlock={addBlock}
-                                    totalBlocks={email.content.length}
-                                />
-                            ),
-                        )}
-
-                        {/* Last Block - Fixed */}
-                        {last && (
-                            <BlockWrapper
-                                key={last.id}
-                                block={last as Required<EmailBlock>}
-                                index={email.content.length - 1}
-                                isFirst={false}
-                                isLast={true}
-                                isFixed={true}
-                                style={email.style}
-                                blockRegistry={blockRegistry}
-                                selectedBlockId={selectedBlockId}
-                                setSelectedBlockId={setSelectedBlockId}
-                                deleteBlock={deleteBlock}
-                                moveBlock={moveBlock}
-                                duplicateBlock={duplicateBlock}
-                                movingBlockId={movingBlockId}
-                                addBlock={addBlock}
-                                totalBlocks={email.content.length}
-                            />
-                        )}
+                        ))}
                     </div>
                 </div>
             </div>

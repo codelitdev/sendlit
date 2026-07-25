@@ -3,8 +3,100 @@ title: Transactional email
 description: Send a single email through the REST API.
 ---
 
-Use the transactional send endpoint for a single, API-triggered message. This is appropriate for application events such as receipts, invitations, password resets, and notifications.
+Use `POST /emails` for one API-triggered message such as a receipt, invitation,
+password reset, OTP, or security notification. Transactional sends appear in
+the dashboard’s **Transactional log**. They do not enroll a contact in a
+sequence or use a broadcast audience.
 
-Transactional sends are recorded in the dashboard’s **Transactional log**, where you can inspect status and provider feedback. They do not enroll a contact in a sequence and do not behave like a broadcast audience send.
+A non-empty workspace mailing address and a configured ESP are still required
+before SendLit accepts any send. This workspace policy is separate from message
+content: transactional templates do not render a marketing footer or
+unsubscribe link.
 
-See the API reference for the request schema, template variables, sender fields, and response identifiers.
+## Create a transactional template
+
+Create a template with `purpose: "transactional"`, or duplicate one of the
+built-in transactional starters from the template hub. System templates are
+starters and cannot be sent directly; the resulting team-owned identifier
+starts with `tpl_`.
+
+Template responses contain a server-computed `requiredVariables` list:
+
+```json
+{
+    "templateId": "tpl_...",
+    "purpose": "transactional",
+    "requiredVariables": ["customer.name", "otp"]
+}
+```
+
+The template hub shows these paths and provides ready-to-copy JSON and curl
+examples.
+
+## Send with a template
+
+Nested paths require nested JSON values:
+
+```sh
+curl -X POST 'http://localhost:5000/emails' \
+  -H 'content-type: application/json' \
+  -H 'x-sendlit-apikey: sl_live_...' \
+  --data '{
+    "to": "reader@example.com",
+    "subject": "Your sign-in code",
+    "templateId": "tpl_...",
+    "variables": {
+      "customer": { "name": "Rajat" },
+      "otp": "345987"
+    },
+    "idempotencyKey": "sign-in-123"
+  }'
+```
+
+`templateId` must identify a team-owned transactional template. A marketing
+template is rejected synchronously:
+
+```json
+{
+    "error": "template_not_transactional"
+}
+```
+
+## Required and optional variables
+
+Every unguarded Liquid value must be present before SendLit creates a
+transactional row or queue job:
+
+```liquid
+Your code is {{ otp }} for {{ customer.name }}.
+```
+
+Missing values return:
+
+```json
+{
+    "error": "missing_template_variables",
+    "missingVariables": ["customer.name", "otp"]
+}
+```
+
+Use a `default` filter or a direct `if` guard for intentionally optional
+content:
+
+```liquid
+Hello {{ first_name | default: "there" }}.
+{% if promotion %}
+Your code: {{ promotion.code }}
+{% endif %}
+```
+
+`address`, `unsubscribe_link`, and `subscriber.*` are owned by the marketing
+pipeline. They are rejected both in transactional template content and as
+top-level request variables.
+
+## Inline HTML
+
+Provide exactly one of `templateId` or `html`. Inline `html` is sent verbatim:
+SendLit does not run Liquid over it, and `variables` cannot be supplied with it.
+This prevents legitimate `{{` or `{%` content in caller-rendered HTML from
+being modified.

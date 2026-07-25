@@ -13,6 +13,11 @@ import {
     listTransactionalEmails,
     toPublicTransactionalEmail,
 } from "../../transactional/queries";
+import { MAILING_ADDRESS_REQUIRED } from "../../settings/general/constants";
+import {
+    MISSING_TEMPLATE_VARIABLES,
+    MissingTemplateVariablesError,
+} from "../../mail/render";
 import { AUTH_ERROR, NOT_FOUND, errorResult, jsonResult } from "./responses";
 import { getTeamId } from "./auth";
 
@@ -32,7 +37,7 @@ export function registerTransactionalTools(server: McpServer): void {
         "send_email",
         {
             description:
-                "Sends a single transactional email (e.g. a receipt or password reset) immediately \u2014 no audience filter, no unsubscribe footer, delivered even to unsubscribed contacts. Provide exactly one of `templateId` (rendered with `variables`) or `html` (sent verbatim). Fire-and-forget: poll `get_email` with the returned `txeId` for delivery status.",
+                "Sends a single transactional email (e.g. a receipt or password reset) immediately—no audience filter or marketing footer. `templateId` must identify a team-owned transactional template and every requiredVariables path must be supplied; marketing templates are rejected as template_not_transactional. Alternatively provide `html`, which is sent verbatim without Liquid rendering. Fire-and-forget: poll `get_email` with the returned `txeId` for delivery status.",
             inputSchema: {
                 to: z.string().email(),
                 subject: z.string().min(1),
@@ -51,7 +56,9 @@ export function registerTransactionalTools(server: McpServer): void {
                 variables: z
                     .record(z.any())
                     .optional()
-                    .describe("Liquid merge variables; requires `templateId`"),
+                    .describe(
+                        "Liquid merge variables; requires `templateId`. Provide every unguarded merge tag; use `{% if %}` or `default` in the template for optional values.",
+                    ),
                 replyTo: z.string().email().optional(),
                 headers: emailHeadersSchema
                     .optional()
@@ -100,6 +107,19 @@ export function registerTransactionalTools(server: McpServer): void {
                 });
                 return jsonResult({ txeId: row.txeId, status: row.status });
             } catch (err: any) {
+                if (
+                    err instanceof MissingTemplateVariablesError ||
+                    err?.message === MISSING_TEMPLATE_VARIABLES
+                ) {
+                    const missingVariables = Array.isArray(err.missingVariables)
+                        ? err.missingVariables.join(", ")
+                        : null;
+                    return errorResult(
+                        missingVariables
+                            ? `Missing required template variables: ${missingVariables}`
+                            : "Missing required template variables",
+                    );
+                }
                 switch (err.message) {
                     case "invalid_content":
                         return errorResult(
@@ -109,12 +129,20 @@ export function registerTransactionalTools(server: McpServer): void {
                         return errorResult(
                             "Header names/values must not contain CR/LF; From, To, Subject and Content-Type are set by the send pipeline",
                         );
+                    case "template_not_transactional":
+                        return errorResult("template_not_transactional");
+                    case "marketing_variables_not_allowed":
+                        return errorResult("marketing_variables_not_allowed");
                     case "template_not_found":
                         return errorResult("Template not found");
                     case "render_failed":
                         return errorResult("Template rendering failed");
                     case "esp_not_configured":
                         return errorResult("Team ESP is not configured.");
+                    case MAILING_ADDRESS_REQUIRED:
+                        return errorResult(
+                            "A mailing address is required before sending email.",
+                        );
                     case "esp_not_found":
                         return errorResult("ESP not found");
                     case "recipient_suppressed":

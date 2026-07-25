@@ -29,6 +29,7 @@ import type { Email as EmailContent } from "@sendlit/email-editor";
 import { syncEmailContentMediaReferences } from "../media/email-content";
 import { deleteMediaReferencesForResource } from "../media/queries";
 import { getEspConfigById, resolveEspConfig } from "../settings/esp/queries";
+import { assertMailingAddressConfigured } from "../settings/general/queries";
 
 export type Sequence = typeof sequences.$inferSelect;
 export type SequenceEmail = typeof sequenceEmails.$inferSelect;
@@ -62,7 +63,11 @@ export async function createSequence({
     templateId: string;
     espId?: string;
 }): Promise<HydratedSequence> {
-    const template = await resolveStartingTemplate(teamId, templateId);
+    const template = await resolveStartingTemplate(
+        teamId,
+        templateId,
+        "marketing",
+    );
     if (!template) {
         throw new Error(responses.item_not_found);
     }
@@ -302,7 +307,11 @@ export async function addMailToSequence({
         throw new Error(responses.action_not_allowed);
     }
 
-    const template = await resolveStartingTemplate(teamId, templateId);
+    const template = await resolveStartingTemplate(
+        teamId,
+        templateId,
+        "marketing",
+    );
     if (!template) {
         throw new Error(responses.item_not_found);
     }
@@ -396,6 +405,15 @@ export async function updateMailInSequence({
 
     const email = sequence.emails.find((e) => e.emailId === emailId);
     if (!email) throw new Error(responses.item_not_found);
+
+    if (templateId !== undefined) {
+        const template = await resolveStartingTemplate(
+            teamId,
+            templateId,
+            "marketing",
+        );
+        if (!template) throw new Error(responses.item_not_found);
+    }
 
     if (content) {
         verifyMandatoryTags((content as any).content || []);
@@ -559,6 +577,8 @@ export async function startSequence({
     teamId: string;
     sequenceId: string;
 }): Promise<HydratedSequence> {
+    await assertMailingAddressConfigured(teamId);
+
     const sequence = await getSequenceBySequenceId(teamId, sequenceId);
     if (!sequence) throw new Error(responses.item_not_found);
 

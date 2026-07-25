@@ -23,8 +23,7 @@ import { serializeDates } from "../utils/serialize";
 import { omitInternal } from "../utils/public";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use("/contacts", requireAuth, requireTeam);
 
 const s = initServer();
 

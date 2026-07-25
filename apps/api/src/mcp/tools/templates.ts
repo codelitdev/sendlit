@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
     createTemplate,
     deleteTemplate,
+    duplicateTemplate,
     getTemplate,
     listTemplates,
     updateTemplate,
@@ -15,6 +16,8 @@ import {
     systemTemplateSchema,
     templateSchema,
 } from "./schemas";
+import { templatePurposeSchema } from "@sendlit/api-contract";
+import { TemplateValidationError } from "../../templates/validation";
 import { getTeamId } from "./auth";
 import { omitInternal } from "../../utils/public";
 
@@ -23,7 +26,10 @@ export function registerTemplateTools(server: McpServer): void {
         "list_system_templates",
         {
             description:
-                "Returns the built-in starting templates (Announcement, New user welcome, Upsell products, Newsletter, Blank) offered alongside a team's own templates when creating a template, broadcast, sequence, or adding an email to a sequence. Not team-scoped — the same for every team.",
+                "Returns built-in marketing and transactional starting templates. System templates are starters and must be copied into a team-owned template before transactional sending.",
+            inputSchema: {
+                purpose: templatePurposeSchema.optional(),
+            },
             outputSchema: z.object({ items: z.array(systemTemplateSchema) }),
             annotations: {
                 readOnlyHint: true,
@@ -31,17 +37,27 @@ export function registerTemplateTools(server: McpServer): void {
                 openWorldHint: false,
             },
         },
-        async (extra: any) => {
+        async (args: any, extra: any) => {
             const teamId = getTeamId(extra);
             if (!teamId) return AUTH_ERROR;
-            return jsonResult({ items: SYSTEM_TEMPLATES });
+            return jsonResult({
+                items: args.purpose
+                    ? SYSTEM_TEMPLATES.filter(
+                          (template) => template.purpose === args.purpose,
+                      )
+                    : SYSTEM_TEMPLATES,
+            });
         },
     );
 
     server.registerTool(
         "list_templates",
         {
-            description: "Returns every reusable email template for the team.",
+            description:
+                "Returns reusable templates for the team, optionally filtered by marketing or transactional purpose.",
+            inputSchema: {
+                purpose: templatePurposeSchema.optional(),
+            },
             outputSchema: z.object({ items: z.array(templateSchema) }),
             annotations: {
                 readOnlyHint: true,
@@ -49,11 +65,11 @@ export function registerTemplateTools(server: McpServer): void {
                 openWorldHint: false,
             },
         },
-        async (extra: any) => {
+        async (args: any, extra: any) => {
             const teamId = getTeamId(extra);
             if (!teamId) return AUTH_ERROR;
             try {
-                const items = await listTemplates(teamId);
+                const items = await listTemplates(teamId, args.purpose);
                 return jsonResult({
                     items: items.map((item) => omitInternal(item)),
                 });
@@ -92,9 +108,10 @@ export function registerTemplateTools(server: McpServer): void {
         "create_template",
         {
             description:
-                "Creates a reusable email template. If the title already exists, a numeric suffix is added automatically.",
+                "Creates a reusable marketing or transactional email template. Marketing content requires one final managed footer; transactional content rejects that footer and marketing-only variables.",
             inputSchema: {
                 title: z.string().min(1),
+                purpose: templatePurposeSchema,
                 content: emailContentSchema.describe(
                     "The email body: { style, meta, content: EmailBlock[] } — see @sendlit/email-editor",
                 ),
@@ -113,10 +130,25 @@ export function registerTemplateTools(server: McpServer): void {
                 const template = await createTemplate({
                     teamId,
                     title: args.title,
+                    purpose: args.purpose,
                     content: args.content,
                 });
                 return jsonResult(omitInternal(template));
-            } catch {
+            } catch (error) {
+                if (error instanceof TemplateValidationError) {
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: JSON.stringify({
+                                    error: error.message,
+                                    variables: error.variables,
+                                }),
+                            },
+                        ],
+                        isError: true,
+                    };
+                }
                 return INTERNAL_ERROR;
             }
         },
@@ -157,6 +189,67 @@ export function registerTemplateTools(server: McpServer): void {
                             {
                                 type: "text" as const,
                                 text: "A template with this title already exists.",
+                            },
+                        ],
+                        isError: true,
+                    };
+                }
+                if (err instanceof TemplateValidationError) {
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: JSON.stringify({
+                                    error: err.message,
+                                    variables: err.variables,
+                                }),
+                            },
+                        ],
+                        isError: true,
+                    };
+                }
+                return INTERNAL_ERROR;
+            }
+        },
+    );
+
+    server.registerTool(
+        "duplicate_template",
+        {
+            description:
+                "Copies a system or team template into a new team-owned template with the same purpose as the source.",
+            inputSchema: {
+                templateId: z.string().min(1),
+                title: z.string().min(1).optional(),
+            },
+            outputSchema: templateSchema,
+            annotations: {
+                readOnlyHint: false,
+                destructiveHint: false,
+                openWorldHint: false,
+            },
+        },
+        async (args: any, extra: any) => {
+            const teamId = getTeamId(extra);
+            if (!teamId) return AUTH_ERROR;
+            try {
+                const template = await duplicateTemplate({
+                    teamId,
+                    templateId: args.templateId,
+                    title: args.title,
+                });
+                if (!template) return NOT_FOUND;
+                return jsonResult(omitInternal(template));
+            } catch (error) {
+                if (error instanceof TemplateValidationError) {
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: JSON.stringify({
+                                    error: error.message,
+                                    variables: error.variables,
+                                }),
                             },
                         ],
                         isError: true,

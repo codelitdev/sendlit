@@ -17,8 +17,7 @@ import {
 import { captureEvent } from "../observability/posthog";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use("/settings/esps/:espId/feedback", requireAuth, requireTeam);
 
 const s = initServer();
 

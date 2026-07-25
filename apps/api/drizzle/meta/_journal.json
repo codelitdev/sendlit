@@ -85,6 +85,13 @@
             "when": 1784317157498,
             "tag": "0011_little_shooting_star",
             "breakpoints": true
+        },
+        {
+            "idx": 12,
+            "version": "7",
+            "when": 1784965175862,
+            "tag": "0012_smooth_blonde_phantom",
+            "breakpoints": true
         }
     ]
 }

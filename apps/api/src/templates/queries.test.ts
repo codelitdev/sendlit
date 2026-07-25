@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultEmail, type Email } from "@sendlit/email-editor";
+import {
+    defaultEmail as editorDefaultEmail,
+    type Email,
+} from "@sendlit/email-editor";
+import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
 import { eq } from "drizzle-orm";
 
 vi.mock("../db/client", async () => {
@@ -17,18 +21,24 @@ vi.mock("../media/service", () => ({
 }));
 
 import { db } from "../db/client";
-import { media, mediaReferences } from "../db/schema";
+import { emailTemplates, media, mediaReferences } from "../db/schema";
 import { deleteMedia, sealMedia } from "../media/service";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
 import {
     createTemplate,
     deleteTemplate,
+    duplicateTemplate,
+    getTemplate,
     listTemplates,
     resolveStartingTemplate,
     updateTemplate,
 } from "./queries";
 
 const tdb = db as unknown as TestDb;
+const defaultEmail: Email = {
+    ...editorDefaultEmail,
+    content: [...editorDefaultEmail.content, createFooterEmailBlock()],
+};
 
 beforeEach(async () => {
     await truncateAll(tdb);
@@ -39,7 +49,7 @@ function emailWithImage(mediaId: string): Email {
     return {
         ...defaultEmail,
         content: [
-            ...defaultEmail.content,
+            ...defaultEmail.content.slice(0, -1),
             {
                 blockType: "image",
                 settings: {
@@ -47,11 +57,87 @@ function emailWithImage(mediaId: string): Email {
                     alt: "Hero",
                 },
             },
+            defaultEmail.content.at(-1)!,
         ],
     };
 }
 
 describe("template queries", () => {
+    it("persists, filters, and discovers requirements by purpose", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const marketing = await createTemplate({
+            teamId: team.id,
+            title: "Campaign",
+            purpose: "marketing",
+            content: defaultEmail,
+        });
+        const transactional = await createTemplate({
+            teamId: team.id,
+            title: "OTP",
+            purpose: "transactional",
+            content: {
+                ...editorDefaultEmail,
+                content: [
+                    {
+                        blockType: "text",
+                        settings: {
+                            content:
+                                "{{ customer.name }} {{ otp }} {{ optional | default: 'none' }}",
+                        },
+                    },
+                ],
+            },
+        });
+
+        expect(marketing).toMatchObject({
+            purpose: "marketing",
+            requiredVariables: [],
+        });
+        expect(transactional).toMatchObject({
+            purpose: "transactional",
+            requiredVariables: ["customer.name", "otp"],
+        });
+        expect(await listTemplates(team.id, "marketing")).toHaveLength(1);
+        expect(await listTemplates(team.id, "transactional")).toHaveLength(1);
+    });
+
+    it("lists a retired pre-footer template without failing the whole hub", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const [legacy] = await tdb
+            .insert(emailTemplates)
+            .values({
+                teamId: team.id,
+                title: "Legacy campaign",
+                purpose: "marketing",
+                content: editorDefaultEmail,
+            })
+            .returning();
+
+        await expect(listTemplates(team.id)).resolves.toEqual([
+            expect.objectContaining({
+                title: "Legacy campaign",
+                requiredVariables: [],
+                validationError: "footer_required",
+            }),
+        ]);
+
+        await deleteTemplate(team.id, legacy.templateId);
+        await expect(listTemplates(team.id)).resolves.toEqual([]);
+    });
+
+    it("rejects invalid purpose values at the database boundary", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+
+        await expect(
+            db.insert(emailTemplates).values({
+                teamId: team.id,
+                title: "Invalid",
+                purpose: "bulk" as any,
+                content: defaultEmail,
+            }),
+        ).rejects.toThrow();
+    });
+
     it("deduplicates template titles within a team only", async () => {
         const one = await seedTeamAndContact(tdb);
         const two = await seedTeamAndContact(tdb);
@@ -88,11 +174,85 @@ describe("template queries", () => {
         });
 
         await expect(
-            resolveStartingTemplate(one.team.id, template.templateId),
+            resolveStartingTemplate(
+                one.team.id,
+                template.templateId,
+                "marketing",
+            ),
         ).resolves.toMatchObject({ title: "Owned" });
         await expect(
-            resolveStartingTemplate(two.team.id, template.templateId),
+            resolveStartingTemplate(
+                two.team.id,
+                template.templateId,
+                "marketing",
+            ),
         ).resolves.toBeNull();
+        await expect(
+            resolveStartingTemplate(
+                one.team.id,
+                template.templateId,
+                "transactional",
+            ),
+        ).rejects.toThrow("template_not_transactional");
+    });
+
+    it("duplicates within the source purpose without mutating the source", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const transactional = await createTemplate({
+            teamId: team.id,
+            title: "Receipt",
+            purpose: "transactional",
+            content: {
+                ...editorDefaultEmail,
+                content: [
+                    {
+                        blockType: "text",
+                        settings: { content: "Receipt {{ order.id }}" },
+                    },
+                ],
+            },
+        });
+
+        const duplicate = await duplicateTemplate({
+            teamId: team.id,
+            templateId: transactional.templateId,
+        });
+
+        expect(duplicate).toMatchObject({
+            purpose: "transactional",
+            title: "Receipt (Copy)",
+        });
+        expect(duplicate?.content).toEqual(transactional.content);
+        expect((await getTemplate(transactional.templateId))?.purpose).toBe(
+            "transactional",
+        );
+    });
+
+    it("reconciles media references for the duplicated template", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const source = await createTemplate({
+            teamId: team.id,
+            title: "Campaign with image",
+            purpose: "marketing",
+            content: emailWithImage("duplicated-media"),
+        });
+
+        const duplicate = await duplicateTemplate({
+            teamId: team.id,
+            templateId: source.templateId,
+        });
+
+        const references = await tdb
+            .select()
+            .from(mediaReferences)
+            .where(eq(mediaReferences.resourceType, "TEMPLATE"));
+        expect(references).toHaveLength(2);
+        expect(
+            new Set(references.map((reference) => reference.mediaId)).size,
+        ).toBe(1);
+        expect(
+            new Set(references.map((reference) => reference.resourcePublicId)),
+        ).toEqual(new Set([source.templateId, duplicate?.templateId]));
     });
 
     it("blocks duplicate renames and scopes updates/deletes by team", async () => {

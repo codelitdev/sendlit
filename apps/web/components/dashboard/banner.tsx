@@ -15,7 +15,7 @@ export function Banner({
                 "rounded-md px-3 py-2 text-sm",
                 variant === "error"
                     ? "bg-destructive/10 text-destructive"
-                    : "bg-emerald-100 text-emerald-800",
+                    : "bg-success-soft text-success",
                 className,
             )}
         >

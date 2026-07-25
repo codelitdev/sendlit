@@ -8,7 +8,7 @@ import {
     type DragEvent,
 } from "react";
 import { ImageIcon, Search, Upload } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/codelit/button";
 import {
     Dialog,
     DialogContent,
@@ -17,10 +17,15 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@/components/ui/codelit/dialog";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
+import {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+} from "@/components/ui/codelit/tabs";
 import { ApiError } from "@/lib/api-client";
 import { listMedia, type Media } from "@/lib/api";
 import { useMediaLit } from "@/lib/use-medialit";

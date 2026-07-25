@@ -1,10 +1,10 @@
 import { defaultEmail, type Email } from "@sendlit/email-editor";
+import { createFooterEmailBlock } from "./footer";
 
 /**
- * A starting point for new templates/emails that already includes the
- * `{{unsubscribe_link}}` and `{{address}}` merge tags the API requires before
- * a broadcast or sequence email can be published (see `verifyMandatoryTags`
- * in `apps/api/src/sequences/helpers.ts`). Prefer this over
+ * A starting point for new marketing templates/emails that already includes
+ * the managed footer the API requires before a broadcast or sequence email can
+ * be published. Prefer this over
  * `@sendlit/email-editor`'s bare `defaultEmail` when creating new templates.
  */
 export const defaultTemplateEmail: Email = {
@@ -18,16 +18,6 @@ export const defaultTemplateEmail: Email = {
                 fontSize: "24px",
             },
         },
-        {
-            blockType: "text",
-            settings: {
-                content: "{{address}}\n\n[Unsubscribe]({{unsubscribe_link}})",
-                alignment: "center",
-                fontSize: "12px",
-                foregroundColor: "#64748b",
-                paddingTop: "0px",
-                paddingBottom: "0px",
-            },
-        },
+        createFooterEmailBlock(),
     ],
 };

@@ -1,6 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db/client";
 import { settings } from "../../db/schema";
+import { MAILING_ADDRESS_REQUIRED } from "./constants";
+export { MAILING_ADDRESS_REQUIRED } from "./constants";
 
 export type TeamSettings = typeof settings.$inferSelect;
 
@@ -14,6 +16,20 @@ export interface GeneralSettingsInput {
 export interface GeneralSettings {
     mailingAddress: string | null;
     updatedAt: Date | null;
+}
+
+/**
+ * A physical mailing address is a compliance prerequisite for every team
+ * email. Keep this check close to the settings source so all send paths use
+ * the same definition (a whitespace-only value is not configured).
+ */
+export async function assertMailingAddressConfigured(
+    teamId: string,
+): Promise<void> {
+    const settings = await getGeneralSettings(teamId);
+    if (!settings.mailingAddress?.trim()) {
+        throw new Error(MAILING_ADDRESS_REQUIRED);
+    }
 }
 
 function toGeneralSettings(row: TeamSettings | null): GeneralSettings {

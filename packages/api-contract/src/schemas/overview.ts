@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+export const overviewQuerySchema = z.object({
+    /** Delivery activity window, in days. Defaults to the last 7 days. */
+    rangeDays: z.coerce
+        .number()
+        .int()
+        .refine((value) => [1, 3, 7, 30].includes(value))
+        .optional(),
+});
+
 export const overviewSchema = z.object({
     activeSequences: z.number(),
     ongoingContacts: z.number(),

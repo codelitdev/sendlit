@@ -39,6 +39,7 @@ import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries"
 import { createCustomRouteOutboundMessage } from "../delivery-feedback/outbound-send";
 import { markOutboundAccepted } from "../delivery-feedback/outbound-queries";
 import { normalizeEmail } from "../utils/email";
+import { validateTemplateContent } from "../templates/validation";
 
 type OngoingSequenceRow = typeof ongoingSequences.$inferSelect;
 type SequenceEmailRow = typeof sequenceEmails.$inferSelect;
@@ -263,6 +264,10 @@ async function attemptMailSending({
     const pixelUrl = `${getSiteUrl()}/api/track/open?d=${pixelToken}`;
     const content = email.content as EmailType;
     const emailContentWithPixel = appendTrackingPixel(content, pixelUrl);
+    // Stored sequence content is normally validated on every write. Recheck
+    // at the delivery boundary as defense in depth so corrupted/manual DB
+    // content can never bypass the managed final-footer invariant.
+    validateTemplateContent(emailContentWithPixel, "marketing");
 
     const renderedHtml = await renderEmailContent({
         content: emailContentWithPixel,

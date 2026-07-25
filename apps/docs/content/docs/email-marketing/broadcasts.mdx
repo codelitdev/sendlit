@@ -5,6 +5,12 @@ description: One-time email sends.
 
 A broadcast is a one-off send to contacts matching an audience filter. An empty filter (the default "Everyone" audience) sends to all contacts.
 
+Broadcasts accept only templates whose `purpose` is `marketing`. Selecting or
+submitting a transactional template returns `422 template_not_marketing`.
+Marketing templates contain one final managed footer. SendLit renders the
+workspace mailing address and recipient-specific unsubscribe URL at delivery
+time.
+
 Broadcast delivery uses the same sequence state machine as automations:
 
 - `draft` means the broadcast is editable.

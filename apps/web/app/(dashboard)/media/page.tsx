@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Save, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/codelit/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
 import { Badge } from "@/components/ui/badge";
 import {
     Dialog,
@@ -13,9 +13,10 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/codelit/dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -298,6 +299,7 @@ function MediaDetailsDialog({
 }) {
     const [alt, setAlt] = useState("");
     const [caption, setCaption] = useState("");
+    const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
 
     useEffect(() => {
         setAlt(item?.alt || "");
@@ -389,7 +391,7 @@ function MediaDetailsDialog({
                                 type="button"
                                 variant="destructive"
                                 disabled={saving || inUse}
-                                onClick={onDelete}
+                                onClick={() => setDeleteConfirmationOpen(true)}
                             >
                                 <Trash2 className="size-4" />
                                 Delete
@@ -406,6 +408,13 @@ function MediaDetailsDialog({
                     </>
                 )}
             </DialogContent>
+            <DeleteConfirmationDialog
+                open={deleteConfirmationOpen}
+                onOpenChange={setDeleteConfirmationOpen}
+                title="Delete media?"
+                description={`This will permanently delete ${item?.fileName || "this media item"}. This action cannot be undone.`}
+                onConfirm={onDelete}
+            />
         </Dialog>
     );
 }

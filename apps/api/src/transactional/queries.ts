@@ -5,9 +5,13 @@ import { transactionalEmails } from "../db/schema";
 import { getTeam } from "../team/queries";
 import { getAccount } from "../account/queries";
 import { resolveEspConfig } from "../settings/esp/queries";
+import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTemplate } from "../templates/queries";
 import { findContactByEmail } from "../contacts/queries";
-import { renderEmailContent } from "../mail/render";
+import {
+    MissingTemplateVariablesError,
+    renderEmailContent,
+} from "../mail/render";
 import { addTransactionalMailJob } from "../mail/queue";
 import { getEmailFrom } from "../utils/mail";
 import { normalizeEmail } from "../utils/email";
@@ -176,7 +180,8 @@ export async function countTransactionalEmails(
  * never goes through that schema).
  *
  * Throws a plain `Error` whose `message` is one of: `invalid_content`,
- * `invalid_headers`, `template_not_found`, `render_failed`,
+ * `invalid_headers`, `marketing_variables_not_allowed`,
+ * `template_not_found`, `render_failed`,
  * `esp_not_configured`, `esp_not_found`, `recipient_suppressed` — callers
  * map these to the PRD's `400`/`422` responses (see
  * `docs/transactional-emails.md#post-emails--202-accepted` and
@@ -209,11 +214,23 @@ export async function createTransactionalEmail({
     trackClicks?: boolean;
     espId?: string;
 }): Promise<TransactionalEmail> {
+    // Reject before persisting or queueing so an unconfigured team cannot
+    // create delivery work that would later fail in a worker.
+    await assertMailingAddressConfigured(teamId);
+
     if (!!templateId === !!html) {
         throw new Error("invalid_content");
     }
     if (html && variables && Object.keys(variables).length > 0) {
         throw new Error("invalid_content");
+    }
+    if (
+        templateId &&
+        ["address", "unsubscribe_link", "subscriber"].some((key) =>
+            Object.prototype.hasOwnProperty.call(variables, key),
+        )
+    ) {
+        throw new Error("marketing_variables_not_allowed");
     }
     // The ts-rest contract (`emailHeadersSchema`) already rejects these for
     // REST callers; re-checked here because MCP callers never pass through
@@ -256,16 +273,42 @@ export async function createTransactionalEmail({
         if (!template || template.teamId !== teamId) {
             throw new Error("template_not_found");
         }
+        if (template.purpose !== "transactional") {
+            captureEvent({
+                event: "template_purpose_mismatch",
+                source: "transactional.create",
+                teamId,
+                properties: {
+                    template_id: template.templateId,
+                    template_purpose: template.purpose,
+                    requested_purpose: "transactional",
+                },
+            });
+            throw new Error("template_not_transactional");
+        }
         resolvedTemplateId = template.templateId;
         try {
             renderedHtml = await renderEmailContent({
                 content: template.content as EmailContent,
                 variables,
+                requireVariables: true,
             });
-        } catch {
+        } catch (error) {
             // Rendering happens at request time precisely so template/merge
             // errors surface as a synchronous 400 instead of failing
             // invisibly in the worker (PRD, send pipeline note 1).
+            if (error instanceof MissingTemplateVariablesError) {
+                captureEvent({
+                    event: "transactional_missing_template_variables",
+                    source: "transactional.create",
+                    teamId,
+                    properties: {
+                        template_id: template.templateId,
+                        missing_variable_count: error.missingVariables.length,
+                    },
+                });
+                throw error;
+            }
             throw new Error("render_failed");
         }
     } else {

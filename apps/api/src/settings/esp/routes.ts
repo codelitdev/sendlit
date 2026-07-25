@@ -21,8 +21,7 @@ import { testEspConfig } from "./test";
 import { captureEvent } from "../../observability/posthog";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use(["/settings/esp", "/settings/esps"], requireAuth, requireTeam);
 
 const s = initServer();
 
@@ -81,6 +80,9 @@ async function testConfig({
     });
     if (result.noDestination) {
         return { status: 400 as const, body: { error: result.error! } };
+    }
+    if (result.mailingAddressRequired) {
+        return { status: 422 as const, body: { error: result.error! } };
     }
     if (!result.success) {
         return {

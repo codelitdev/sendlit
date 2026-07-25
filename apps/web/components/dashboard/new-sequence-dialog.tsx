@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/codelit/button";
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+} from "@/components/ui/codelit/dialog";
+import { Label } from "@/components/ui/codelit/label";
 import { Banner } from "@/components/dashboard/banner";
 import { EspPicker } from "@/components/dashboard/esp-picker";
 import { ApiError } from "@/lib/api-client";
@@ -24,6 +24,14 @@ import {
 } from "@/lib/api";
 import { TemplateChooser, type EmailTemplate } from "@sendlit/email-blocks";
 import type { MailType } from "@sendlit/email-blocks";
+import { MARKETING_EMAIL_EDITOR_BLOCKS } from "./email-editor-screen";
+
+const MARKETING_PREVIEW_CONTEXT = {
+    footer: {
+        mailingAddress: "Your workspace mailing address",
+        unsubscribeUrl: "#unsubscribe-preview",
+    },
+};
 
 export function NewSequenceDialog({
     type,
@@ -49,7 +57,11 @@ export function NewSequenceDialog({
         if (!open) return;
         setEspId(null);
         setLoading(true);
-        Promise.all([listSystemTemplates(), listTemplates(), listEsps()])
+        Promise.all([
+            listSystemTemplates("marketing"),
+            listTemplates("marketing"),
+            listEsps(),
+        ])
             .then(([system, own, espResult]) => {
                 setSystemTemplates(system);
                 setTemplates(own);
@@ -110,10 +122,13 @@ export function NewSequenceDialog({
                     </div>
                 )}
                 <TemplateChooser
+                    purpose="marketing"
                     systemTemplates={systemTemplates}
                     templates={templates}
                     onSelect={onSelect}
                     loading={loading || submitting}
+                    previewBlocks={MARKETING_EMAIL_EDITOR_BLOCKS}
+                    previewRenderContext={MARKETING_PREVIEW_CONTEXT}
                 />
             </DialogContent>
         </Dialog>

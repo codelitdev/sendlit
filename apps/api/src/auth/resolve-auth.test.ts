@@ -198,6 +198,29 @@ describe("resolveAuth", () => {
         });
     });
 
+    it("prefers an explicitly supplied API key over a browser session", async () => {
+        const authDeps = deps({
+            getBetterAuthSession: vi.fn(async () => ({
+                user: { email: "owner@example.com", name: "Owner" },
+            })),
+        });
+
+        await expect(
+            resolveAuth(
+                {
+                    apiKeyHeader: "api-key",
+                    headers: { cookie: "better-auth.session_token=s" },
+                },
+                authDeps,
+            ),
+        ).resolves.toMatchObject({
+            status: "authenticated",
+            kind: "apikey",
+            teamId: "team-1",
+        });
+        expect(authDeps.getBetterAuthSession).not.toHaveBeenCalled();
+    });
+
     it("distinguishes missing credentials from unknown credentials", async () => {
         await expect(resolveAuth({}, deps())).resolves.toEqual({
             status: "missing",

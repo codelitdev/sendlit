@@ -230,6 +230,21 @@ export async function resolveAuth(
         }
     }
 
+    const submittedApiKey =
+        getHeaderValue(input.bodyApiKey) || getHeaderValue(input.apiKeyHeader);
+    if (submittedApiKey) {
+        const apiKey = await dependencies.getApiKeyBySecret(submittedApiKey);
+        if (!apiKey) return { status: "unauthorized" };
+
+        return {
+            status: "authenticated",
+            kind: "apikey",
+            account: null,
+            apiKey: submittedApiKey,
+            teamId: apiKey.teamId,
+        };
+    }
+
     if (input.headers) {
         const session = await dependencies.getBetterAuthSession(input.headers);
         if (session?.user?.email) {
@@ -248,18 +263,5 @@ export async function resolveAuth(
         }
     }
 
-    const submittedApiKey =
-        getHeaderValue(input.bodyApiKey) || getHeaderValue(input.apiKeyHeader);
-    if (!submittedApiKey) return { status: "missing" };
-
-    const apiKey = await dependencies.getApiKeyBySecret(submittedApiKey);
-    if (!apiKey) return { status: "unauthorized" };
-
-    return {
-        status: "authenticated",
-        kind: "apikey",
-        account: null,
-        apiKey: submittedApiKey,
-        teamId: apiKey.teamId,
-    };
+    return { status: "missing" };
 }

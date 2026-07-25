@@ -63,9 +63,47 @@ describe("renderEmailToHtml", () => {
         expect(html).toContain("future-block");
     });
 
+    it("passes render context to custom blocks without persisting it", async () => {
+        const contextBlock = {
+            metadata: {
+                name: "context",
+                displayName: "Context",
+                description: "Context block",
+                icon: () => null,
+                docs: { settings: {} },
+            },
+            settings: () => null,
+            block: ({
+                renderContext,
+            }: {
+                renderContext?: { value: string };
+            }) => <div>{renderContext?.value}</div>,
+        };
+        const email = {
+            ...defaultEmail,
+            content: [{ blockType: "context", settings: {} }],
+        };
+
+        const html = await renderEmailToHtml({
+            email,
+            blocks: [contextBlock],
+            renderContext: { value: "render-only-value" },
+        });
+
+        expect(html).toContain("render-only-value");
+        expect(JSON.stringify(email)).not.toContain("render-only-value");
+    });
+
     it("returns safe error markup when a custom block throws", async () => {
         const brokenBlock = {
-            metadata: { name: "broken" },
+            metadata: {
+                name: "broken",
+                displayName: "Broken",
+                description: "Broken block",
+                icon: () => null,
+                docs: { settings: {} },
+            },
+            settings: () => null,
             block: () => {
                 throw new Error("render exploded");
             },

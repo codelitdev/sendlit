@@ -11,10 +11,14 @@ import {
     listTransactionalEmails,
     toPublicTransactionalEmail,
 } from "./queries";
+import { MAILING_ADDRESS_REQUIRED } from "../settings/general/constants";
+import {
+    MISSING_TEMPLATE_VARIABLES,
+    MissingTemplateVariablesError,
+} from "../mail/render";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use("/emails", requireAuth, requireTeam);
 
 // Team-keyed (not IP-keyed): the typical caller is one server (e.g.
 // CourseLit) sending on behalf of many teams from a single IP, so IP keying
@@ -50,7 +54,10 @@ const readLimiter = rateLimit({
     },
 });
 
-router.use((req, res, next) => {
+// Like the provisioning router, this router is mounted at the API root.
+// Apply delivery limits only to transactional endpoints, not every request
+// that passes through this router while Express searches for a route match.
+router.use("/emails", (req, res, next) => {
     if (req.method === "POST") return sendLimiter(req, res, next);
     return readLimiter(req, res, next);
 });
@@ -79,6 +86,15 @@ const impl = s.router(contract.transactional, {
                 body: { txeId: row.txeId, status: row.status as any },
             };
         } catch (err: any) {
+            if (err instanceof MissingTemplateVariablesError) {
+                return {
+                    status: 422,
+                    body: {
+                        error: MISSING_TEMPLATE_VARIABLES,
+                        missingVariables: err.missingVariables,
+                    },
+                };
+            }
             switch (err.message) {
                 case "invalid_content":
                     return {
@@ -104,6 +120,16 @@ const impl = s.router(contract.transactional, {
                         status: 400,
                         body: { error: "Template not found" },
                     };
+                case "template_not_transactional":
+                    return {
+                        status: 422,
+                        body: { error: "template_not_transactional" },
+                    };
+                case "marketing_variables_not_allowed":
+                    return {
+                        status: 422,
+                        body: { error: "marketing_variables_not_allowed" },
+                    };
                 case "render_failed":
                     return {
                         status: 400,
@@ -113,6 +139,13 @@ const impl = s.router(contract.transactional, {
                     return {
                         status: 422,
                         body: { error: "Team ESP is not configured." },
+                    };
+                case MAILING_ADDRESS_REQUIRED:
+                    return {
+                        status: 422,
+                        body: {
+                            error: "A mailing address is required before sending email.",
+                        },
                     };
                 case "esp_not_found":
                     return { status: 422, body: { error: "ESP not found" } };

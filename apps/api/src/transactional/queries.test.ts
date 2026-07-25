@@ -8,11 +8,12 @@ vi.mock("../db/client", async () => {
 // `createTransactionalEmail` enqueues a BullMQ job on every successful
 // insert; the real queue would try to open a connection to Redis, which
 // isn't available (or wanted) in this DB-backed query test.
-vi.mock("../mail/queue", () => ({
-    addTransactionalMailJob: vi.fn(),
-}));
+const queue = vi.hoisted(() => ({ addTransactionalMailJob: vi.fn() }));
+
+vi.mock("../mail/queue", () => queue);
 
 import { defaultEmail } from "@sendlit/email-editor";
+import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import * as schema from "../db/schema";
@@ -35,6 +36,7 @@ import {
     markTransactionalEmailSent,
     toPublicTransactionalEmail,
 } from "./queries";
+import { MissingTemplateVariablesError } from "../mail/render";
 
 const tdb = db as unknown as TestDb;
 
@@ -93,6 +95,30 @@ describe("createTransactionalEmail validation", () => {
         expect(row.status).toBe("queued");
     });
 
+    it("rejects marketing-owned variables in template sends", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+
+        for (const key of ["address", "unsubscribe_link", "subscriber"]) {
+            await expect(
+                createTransactionalEmail({
+                    teamId: team.id,
+                    to: "a@example.com",
+                    subject: "Hi",
+                    templateId: "tpl_whatever",
+                    variables: { [key]: "caller-controlled" },
+                }),
+            ).rejects.toThrow("marketing_variables_not_allowed");
+        }
+
+        expect(
+            await db
+                .select()
+                .from(schema.transactionalEmails)
+                .where(eq(schema.transactionalEmails.teamId, team.id)),
+        ).toHaveLength(0);
+        expect(queue.addTransactionalMailJob).not.toHaveBeenCalled();
+    });
+
     it("rejects headers containing CR/LF (header injection)", async () => {
         const { team } = await seedTeamAndContact(tdb);
         await expect(
@@ -148,7 +174,11 @@ describe("createTransactionalEmail validation", () => {
         const template = await createTemplate({
             teamId: team.id,
             title: "Broken",
-            content: emailContent({ text: "Hello {% broken" }),
+            purpose: "transactional",
+            content: emailContent({
+                text: "Hello {% broken",
+                includeFooter: false,
+            }),
         });
 
         await expect(
@@ -159,6 +189,46 @@ describe("createTransactionalEmail validation", () => {
                 templateId: template.templateId,
             }),
         ).rejects.toThrow("render_failed");
+    });
+
+    it("rejects missing unguarded template variables before queueing", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const template = await createTemplate({
+            teamId: team.id,
+            title: "OTP",
+            purpose: "transactional",
+            content: emailContent({
+                text: "Your code is {{ otp }}",
+                includeFooter: false,
+            }),
+        });
+
+        await expect(
+            createTransactionalEmail({
+                teamId: team.id,
+                to: "a@example.com",
+                subject: "Your code",
+                templateId: template.templateId,
+            }),
+        ).rejects.toMatchObject({
+            name: "MissingTemplateVariablesError",
+            message: "missing_template_variables",
+            missingVariables: ["otp"],
+        } satisfies Partial<MissingTemplateVariablesError>);
+
+        expect(
+            await db
+                .select()
+                .from(schema.transactionalEmails)
+                .where(eq(schema.transactionalEmails.teamId, team.id)),
+        ).toHaveLength(0);
+        expect(
+            await db
+                .select()
+                .from(schema.outboundMessages)
+                .where(eq(schema.outboundMessages.teamId, team.id)),
+        ).toHaveLength(0);
+        expect(queue.addTransactionalMailJob).not.toHaveBeenCalled();
     });
 });
 
@@ -181,6 +251,7 @@ describe("createTransactionalEmail resolution errors", () => {
         const foreignTemplate = await createTemplate({
             teamId: otherTeam.id,
             title: "Foreign template",
+            purpose: "transactional",
             content: defaultEmail,
         });
 
@@ -192,6 +263,45 @@ describe("createTransactionalEmail resolution errors", () => {
                 templateId: foreignTemplate.templateId,
             }),
         ).rejects.toThrow("template_not_found");
+    });
+
+    it("rejects a marketing template before creating or queueing", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const template = await createTemplate({
+            teamId: team.id,
+            title: "Campaign",
+            purpose: "marketing",
+            content: {
+                ...defaultEmail,
+                content: [
+                    { blockType: "text", settings: { content: "Campaign" } },
+                    createFooterEmailBlock(),
+                ],
+            },
+        });
+
+        await expect(
+            createTransactionalEmail({
+                teamId: team.id,
+                to: "a@example.com",
+                subject: "Hi",
+                templateId: template.templateId,
+            }),
+        ).rejects.toThrow("template_not_transactional");
+
+        expect(
+            await db
+                .select()
+                .from(schema.transactionalEmails)
+                .where(eq(schema.transactionalEmails.teamId, team.id)),
+        ).toHaveLength(0);
+        expect(
+            await db
+                .select()
+                .from(schema.outboundMessages)
+                .where(eq(schema.outboundMessages.teamId, team.id)),
+        ).toHaveLength(0);
+        expect(queue.addTransactionalMailJob).not.toHaveBeenCalled();
     });
 
     it("throws esp_not_configured when the team has no ESP config", async () => {
@@ -306,6 +416,7 @@ describe("createTransactionalEmail happy paths", () => {
         const template = await createTemplate({
             teamId: team.id,
             title: "Receipt",
+            purpose: "transactional",
             content: defaultEmail,
         });
 

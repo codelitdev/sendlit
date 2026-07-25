@@ -1,4 +1,5 @@
 import type { Email } from "@sendlit/email-editor";
+import type { TemplatePurpose } from "@sendlit/api-contract";
 
 export type MailType = "broadcast" | "sequence";
 export type SequenceStatus = "draft" | "active" | "paused" | "completed";
@@ -39,11 +40,13 @@ export interface Contact {
 }
 
 export interface EmailTemplate {
-    id: string;
-    teamId: string;
     templateId: string;
     title: string;
+    purpose: TemplatePurpose;
     content: Email;
+    requiredVariables: string[];
+    /** A retired document that is listed only so its owner can delete it. */
+    validationError?: string;
     createdAt: string;
     updatedAt: string;
 }

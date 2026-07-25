@@ -24,7 +24,7 @@ beforeEach(async () => {
 });
 
 describe("sequence helpers", () => {
-    it("requires unsubscribe and address merge tags", () => {
+    it("requires exactly one final managed footer", () => {
         expect(() =>
             verifyMandatoryTags(defaultEmailContent.content),
         ).not.toThrow();
@@ -35,7 +35,7 @@ describe("sequence helpers", () => {
                     settings: { content: "no tags here" },
                 },
             ]),
-        ).toThrow(/unsubscribe_link/);
+        ).toThrow(/managed footer/);
     });
 
     it("adds and removes broadcast schedule rules", async () => {

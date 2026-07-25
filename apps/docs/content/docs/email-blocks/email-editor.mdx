@@ -23,14 +23,10 @@ its types without you needing a second dependency.
 
 ```tsx
 import { useState } from "react";
-import {
-    EmailEditor,
-    defaultTemplateEmail,
-    type Email,
-} from "@sendlit/email-blocks";
+import { EmailEditor, defaultEmail, type Email } from "@sendlit/email-blocks";
 
 function Example() {
-    const [email, setEmail] = useState<Email>(defaultTemplateEmail);
+    const [email, setEmail] = useState<Email>(defaultEmail);
 
     return <EmailEditor email={email} onChange={setEmail} />;
 }
@@ -43,11 +39,8 @@ opens your own uploader from the existing image upload button.
 
 ```tsx
 import { useRef, useState, type ChangeEvent } from "react";
-import {
-    EmailEditor,
-    defaultTemplateEmail,
-    type Email,
-} from "@sendlit/email-blocks";
+import { EmailEditor, type Email } from "@sendlit/email-blocks";
+import { defaultEmail } from "@sendlit/email-editor";
 import {
     ImageBlock,
     Link,
@@ -104,7 +97,7 @@ const blocks = [
 ];
 
 function Example() {
-    const [email, setEmail] = useState<Email>(defaultTemplateEmail);
+    const [email, setEmail] = useState<Email>(defaultEmail);
 
     return <EmailEditor email={email} onChange={setEmail} blocks={blocks} />;
 }
@@ -113,3 +106,43 @@ function Example() {
 Pass the same `Email` value to [`EmailPreview`](/email-blocks/email-preview)
 or `renderEmailToHtml` (also re-exported) to see the rendered result or
 generate the HTML you actually send.
+
+## Generic add-on blocks
+
+`@sendlit/email-editor` does not know about SendLit template purposes or
+compliance. Host applications can register add-on blocks with:
+
+- `defaultSettings`
+- `insertable`, `deletable`, `duplicable`, and `movable` capabilities
+- `placement: "any" | "first" | "last"`
+- an optional `renderContext` supplied by the host
+
+Mutation handlers enforce these capabilities as well as hiding unavailable
+controls. The render context is passed to preview and HTML rendering but is
+never serialized into the `Email` document.
+
+SendLit itself uses those generic hooks for the optional
+`@sendlit/email-blocks/footer` add-on. Marketing hosts register it as a locked
+final block and provide the real address and unsubscribe URL:
+
+```tsx
+import { EmailEditor } from "@sendlit/email-editor";
+import { createFooterBlock } from "@sendlit/email-blocks/footer";
+
+const footer = createFooterBlock({ labels });
+
+<EmailEditor
+    email={email}
+    onChange={setEmail}
+    blocks={[Text, Separator, Link, ImageBlock, footer]}
+    renderContext={{
+        footer: {
+            mailingAddress: "123 Main Street",
+            unsubscribeUrl: "#unsubscribe-preview",
+        },
+    }}
+/>;
+```
+
+The independently hosted editor remains generic: omit this add-on and context
+for ordinary or transactional designs.

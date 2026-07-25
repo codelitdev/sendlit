@@ -57,7 +57,9 @@ export const segmentListSchema = z.object({
 export const templateSchema = z.object({
     templateId: z.string().min(1),
     title: z.string(),
+    purpose: z.enum(["marketing", "transactional"]),
     content: emailContentSchema,
+    requiredVariables: z.array(z.string()),
     createdAt: z.string().or(z.date()),
     updatedAt: z.string().or(z.date()),
 });
@@ -99,7 +101,18 @@ export const systemTemplateSchema = z.object({
     templateId: z.string().min(1),
     title: z.string(),
     description: z.string(),
+    purpose: z.enum(["marketing", "transactional"]),
     content: emailContentSchema,
+    requiredVariables: z.array(z.string()),
+    variableDefinitions: z
+        .array(
+            z.object({
+                path: z.string(),
+                description: z.string(),
+                example: z.any(),
+            }),
+        )
+        .optional(),
 });
 
 export const sequenceEmailSchema = z.object({

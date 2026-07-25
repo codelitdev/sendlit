@@ -1,0 +1,37 @@
+---
+title: API errors
+description: Stable template and sending error codes.
+---
+
+SendLit returns JSON errors with a stable `error` string. Clients should branch
+on the code rather than human-readable descriptions.
+
+| Status | Error                                  | Meaning                                                              |
+| ------ | -------------------------------------- | -------------------------------------------------------------------- |
+| `422`  | `template_not_transactional`           | `POST /emails` received a marketing template.                        |
+| `422`  | `template_not_marketing`               | A broadcast or sequence received a transactional template.           |
+| `422`  | `missing_template_variables`           | Required Liquid paths were absent from `variables`.                  |
+| `422`  | `template_conversion_requires_changes` | Marketing-only references remain outside the managed footer.         |
+| `422`  | `footer_required`                      | Marketing content does not contain exactly one final managed footer. |
+| `422`  | `footer_not_allowed`                   | Transactional content contains a managed footer.                     |
+| `422`  | `marketing_variables_not_allowed`      | Transactional content references marketing-owned values.             |
+
+Missing and conversion errors include the affected paths:
+
+```json
+{
+    "error": "missing_template_variables",
+    "missingVariables": ["customer.name", "otp"]
+}
+```
+
+```json
+{
+    "error": "template_conversion_requires_changes",
+    "variables": ["subscriber.name"]
+}
+```
+
+All template-purpose, structural, and missing-variable checks happen before an
+email is queued. A rejected request does not create a partial destination
+template or transactional delivery.

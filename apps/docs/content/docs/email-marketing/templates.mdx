@@ -1,8 +1,76 @@
 ---
 title: Templates
-description: Reusable email layouts.
+description: Reusable marketing and transactional email designs.
 ---
 
-Templates store reusable email content. They can be used when creating broadcasts, sequences, or additional sequence emails.
+Templates store reusable email content. Every template has an immutable
+`purpose`:
 
-SendLit also exposes system templates that are available to every team.
+| Purpose         | Used by                             | Managed footer |
+| --------------- | ----------------------------------- | -------------- |
+| `marketing`     | Broadcasts and sequences            | Required       |
+| `transactional` | `POST /emails` and MCP `send_email` | Not allowed    |
+
+The template hub can be filtered by purpose. Choose the purpose before choosing
+a built-in starter or one of your existing templates. SendLit filters choosers
+defensively, so a transactional template cannot be selected for a broadcast or
+sequence and a marketing template cannot be sent through the transactional
+API.
+
+## Marketing footer
+
+Every marketing template contains one final **Footer** block. It displays the
+workspace mailing address and a recipient-specific unsubscribe link directly
+inside the editor preview. You can change its presentation, but cannot delete,
+move, duplicate, or edit its compliance content.
+
+The address and unsubscribe URL are not stored in the template. SendLit supplies
+them during preview and delivery and validates the final rendered email before
+transport. Direct API requests cannot bypass this rule.
+
+Transactional templates have no managed footer and cannot use
+`address`, `unsubscribe_link`, or `subscriber.*`.
+
+## Required variables
+
+Transactional template responses include `requiredVariables`, a sorted list of
+the unguarded Liquid paths discovered from the content:
+
+```json
+{
+    "purpose": "transactional",
+    "requiredVariables": ["customer.name", "otp"]
+}
+```
+
+Defaults and inactive guarded branches are optional:
+
+```liquid
+Hello {{ customer.name }}.
+{{ company | default: "Acme" }}
+{% if promotion %}{{ promotion.code }}{% endif %}
+```
+
+Built-in transactional starters additionally expose descriptions and example
+values through `variableDefinitions`. Runtime discovery remains authoritative.
+
+## Duplicate and convert
+
+Purpose cannot be changed in place. Use **Duplicate as transactional** or
+**Duplicate as marketing**:
+
+- Transactional to marketing preserves the content and appends the managed
+  footer.
+- Marketing to transactional removes only the managed footer. If ordinary
+  content still references `subscriber`, `address`, or `unsubscribe_link`, the
+  conversion is rejected without creating a partial copy.
+
+The original template and historical rendered email snapshots are unchanged.
+
+## Built-in starters
+
+SendLit provides marketing starters and transactional starters for OTPs, magic
+links, password resets, verification, invitations, receipts, payment
+confirmations, security alerts, and blank transactional designs. Built-in
+templates are starters: duplicate one into a team-owned `tpl_` template before
+using it with `POST /emails`.

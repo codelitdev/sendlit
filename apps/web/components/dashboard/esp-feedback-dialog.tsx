@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, Copy, XCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/codelit/button";
+import { IconButton } from "@/components/ui/codelit/icon-button";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
 import { Badge } from "@/components/ui/badge";
 import {
     Dialog,
@@ -12,8 +13,9 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/codelit/dialog";
 import { Banner } from "@/components/dashboard/banner";
+import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ApiError } from "@/lib/api-client";
 import {
     deleteEspFeedback,
@@ -112,6 +114,8 @@ export function EspFeedbackDialog({
         error?: string;
     } | null>(null);
     const [copied, setCopied] = useState(false);
+    const [disableConfirmationOpen, setDisableConfirmationOpen] =
+        useState(false);
 
     useEffect(() => {
         if (!esp) return;
@@ -175,7 +179,6 @@ export function EspFeedbackDialog({
 
     async function disable() {
         if (!esp) return;
-        if (!confirm("Disable delivery feedback for this ESP?")) return;
         setError(null);
         try {
             await deleteEspFeedback(esp.espId);
@@ -219,11 +222,11 @@ export function EspFeedbackDialog({
                                         value={connection.webhookUrl}
                                         className="font-mono text-xs"
                                     />
-                                    <Button
+                                    <IconButton
                                         type="button"
                                         variant="outline"
-                                        size="icon"
                                         title="Copy"
+                                        aria-label="Copy webhook URL"
                                         onClick={() => {
                                             navigator.clipboard.writeText(
                                                 connection.webhookUrl,
@@ -236,7 +239,7 @@ export function EspFeedbackDialog({
                                         }}
                                     >
                                         <Copy className="size-4" />
-                                    </Button>
+                                    </IconButton>
                                 </div>
                                 {copied && (
                                     <p className="text-xs text-muted-foreground">
@@ -320,7 +323,7 @@ export function EspFeedbackDialog({
                                 type="button"
                                 variant="ghost"
                                 className="text-destructive"
-                                onClick={disable}
+                                onClick={() => setDisableConfirmationOpen(true)}
                             >
                                 Disable
                             </Button>
@@ -351,6 +354,14 @@ export function EspFeedbackDialog({
                     </div>
                 </DialogFooter>
             </DialogContent>
+            <DeleteConfirmationDialog
+                open={disableConfirmationOpen}
+                onOpenChange={setDisableConfirmationOpen}
+                title="Disable delivery feedback?"
+                description={`This will remove the delivery feedback connection for ${esp.name}. You can configure it again later.`}
+                confirmLabel="Disable feedback"
+                onConfirm={disable}
+            />
         </Dialog>
     );
 }

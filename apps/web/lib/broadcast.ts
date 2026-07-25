@@ -11,17 +11,17 @@ import type { Sequence } from "@sendlit/email-blocks";
  */
 export function presentBroadcastStatus(sequence: Sequence): {
     label: "draft" | "scheduled" | "sending" | "sent";
-    variant: "success" | "secondary" | "outline";
+    variant: "success" | "warning" | "neutral";
 } {
     if (sequence.status === "completed") {
-        return { label: "sent", variant: "outline" };
+        return { label: "sent", variant: "success" };
     }
     if (sequence.status === "active") {
         return broadcastScheduledFor(sequence)
-            ? { label: "scheduled", variant: "success" }
+            ? { label: "scheduled", variant: "warning" }
             : { label: "sending", variant: "success" };
     }
-    return { label: "draft", variant: "secondary" };
+    return { label: "draft", variant: "neutral" };
 }
 
 /** The future send time of an active, not-yet-locked broadcast, or `null`

@@ -1,6 +1,7 @@
 import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
 import { getEspTransport, getTeamTransport } from "./transport";
+import { assertMailingAddressConfigured } from "../settings/general/queries";
 
 const MISSING_TEAM_ESP_ERROR = "Team ESP is not configured.";
 
@@ -57,6 +58,9 @@ export async function sendMail({
 }: MailInput): Promise<SendMailResult> {
     let result: SendMailResult = { messageId: null, providerResponse: null };
     try {
+        // This is the final guard for all delivery paths, including queued
+        // work accepted before a team clears its address.
+        await assertMailingAddressConfigured(teamId);
         const transporter = await resolveTeamTransporter(teamId, espConfigId);
         if (process.env.NODE_ENV === "production") {
             const info = await transporter.sendMail({
@@ -107,6 +111,7 @@ export async function sendTestMail({
     teamId,
     espConfigId,
 }: MailInput): Promise<void> {
+    await assertMailingAddressConfigured(teamId);
     const transporter = await resolveTeamTransporter(teamId, espConfigId);
     await transporter.sendMail({ from, to, subject, html });
 }

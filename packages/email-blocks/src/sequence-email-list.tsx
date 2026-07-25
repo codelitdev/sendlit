@@ -24,6 +24,7 @@ import { TemplateChooser } from "./template-chooser";
 import { cn } from "./lib/utils";
 import type { EmailTemplate, SequenceEmail } from "./types";
 import type { SystemTemplateSummary } from "./template-chooser";
+import type { BlockComponent } from "@sendlit/email-editor";
 
 export interface SequenceEmailListProps {
     emails: SequenceEmail[];
@@ -45,6 +46,8 @@ export interface SequenceEmailListProps {
     systemTemplates: SystemTemplateSummary[];
     templates: EmailTemplate[];
     templatesLoading?: boolean;
+    previewBlocks?: BlockComponent[];
+    previewRenderContext?: unknown;
     addButtonLabel?: string;
     dialogTitle?: string;
     dialogDescription?: string;
@@ -101,6 +104,8 @@ export function SequenceEmailList({
     systemTemplates,
     templates,
     templatesLoading,
+    previewBlocks,
+    previewRenderContext,
     addButtonLabel = "Add email",
     dialogTitle = "Choose a template",
     dialogDescription = "Pick a starting point for the new email.",
@@ -236,9 +241,12 @@ export function SequenceEmailList({
                         </DialogDescription>
                     </DialogHeader>
                     <TemplateChooser
+                        purpose="marketing"
                         systemTemplates={systemTemplates}
                         templates={templates}
                         loading={templatesLoading}
+                        previewBlocks={previewBlocks}
+                        previewRenderContext={previewRenderContext}
                         onSelect={({ templateId }) => {
                             onAdd(templateId);
                             setAddOpen(false);

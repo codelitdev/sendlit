@@ -1,6 +1,13 @@
 export { EmailEditor } from "./email-editor";
-export type { BlockComponent } from "./types/block-registry";
 export type {
+    BlockCapabilities,
+    BlockComponent,
+    BlockPlacement,
+    BlockRegistry,
+} from "./types/block-registry";
+export type {
+    BlockRenderProps,
+    BlockSettingsProps,
     Email,
     EmailBlock,
     EmailMeta,

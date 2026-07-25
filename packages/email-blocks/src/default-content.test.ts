@@ -3,18 +3,20 @@ import { defaultEmail } from "@sendlit/email-editor";
 import { defaultTemplateEmail } from "./default-content";
 
 describe("defaultTemplateEmail", () => {
-    it("includes the compliance merge tags required for publishing", () => {
-        const serialized = JSON.stringify(defaultTemplateEmail);
-
-        expect(serialized).toContain("{{address}}");
-        expect(serialized).toContain("{{unsubscribe_link}}");
+    it("includes one final managed footer required for publishing", () => {
+        expect(
+            defaultTemplateEmail.content.filter(
+                (block) => block.blockType === "footer",
+            ),
+        ).toHaveLength(1);
+        expect(defaultTemplateEmail.content.at(-1)?.blockType).toBe("footer");
     });
 
     it("does not mutate the lower-level editor default content", () => {
         expect(defaultTemplateEmail).not.toBe(defaultEmail);
-        expect(JSON.stringify(defaultEmail)).not.toContain(
-            "{{unsubscribe_link}}",
-        );
+        expect(
+            defaultEmail.content.some((block) => block.blockType === "footer"),
+        ).toBe(false);
     });
 
     it("retains the shared editor style while replacing only starter content", () => {

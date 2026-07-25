@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultEmail, type Email } from "@sendlit/email-editor";
+import type { Email } from "@sendlit/email-editor";
 import { eq } from "drizzle-orm";
 
 vi.mock("../db/client", async () => {
@@ -59,14 +59,14 @@ beforeEach(async () => {
 });
 
 async function makeTemplate(teamId: string, title = "Starter") {
-    return createTemplate({ teamId, title, content: defaultEmail });
+    return createTemplate({ teamId, title, content: defaultEmailContent });
 }
 
 function emailWithImage(mediaId: string): Email {
     return {
         ...defaultEmailContent,
         content: [
-            ...defaultEmailContent.content,
+            ...defaultEmailContent.content.slice(0, -1),
             {
                 blockType: "image",
                 settings: {
@@ -74,6 +74,7 @@ function emailWithImage(mediaId: string): Email {
                     alt: "Hero",
                 },
             },
+            defaultEmailContent.content.at(-1)!,
         ],
     };
 }
@@ -158,6 +159,34 @@ describe("sequence queries", () => {
                 templateId: template.templateId,
             }),
         ).rejects.toThrow(responses.action_not_allowed);
+    });
+
+    it("rejects transactional templates when changing a sequence email template", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const marketingTemplate = await makeTemplate(team.id);
+        const transactionalTemplate = await createTemplate({
+            teamId: team.id,
+            title: "Transactional",
+            purpose: "transactional",
+            content: {
+                ...defaultEmailContent,
+                content: defaultEmailContent.content.slice(0, -1),
+            },
+        });
+        const sequence = await createSequence({
+            teamId: team.id,
+            type: "sequence",
+            templateId: marketingTemplate.templateId,
+        });
+
+        await expect(
+            updateMailInSequence({
+                teamId: team.id,
+                sequenceId: sequence.sequenceId,
+                emailId: sequence.emails[0].emailId,
+                templateId: transactionalTemplate.templateId,
+            }),
+        ).rejects.toThrow("template_not_marketing");
     });
 
     it("validates start requirements for sequences and broadcasts", async () => {

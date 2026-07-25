@@ -261,6 +261,9 @@ importers:
       '@sendlit/api-contract':
         specifier: workspace:*
         version: link:../../packages/api-contract
+      '@sendlit/email-blocks':
+        specifier: workspace:*
+        version: link:../../packages/email-blocks
       '@sendlit/email-editor':
         specifier: workspace:*
         version: link:../../packages/email-editor
@@ -449,6 +452,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@codelitdev/design-system':
+        specifier: 0.1.0-alpha.2
+        version: 0.1.0-alpha.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.18
         version: 1.1.18(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -598,6 +604,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.7
         version: 1.2.11(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@sendlit/api-contract':
+        specifier: workspace:*
+        version: link:../api-contract
       '@sendlit/email-editor':
         specifier: workspace:*
         version: link:../email-editor
@@ -1042,6 +1051,12 @@ packages:
   '@changesets/write@0.4.0':
     resolution: {integrity: sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q==}
 
+  '@codelitdev/design-system@0.1.0-alpha.2':
+    resolution: {integrity: sha512-ROHBHXzk2OIeDwGJYMySgE1KgdFruk8tvUxXLy57Oo4QjO3CGuc2lAtTNT1okQhpR79SAdRScESmy2plDGzWgw==}
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
+
   '@csstools/color-helpers@5.1.0':
     resolution: {integrity: sha512-S11EXWJyy0Mz5SYvRmY8nJYTFFd1LCNV+7cXyAgQtOOuzb4EsgfqDufL+9esx72/eLhsRdGZwaldu/h+E4t4BA==}
     engines: {node: '>=18'}
@@ -1103,11 +1118,11 @@ packages:
 
   '@esbuild-kit/core-utils@3.3.2':
     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild-kit/esm-loader@2.6.5':
     resolution: {integrity: sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild/aix-ppc64@0.19.12':
     resolution: {integrity: sha512-bmoCYyWdEL3wDQIVbcyzRyeKLgk2WtWLTWz1ZIAZF/EGbNOwSA6ew3PftJ1PqMiOOGu0OyFMzG53L0zqIpPeNA==}
@@ -9210,6 +9225,11 @@ snapshots:
       fs-extra: 7.0.1
       human-id: 4.2.0
       prettier: 2.8.8
+
+  '@codelitdev/design-system@0.1.0-alpha.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
 
   '@csstools/color-helpers@5.1.0': {}
 

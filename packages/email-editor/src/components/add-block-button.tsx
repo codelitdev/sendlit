@@ -6,6 +6,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import type { BlockRegistry } from "../types/block-registry";
+import { getInsertableBlocks } from "../lib/block-policy";
 
 interface AddBlockButtonProps {
     position: "above" | "below";
@@ -22,7 +23,7 @@ export function AddBlockButton({
 }: AddBlockButtonProps) {
     const [isOpen, setIsOpen] = useState(false);
 
-    const blockTypes = Object.values(blockRegistry).map((block) => ({
+    const blockTypes = getInsertableBlocks(blockRegistry).map((block) => ({
         type: block.metadata.name,
         icon: block.metadata.icon,
         label: block.metadata.displayName,

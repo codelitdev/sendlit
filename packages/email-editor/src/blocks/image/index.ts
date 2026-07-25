@@ -12,6 +12,16 @@ const baseImageBlock: BlockComponent<ImageBlockSettings> = {
     block,
     settings,
     metadata,
+    defaultSettings: () => ({
+        src: "",
+        alt: "Image",
+        alignment: "left",
+        width: "auto",
+        height: "auto",
+        maxWidth: "100%",
+        borderRadius: "0px",
+        padding: "16px",
+    }),
 };
 
 export const ImageBlock: ConfigurableImageBlock = {

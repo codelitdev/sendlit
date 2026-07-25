@@ -71,6 +71,27 @@ migrations on every boot; it only checks that the database is reachable. For
 local development, continue using `pnpm --filter @sendlit/api db:push` unless
 you are explicitly testing generated migration files.
 
+### Development-only template reset
+
+The marketing/transactional template-purpose boundary intentionally has no
+legacy-footer recognition or normalization because the product is still in
+early development. Existing local/test rows created before the managed
+`footer` block should be cleared instead of carried forward.
+
+For a disposable local database only, reset the schema and recreate it:
+
+```sh
+# Verify DB_CONNECTION_STRING points at a disposable development/test database.
+psql "$DB_CONNECTION_STRING" \
+  -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+pnpm --filter @sendlit/api db:push
+```
+
+This destroys all rows in that database. Never run it against a deployment
+whose data must be retained. Such a deployment requires a purpose/footer data
+migration designed for its actual contents. The API never clears or rewrites
+template data during startup.
+
 ## API Reference
 
 Visit `GET /docs` on the running API for the Swagger UI. It contains the full

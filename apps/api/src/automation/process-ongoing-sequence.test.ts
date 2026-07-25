@@ -18,6 +18,7 @@ import {
     contacts,
     emailDeliveries,
     ongoingSequences,
+    sequenceEmails,
     sequences,
 } from "../db/schema";
 import { truncateAll, seedTeamAndContact, type TestDb } from "../test/db";
@@ -145,6 +146,40 @@ describe("processOngoingSequence", () => {
             .where(eq(accounts.id, account.id));
         expect(accountAfter.dailyMailCount).toBe(0);
         expect(accountAfter.monthlyMailCount).toBe(0);
+    });
+
+    it("rejects corrupted marketing content without a final managed footer before transport", async () => {
+        const { team, contact } = await seedTeamAndContact(tdb);
+        const { sequenceRow, emailRows } = await seedSequence(tdb, {
+            teamId: team.id,
+            emails: [{ emailId: "email_e1", subject: "Broken" }],
+        });
+        await tdb
+            .update(sequenceEmails)
+            .set({
+                content: {
+                    style: {},
+                    meta: {},
+                    content: [
+                        {
+                            blockType: "text",
+                            settings: { content: "No footer" },
+                        },
+                    ],
+                },
+            })
+            .where(eq(sequenceEmails.id, emailRows[0].id));
+        const row = await seedOngoingSequence(tdb, {
+            teamId: team.id,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
+        });
+
+        await expect(processOngoingSequence(row.id)).rejects.toThrow(
+            "footer_required",
+        );
+        expect(mockedSendMail).not.toHaveBeenCalled();
+        expect(await tdb.select().from(emailDeliveries)).toHaveLength(0);
     });
 
     it("skips a suppressed recipient without sending or recording a delivery", async () => {

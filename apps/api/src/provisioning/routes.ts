@@ -22,7 +22,9 @@ const provisioningLimiter = rateLimit({
         error_description: "Too many requests.",
     },
 });
-router.use(provisioningLimiter);
+// This router is mounted at the API root, so scope the limiter explicitly;
+// an unqualified `router.use` would throttle every dashboard API request.
+router.use("/provisioning", provisioningLimiter);
 
 /** Constant-time comparison so an invalid secret can't be brute-forced via
  * response-time differences. */

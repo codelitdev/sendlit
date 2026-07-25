@@ -52,6 +52,7 @@ const mocks = vi.hoisted(() => ({
 
     createTemplate: vi.fn(),
     deleteTemplate: vi.fn(),
+    duplicateTemplate: vi.fn(),
     getTemplate: vi.fn(),
     listTemplates: vi.fn(),
     updateTemplate: vi.fn(),
@@ -147,6 +148,7 @@ vi.mock("../../apikey/queries", () => ({
 vi.mock("../../templates/queries", () => ({
     createTemplate: mocks.createTemplate,
     deleteTemplate: mocks.deleteTemplate,
+    duplicateTemplate: mocks.duplicateTemplate,
     getTemplate: mocks.getTemplate,
     listTemplates: mocks.listTemplates,
     updateTemplate: mocks.updateTemplate,
@@ -637,6 +639,7 @@ describe("MCP team and template tools", () => {
         for (const toolName of [
             "get_template",
             "update_template",
+            "duplicate_template",
             "delete_template",
         ]) {
             expect(
@@ -644,6 +647,74 @@ describe("MCP team and template tools", () => {
                     .success,
             ).toBe(false);
         }
+    });
+
+    it("filters, creates, and duplicates templates without changing purpose", async () => {
+        const tools = makeToolRegistry(registerTemplateTools);
+        const template = {
+            id: "internal-template",
+            teamId: "team-1",
+            templateId: "tpl_1",
+            title: "Receipt",
+            purpose: "transactional",
+            content: { style: {}, meta: {}, content: [] },
+            requiredVariables: ["order.id"],
+            createdAt: null,
+            updatedAt: null,
+        };
+
+        mocks.listTemplates.mockResolvedValue([template]);
+        await expect(
+            tools
+                .get("list_templates")!
+                .handler({ purpose: "transactional" }, auth),
+        ).resolves.toMatchObject({
+            structuredContent: {
+                items: [
+                    {
+                        templateId: "tpl_1",
+                        purpose: "transactional",
+                        requiredVariables: ["order.id"],
+                    },
+                ],
+            },
+        });
+        expect(mocks.listTemplates).toHaveBeenCalledWith(
+            "team-1",
+            "transactional",
+        );
+
+        mocks.createTemplate.mockResolvedValue(template);
+        await tools.get("create_template")!.handler(
+            {
+                title: "Receipt",
+                purpose: "transactional",
+                content: template.content,
+            },
+            auth,
+        );
+        expect(mocks.createTemplate).toHaveBeenCalledWith({
+            teamId: "team-1",
+            title: "Receipt",
+            purpose: "transactional",
+            content: template.content,
+        });
+
+        mocks.duplicateTemplate.mockResolvedValue({
+            ...template,
+            templateId: "tpl_2",
+        });
+        await tools.get("duplicate_template")!.handler(
+            {
+                templateId: "tpl_1",
+            },
+            auth,
+        );
+        expect(mocks.duplicateTemplate).toHaveBeenCalledWith({
+            teamId: "team-1",
+            templateId: "tpl_1",
+            title: undefined,
+        });
     });
 });
 
@@ -804,6 +875,11 @@ describe("MCP transactional tools", () => {
                 "Provide exactly one of templateId or html; variables requires templateId",
             ],
             ["template_not_found", "Template not found"],
+            ["template_not_transactional", "template_not_transactional"],
+            [
+                "marketing_variables_not_allowed",
+                "marketing_variables_not_allowed",
+            ],
             ["esp_not_configured", "Team ESP is not configured."],
             ["esp_not_found", "ESP not found"],
         ];
@@ -826,6 +902,34 @@ describe("MCP transactional tools", () => {
                 isError: true,
             });
         }
+    });
+
+    it("reports missing transactional template variables", async () => {
+        const tools = makeToolRegistry(registerTransactionalTools);
+        mocks.createTransactionalEmail.mockRejectedValueOnce(
+            Object.assign(new Error("missing_template_variables"), {
+                missingVariables: ["customer.name", "otp"],
+            }),
+        );
+
+        await expect(
+            tools.get("send_email")!.handler(
+                {
+                    to: "a@example.com",
+                    subject: "Hi",
+                    templateId: "tpl_1",
+                },
+                auth,
+            ),
+        ).resolves.toEqual({
+            content: [
+                {
+                    type: "text",
+                    text: "Missing required template variables: customer.name, otp",
+                },
+            ],
+            isError: true,
+        });
     });
 
     it("rethrows unmapped errors from send_email", async () => {

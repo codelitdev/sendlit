@@ -3,21 +3,29 @@ import type { Email } from "@/types/email-editor";
 import type { BlockComponent, BlockRegistry } from "@/types/block-registry";
 import { Text, Separator, Image, Link } from "@/blocks";
 
-interface EmailEditorProps {
+interface EmailEditorProps<TRenderContext = any> {
     email: Email;
     onChange: (email: Email) => void;
-    blocks?: BlockComponent[];
+    blocks?: BlockComponent<any, TRenderContext>[];
+    renderContext?: TRenderContext;
 }
 
-function generateBlockRegistry(blocks?: BlockComponent[]): BlockRegistry {
-    const blockRegistry: BlockRegistry = {};
+function generateBlockRegistry<TRenderContext>(
+    blocks?: BlockComponent<any, TRenderContext>[],
+): BlockRegistry<TRenderContext> {
+    const blockRegistry: BlockRegistry<TRenderContext> = {};
     for (const block of blocks || [Text, Separator, Image, Link]) {
         blockRegistry[block.metadata.name] = block;
     }
     return blockRegistry;
 }
 
-export function EmailEditor({ email, onChange, blocks }: EmailEditorProps) {
+export function EmailEditor<TRenderContext = any>({
+    email,
+    onChange,
+    blocks,
+    renderContext,
+}: EmailEditorProps<TRenderContext>) {
     const blockRegistry = generateBlockRegistry(blocks);
 
     return (
@@ -25,6 +33,7 @@ export function EmailEditor({ email, onChange, blocks }: EmailEditorProps) {
             initialEmail={email}
             onChange={onChange}
             blockRegistry={blockRegistry}
+            renderContext={renderContext}
         />
     );
 }

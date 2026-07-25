@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/codelit/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
     Select,
@@ -11,7 +11,7 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/codelit/select";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";

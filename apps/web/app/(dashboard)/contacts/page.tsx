@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/codelit/button";
+import { IconButton } from "@/components/ui/codelit/icon-button";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -15,9 +16,10 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/codelit/dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ApiError } from "@/lib/api-client";
 import { createContact, deleteContact, listContacts } from "@/lib/api";
 import { useSegments } from "@/lib/use-segments";
@@ -41,6 +43,8 @@ export default function ContactsPage() {
     const [filter, setFilter] = useState(emptyFilter);
     const [error, setError] = useState<string | null>(null);
     const [open, setOpen] = useState(false);
+    const [contactPendingDelete, setContactPendingDelete] =
+        useState<Contact | null>(null);
     const { segmentProps, clearSelection } = useSegments(setError);
 
     useSetBreadcrumb([{ label: "Contacts" }]);
@@ -81,6 +85,20 @@ export default function ContactsPage() {
             />
 
             {error && <Banner className="mb-4">{error}</Banner>}
+
+            <DeleteConfirmationDialog
+                open={contactPendingDelete !== null}
+                onOpenChange={(open) => {
+                    if (!open) setContactPendingDelete(null);
+                }}
+                title="Delete contact?"
+                description={`This will permanently delete ${contactPendingDelete?.email ?? "this contact"} and its contact data. This action cannot be undone.`}
+                onConfirm={async () => {
+                    if (!contactPendingDelete) return;
+                    await deleteContact(contactPendingDelete.contactId);
+                    await load();
+                }}
+            />
 
             <ContactFilterBuilder
                 className="mb-4"
@@ -171,18 +189,16 @@ export default function ContactsPage() {
                                             </Badge>
                                         </td>
                                         <td className="px-4 py-3 text-right">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={async () => {
-                                                    await deleteContact(
-                                                        contact.contactId,
-                                                    );
-                                                    load();
-                                                }}
+                                            <IconButton
+                                                aria-label={`Delete ${contact.email}`}
+                                                onClick={() =>
+                                                    setContactPendingDelete(
+                                                        contact,
+                                                    )
+                                                }
                                             >
                                                 <Trash2 className="size-4" />
-                                            </Button>
+                                            </IconButton>
                                         </td>
                                     </tr>
                                 ))}
@@ -338,9 +354,7 @@ function NewContactDialog({
                                     }
                                     placeholder="Value"
                                 />
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
+                                <IconButton
                                     aria-label="Remove custom field"
                                     onClick={() =>
                                         setCustomFields((current) =>
@@ -351,7 +365,7 @@ function NewContactDialog({
                                     }
                                 >
                                     <Trash2 className="size-4" />
-                                </Button>
+                                </IconButton>
                             </div>
                         ))}
                         <Button

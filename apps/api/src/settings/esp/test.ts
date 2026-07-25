@@ -2,6 +2,7 @@ import { sendTestMail } from "../../mail/send";
 import { getEmailFrom } from "../../utils/mail";
 import { captureError, captureEvent } from "../../observability/posthog";
 import { recordEspTestResult, type EspConfig } from "./queries";
+import { MAILING_ADDRESS_REQUIRED } from "../general/constants";
 
 export interface TestEspConfigResult {
     success: boolean;
@@ -10,6 +11,8 @@ export interface TestEspConfigResult {
      * from a delivery failure so callers (REST `400` vs `502`, MCP) can tell
      * "nothing to send to" apart from "the ESP rejected the send". */
     noDestination?: boolean;
+    /** Set when the team has not configured its required physical address. */
+    mailingAddressRequired?: boolean;
 }
 
 /** Sends a real test email through `config`'s transport and records the
@@ -64,6 +67,13 @@ export async function testEspConfig({
         });
         return { success: true };
     } catch (err: any) {
+        if (err.message === MAILING_ADDRESS_REQUIRED) {
+            return {
+                success: false,
+                error: "A mailing address is required before sending email.",
+                mailingAddressRequired: true,
+            };
+        }
         await recordEspTestResult(
             config.teamId,
             "failed",

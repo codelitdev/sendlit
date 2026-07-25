@@ -6,8 +6,44 @@ import { getSystemTemplate } from "./system-templates";
 import { captureEvent } from "../observability/posthog";
 import { syncEmailContentMediaReferences } from "../media/email-content";
 import { deleteMediaReferencesForResource } from "../media/queries";
+import type { TemplatePurpose } from "@sendlit/api-contract";
+import {
+    TemplateValidationError,
+    getRequiredTemplateVariables,
+    validateTemplateContent,
+} from "./validation";
 
-export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export type StoredEmailTemplate = typeof emailTemplates.$inferSelect;
+export type EmailTemplate = StoredEmailTemplate & {
+    requiredVariables: string[];
+    /** Present only in list responses for a retired template row. */
+    validationError?: string;
+};
+
+function withRequiredVariables(template: StoredEmailTemplate): EmailTemplate {
+    return {
+        ...template,
+        requiredVariables: getRequiredTemplateVariables(
+            template.content as EmailContent,
+            template.purpose,
+        ),
+    };
+}
+
+function withListRequiredVariables(
+    template: StoredEmailTemplate,
+): EmailTemplate {
+    try {
+        return withRequiredVariables(template);
+    } catch (error) {
+        if (!(error instanceof TemplateValidationError)) throw error;
+        return {
+            ...template,
+            requiredVariables: [],
+            validationError: error.message,
+        };
+    }
+}
 
 /**
  * Resolves a starting point for a new broadcast/sequence/sequence-email:
@@ -19,13 +55,54 @@ export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export async function resolveStartingTemplate(
     teamId: string,
     templateId: string,
-): Promise<{ title: string; content: EmailContent } | null> {
+    purpose: TemplatePurpose,
+): Promise<{
+    title: string;
+    content: EmailContent;
+    purpose: TemplatePurpose;
+} | null> {
     const system = getSystemTemplate(templateId);
-    if (system) return { title: system.title, content: system.content };
+    if (system) {
+        if (system.purpose !== purpose) {
+            captureEvent({
+                event: "template_purpose_mismatch",
+                source: "templates.resolve",
+                teamId,
+                properties: {
+                    template_id: templateId,
+                    template_purpose: system.purpose,
+                    requested_purpose: purpose,
+                },
+            });
+            throw new Error(`template_not_${purpose}`);
+        }
+        return {
+            title: system.title,
+            content: system.content,
+            purpose: system.purpose,
+        };
+    }
 
     const template = await getTemplate(templateId);
     if (!template || template.teamId !== teamId) return null;
-    return { title: template.title, content: template.content as EmailContent };
+    if (template.purpose !== purpose) {
+        captureEvent({
+            event: "template_purpose_mismatch",
+            source: "templates.resolve",
+            teamId,
+            properties: {
+                template_id: templateId,
+                template_purpose: template.purpose,
+                requested_purpose: purpose,
+            },
+        });
+        throw new Error(`template_not_${purpose}`);
+    }
+    return {
+        title: template.title,
+        content: template.content as EmailContent,
+        purpose: template.purpose,
+    };
 }
 
 export async function getUniqueTemplateTitle(
@@ -51,11 +128,14 @@ export async function createTemplate({
     teamId,
     title,
     content,
+    purpose = "marketing",
 }: {
     teamId: string;
     title: string;
     content: EmailContent;
+    purpose?: TemplatePurpose;
 }): Promise<EmailTemplate> {
+    validateTemplateContent(content, purpose);
     const uniqueTitle = await getUniqueTemplateTitle(teamId, title);
 
     const [template] = await db
@@ -64,6 +144,7 @@ export async function createTemplate({
             teamId,
             title: uniqueTitle,
             content,
+            purpose,
         })
         .returning();
 
@@ -88,9 +169,12 @@ export async function createTemplate({
         event: "template_created",
         source: "templates.create",
         teamId,
-        properties: { template_id: template.templateId },
+        properties: {
+            template_id: template.templateId,
+            template_purpose: template.purpose,
+        },
     });
-    return template;
+    return withRequiredVariables(template);
 }
 
 export async function getTemplate(
@@ -101,14 +185,28 @@ export async function getTemplate(
         .from(emailTemplates)
         .where(eq(emailTemplates.templateId, templateId))
         .limit(1);
-    return row ?? null;
+    return row ? withRequiredVariables(row) : null;
 }
 
-export async function listTemplates(teamId: string): Promise<EmailTemplate[]> {
-    return db
+export async function listTemplates(
+    teamId: string,
+    purpose?: TemplatePurpose,
+): Promise<EmailTemplate[]> {
+    const rows = await db
         .select()
         .from(emailTemplates)
-        .where(eq(emailTemplates.teamId, teamId));
+        .where(
+            purpose
+                ? and(
+                      eq(emailTemplates.teamId, teamId),
+                      eq(emailTemplates.purpose, purpose),
+                  )
+                : eq(emailTemplates.teamId, teamId),
+        );
+    // Early SendLit deployments intentionally have no automatic legacy-footer
+    // migration. Keep retired rows visible for deletion/recreation without
+    // letting one bad historical document make the template hub a 500.
+    return rows.map(withListRequiredVariables);
 }
 
 export async function updateTemplate({
@@ -122,10 +220,11 @@ export async function updateTemplate({
     title?: string;
     content?: EmailContent;
 }): Promise<EmailTemplate | null> {
-    const existing = content ? await getTemplate(templateId) : null;
-    if (content && (!existing || existing.teamId !== teamId)) {
+    const existing = await getTemplate(templateId);
+    if (!existing || existing.teamId !== teamId) {
         return null;
     }
+    if (content) validateTemplateContent(content, existing.purpose);
 
     if (title) {
         const [clash] = await db
@@ -144,7 +243,7 @@ export async function updateTemplate({
         }
     }
 
-    const patch: Partial<EmailTemplate> = { updatedAt: new Date() };
+    const patch: Partial<StoredEmailTemplate> = { updatedAt: new Date() };
     if (title) patch.title = title;
     if (content) {
         const reconciledContent = await syncEmailContentMediaReferences({
@@ -177,14 +276,73 @@ export async function updateTemplate({
             properties: { template_id: row.templateId },
         });
     }
-    return row ?? null;
+    return row ? withRequiredVariables(row) : null;
+}
+
+export async function duplicateTemplate({
+    teamId,
+    templateId,
+    title,
+}: {
+    teamId: string;
+    templateId: string;
+    title?: string;
+}): Promise<EmailTemplate | null> {
+    const system = getSystemTemplate(templateId);
+    let source: {
+        title: string;
+        content: EmailContent;
+        purpose: TemplatePurpose;
+    };
+    if (system) {
+        source = {
+            title: system.title,
+            content: structuredClone(system.content),
+            purpose: system.purpose,
+        };
+    } else {
+        const teamTemplate = await getTemplate(templateId);
+        if (!teamTemplate || teamTemplate.teamId !== teamId) return null;
+        source = {
+            title: teamTemplate.title,
+            content: structuredClone(teamTemplate.content) as EmailContent,
+            purpose: teamTemplate.purpose,
+        };
+    }
+
+    const content = structuredClone(source.content);
+    validateTemplateContent(content, source.purpose);
+    const duplicate = await createTemplate({
+        teamId,
+        title: title ?? `${source.title} (Copy)`,
+        purpose: source.purpose,
+        content,
+    });
+    captureEvent({
+        event: "template_duplicated",
+        source: "templates.duplicate",
+        teamId,
+        properties: {
+            source_template_id: templateId,
+            destination_template_id: duplicate.templateId,
+            source_purpose: source.purpose,
+            destination_purpose: source.purpose,
+        },
+    });
+    return duplicate;
 }
 
 export async function deleteTemplate(
     teamId: string,
     templateId: string,
 ): Promise<void> {
-    const template = await getTemplate(templateId);
+    // A retired template is deliberately deletable even though `getTemplate`
+    // rejects its invalid content.
+    const [template] = await db
+        .select()
+        .from(emailTemplates)
+        .where(eq(emailTemplates.templateId, templateId))
+        .limit(1);
     if (template && template.teamId === teamId) {
         await deleteMediaReferencesForResource({
             teamId,

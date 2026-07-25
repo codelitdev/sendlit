@@ -329,23 +329,54 @@ export interface SystemTemplate {
     templateId: string;
     title: string;
     description: string;
+    purpose: import("@sendlit/api-contract").TemplatePurpose;
     content: Email;
+    requiredVariables: string[];
+    variableDefinitions?: Array<{
+        path: string;
+        description: string;
+        example: unknown;
+    }>;
 }
 
 /** Built-in starting templates (Announcement, New user welcome, Upsell
  * products, Newsletter, Blank) offered alongside a team's own templates. */
-export function listSystemTemplates() {
+export function listSystemTemplates(
+    purpose?: import("@sendlit/api-contract").TemplatePurpose,
+) {
     return unwrap<{ items: SystemTemplate[] }>(
-        client.templates.listSystem(),
+        client.templates.listSystem({ query: { purpose } }),
     ).then((res) => res.items);
 }
 
-export function listTemplates() {
-    return unwrap<EmailTemplate[]>(client.templates.list());
+export function listTemplates(
+    purpose?: import("@sendlit/api-contract").TemplatePurpose,
+) {
+    return unwrap<EmailTemplate[]>(
+        client.templates.list({ query: { purpose } }),
+    );
 }
 
-export function createTemplate(input: { title: string; content: Email }) {
+export function createTemplate(input: {
+    title: string;
+    purpose: import("@sendlit/api-contract").TemplatePurpose;
+    content: Email;
+}) {
     return unwrap<EmailTemplate>(client.templates.create({ body: input }));
+}
+
+export function duplicateTemplate(
+    templateId: string,
+    input: {
+        title?: string;
+    } = {},
+) {
+    return unwrap<EmailTemplate>(
+        client.templates.duplicate({
+            params: { templateId },
+            body: input,
+        }),
+    );
 }
 
 export function getTemplate(templateId: string) {
@@ -475,8 +506,8 @@ export interface Overview {
         monthlyLimit: number;
     };
 }
-export function getOverview() {
-    return unwrap<Overview>(client.overview.get());
+export function getOverview(rangeDays = 7) {
+    return unwrap<Overview>(client.overview.get({ query: { rangeDays } }));
 }
 
 // ---- ESP (email sending provider) ----------------------------------------

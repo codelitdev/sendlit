@@ -1,6 +1,6 @@
 # PRD: Transactional Emails
 
-_Status: proposed. Date: 2026-07-11. Scope: `apps/api` (schema, contract,
+_Status: implemented. Date: 2026-07-11. Scope: `apps/api` (schema, contract,
 routes, mail pipeline, tracking), the generated REST docs and MCP server, and
 a read-only log page in `apps/web`._
 
@@ -18,8 +18,10 @@ invariants:
 
 - Recipients must be subscribed `contacts` rows; transactional mail **must**
   reach unsubscribed addresses and addresses that aren't contacts at all.
-- Every render injects an unsubscribe link and the CAN-SPAM mailing address —
-  required for marketing mail, actively wrong for a password reset.
+- A team must configure a non-empty physical mailing address before any email,
+  including transactional mail, can be accepted or delivered.
+- The campaign renderer injects an unsubscribe link and the CAN-SPAM mailing
+  address — required for marketing mail, actively wrong for a password reset.
 - Delivery is driven by a 60s due-poll over `ongoing_sequences`; transactional
   mail needs immediate, prioritized dispatch.
 - `email_deliveries` / `email_events` carry `NOT NULL` FKs to `sequences` /
@@ -142,6 +144,25 @@ live in a new `apps/api/src/transactional/` module (`routes.ts`, `queries.ts`)
 mounted like the others in `index.ts`, behind `requireAuth` + `requireTeam`.
 API keys are the primary consumer (server-to-server).
 
+### Template purposes
+
+Saved and built-in templates have an immutable `purpose`:
+
+- `marketing` templates are valid only for broadcasts and sequences. They
+  contain exactly one final managed `footer` whose workspace address and
+  recipient-specific unsubscribe URL are supplied by SendLit.
+- `transactional` templates are valid only for `POST /emails` and MCP
+  `send_email`. They cannot contain the managed footer or reference the
+  marketing-owned `address`, `unsubscribe_link`, or `subscriber` variables.
+
+`GET /templates` and `GET /system-templates` accept a `purpose` filter and
+return `requiredVariables`. Built-in transactional starters also return
+`variableDefinitions` with descriptions and examples. System templates are
+starters: duplicate one into a team-owned `tpl_` template before sending.
+
+Purpose is not patchable. `POST /templates/:templateId/duplicate` makes a
+same-purpose copy; it never converts between transactional and marketing.
+
 ### `POST /emails` → `202 Accepted`
 
 ```jsonc
@@ -165,11 +186,27 @@ Validation / behavior:
 
 - Exactly one of `templateId` / `html`. `subject` is always required in v1
   (template-level default subjects are future work).
+- `templateId` must identify a team-owned template with
+  `purpose: "transactional"`. Marketing templates return
+  `422 { "error": "template_not_transactional" }` before a row or queue job
+  is created. System starter IDs must be duplicated first.
 - `variables` is only accepted with `templateId` (`400` alongside `html`).
   Inline `html` is sent **verbatim** — the caller has already interpolated it,
   and running Liquid over arbitrary caller HTML would corrupt legitimate
   `{{`/`{%` content. This matches Postmark/Resend: variables are a template
   feature.
+- Every unguarded Liquid value in a template must be present in `variables`.
+  Missing values return `422 missing_template_variables` with a
+  `missingVariables` array; no transactional row or queue job is created.
+  A `default` filter (for example, `{{ first_name | default: "there" }}`) or
+  a direct `{% if promotion %}...{{ promotion.code }}...{% endif %}` guard
+  makes intentionally optional content explicit.
+- Template responses expose these unconditional paths as a sorted,
+  server-computed `requiredVariables` array. The send-time scan remains
+  authoritative; clients do not submit or maintain this field.
+- `address`, `unsubscribe_link`, and `subscriber` are marketing-owned
+  top-level variables. Transactional template content and send payloads cannot
+  provide them.
 - `to` is a single email address (see Non-goals).
 - `headers`: names and values must not contain CR/LF (header injection), and
   headers the pipeline owns (`From`, `To`, `Subject`, `Content-Type`) are

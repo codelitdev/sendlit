@@ -3,7 +3,7 @@ title: TemplateChooser
 description: Pick from system and saved templates.
 ---
 
-`TemplateChooser` combines system templates and team templates into a reusable picker with real previews.
+`TemplateChooser` combines system templates and team templates into a reusable picker with real previews. Its required `purpose` prop defensively removes incompatible items even if the host passes an unfiltered response.
 Section headings/descriptions, the loading label, and the empty-templates
 message are all props with English defaults.
 
@@ -31,23 +31,27 @@ const systemTemplates: SystemTemplateSummary[] = [
         templateId: "announcement",
         title: "Announcement",
         description: "Launch a feature, webinar, or limited-time offer.",
+        purpose: "marketing",
         content: defaultTemplateEmail,
+        requiredVariables: [],
     },
     {
         templateId: "blank",
         title: "Blank",
         description: "Start from the required unsubscribe and address footer.",
+        purpose: "marketing",
         content: defaultTemplateEmail,
+        requiredVariables: [],
     },
 ];
 
 const savedTemplates: EmailTemplate[] = [
     {
-        id: "template_row_1",
-        teamId: "team_1",
         templateId: "customer-update",
         title: "Customer update",
+        purpose: "marketing",
         content: defaultTemplateEmail,
+        requiredVariables: [],
         createdAt: now,
         updatedAt: now,
     },
@@ -65,6 +69,7 @@ function Example() {
 
     return (
         <TemplateChooser
+            purpose="marketing"
             systemTemplates={systemTemplates}
             templates={savedTemplates}
             onSelect={({ templateId }) => setSelectedTemplate(templateId)}

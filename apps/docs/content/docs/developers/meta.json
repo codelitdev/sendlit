@@ -5,6 +5,7 @@
         "overview",
         "authentication",
         "api-keys",
+        "errors",
         "mcp",
         "transactional",
         "provisioning"

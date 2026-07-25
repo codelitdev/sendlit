@@ -3,7 +3,7 @@ import { render, pretty } from "@react-email/render";
 import { Html, Head, Preview, Body, Container } from "@react-email/components";
 import type { Email, EmailBlock } from "../types/email-editor";
 import type { LinkBlockSettings } from "@/blocks/link/types";
-import type { BlockRegistry } from "../types/block-registry";
+import type { BlockComponent, BlockRegistry } from "../types/block-registry";
 import { Text, Link as LinkBlock, Separator, Image } from "@/blocks";
 
 export interface UtmParams {
@@ -46,10 +46,12 @@ export function EmailTemplate({
     email,
     utmParams,
     blockRegistry,
+    renderContext,
 }: {
     email: Email;
     utmParams?: UtmParams;
     blockRegistry: BlockRegistry;
+    renderContext?: unknown;
 }) {
     // Function to render a block based on its type
     const renderBlock = (block: EmailBlock) => {
@@ -86,6 +88,7 @@ export function EmailTemplate({
                 key={block.id}
                 block={modifiedBlock}
                 style={email.style}
+                renderContext={renderContext}
             />
         );
     };
@@ -133,15 +136,23 @@ export async function renderEmailToHtml({
     email,
     utmParams,
     blocks,
+    renderContext,
 }: {
     email: Email;
     utmParams?: UtmParams;
-    blocks?: any[];
+    blocks?: BlockComponent<any, any>[];
+    renderContext?: unknown;
 }): Promise<string> {
     try {
         // Create block registry from blocks or use defaults
         const blockRegistry: BlockRegistry = {};
-        const defaultBlocks = blocks || [Text, LinkBlock, Separator, Image];
+        const defaultBlocks = [
+            Text,
+            LinkBlock,
+            Separator,
+            Image,
+            ...(blocks ?? []),
+        ];
 
         for (const block of defaultBlocks) {
             blockRegistry[block.metadata.name] = block;
@@ -152,6 +163,7 @@ export async function renderEmailToHtml({
                 email={email}
                 utmParams={utmParams}
                 blockRegistry={blockRegistry}
+                renderContext={renderContext}
             />
         );
         const renderedHtml = await render(template);

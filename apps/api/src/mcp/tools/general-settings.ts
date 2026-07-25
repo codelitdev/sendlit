@@ -21,7 +21,7 @@ export function registerGeneralSettingsTools(server: McpServer): void {
         "get_general_settings",
         {
             description:
-                "Returns the team's general workspace settings (e.g. the mailing address rendered in email footers). Returns defaults (null fields) when nothing has been saved yet.",
+                "Returns the team's general workspace settings. A non-empty mailing address is required before the team can send any email and is rendered in email footers. Returns defaults (null fields) when nothing has been saved yet.",
             outputSchema: generalSettingsSchema,
             annotations: {
                 readOnlyHint: true,
@@ -41,7 +41,7 @@ export function registerGeneralSettingsTools(server: McpServer): void {
         "update_general_settings",
         {
             description:
-                "Updates the team's general workspace settings. Omitted fields are left unchanged; send an empty string to clear a field. `mailingAddress` is the physical postal address rendered in email footers (CAN-SPAM/GDPR requirement).",
+                "Updates the team's general workspace settings. Omitted fields are left unchanged; send an empty string to clear a field. `mailingAddress` is the physical postal address rendered in email footers and is required before the team can send email (CAN-SPAM/GDPR requirement).",
             inputSchema: {
                 mailingAddress: z
                     .string()

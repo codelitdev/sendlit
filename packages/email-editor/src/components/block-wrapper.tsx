@@ -7,11 +7,9 @@ import { Trash, Copy, ChevronUp, ChevronDown } from "lucide-react";
 interface BlockWrapperProps {
     block: Required<EmailBlock>;
     index: number;
-    isFirst: boolean;
-    isLast: boolean;
-    isFixed?: boolean;
     style?: EmailStyle;
     blockRegistry: BlockRegistry;
+    renderContext?: unknown;
     selectedBlockId: string | null;
     setSelectedBlockId: (id: string | null) => void;
     deleteBlock: (id: string) => void;
@@ -19,17 +17,19 @@ interface BlockWrapperProps {
     duplicateBlock: (id: string) => void;
     movingBlockId: string | null;
     addBlock: (blockType: string, index: number) => void;
-    totalBlocks: number;
+    canDelete: boolean;
+    canDuplicate: boolean;
+    canMoveUp: boolean;
+    canMoveDown: boolean;
+    canAddBelow: boolean;
 }
 
 export function BlockWrapper({
     block,
     index,
-    isFirst,
-    isLast,
-    isFixed = false,
     style,
     blockRegistry,
+    renderContext,
     selectedBlockId,
     setSelectedBlockId,
     deleteBlock,
@@ -37,7 +37,11 @@ export function BlockWrapper({
     duplicateBlock,
     movingBlockId,
     addBlock,
-    totalBlocks,
+    canDelete,
+    canDuplicate,
+    canMoveUp,
+    canMoveDown,
+    canAddBelow,
 }: BlockWrapperProps) {
     const [isHovered, setIsHovered] = useState(false);
     const [isControlsHovered, setIsControlsHovered] = useState(false);
@@ -75,16 +79,14 @@ export function BlockWrapper({
                 block={block}
                 style={style}
                 selectedBlockId={selectedBlockId}
+                renderContext={renderContext}
             />
         );
     };
 
-    // Calculate if move buttons should be disabled
-    const canMoveUp = !isFixed && index > 1; // Can't move into first position (index 0)
-    const canMoveDown = !isFixed && index < totalBlocks - 2; // Can't move into last position
-
     // Check if we should show any controls at all
-    const hasAnyControls = !isFixed || (!isFirst && !isLast);
+    const hasAnyControls =
+        canDelete || canDuplicate || canMoveUp || canMoveDown;
 
     return (
         <div
@@ -111,7 +113,7 @@ export function BlockWrapper({
                 <div>{renderBlock()}</div>
 
                 {/* Bottom border with add button on hover */}
-                {!isLast && (
+                {canAddBelow && (
                     <div className="absolute left-0 right-0 bottom-0 z-10">
                         <div
                             className={`absolute -bottom-3 left-1/2 transform -translate-x-1/2 transition-opacity duration-200 ${
@@ -138,8 +140,7 @@ export function BlockWrapper({
                         onMouseLeave={handleControlsMouseLeave}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Delete button - disabled for fixed blocks */}
-                        {!isFixed && (
+                        {canDelete && (
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -152,21 +153,19 @@ export function BlockWrapper({
                             </button>
                         )}
 
-                        {/* Duplicate button - only for non-first and non-last blocks */}
-                        {!isFirst && !isLast && (
+                        {canDuplicate && (
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     duplicateBlock(block.id);
                                 }}
-                                className={`p-2 hover:bg-accent hover:text-accent-foreground transition-colors ${!isFixed ? "" : "rounded-l-md"}`}
+                                className="p-2 hover:bg-accent hover:text-accent-foreground transition-colors"
                                 title="Duplicate block"
                             >
                                 <Copy className="h-3 w-3 text-foreground" />
                             </button>
                         )}
 
-                        {/* Move up button - disabled for fixed blocks and when can't move up */}
                         {canMoveUp && (
                             <button
                                 onClick={(e) => {
@@ -181,7 +180,6 @@ export function BlockWrapper({
                             </button>
                         )}
 
-                        {/* Move down button - disabled for fixed blocks and when can't move down */}
                         {canMoveDown && (
                             <button
                                 onClick={(e) => {

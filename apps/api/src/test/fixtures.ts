@@ -1,23 +1,30 @@
 import { defaultEmail } from "@sendlit/email-editor";
+import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { makeTestDb } from "./db";
 
 /**
- * A renderable email body: a text block carrying Liquid merge tags and a link
- * that the click-tracking rewrite should pick up (`renderEmailToHtml` runs
- * first, then Liquid, then link rewriting — see
+ * A renderable marketing email body: a text block carrying subscriber data, a
+ * link that click tracking should pick up, and the final managed footer
+ * (`renderEmailToHtml` runs first, then Liquid, then link rewriting — see
  * `automation/process-ongoing-sequence.ts#attemptMailSending`).
  */
 export function emailContent({
-    text = "Hello {{ subscriber.name }}! Unsub: {{ unsubscribe_link }}",
+    text = "Hello {{ subscriber.name }}!",
     linkUrl = "https://example.com/offer",
-}: { text?: string; linkUrl?: string } = {}) {
+    includeFooter = true,
+}: {
+    text?: string;
+    linkUrl?: string;
+    includeFooter?: boolean;
+} = {}) {
     return {
         ...defaultEmail,
         content: [
             { blockType: "text", settings: { content: text } },
             { blockType: "link", settings: { text: "Click me", url: linkUrl } },
+            ...(includeFooter ? [createFooterEmailBlock()] : []),
         ],
     };
 }

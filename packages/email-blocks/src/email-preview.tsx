@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, startTransition } from "react";
 import {
     defaultEmail,
     renderEmailToHtml,
+    type BlockComponent,
     type Email,
 } from "@sendlit/email-editor";
 import { cn } from "@/lib/utils";
@@ -13,9 +14,15 @@ export interface EmailPreviewProps {
     content: Email | null;
     className?: string;
     minHeight?: string;
+    /** Fixed visible viewport for compact grid previews. Full content remains
+     * rendered inside the iframe, but overflow is faded rather than changing
+     * surrounding card heights. */
+    previewHeight?: string;
     iframeTitle?: string;
     errorPrefix?: string;
     fallbackErrorMessage?: string;
+    blocks?: BlockComponent[];
+    renderContext?: unknown;
 }
 
 /**
@@ -31,16 +38,22 @@ export function EmailPreview({
     content,
     className,
     minHeight = "420px",
+    previewHeight,
     iframeTitle = "Email preview",
     errorPrefix = "Error: ",
     fallbackErrorMessage = "Failed to render email",
+    blocks,
+    renderContext,
 }: EmailPreviewProps) {
     const [renderedHTML, setRenderedHTML] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(!!content);
     const [error, setError] = useState<string | null>(null);
     const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const contentResizeObserverRef = useRef<ResizeObserver | null>(null);
     const [wrapperWidth, setWrapperWidth] = useState(0);
     const [contentHeight, setContentHeight] = useState<number | null>(null);
+
+    useEffect(() => () => contentResizeObserverRef.current?.disconnect(), []);
 
     useEffect(() => {
         if (content) {
@@ -52,7 +65,11 @@ export function EmailPreview({
                 setError(null);
             });
 
-            renderEmailToHtml({ email: normalizedEmail })
+            renderEmailToHtml({
+                email: normalizedEmail,
+                blocks,
+                renderContext,
+            })
                 .then((html) => {
                     startTransition(() => {
                         setRenderedHTML(html);
@@ -73,7 +90,7 @@ export function EmailPreview({
                 setError(null);
             });
         }
-    }, [content]);
+    }, [blocks, content, fallbackErrorMessage, renderContext]);
 
     useEffect(() => {
         if (!wrapperRef.current) return;
@@ -112,6 +129,7 @@ export function EmailPreview({
     const normalizedEmail = normalizeEmailForPreview(content);
     const previewWidth = getPreviewWidth(normalizedEmail);
     const minHeightPx = toPixels(minHeight);
+    const fixedPreviewHeight = previewHeight ? toPixels(previewHeight) : null;
     const scale =
         wrapperWidth > 0 ? Math.min(wrapperWidth / previewWidth, 1) : 1;
     // Before `onLoad` reports the real content height, size as if content
@@ -120,16 +138,21 @@ export function EmailPreview({
     // for a 1:1 render, leaving a blank gap under the shrunk-down content.
     const previewViewportHeight =
         contentHeight ?? (scale > 0 ? minHeightPx / scale : minHeightPx);
-    const previewHeight = contentHeight
+    const renderedPreviewHeight = contentHeight
         ? previewViewportHeight * scale
         : minHeightPx;
+    const visiblePreviewHeight = fixedPreviewHeight ?? renderedPreviewHeight;
+    const isOverflowingFixedPreview =
+        fixedPreviewHeight !== null &&
+        contentHeight !== null &&
+        renderedPreviewHeight > fixedPreviewHeight;
 
     return (
         <div className={cn("relative", className)}>
             <div
                 ref={wrapperRef}
                 className="relative w-full overflow-hidden rounded-lg border bg-background"
-                style={{ height: `${previewHeight}px` }}
+                style={{ height: `${visiblePreviewHeight}px` }}
             >
                 <iframe
                     srcDoc={renderedHTML}
@@ -143,13 +166,53 @@ export function EmailPreview({
                     scrolling="no"
                     title={iframeTitle}
                     onLoad={(event) => {
-                        const doc = event.currentTarget.contentDocument;
-                        const measured = doc?.documentElement?.scrollHeight;
-                        if (measured) setContentHeight(measured);
+                        const iframe = event.currentTarget;
+                        contentResizeObserverRef.current?.disconnect();
+                        const measureContentHeight = () => {
+                            const measured = getPreviewDocumentHeight(
+                                iframe.contentDocument,
+                            );
+                            if (measured) {
+                                setContentHeight((current) =>
+                                    current === measured ? current : measured,
+                                );
+                            }
+                        };
+
+                        measureContentHeight();
+                        const body = iframe.contentDocument?.body;
+                        if (body) {
+                            const observer = new ResizeObserver(
+                                measureContentHeight,
+                            );
+                            observer.observe(body);
+                            contentResizeObserverRef.current = observer;
+                        }
+                        window.requestAnimationFrame(measureContentHeight);
                     }}
                 />
+                {isOverflowingFixedPreview && (
+                    <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-background to-transparent"
+                    />
+                )}
             </div>
         </div>
+    );
+}
+
+function getPreviewDocumentHeight(doc: Document | null): number {
+    if (!doc) return 0;
+
+    const root = doc.documentElement;
+    const body = doc.body;
+    return Math.max(
+        doc.scrollingElement?.scrollHeight ?? 0,
+        root?.scrollHeight ?? 0,
+        root?.offsetHeight ?? 0,
+        body?.scrollHeight ?? 0,
+        body?.offsetHeight ?? 0,
     );
 }
 

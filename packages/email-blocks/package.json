@@ -17,6 +17,11 @@
             "import": "./dist/index.mjs",
             "default": "./dist/index.mjs"
         },
+        "./footer": {
+            "types": "./dist/footer/index.d.ts",
+            "import": "./dist/footer/index.mjs",
+            "default": "./dist/footer/index.mjs"
+        },
         "./styles.css": "./dist/index.css"
     },
     "publishConfig": {
@@ -56,6 +61,7 @@
         "@radix-ui/react-slot": "^1.2.3",
         "@radix-ui/react-switch": "^1.2.5",
         "@radix-ui/react-tooltip": "^1.2.7",
+        "@sendlit/api-contract": "workspace:*",
         "@sendlit/email-editor": "workspace:*",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",

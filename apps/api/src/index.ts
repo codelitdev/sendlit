@@ -92,6 +92,11 @@ app.use(mcpRoutes);
 app.use(trackingRoutes);
 app.use(provisioningRoutes);
 
+// Team management is account-scoped: `/teams` must be registered before the
+// routers below, whose blanket `requireTeam` middleware otherwise intercepts
+// it for multi-team accounts before `teamRoutes` can create/list teams.
+app.use(teamRoutes);
+
 app.use(contactsRoutes);
 app.use(segmentsRoutes);
 app.use(mediaRoutes);
@@ -100,7 +105,6 @@ app.use(sequencesRoutes);
 app.use(transactionalRoutes);
 app.use(espRoutes);
 app.use(generalSettingsRoutes);
-app.use(teamRoutes);
 app.use(overviewRoutes);
 app.use(feedbackRoutes);
 app.use(deliveryEventsRoutes);

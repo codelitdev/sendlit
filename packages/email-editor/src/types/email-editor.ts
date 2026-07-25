@@ -81,10 +81,14 @@ export interface EmailBlock<TSettings = Record<string, any>> {
     settings: TSettings;
 }
 
-export interface BlockRenderProps<TSettings = Record<string, any>> {
+export interface BlockRenderProps<
+    TSettings = Record<string, any>,
+    TRenderContext = any,
+> {
     block: EmailBlock<TSettings> & { settings: TSettings };
     style?: EmailStyle;
     selectedBlockId?: string | null;
+    renderContext?: TRenderContext;
 }
 
 export type RuntimeEmailBlock<TSettings = Record<string, any>> = Required<

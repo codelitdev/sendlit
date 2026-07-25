@@ -1,13 +1,14 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
 import { Banner } from "@/components/dashboard/banner";
 import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
 import { ApiError } from "@/lib/api-client";
 import { getTemplate, updateTemplate } from "@/lib/api";
 import type { Email } from "@sendlit/email-editor";
+import type { TemplatePurpose } from "@sendlit/api-contract";
 
 export default function TemplateEditorPage({
     params,
@@ -17,6 +18,8 @@ export default function TemplateEditorPage({
     const { templateId } = use(params);
     const [title, setTitle] = useState<string | null>(null);
     const [content, setContent] = useState<Email | null>(null);
+    const [purpose, setPurpose] = useState<TemplatePurpose | null>(null);
+    const [requiredVariables, setRequiredVariables] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -24,6 +27,8 @@ export default function TemplateEditorPage({
             .then((template) => {
                 setTitle(template.title);
                 setContent(template.content);
+                setPurpose(template.purpose);
+                setRequiredVariables(template.requiredVariables);
             })
             .catch((err) =>
                 setError(
@@ -35,7 +40,7 @@ export default function TemplateEditorPage({
     }, [templateId]);
 
     if (error) return <Banner>{error}</Banner>;
-    if (title === null || content === null)
+    if (title === null || content === null || purpose === null)
         return <p className="text-sm text-muted-foreground">Loading…</p>;
 
     return (
@@ -44,11 +49,14 @@ export default function TemplateEditorPage({
             screenTitle="Editing template"
             saveLabel="Save template"
             initialContent={content}
+            purpose={purpose}
+            requiredVariables={requiredVariables}
             onSave={async (nextContent) => {
-                await updateTemplate(templateId, {
+                const updated = await updateTemplate(templateId, {
                     title,
                     content: nextContent,
                 });
+                setRequiredVariables(updated.requiredVariables);
             }}
             header={
                 <div className="flex max-w-md items-center gap-3">

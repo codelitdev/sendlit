@@ -1,10 +1,22 @@
-import type { Email as EmailContent } from "@sendlit/email-editor";
+import {
+    defaultEmail,
+    type Email as EmailContent,
+} from "@sendlit/email-editor";
+import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
+import type {
+    TemplatePurpose,
+    TemplateVariableDefinition,
+} from "@sendlit/api-contract";
+import { getRequiredTemplateVariables } from "./validation";
 
 export interface SystemTemplate {
     templateId: string;
     title: string;
     description: string;
+    purpose: TemplatePurpose;
     content: EmailContent;
+    requiredVariables: string[];
+    variableDefinitions?: TemplateVariableDefinition[];
 }
 
 /**
@@ -15,10 +27,12 @@ export interface SystemTemplate {
  * CourseLit these are static, in-code data rather than files read off disk at
  * request time, since they never change per-deployment; `resolveStartingTemplate`
  * in `templates/queries.ts` checks these before falling back to the DB, so a
- * broadcast/sequence/email can be seeded straight from one of these ids
- * without a team having to first duplicate it into its own template list.
+ * broadcast or sequence can be seeded from a marketing starter. Transactional
+ * starters must first be duplicated into a team-owned `tpl_` template.
  */
-export const SYSTEM_TEMPLATES: SystemTemplate[] = [
+const MARKETING_SYSTEM_TEMPLATES: Array<
+    Omit<SystemTemplate, "purpose" | "requiredVariables">
+> = [
     {
         templateId: "system:announcement",
         title: "Announcement",
@@ -189,19 +203,11 @@ export const SYSTEM_TEMPLATES: SystemTemplate[] = [
                         paddingBottom: "10px",
                     },
                 },
-                {
-                    blockType: "text",
-                    settings: {
-                        content:
-                            "{{address}}\n\n[Unsubscribe]({{unsubscribe_link}})",
-                        alignment: "center",
-                        fontFamily: "Helvetica, sans-serif",
-                        fontSize: "12px",
-                        foregroundColor: "#64748b",
-                        paddingTop: "0px",
-                        paddingBottom: "0px",
-                    },
-                },
+                createFooterEmailBlock({
+                    fontFamily: "Helvetica, sans-serif",
+                    paddingTop: "0px",
+                    paddingBottom: "0px",
+                }),
             ],
         },
     },
@@ -353,19 +359,11 @@ export const SYSTEM_TEMPLATES: SystemTemplate[] = [
                         paddingBottom: "10px",
                     },
                 },
-                {
-                    blockType: "text",
-                    settings: {
-                        content:
-                            "{{address}}\n\n[Unsubscribe]({{unsubscribe_link}})",
-                        alignment: "center",
-                        fontFamily: "Helvetica, sans-serif",
-                        fontSize: "12px",
-                        foregroundColor: "#64748b",
-                        paddingTop: "0px",
-                        paddingBottom: "0px",
-                    },
-                },
+                createFooterEmailBlock({
+                    fontFamily: "Helvetica, sans-serif",
+                    paddingTop: "0px",
+                    paddingBottom: "0px",
+                }),
             ],
         },
     },
@@ -519,19 +517,11 @@ export const SYSTEM_TEMPLATES: SystemTemplate[] = [
                         paddingBottom: "10px",
                     },
                 },
-                {
-                    blockType: "text",
-                    settings: {
-                        content:
-                            "{{address}}\n\n[Unsubscribe]({{unsubscribe_link}})",
-                        alignment: "center",
-                        fontFamily: "Helvetica, sans-serif",
-                        fontSize: "12px",
-                        foregroundColor: "#64748b",
-                        paddingTop: "0px",
-                        paddingBottom: "0px",
-                    },
-                },
+                createFooterEmailBlock({
+                    fontFamily: "Helvetica, sans-serif",
+                    paddingTop: "0px",
+                    paddingBottom: "0px",
+                }),
             ],
         },
     },
@@ -703,27 +693,18 @@ export const SYSTEM_TEMPLATES: SystemTemplate[] = [
                         paddingBottom: "10px",
                     },
                 },
-                {
-                    blockType: "text",
-                    settings: {
-                        content:
-                            "{{address}}\n\n[Unsubscribe]({{unsubscribe_link}})",
-                        alignment: "center",
-                        fontFamily: "Arial, sans-serif",
-                        fontSize: "12px",
-                        foregroundColor: "#64748b",
-                        paddingTop: "0px",
-                        paddingBottom: "0px",
-                    },
-                },
+                createFooterEmailBlock({
+                    fontFamily: "Arial, sans-serif",
+                    paddingTop: "0px",
+                    paddingBottom: "0px",
+                }),
             ],
         },
     },
     {
         templateId: "system:blank",
         title: "Blank",
-        description:
-            "A blank starter template with only content and unsubscribe placeholders.",
+        description: "A blank marketing starter with a managed footer.",
         content: {
             style: {
                 colors: {
@@ -778,8 +759,7 @@ export const SYSTEM_TEMPLATES: SystemTemplate[] = [
                 },
             },
             meta: {
-                previewText:
-                    "A blank starter template with only content and unsubscribe placeholders.",
+                previewText: "A blank marketing starter with a managed footer.",
             },
             content: [
                 {
@@ -795,22 +775,231 @@ export const SYSTEM_TEMPLATES: SystemTemplate[] = [
                         paddingBottom: "12px",
                     },
                 },
-                {
-                    blockType: "text",
-                    settings: {
-                        content:
-                            "{{address}}\n\n[Unsubscribe]({{unsubscribe_link}})",
-                        alignment: "center",
-                        fontFamily: "Helvetica, sans-serif",
-                        fontSize: "12px",
-                        foregroundColor: "#64748b",
-                        paddingTop: "8px",
-                        paddingBottom: "0px",
-                    },
-                },
+                createFooterEmailBlock({
+                    fontFamily: "Helvetica, sans-serif",
+                    paddingTop: "8px",
+                    paddingBottom: "0px",
+                }),
             ],
         },
     },
+];
+
+function transactionalContent(
+    previewText: string,
+    content: string,
+): EmailContent {
+    return {
+        style: defaultEmail.style,
+        meta: { previewText },
+        content: [
+            {
+                blockType: "text",
+                settings: {
+                    content,
+                    alignment: "left",
+                    fontSize: "16px",
+                    paddingTop: "24px",
+                    paddingBottom: "24px",
+                },
+            },
+        ],
+    };
+}
+
+const TRANSACTIONAL_SYSTEM_TEMPLATES: Array<
+    Omit<SystemTemplate, "requiredVariables">
+> = [
+    {
+        templateId: "system:transactional:otp",
+        title: "One-time password",
+        description: "Send a short-lived code for sign-in or verification.",
+        purpose: "transactional",
+        content: transactionalContent(
+            "Your one-time verification code",
+            "# Your verification code\n\nUse this code to continue:\n\n## {{ otp }}\n\nIf you did not request this code, you can ignore this email.",
+        ),
+        variableDefinitions: [
+            {
+                path: "otp",
+                description: "One-time verification code",
+                example: "345987",
+            },
+        ],
+    },
+    {
+        templateId: "system:transactional:magic-link",
+        title: "Magic sign-in link",
+        description: "Send a secure passwordless sign-in link.",
+        purpose: "transactional",
+        content: transactionalContent(
+            "Your secure sign-in link",
+            "# Sign in to your account\n\n[Sign in securely]({{ magic_link }})\n\nIf you did not request this link, you can ignore this email.",
+        ),
+        variableDefinitions: [
+            {
+                path: "magic_link",
+                description: "Recipient-specific sign-in URL",
+                example: "https://example.com/sign-in/token",
+            },
+        ],
+    },
+    {
+        templateId: "system:transactional:password-reset",
+        title: "Password reset",
+        description: "Help a user securely reset their password.",
+        purpose: "transactional",
+        content: transactionalContent(
+            "Reset your password",
+            "# Reset your password\n\n[Choose a new password]({{ reset_url }})\n\nIf you did not request a password reset, you can ignore this email.",
+        ),
+        variableDefinitions: [
+            {
+                path: "reset_url",
+                description: "Recipient-specific password reset URL",
+                example: "https://example.com/reset/token",
+            },
+        ],
+    },
+    {
+        templateId: "system:transactional:verify-email",
+        title: "Email verification",
+        description: "Verify ownership of a user's email address.",
+        purpose: "transactional",
+        content: transactionalContent(
+            "Verify your email address",
+            "# Verify your email address\n\n[Verify email]({{ verification_url }})\n\nThis link can only be used for your account.",
+        ),
+        variableDefinitions: [
+            {
+                path: "verification_url",
+                description: "Recipient-specific email verification URL",
+                example: "https://example.com/verify/token",
+            },
+        ],
+    },
+    {
+        templateId: "system:transactional:invitation",
+        title: "Account invitation",
+        description: "Invite someone to join an account or workspace.",
+        purpose: "transactional",
+        content: transactionalContent(
+            "You have been invited",
+            "# You are invited\n\n{{ inviter.name }} invited you to join.\n\n[Accept invitation]({{ invitation_url }})",
+        ),
+        variableDefinitions: [
+            {
+                path: "inviter.name",
+                description: "Name of the person sending the invitation",
+                example: "Ada Lovelace",
+            },
+            {
+                path: "invitation_url",
+                description: "Recipient-specific invitation URL",
+                example: "https://example.com/invitations/token",
+            },
+        ],
+    },
+    {
+        templateId: "system:transactional:receipt",
+        title: "Receipt",
+        description: "Confirm an order and summarize its total.",
+        purpose: "transactional",
+        content: transactionalContent(
+            "Receipt for order {{ order.id }}",
+            "# Receipt\n\nOrder: **{{ order.id }}**\n\nTotal: **{{ order.total }}**\n\n{% for item in order.items %}- {{ item.name }} — {{ item.price }}\n{% endfor %}",
+        ),
+        variableDefinitions: [
+            {
+                path: "order.id",
+                description: "Order identifier",
+                example: "ORD-1001",
+            },
+            {
+                path: "order.total",
+                description: "Formatted order total",
+                example: "$49.00",
+            },
+            {
+                path: "order.items",
+                description: "Purchased items",
+                example: [{ name: "Pro plan", price: "$49.00" }],
+            },
+        ],
+    },
+    {
+        templateId: "system:transactional:payment",
+        title: "Payment confirmation",
+        description: "Confirm that a payment was received.",
+        purpose: "transactional",
+        content: transactionalContent(
+            "Payment received",
+            "# Payment received\n\nPayment **{{ payment.id }}** for **{{ payment.amount }}** was successful.",
+        ),
+        variableDefinitions: [
+            {
+                path: "payment.id",
+                description: "Payment identifier",
+                example: "PAY-1001",
+            },
+            {
+                path: "payment.amount",
+                description: "Formatted payment amount",
+                example: "$49.00",
+            },
+        ],
+    },
+    {
+        templateId: "system:transactional:security-alert",
+        title: "Security alert",
+        description: "Notify a user about an important account event.",
+        purpose: "transactional",
+        content: transactionalContent(
+            "Security alert for your account",
+            "# Security alert\n\n{{ event }}\n\nOccurred at: {{ occurred_at }}\n\nIf this was not you, secure your account immediately.",
+        ),
+        variableDefinitions: [
+            {
+                path: "event",
+                description: "Human-readable security event",
+                example: "A new device signed in to your account.",
+            },
+            {
+                path: "occurred_at",
+                description: "Formatted event time",
+                example: "25 July 2026 at 13:15 UTC",
+            },
+        ],
+    },
+    {
+        templateId: "system:transactional:blank",
+        title: "Blank transactional email",
+        description: "Start a transactional email without marketing content.",
+        purpose: "transactional",
+        content: transactionalContent(
+            "",
+            "# Transactional email\n\nReplace this content with your message.",
+        ),
+        variableDefinitions: [],
+    },
+];
+
+export const SYSTEM_TEMPLATES: SystemTemplate[] = [
+    ...MARKETING_SYSTEM_TEMPLATES.map((template) => ({
+        ...template,
+        purpose: "marketing" as const,
+        requiredVariables: getRequiredTemplateVariables(
+            template.content,
+            "marketing",
+        ),
+    })),
+    ...TRANSACTIONAL_SYSTEM_TEMPLATES.map((template) => ({
+        ...template,
+        requiredVariables: getRequiredTemplateVariables(
+            template.content,
+            "transactional",
+        ),
+    })),
 ];
 
 export function getSystemTemplate(templateId: string): SystemTemplate | null {

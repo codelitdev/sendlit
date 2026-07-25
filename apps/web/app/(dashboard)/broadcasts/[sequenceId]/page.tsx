@@ -3,8 +3,8 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, Check, Pencil, Send, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/codelit/button";
+import { Badge } from "@/components/ui/codelit/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Dialog,
@@ -13,9 +13,9 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from "@/components/ui/codelit/dialog";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { EspPicker } from "@/components/dashboard/esp-picker";
@@ -44,6 +44,14 @@ import {
 } from "@sendlit/email-blocks";
 import { sequenceStatsMetrics } from "@/lib/stats";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { MARKETING_EMAIL_EDITOR_BLOCKS } from "@/components/dashboard/email-editor-screen";
+
+const MARKETING_PREVIEW_CONTEXT = {
+    footer: {
+        mailingAddress: "Your workspace mailing address",
+        unsubscribeUrl: "#unsubscribe-preview",
+    },
+};
 
 interface BroadcastMeta {
     title: string;
@@ -408,6 +416,8 @@ export default function BroadcastEditorPage({
                             <EmailPreview
                                 content={email.content}
                                 minHeight="420px"
+                                blocks={MARKETING_EMAIL_EDITOR_BLOCKS}
+                                renderContext={MARKETING_PREVIEW_CONTEXT}
                             />
                         </CardContent>
                     </Card>

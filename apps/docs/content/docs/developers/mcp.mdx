@@ -54,10 +54,14 @@ Segments save reusable filters over contact fields, tags, subscription state, si
 
 ### Templates and media
 
-- `list_system_templates`, `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`
+- `list_system_templates`, `list_templates`, `get_template`, `create_template`, `update_template`, `duplicate_template`, `delete_template`
 - `list_media`, `get_media`, `update_media`, `delete_media`, `list_media_references`
 
-Templates and media are scoped to the selected team. System templates are available for discovery but are not team-owned.
+Templates and media are scoped to the selected team. Template list tools accept
+an optional `purpose` filter; `create_template` requires a purpose and returns
+the computed `requiredVariables`. System templates expose transactional
+variable descriptions and examples, but are starters rather than team-owned
+sendable templates. Use `duplicate_template` to copy or safely convert one.
 
 ### Broadcasts and sequences
 
@@ -76,6 +80,10 @@ Use `start_sequence` only after the audience, trigger, email content, delays, an
 - `list_emails` lists transactional delivery records.
 
 Transactional sends are separate from broadcasts and sequences; they do not enroll a contact or use a campaign audience.
+`send_email` accepts only team-owned transactional templates and reports
+`template_not_transactional` or the missing variable paths without creating a
+send. Broadcast and sequence tools accept only marketing templates and report
+`template_not_marketing`.
 
 ### Sending configuration
 
@@ -106,14 +114,14 @@ The exact configuration shape depends on the MCP client. For clients that suppor
 
 ```json
 {
-  "mcpServers": {
-    "sendlit": {
-      "url": "https://api.sendlit.com/mcp",
-      "headers": {
-        "x-sendlit-apikey": "${SENDLIT_API_KEY}"
-      }
+    "mcpServers": {
+        "sendlit": {
+            "url": "https://api.sendlit.com/mcp",
+            "headers": {
+                "x-sendlit-apikey": "${SENDLIT_API_KEY}"
+            }
+        }
     }
-  }
 }
 ```
 

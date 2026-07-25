@@ -511,6 +511,11 @@ export const emailTemplates = pgTable(
             .unique()
             .$defaultFn(() => genPublicId("tpl")),
         title: text("title").notNull(),
+        purpose: text("purpose", {
+            enum: ["marketing", "transactional"],
+        })
+            .notNull()
+            .default("marketing"),
         // { content: EmailBlock[], style: EmailStyle, meta: EmailMeta } — see @sendlit/email-editor
         content: jsonb("content").notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -525,6 +530,10 @@ export const emailTemplates = pgTable(
             "email_templates_template_id_check",
             table.templateId,
             "tpl",
+        ),
+        purposeCheck: check(
+            "email_templates_purpose_check",
+            sql`${table.purpose} in ('marketing', 'transactional')`,
         ),
     }),
 );

@@ -7,9 +7,13 @@ import {
     type EmailBlock,
 } from "@sendlit/email-editor";
 import { responses } from "../config/strings";
+import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
+import {
+    TemplateValidationError,
+    validateTemplateContent,
+} from "../templates/validation";
 
-/** Same starting content as CourseLit's `createSequence`, with the mandatory
- * unsubscribe/address merge tags baked in so `verifyMandatoryTags` passes. */
+/** Marketing starting content with the required managed footer. */
 export const defaultEmailContent: Email = {
     ...defaultEmail,
     content: [
@@ -21,36 +25,18 @@ export const defaultEmailContent: Email = {
                 fontSize: "24px",
             },
         },
-        {
-            blockType: "text",
-            settings: {
-                content: "{{address}}\n\n[Unsubscribe]({{unsubscribe_link}})",
-                alignment: "center",
-                fontSize: "12px",
-                foregroundColor: "#64748b",
-                paddingTop: "0px",
-                paddingBottom: "0px",
-            },
-        },
+        createFooterEmailBlock(),
     ],
 };
 
 export function verifyMandatoryTags(emailContent: EmailBlock[]) {
-    const unsubscribeRegex = /{{\s*unsubscribe_link\s*}}/;
-    const addressRegex = /{{\s*address\s*}}/;
-
-    const hasUnsubscribeLink = emailContent.some(
-        (block) =>
-            block.settings &&
-            JSON.stringify(block.settings).match(unsubscribeRegex),
-    );
-    const hasAddress = emailContent.some(
-        (block) =>
-            block.settings &&
-            JSON.stringify(block.settings).match(addressRegex),
-    );
-
-    if (!hasUnsubscribeLink || !hasAddress) {
+    try {
+        validateTemplateContent(
+            { ...defaultEmailContent, content: emailContent },
+            "marketing",
+        );
+    } catch (error) {
+        if (!(error instanceof TemplateValidationError)) throw error;
         throw new Error(responses.mandatory_tags_missing);
     }
 }

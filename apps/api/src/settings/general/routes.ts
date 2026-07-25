@@ -10,8 +10,7 @@ import {
 } from "./queries";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use("/settings/general", requireAuth, requireTeam);
 
 const s = initServer();
 

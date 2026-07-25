@@ -19,7 +19,9 @@ import {
 import { serializeDates } from "../utils/serialize";
 
 const router = Router();
-router.use(requireAuth);
+// This router is mounted at the API root. Scope account-level middleware to
+// `/teams` so it cannot intercept unrelated endpoints such as `/contacts`.
+router.use("/teams", requireAuth);
 
 /**
  * Team management is account-level (list/create/rename/delete which teams an
@@ -29,7 +31,7 @@ router.use(requireAuth);
  * team, so allowing it to enumerate or manage every team its owning account
  * belongs to would defeat that isolation.
  */
-router.use((req: Request, res: Response, next: NextFunction) => {
+router.use("/teams", (req: Request, res: Response, next: NextFunction) => {
     if (!["oauth", "session"].includes((req as any).authKind)) {
         return res.status(403).json({
             error: "user_auth_required",

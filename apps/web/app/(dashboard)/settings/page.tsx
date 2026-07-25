@@ -12,11 +12,12 @@ import {
     Trash2,
     XCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/codelit/button";
+import { IconButton } from "@/components/ui/codelit/icon-button";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
+import { Textarea } from "@/components/ui/codelit/textarea";
+import { Switch } from "@/components/ui/codelit/switch";
 import { Badge } from "@/components/ui/badge";
 import {
     Card,
@@ -31,15 +32,20 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/codelit/dialog";
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@/components/ui/codelit/select";
+import {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+} from "@/components/ui/codelit/tabs";
 import {
     Table,
     TableBody,
@@ -50,6 +56,7 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -104,6 +111,9 @@ export default function SettingsPage() {
     const [generalSaved, setGeneralSaved] = useState(false);
     const [espFormOpen, setEspFormOpen] = useState(false);
     const [editingEsp, setEditingEsp] = useState<EspConfig | null>(null);
+    const [espPendingDelete, setEspPendingDelete] = useState<EspConfig | null>(
+        null,
+    );
     const [feedbackEsp, setFeedbackEsp] = useState<EspConfig | null>(null);
     const [testingEspId, setTestingEspId] = useState<string | null>(null);
     const [testResult, setTestResult] = useState<{
@@ -186,7 +196,6 @@ export default function SettingsPage() {
     }
 
     async function handleDelete(esp: EspConfig) {
-        if (!confirm(`Remove ESP "${esp.name}"? This can't be undone.`)) return;
         setError(null);
         try {
             await deleteEsp(esp.espId);
@@ -232,6 +241,20 @@ export default function SettingsPage() {
 
                 {error && <Banner className="mb-4">{error}</Banner>}
 
+                <DeleteConfirmationDialog
+                    open={espPendingDelete !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setEspPendingDelete(null);
+                    }}
+                    title="Remove email service provider?"
+                    description={`This will permanently remove "${espPendingDelete?.name ?? "this email service provider"}". Sending through it will no longer be available.`}
+                    confirmLabel="Remove ESP"
+                    onConfirm={async () => {
+                        if (!espPendingDelete) return;
+                        await handleDelete(espPendingDelete);
+                    }}
+                />
+
                 <Tabs
                     value={selectedTab}
                     defaultValue="general"
@@ -246,6 +269,16 @@ export default function SettingsPage() {
 
                     <TabsContent value="general">
                         <div className="max-w-xl">
+                            {generalSettings &&
+                                !generalSettings.mailingAddress?.trim() && (
+                                    <Banner className="mb-4">
+                                        A mailing address is required before
+                                        this workspace can send email. Add and
+                                        save it below to enable broadcasts,
+                                        sequences, transactional email, and ESP
+                                        test sends.
+                                    </Banner>
+                                )}
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="text-base">
@@ -255,7 +288,7 @@ export default function SettingsPage() {
                                 <CardContent className="space-y-4">
                                     <div className="space-y-1.5">
                                         <Label htmlFor="mailing-address">
-                                            Mailing address
+                                            Mailing address (required to send)
                                         </Label>
                                         <Textarea
                                             id="mailing-address"
@@ -267,7 +300,17 @@ export default function SettingsPage() {
                                             }
                                             placeholder="123 Main St, City, Country"
                                             rows={4}
+                                            aria-describedby="mailing-address-help"
                                         />
+                                        <p
+                                            id="mailing-address-help"
+                                            className="text-sm text-muted-foreground"
+                                        >
+                                            Your physical mailing address is
+                                            included in email footers and is
+                                            required before any email can be
+                                            sent.
+                                        </p>
                                     </div>
                                 </CardContent>
                                 <CardFooter>
@@ -287,6 +330,13 @@ export default function SettingsPage() {
                     </TabsContent>
 
                     <TabsContent value="esp">
+                        {generalSettings &&
+                            !generalSettings.mailingAddress?.trim() && (
+                                <Banner className="mb-4">
+                                    Add a mailing address in General before
+                                    sending an ESP test email or campaign email.
+                                </Banner>
+                            )}
                         <div className="mb-4 flex items-start justify-between gap-4">
                             <p className="max-w-lg text-sm text-muted-foreground">
                                 Configure one or more sending identities. One is
@@ -393,10 +443,9 @@ export default function SettingsPage() {
                                                     <TableCell>
                                                         <div className="flex items-center justify-end gap-1">
                                                             {!esp.isDefault && (
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
+                                                                <IconButton
                                                                     title="Set as default"
+                                                                    aria-label={`Set ${esp.name} as default`}
                                                                     onClick={() =>
                                                                         handleSetDefault(
                                                                             esp.espId,
@@ -404,12 +453,11 @@ export default function SettingsPage() {
                                                                     }
                                                                 >
                                                                     <Star className="size-4" />
-                                                                </Button>
+                                                                </IconButton>
                                                             )}
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
+                                                            <IconButton
                                                                 title="Send test email"
+                                                                aria-label={`Send test email via ${esp.name}`}
                                                                 disabled={
                                                                     testingEspId ===
                                                                     esp.espId
@@ -421,14 +469,13 @@ export default function SettingsPage() {
                                                                 }
                                                             >
                                                                 <Send className="size-4" />
-                                                            </Button>
+                                                            </IconButton>
                                                             {feedbackCapableProviders.includes(
                                                                 esp.provider,
                                                             ) && (
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
+                                                                <IconButton
                                                                     title="Delivery feedback (bounces & complaints)"
+                                                                    aria-label={`Delivery feedback for ${esp.name}`}
                                                                     onClick={() =>
                                                                         setFeedbackEsp(
                                                                             esp,
@@ -436,12 +483,11 @@ export default function SettingsPage() {
                                                                     }
                                                                 >
                                                                     <Mail className="size-4" />
-                                                                </Button>
+                                                                </IconButton>
                                                             )}
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
+                                                            <IconButton
                                                                 title="Edit"
+                                                                aria-label={`Edit ${esp.name}`}
                                                                 onClick={() => {
                                                                     setEditingEsp(
                                                                         esp,
@@ -452,20 +498,19 @@ export default function SettingsPage() {
                                                                 }}
                                                             >
                                                                 <Pencil className="size-4" />
-                                                            </Button>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
+                                                            </IconButton>
+                                                            <IconButton
                                                                 title="Remove"
+                                                                aria-label={`Remove ${esp.name}`}
                                                                 className="text-destructive hover:text-destructive"
                                                                 onClick={() =>
-                                                                    handleDelete(
+                                                                    setEspPendingDelete(
                                                                         esp,
                                                                     )
                                                                 }
                                                             >
                                                                 <Trash2 className="size-4" />
-                                                            </Button>
+                                                            </IconButton>
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>

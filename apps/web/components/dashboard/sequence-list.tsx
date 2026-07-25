@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pause, Play } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { IconButton } from "@/components/ui/codelit/icon-button";
+import { Badge } from "@/components/ui/codelit/badge";
+import { Card, CardContent } from "@/components/ui/codelit/card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
@@ -18,10 +18,10 @@ import type { MailType, Sequence } from "@sendlit/email-blocks";
 
 const STATUS_VARIANT: Record<
     Sequence["status"],
-    "success" | "secondary" | "outline"
+    "success" | "neutral" | "outline"
 > = {
     active: "success",
-    draft: "secondary",
+    draft: "neutral",
     paused: "outline",
     completed: "outline",
 };
@@ -171,9 +171,13 @@ export function SequenceListPage({
                                                         "draft" ||
                                                     sequence.status ===
                                                         "paused") && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
+                                                    <IconButton
+                                                        aria-label={
+                                                            sequence.status ===
+                                                            "active"
+                                                                ? "Pause sequence"
+                                                                : "Start sequence"
+                                                        }
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             toggle(sequence);
@@ -185,7 +189,7 @@ export function SequenceListPage({
                                                         ) : (
                                                             <Play className="size-4" />
                                                         )}
-                                                    </Button>
+                                                    </IconButton>
                                                 )}
                                         </td>
                                     </tr>

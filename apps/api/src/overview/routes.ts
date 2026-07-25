@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, count, eq, gt } from "drizzle-orm";
+import { and, count, eq, gt, lt } from "drizzle-orm";
 import { createExpressEndpoints, initServer } from "@ts-rest/express";
 import { contract } from "@sendlit/api-contract";
 import { requireAuth } from "../auth/middleware";
@@ -15,15 +15,19 @@ import {
 } from "../db/schema";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use("/overview", requireAuth, requireTeam);
 const s = initServer();
 
 createExpressEndpoints(
     contract.overview,
     s.router(contract.overview, {
-        get: async ({ req }) => {
+        get: async ({ req, query }) => {
             const teamId = (req as any).teamId as string;
+            const rangeDays = query.rangeDays ?? 7;
+            const rangeStart = new Date(
+                Date.now() - rangeDays * 24 * 60 * 60 * 1000,
+            );
+            const rangeEnd = Date.now() + rangeDays * 24 * 60 * 60 * 1000;
             const [active, ongoing, scheduled, mailRows, accountRow] =
                 await Promise.all([
                     db
@@ -57,6 +61,7 @@ createExpressEndpoints(
                                 eq(sequences.type, "broadcast"),
                                 eq(sequences.status, "active"),
                                 gt(sequenceEmails.delayInMillis, Date.now()),
+                                lt(sequenceEmails.delayInMillis, rangeEnd),
                             ),
                         ),
                     db
@@ -65,7 +70,12 @@ createExpressEndpoints(
                             value: count(),
                         })
                         .from(transactionalEmails)
-                        .where(eq(transactionalEmails.teamId, teamId))
+                        .where(
+                            and(
+                                eq(transactionalEmails.teamId, teamId),
+                                gt(transactionalEmails.createdAt, rangeStart),
+                            ),
+                        )
                         .groupBy(transactionalEmails.status),
                     db
                         .select({

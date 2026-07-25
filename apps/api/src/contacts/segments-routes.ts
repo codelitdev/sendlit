@@ -14,8 +14,7 @@ import { serializeDates } from "../utils/serialize";
 import { omitInternal } from "../utils/public";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use("/segments", requireAuth, requireTeam);
 
 const s = initServer();
 

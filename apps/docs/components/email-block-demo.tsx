@@ -29,6 +29,10 @@ import {
     Text,
     type UploaderProps,
 } from "@sendlit/email-editor/blocks";
+import {
+    createFooterBlock,
+    createFooterEmailBlock,
+} from "@sendlit/email-blocks/footer";
 
 type DemoName =
     | "contact-filter-builder"
@@ -109,11 +113,12 @@ const sampleEmail: Email = {
             blockType: "text",
             settings: {
                 content:
-                    "## Why this template works\n\n- Fast visual hierarchy.\n- Clean body copy.\n- Strong CTA treatment.\n\n{{address}}\n\n[Unsubscribe]({{unsubscribe_link}})",
+                    "## Why this template works\n\n- Fast visual hierarchy.\n- Clean body copy.\n- Strong CTA treatment.",
                 alignment: "left",
                 fontSize: "14px",
             },
         },
+        createFooterEmailBlock(),
     ],
 };
 
@@ -354,23 +359,27 @@ const systemTemplates: SystemTemplateSummary[] = [
         templateId: "announcement",
         title: "Announcement",
         description: "Launch a feature, webinar, or limited-time offer.",
+        purpose: "marketing",
         content: sampleEmail,
+        requiredVariables: [],
     },
     {
         templateId: "blank",
         title: "Blank",
         description: "Start from the required unsubscribe and address footer.",
+        purpose: "marketing",
         content: defaultTemplateEmail,
+        requiredVariables: [],
     },
 ];
 
 const savedTemplates: EmailTemplate[] = [
     {
-        id: "template_row_1",
-        teamId: "team_1",
         templateId: "customer-update",
         title: "Customer update",
+        purpose: "marketing",
         content: sampleEmail,
+        requiredVariables: [],
         createdAt: now,
         updatedAt: now,
     },
@@ -422,6 +431,37 @@ const emailEditorBlocks = [
     Link,
     ImageBlock.configure({ uploader: LocalImageUploader }),
 ];
+
+const footerBlock = createFooterBlock({
+    labels: {
+        displayName: "Footer",
+        description: "Managed mailing address and unsubscribe footer",
+        unsubscribe: "Unsubscribe",
+        alignment: "Alignment",
+        alignmentLeft: "Left",
+        alignmentCenter: "Center",
+        alignmentRight: "Right",
+        foregroundColor: "Text color",
+        backgroundColor: "Background color",
+        fontSize: "Font size",
+        paddingTop: "Top padding",
+        paddingBottom: "Bottom padding",
+        paddingX: "Horizontal padding",
+    },
+});
+const marketingBlocks = [...emailEditorBlocks, footerBlock];
+const marketingRenderContext = {
+    footer: {
+        mailingAddress: "123 Main Street, Example City",
+        unsubscribeUrl: "#unsubscribe-preview",
+    },
+};
+const genericEditorEmail: Email = {
+    ...sampleEmail,
+    content: sampleEmail.content.filter(
+        (block) => block.blockType !== "footer",
+    ),
+};
 
 export function EmailBlockDemo({ demo }: { demo: DemoName }) {
     const [filter, setFilter] =
@@ -489,7 +529,7 @@ export function EmailBlockDemo({ demo }: { demo: DemoName }) {
         "email_2",
         "email_3",
     ]);
-    const [editorEmail, setEditorEmail] = useState<Email>(sampleEmail);
+    const [editorEmail, setEditorEmail] = useState<Email>(genericEditorEmail);
     const [selectedTemplate, setSelectedTemplate] = useState("announcement");
     const [subscriberPage, setSubscriberPage] = useState(1);
     const subscriberTotalPages = Math.ceil(
@@ -657,6 +697,8 @@ export function EmailBlockDemo({ demo }: { demo: DemoName }) {
                         onReorder={setEmailsOrder}
                         systemTemplates={systemTemplates}
                         templates={savedTemplates}
+                        previewBlocks={marketingBlocks}
+                        previewRenderContext={marketingRenderContext}
                     />
                 </DemoFrame>
             );
@@ -680,7 +722,12 @@ export function EmailBlockDemo({ demo }: { demo: DemoName }) {
                     title="EmailPreview"
                     description="Rendered email iframe preview."
                 >
-                    <EmailPreview content={sampleEmail} minHeight="360px" />
+                    <EmailPreview
+                        content={sampleEmail}
+                        minHeight="360px"
+                        blocks={marketingBlocks}
+                        renderContext={marketingRenderContext}
+                    />
                 </DemoFrame>
             );
         case "template-chooser":
@@ -690,8 +737,11 @@ export function EmailBlockDemo({ demo }: { demo: DemoName }) {
                     description={`Selected: ${selectedTemplateLabel ?? selectedTemplate}`}
                 >
                     <TemplateChooser
+                        purpose="marketing"
                         systemTemplates={systemTemplates}
                         templates={savedTemplates}
+                        previewBlocks={marketingBlocks}
+                        previewRenderContext={marketingRenderContext}
                         onSelect={({ templateId }) =>
                             setSelectedTemplate(templateId)
                         }

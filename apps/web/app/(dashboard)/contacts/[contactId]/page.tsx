@@ -2,15 +2,17 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Plus, Trash2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Mail, Trash2, X } from "lucide-react";
+import { Button } from "@/components/ui/codelit/button";
+import { IconButton } from "@/components/ui/codelit/icon-button";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
+import { Switch } from "@/components/ui/codelit/switch";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ApiError } from "@/lib/api-client";
 import {
     addContactTag,
@@ -37,6 +39,18 @@ export default function ContactDetailPage({
         null,
     );
     const [error, setError] = useState<string | null>(null);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [name, setName] = useState("");
+    const [subscribed, setSubscribed] = useState(false);
+    const [customFields, setCustomFields] = useState<Contact["customFields"]>(
+        {},
+    );
+    const [newCustomField, setNewCustomField] = useState({
+        key: "",
+        value: "",
+    });
+    const [isSaving, setIsSaving] = useState(false);
+    const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
 
     useSetBreadcrumb([
         { label: "Contacts", href: "/contacts" },
@@ -50,6 +64,9 @@ export default function ContactDetailPage({
                 getContactDeliveries(contactId),
             ]);
             setContact(contact);
+            setName(contact.name ?? "");
+            setSubscribed(contact.subscribed);
+            setCustomFields(contact.customFields);
             setDeliveries(deliveries);
         } catch (err) {
             setError(
@@ -65,6 +82,44 @@ export default function ContactDetailPage({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [contactId]);
 
+    const isDirty =
+        name !== (contact?.name ?? "") ||
+        subscribed !== contact?.subscribed ||
+        JSON.stringify(customFields) !==
+            JSON.stringify(contact?.customFields) ||
+        Boolean(newCustomField.key.trim());
+
+    async function saveChanges() {
+        if (!contact || !isDirty) return;
+
+        setIsSaving(true);
+        setSaveError(null);
+        try {
+            const pendingKey = newCustomField.key.trim();
+            const fieldsToSave = pendingKey
+                ? { ...customFields, [pendingKey]: newCustomField.value }
+                : customFields;
+            const updated = await updateContact(contact.contactId, {
+                name,
+                subscribed,
+                customFields: fieldsToSave,
+            });
+            setContact(updated);
+            setName(updated.name ?? "");
+            setSubscribed(updated.subscribed);
+            setCustomFields(updated.customFields);
+            setNewCustomField({ key: "", value: "" });
+        } catch (err) {
+            setSaveError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to save contact changes",
+            );
+        } finally {
+            setIsSaving(false);
+        }
+    }
+
     if (error) return <Banner>{error}</Banner>;
     if (!contact)
         return <p className="text-sm text-muted-foreground">Loading…</p>;
@@ -76,20 +131,37 @@ export default function ContactDetailPage({
                     title={contact.name || contact.email}
                     description={contact.email}
                     action={
-                        <Button
-                            variant="destructive"
-                            onClick={async () => {
-                                await deleteContact(contact.contactId);
-                                router.push("/contacts");
-                            }}
-                        >
-                            <Trash2 className="size-4" />
-                            Delete
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                onClick={saveChanges}
+                                disabled={!isDirty || isSaving}
+                            >
+                                {isSaving ? "Saving…" : "Save changes"}
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={() => setDeleteConfirmationOpen(true)}
+                            >
+                                <Trash2 className="size-4" />
+                                Delete
+                            </Button>
+                        </div>
                     }
                 />
 
+                <DeleteConfirmationDialog
+                    open={deleteConfirmationOpen}
+                    onOpenChange={setDeleteConfirmationOpen}
+                    title="Delete contact?"
+                    description={`This will permanently delete ${contact.email} and its contact data. This action cannot be undone.`}
+                    onConfirm={async () => {
+                        await deleteContact(contact.contactId);
+                        router.push("/contacts");
+                    }}
+                />
+
                 <div className="space-y-6">
+                    {saveError && <Banner>{saveError}</Banner>}
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-base">Details</CardTitle>
@@ -99,33 +171,17 @@ export default function ContactDetailPage({
                                 <Label htmlFor="contact-name">Name</Label>
                                 <Input
                                     id="contact-name"
-                                    defaultValue={contact.name ?? ""}
-                                    onBlur={async (e) => {
-                                        setContact(
-                                            await updateContact(
-                                                contact.contactId,
-                                                {
-                                                    name: e.target.value,
-                                                },
-                                            ),
-                                        );
-                                    }}
+                                    value={name}
+                                    onChange={(event) =>
+                                        setName(event.target.value)
+                                    }
                                 />
                             </div>
                             <div className="flex items-center gap-3">
                                 <Switch
                                     id="contact-subscribed"
-                                    checked={contact.subscribed}
-                                    onCheckedChange={async (subscribed) => {
-                                        setContact(
-                                            await updateContact(
-                                                contact.contactId,
-                                                {
-                                                    subscribed,
-                                                },
-                                            ),
-                                        );
-                                    }}
+                                    checked={subscribed}
+                                    onCheckedChange={setSubscribed}
                                 />
                                 <Label htmlFor="contact-subscribed">
                                     Subscribed to broadcasts &amp; sequences
@@ -138,7 +194,7 @@ export default function ContactDetailPage({
                         <CardHeader>
                             <CardTitle className="text-base">Tags</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="space-y-2">
                             <TagEditor
                                 tags={contact.tags}
                                 onAdd={async (tag) =>
@@ -158,10 +214,18 @@ export default function ContactDetailPage({
                                     )
                                 }
                             />
+                            <p className="text-sm text-muted-foreground">
+                                Tag changes are saved immediately.
+                            </p>
                         </CardContent>
                     </Card>
 
-                    <CustomFieldsCard contact={contact} onUpdate={setContact} />
+                    <CustomFieldsCard
+                        customFields={customFields}
+                        onChange={setCustomFields}
+                        newField={newCustomField}
+                        onNewFieldChange={setNewCustomField}
+                    />
 
                     <Card>
                         <CardHeader>
@@ -212,35 +276,20 @@ export default function ContactDetailPage({
 }
 
 function CustomFieldsCard({
-    contact,
-    onUpdate,
+    customFields,
+    onChange,
+    newField,
+    onNewFieldChange,
 }: {
-    contact: Contact;
-    onUpdate: (c: Contact) => void;
+    customFields: Contact["customFields"];
+    onChange: (fields: Contact["customFields"]) => void;
+    newField: { key: string; value: string };
+    onNewFieldChange: (field: { key: string; value: string }) => void;
 }) {
-    const [newKey, setNewKey] = useState("");
-    const [newValue, setNewValue] = useState("");
-
-    async function save(fields: Contact["customFields"]) {
-        const updated = await updateContact(contact.contactId, {
-            customFields: fields,
-        });
-        onUpdate(updated);
-    }
-
-    async function addField() {
-        const key = newKey.trim();
-        const value = newValue.trim();
-        if (!key) return;
-        await save({ ...contact.customFields, [key]: value });
-        setNewKey("");
-        setNewValue("");
-    }
-
-    async function removeField(key: string) {
-        const next = { ...contact.customFields };
+    function removeField(key: string) {
+        const next = { ...customFields };
         delete next[key];
-        await save(next);
+        onChange(next);
     }
 
     return (
@@ -249,7 +298,7 @@ function CustomFieldsCard({
                 <CardTitle className="text-base">Custom fields</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-                {Object.entries(contact.customFields).map(([key, value]) => (
+                {Object.entries(customFields).map(([key, value]) => (
                     <div key={key} className="flex items-center gap-2">
                         <Input
                             className="w-40 shrink-0"
@@ -258,53 +307,49 @@ function CustomFieldsCard({
                         />
                         <Input
                             className="flex-1"
-                            defaultValue={
+                            value={
                                 Array.isArray(value)
                                     ? value.join(", ")
                                     : String(value)
                             }
-                            onBlur={async (e) => {
-                                const stringValue = Array.isArray(value)
-                                    ? value.join(", ")
-                                    : String(value);
-                                if (e.target.value === stringValue) return;
-                                await save({
-                                    ...contact.customFields,
-                                    [key]: e.target.value,
-                                });
-                            }}
+                            onChange={(event) =>
+                                onChange({
+                                    ...customFields,
+                                    [key]: event.target.value,
+                                })
+                            }
                         />
-                        <Button
-                            variant="ghost"
-                            size="icon"
+                        <IconButton
+                            aria-label={`Remove ${key} field`}
                             onClick={() => removeField(key)}
                         >
                             <X className="size-4" />
-                        </Button>
+                        </IconButton>
                     </div>
                 ))}
                 <div className="flex items-center gap-2">
                     <Input
                         className="w-40 shrink-0"
                         placeholder="Key"
-                        value={newKey}
-                        onChange={(e) => setNewKey(e.target.value)}
+                        value={newField.key}
+                        onChange={(event) =>
+                            onNewFieldChange({
+                                ...newField,
+                                key: event.target.value,
+                            })
+                        }
                     />
                     <Input
                         className="flex-1"
                         placeholder="Value"
-                        value={newValue}
-                        onChange={(e) => setNewValue(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && addField()}
+                        value={newField.value}
+                        onChange={(event) =>
+                            onNewFieldChange({
+                                ...newField,
+                                value: event.target.value,
+                            })
+                        }
                     />
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={addField}
-                        disabled={!newKey.trim()}
-                    >
-                        <Plus className="size-4" />
-                    </Button>
                 </div>
             </CardContent>
         </Card>

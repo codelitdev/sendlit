@@ -92,6 +92,13 @@ export const sendEmailResponseSchema = transactionalEmailSchema.pick({
     status: true,
 });
 
+/** A template's unguarded Liquid merge tags were not all provided in the
+ * request's `variables`. No transactional record is created or queued. */
+export const missingTemplateVariablesErrorSchema = z.object({
+    error: z.literal("missing_template_variables"),
+    missingVariables: z.array(z.string()).min(1),
+});
+
 export const listTransactionalEmailsQuerySchema = z.object({
     status: z.enum(transactionalEmailStatus).optional(),
     createdAfter: z.coerce

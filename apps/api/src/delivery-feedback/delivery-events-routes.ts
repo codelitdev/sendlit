@@ -13,8 +13,7 @@ import {
 import { getOutboundMessagesByIds } from "./outbound-queries";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use("/delivery-events", requireAuth, requireTeam);
 
 const s = initServer();
 

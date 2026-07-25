@@ -13,8 +13,7 @@ import {
 } from "./suppression-queries";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use("/suppressions", requireAuth, requireTeam);
 
 const s = initServer();
 

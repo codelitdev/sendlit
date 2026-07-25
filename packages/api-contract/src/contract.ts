@@ -10,8 +10,13 @@ import {
 } from "./schemas/contacts";
 import {
     createTemplateBodySchema,
+    duplicateTemplateBodySchema,
     emailTemplateSchema,
+    listTemplatesQuerySchema,
     systemTemplateSchema,
+    templateNotMarketingErrorSchema,
+    templateNotTransactionalErrorSchema,
+    templateValidationErrorSchema,
     updateTemplateBodySchema,
 } from "./schemas/templates";
 import {
@@ -60,12 +65,13 @@ import {
 } from "./schemas/media";
 import {
     listTransactionalEmailsQuerySchema,
+    missingTemplateVariablesErrorSchema,
     sendEmailBodySchema,
     sendEmailResponseSchema,
     transactionalEmailDetailSchema,
     transactionalEmailSchema,
 } from "./schemas/transactional";
-import { overviewSchema } from "./schemas/overview";
+import { overviewQuerySchema, overviewSchema } from "./schemas/overview";
 import {
     feedbackConnectionSchema,
     testFeedbackConnectionResponseSchema,
@@ -272,28 +278,41 @@ const templatesContract = c.router(
         listSystem: {
             method: "GET",
             path: "/system-templates",
+            query: listTemplatesQuerySchema,
             responses: { 200: itemsList(systemTemplateSchema) },
             summary: "List built-in starting templates",
             description:
-                "Not team-scoped \u2014 the same for every team. Offered alongside a team's own templates when creating a template, broadcast, sequence, or adding an email to a sequence.",
+                "Not team-scoped—the same for every team. Filter by purpose. System templates are starters and must be duplicated into a team-owned template before transactional sending.",
         },
         create: {
             method: "POST",
             path: "/templates",
             body: createTemplateBodySchema,
-            responses: { 201: emailTemplateSchema },
+            responses: {
+                201: emailTemplateSchema,
+                422: templateValidationErrorSchema,
+            },
             summary: "Create an email template",
+            description:
+                "Purpose is immutable. Marketing content must contain exactly one final managed footer; transactional content must not contain a footer or marketing-only variables.",
         },
         list: {
             method: "GET",
             path: "/templates",
+            query: listTemplatesQuerySchema,
             responses: { 200: c.type<z.infer<typeof emailTemplateSchema>[]>() },
             summary: "List email templates",
+            description:
+                "Returns team-owned templates with their immutable purpose and server-computed requiredVariables. Optionally filter by purpose.",
         },
         get: {
             method: "GET",
             path: "/templates/:templateId",
-            responses: { 200: emailTemplateSchema, 404: errorSchema },
+            responses: {
+                200: emailTemplateSchema,
+                404: errorSchema,
+                422: templateValidationErrorSchema,
+            },
             summary: "Get an email template",
         },
         update: {
@@ -304,8 +323,22 @@ const templatesContract = c.router(
                 200: emailTemplateSchema,
                 404: errorSchema,
                 409: errorSchema,
+                422: templateValidationErrorSchema,
             },
             summary: "Update an email template",
+        },
+        duplicate: {
+            method: "POST",
+            path: "/templates/:templateId/duplicate",
+            body: duplicateTemplateBodySchema,
+            responses: {
+                201: emailTemplateSchema,
+                404: errorSchema,
+                422: templateValidationErrorSchema,
+            },
+            summary: "Duplicate an email template",
+            description:
+                "Creates a new team-owned copy with the same immutable purpose as the source template.",
         },
         remove: {
             method: "DELETE",
@@ -323,8 +356,14 @@ const sequencesContract = c.router(
             method: "POST",
             path: "/sequences",
             body: createSequenceBodySchema,
-            responses: { 201: sequenceSchema, 400: errorSchema },
+            responses: {
+                201: sequenceSchema,
+                400: errorSchema,
+                422: templateNotMarketingErrorSchema,
+            },
             summary: "Create a broadcast or a sequence",
+            description:
+                "templateId must identify a marketing team template or marketing system starter. Transactional templates return 422 template_not_marketing.",
         },
         list: {
             method: "GET",
@@ -364,8 +403,11 @@ const sequencesContract = c.router(
                 201: sequenceSchema,
                 400: errorSchema,
                 404: errorSchema,
+                422: templateNotMarketingErrorSchema,
             },
             summary: "Add an email to a sequence",
+            description:
+                "templateId must identify a marketing template; transactional templates return 422 template_not_marketing.",
         },
         updateEmail: {
             method: "PATCH",
@@ -375,8 +417,11 @@ const sequencesContract = c.router(
                 200: sequenceSchema,
                 400: errorSchema,
                 404: errorSchema,
+                422: templateNotMarketingErrorSchema,
             },
             summary: "Update an email within a sequence",
+            description:
+                "When templateId is supplied, it must identify a marketing template; transactional templates return 422 template_not_marketing.",
         },
         removeEmail: {
             method: "DELETE",
@@ -398,6 +443,8 @@ const sequencesContract = c.router(
                 422: errorSchema,
             },
             summary: "Start a broadcast or activate a sequence",
+            description:
+                "Requires a non-empty mailing address in the team's general settings.",
         },
         pause: {
             method: "POST",
@@ -440,10 +487,16 @@ const transactionalContract = c.router(
             responses: {
                 202: sendEmailResponseSchema,
                 400: errorSchema,
-                422: errorSchema,
+                422: z.union([
+                    missingTemplateVariablesErrorSchema,
+                    templateNotTransactionalErrorSchema,
+                    errorSchema,
+                ]),
                 429: errorSchema,
             },
             summary: "Send a transactional email",
+            description:
+                "Requires a non-empty mailing address in the team's general settings. `templateId` must identify a team-owned transactional template; marketing templates return 422 template_not_transactional. Unguarded Liquid variables must be supplied in `variables`, or the API returns 422 missing_template_variables without creating a row or queue job. Inline `html` is sent verbatim without Liquid rendering. address, unsubscribe_link, and subscriber are marketing-only server-owned values and are unavailable to transactional templates.",
         },
         get: {
             method: "GET",
@@ -507,11 +560,12 @@ const espSettingsContract = c.router(
             responses: {
                 200: testEspConfigResponseSchema,
                 400: errorSchema,
+                422: errorSchema,
                 502: testEspConfigResponseSchema,
             },
             summary: "Send a test email through the team's configured ESP",
             description:
-                "Sends to the given address, or the current user's own email if omitted. Always attempts real delivery.",
+                "Sends to the given address, or the current user's own email if omitted. Always attempts real delivery. Requires a non-empty mailing address in the team's general settings.",
         },
     },
     { metadata: { tag: "Settings" } },
@@ -562,10 +616,13 @@ const espCollectionContract = c.router(
             responses: {
                 200: testEspConfigResponseSchema,
                 400: errorSchema,
+                422: errorSchema,
                 404: errorSchema,
                 502: testEspConfigResponseSchema,
             },
             summary: "Send a test email through a user-managed ESP",
+            description:
+                "Requires a non-empty mailing address in the team's general settings.",
         },
     },
     { metadata: { tag: "Settings" } },
@@ -681,8 +738,11 @@ const overviewContract = c.router(
         get: {
             method: "GET",
             path: "/overview",
+            query: overviewQuerySchema,
             responses: { 200: overviewSchema },
-            summary: "Get team overview metrics",
+            summary: "Get team overview metrics for a delivery activity window",
+            description:
+                "Use `rangeDays` (1, 3, 7, or 30; default 7) to filter transactional delivery activity and scheduled broadcasts.",
         },
     },
     { metadata: { tag: "Overview" } },

@@ -4,6 +4,7 @@ const sendMailMock = vi.fn();
 const getTeamTransportMock = vi.fn();
 const captureErrorMock = vi.fn();
 const captureEventMock = vi.fn();
+const assertMailingAddressConfiguredMock = vi.fn();
 
 vi.mock("./transport", () => ({
     getTeamTransport: getTeamTransportMock,
@@ -20,11 +21,37 @@ vi.mock("../services/log", () => ({
     },
 }));
 
+vi.mock("../settings/general/queries", () => ({
+    assertMailingAddressConfigured: assertMailingAddressConfiguredMock,
+}));
+
 describe("sendMail", () => {
     beforeEach(() => {
         vi.resetModules();
         vi.clearAllMocks();
         process.env.NODE_ENV = "production";
+        assertMailingAddressConfiguredMock.mockResolvedValue(undefined);
+    });
+
+    it("does not send when the team has no mailing address", async () => {
+        assertMailingAddressConfiguredMock.mockRejectedValueOnce(
+            new Error("mailing_address_required"),
+        );
+        getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
+        const { sendMail } = await import("./send.js");
+
+        await expect(
+            sendMail({
+                from: "Sender <sender@example.com>",
+                to: "contact@example.com",
+                subject: "Hello",
+                html: "<p>Hello</p>",
+                teamId: "team-1",
+            }),
+        ).rejects.toThrow("mailing_address_required");
+
+        expect(getTeamTransportMock).not.toHaveBeenCalled();
+        expect(sendMailMock).not.toHaveBeenCalled();
     });
 
     it("fails clearly when a team has no ESP configured", async () => {

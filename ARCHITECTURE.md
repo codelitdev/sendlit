@@ -59,7 +59,13 @@ to port.
 `accounts`, `teams`, `team_members`, `oauth_clients`, `oauth_pending_auth`,
 `oauth_revoked_tokens`, `api_keys`, `esp_configs`, `contacts`, `email_templates`,
 `sequences`, `sequence_emails`, `rules`, `ongoing_sequences`, `email_deliveries`,
-`email_events`.
+`email_events`, `transactional_emails`.
+
+`email_templates.purpose` is constrained to `marketing | transactional`.
+Marketing template content contains one final managed `footer` block;
+transactional content cannot contain that block or marketing-owned Liquid
+variables. See
+`apps/api/docs/transactional-vs-marketing-templates.md`.
 
 Every table above except `accounts`/`team_members` (account-scoped) and the
 OAuth bookkeeping tables (client-scoped) carries a `team_id`, not `account_id`
@@ -263,45 +269,31 @@ API key and confirmed it returned only that key's team's contact. Both
 `apps/api` (`tsc --noEmit`) and `apps/web` (`tsc --noEmit` + `next build`)
 compile clean.
 
-Gap fix (post-Phase-5) — **done**: **system/starter templates**. CourseLit
-offers four themed starting templates (Announcement, New user welcome,
-Upsell products, Newsletter) plus a Blank one, selectable alongside a user's
-own templates whenever creating a template, broadcast, or sequence, or
-adding an email to a sequence (`apps/web/.../mails/new/new-mail-page-client.tsx`,
-CourseLit's `getSystemEmailTemplates`). This had not been ported — SendLit's
-equivalent flows only ever offered a blank canvas (new template) or required
-an existing saved template (new broadcast/sequence/sequence-email), with no
-way to start from a themed default. Fixed:
+Gap fix (post-Phase-5) — **done**: **purpose-aware system/starter templates**.
+SendLit exposes five marketing starters and nine footer-free transactional
+starters as static, in-code data in
+`apps/api/src/templates/system-templates.ts`.
 
-- `apps/api/src/templates/system-templates.ts`: the same five templates as
-  static, in-code data (`SYSTEM_TEMPLATES`) rather than files read off disk
-  per-request like CourseLit — they never vary per deployment, so there's no
-  need for filesystem I/O at request time.
-- `templates/queries.ts`'s new `resolveStartingTemplate(teamId, templateId)`
-  checks the system list first, then falls back to a team's own saved
-  template — used by `sequences/queries.ts`'s `createSequence` and
-  `addMailToSequence` (and therefore both the REST and MCP surfaces, and both
-  broadcasts and sequences, for free) instead of requiring a real DB row.
-  A system template id can be passed anywhere a `templateId` is accepted.
-- `GET /system-templates` (not team-scoped — identical for every team) +
-  the `list_system_templates` MCP tool.
-- `packages/email-blocks`'s new `TemplateChooser` component — a single,
-  reusable "pick a system template or one of your own" grid, wired into all
-  three call sites: the templates page's "New template" dialog, the broadcast/
-  sequence creation dialog, and the sequence editor's "add email" dialog.
-
-Validated end-to-end: listed all five system templates via the API;
-created a broadcast directly from `system:newsletter` and confirmed the
-full themed content (not just the title) was seeded onto its first email;
-created a sequence from `system:blank` and added a second email from
-`system:welcome`, confirming both are independently seeded correctly; confirmed
-an unknown template id still 400s (`item_not_found`) exactly as before. Also
-found and fixed a latent bug from the Phase 5 migration while in this area:
-`packages/email-blocks/src/types.ts`'s `Contact`/`EmailTemplate`/`Sequence`
-types still declared a stale `accountId` field (should have been renamed to
-`teamId` along with everything else) — harmless at runtime since nothing read
-it, but incorrect; renamed. `apps/api`, `packages/email-blocks`, and
-`apps/web` all typecheck and build clean.
+- `GET /system-templates?purpose=marketing|transactional` and the
+  `list_system_templates` MCP tool expose the catalog, computed
+  `requiredVariables`, and curated transactional `variableDefinitions`.
+- `resolveStartingTemplate(teamId, templateId, purpose)` enforces the sending
+  context. Broadcast/sequence creation and add-email request `marketing`;
+  a transactional mismatch returns `template_not_marketing`.
+- System transactional templates are starters rather than directly sendable
+  dependencies. `POST /templates/:templateId/duplicate` creates a team-owned
+  `tpl_` template before `POST /emails` can use it.
+- `packages/email-blocks`'s `TemplateChooser` requires a purpose and filters
+  incompatible system and team templates defensively at the component
+  boundary.
+- Purpose is immutable. Safe duplication owns conversion, media-reference
+  reconciliation, and analytics. Marketing-to-transactional conversion
+  removes the managed footer but atomically rejects remaining marketing
+  variables; transactional-to-marketing appends the footer.
+- The SendLit footer is a shared add-on at
+  `@sendlit/email-blocks/footer`, consumed by both Web preview/editing and API
+  rendering. `@sendlit/email-editor` remains a generic independently hostable
+  editor and exposes only generic block capabilities and render context.
 
 Gap fix (post-Phase-5) — **done**: **migrated the REST API from Express +
 `swagger-autogen` to a `ts-rest` contract**. The original complaint ("payload
@@ -476,6 +468,94 @@ Next.js's dynamic route segment). Validated: `packages/email-editor` and
 `packages/email-blocks` typecheck and build clean, and `apps/web` typechecks
 and builds clean under Turbopack.
 
+Gap fix (post-Phase-5) — **done**: **adopted `@codelitdev/design-system`**,
+a shared token/component library across CodeLit's four products (CourseLit,
+MediaLit, SendLit, FrontLit), replacing `apps/web`'s stock shadcn palette.
+Two independent integration layers, added in sequence:
+
+- **Token layer (CSS only).** `app/globals.css` imports
+  `@codelitdev/design-system/styles.css` first (its own `@import` chain
+  includes a Google Fonts `url()` for Hanken Grotesk/Spline Sans Mono, which
+  CSS requires to precede all other rules) and remaps the shadcn `--color-*`
+  `@theme inline` keys onto the design system's raw tokens
+  (`--color-primary: var(--primary)`, etc.) so every existing shadcn
+  component picks up the new palette with no code changes. Product identity
+  is set once, `<html data-product="sendlit">` in `app/layout.tsx` — omit it
+  for CodeLit's default amber, or swap to `courselit`/`medialit`/`frontlit`
+  for the other three products' accents. Sidebar tokens
+  (`--sidebar-primary`, etc.), which the design system doesn't ship, are
+  hand-aliased in `globals.css` onto the shipped ones (`var(--card)`,
+  `var(--primary)`, ...).
+- **Component layer (shadcn registry, partial).** The design system also
+  publishes a shadcn registry (`registry.json` in its own repo, served as
+  static JSON from `public/r/*.json` over GitHub raw URLs — no npm
+  publish/version bump needed to update it) of 15 components restyled to its
+  spec. `apps/web` has adopted 4 so far — `Button`, `IconButton`, `Badge`,
+  `Card`, fetched into `components/ui/codelit/*.tsx` — replacing the stock
+  shadcn `Button` outright (deleted) across all 18 call sites, including
+  inside shadcn's own composite primitives (`dialog.tsx`, `sheet.tsx`,
+  `alert-dialog.tsx`, `sidebar.tsx`, which only needed their internal
+  `Button` import repointed, not a rewrite). `Input`, `Select`, `Tabs`,
+  `Textarea`, and `DropdownMenu` are still the stock shadcn versions —
+  registry equivalents exist for the first four; `DropdownMenu` doesn't have
+  one yet.
+
+The package itself started as a local `workspace:*` dependency
+(`packages/design-system`) and was extracted to its own repo
+(`github.com/codelitdev/design-system`) once CourseLit/MediaLit/FrontLit
+needed to consume it too; `apps/web` now pins an exact published version
+(`@codelitdev/design-system`, currently `0.1.0-alpha.2` — deliberately
+pinned rather than a range, since a first npm publish always sets the
+`latest` dist-tag regardless of `--tag`, so `latest` still points at the
+very first `0.1.0-alpha.0` and would resolve to a stale/buggy version on a
+bare install).
+
+This pass found and fixed two real bugs, both structural rather than
+cosmetic:
+
+- **The amber-avatar bug.** `data-product` was originally placed on
+  `<body>`. `--sidebar-primary: var(--primary)` is declared on `:root`
+  (`<html>`) in `globals.css`; a CSS custom property's `var()` reference
+  resolves at the element the declaration applies to, not at the element
+  where it's read — so with the override one level down on `<body>`, every
+  `:root`-declared alias like `--sidebar-primary` stayed frozen at the base
+  CodeLit amber while direct `bg-primary` utilities correctly turned green,
+  producing a confusing split (green buttons, amber sidebar avatar). Fixed
+  by moving `data-product` to `<html>`, the same element the aliases are
+  declared on.
+- **The `rounded-lg` / `--radius-lg` collision.** Tailwind ships its own
+  built-in `--radius-lg` default, which stock shadcn templates (`Button`
+  originally, and still `Input`/`Select`/`Tabs`/`Textarea`/`DropdownMenu`/
+  parts of `Sidebar`) reference via the generic `rounded-lg` utility for
+  ordinary controls. The design system repurposes that exact variable name
+  for something narrower: `--radius-lg: 16px; /* cards, dialogs */`,
+  declared plainly (unlayered) in its own `:root`. Per the CSS cascade,
+  unlayered rules always beat layered ones regardless of specificity or
+  source order, and Tailwind's own defaults live inside an internal
+  `@layer` — so the design system's card-radius value silently wins
+  everywhere `rounded-lg` is used, not just on cards, making every
+  unmigrated control render 6px more rounded than intended. `apps/web`
+  writes no competing override itself (`globals.css` explicitly defers to
+  the design system's unlayered token — see the comment above
+  `--radius-md`). The fix is per-component: the registry's `Button`
+  references `rounded-[var(--radius)]` (10px, the correct control radius)
+  directly instead of the generic utility, sidestepping the name collision;
+  the same fix needs to land for the remaining unmigrated components.
+
+A third bug — the design system's `typography.css` set
+`text-decoration: underline` on hover for _every_ bare `<a>`/framework
+`<Link>`, globally, breaking nav items and clickable cards app-wide — was a
+defect in the design system itself, not the integration, and was fixed
+upstream (`@codelitdev/design-system@0.1.0-alpha.2`, replacing the blanket
+rule with an opt-in `.cl-link` class) rather than worked around here.
+
+Validated: `apps/web` (`tsc --noEmit` + `next build`, all 23 routes) and all
+28 `vitest` tests pass after each change; the compiled CSS output was
+inspected directly (not just the source) to confirm the buggy global
+`a`/`a:hover` rule is absent post-upgrade and `rounded-[var(--radius)]` is
+present; computed styles were checked in a live logged-in session to confirm
+the sidebar avatar and primary buttons resolve to the identical green.
+
 Phase 6 — **not started, follow-up work**:
 
 - [ ] Richer segmentation (signed-up date ranges, last-active) and team-wide
@@ -490,6 +570,13 @@ Phase 6 — **not started, follow-up work**:
 - [ ] Native API-based sending (SendGrid/Mailgun/SES SDKs) as an alternative to
       SMTP, if a customer's provider doesn't expose an SMTP relay or higher
       throughput than SMTP allows is needed
+- [ ] Finish the `@codelitdev/design-system` component migration: `Input`,
+      `Select`, `Tabs`, `Textarea` already have restyled equivalents in the
+      design system's shadcn registry, just not yet fetched into
+      `components/ui/codelit/` here, so they're still on stock shadcn and
+      carry the `rounded-lg`/`--radius-lg` collision described above;
+      `DropdownMenu` and the rest of `Sidebar`'s own `rounded-lg` usages need
+      a registry component that doesn't exist yet
 
 ## Environment variables (`apps/api`)
 

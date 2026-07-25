@@ -3,19 +3,19 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { Check, Pause, Pencil, Play } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/codelit/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+} from "@/components/ui/codelit/select";
+import { Switch } from "@/components/ui/codelit/switch";
 import { Banner } from "@/components/dashboard/banner";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { EspPicker } from "@/components/dashboard/esp-picker";
@@ -49,6 +49,14 @@ import {
 } from "@sendlit/email-blocks";
 import { sequenceStatsMetrics } from "@/lib/stats";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { MARKETING_EMAIL_EDITOR_BLOCKS } from "@/components/dashboard/email-editor-screen";
+
+const MARKETING_PREVIEW_CONTEXT = {
+    footer: {
+        mailingAddress: "Your workspace mailing address",
+        unsubscribeUrl: "#unsubscribe-preview",
+    },
+};
 
 interface SequenceMeta {
     title: string;
@@ -155,7 +163,11 @@ export default function SequenceEditorPage({
 
     useEffect(() => {
         setTemplatesLoading(true);
-        Promise.all([listSystemTemplates(), listTemplates(), listEsps()])
+        Promise.all([
+            listSystemTemplates("marketing"),
+            listTemplates("marketing"),
+            listEsps(),
+        ])
             .then(([system, own, espResult]) => {
                 setSystemTemplates(system);
                 setTemplates(own);
@@ -396,6 +408,8 @@ export default function SequenceEditorPage({
                             systemTemplates={systemTemplates}
                             templates={templates}
                             templatesLoading={templatesLoading}
+                            previewBlocks={MARKETING_EMAIL_EDITOR_BLOCKS}
+                            previewRenderContext={MARKETING_PREVIEW_CONTEXT}
                         />
                     </div>
 
@@ -571,6 +585,12 @@ export default function SequenceEditorPage({
                                         <EmailPreview
                                             content={emailDraft.content}
                                             minHeight="420px"
+                                            blocks={
+                                                MARKETING_EMAIL_EDITOR_BLOCKS
+                                            }
+                                            renderContext={
+                                                MARKETING_PREVIEW_CONTEXT
+                                            }
                                         />
                                     </div>
                                 </CardContent>

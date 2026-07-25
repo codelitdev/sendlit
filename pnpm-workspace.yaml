@@ -10,5 +10,8 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
+minimumReleaseAgeExclude:
+  - '@codelitdev/design-system@0.1.0-alpha.0 || 0.1.0-alpha.2'
+
 overrides:
   "@types/node": ^22.14.1

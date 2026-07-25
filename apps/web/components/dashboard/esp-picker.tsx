@@ -6,7 +6,7 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/codelit/select";
 import type { EspConfig } from "@/lib/api";
 
 /** Sentinel for "use the team's default ESP" — `Select` can't carry a real

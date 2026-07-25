@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/codelit/button";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
 import { Badge } from "@/components/ui/badge";
 import {
     Card,
@@ -20,9 +20,10 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/codelit/dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -171,6 +172,11 @@ function TeamCard({
     const [newKey, setNewKey] = useState<string | null>(null);
     const [newKeyName, setNewKeyName] = useState("");
     const [error, setError] = useState<string | null>(null);
+    const [keyPendingDelete, setKeyPendingDelete] = useState<ApiKey | null>(
+        null,
+    );
+    const [teamDeleteConfirmationOpen, setTeamDeleteConfirmationOpen] =
+        useState(false);
 
     async function loadKeys() {
         try {
@@ -222,13 +228,6 @@ function TeamCard({
     }
 
     async function removeTeam() {
-        if (
-            !confirm(
-                `Delete "${team.name}"? This deletes everything scoped to it — contacts, templates, broadcasts, sequences.`,
-            )
-        ) {
-            return;
-        }
         try {
             await deleteTeam(team.teamId);
             onChanged();
@@ -336,7 +335,9 @@ function TeamCard({
                                     variant="ghost"
                                     size="sm"
                                     className="shrink-0 text-destructive"
-                                    onClick={() => removeKey(k.id)}
+                                    onClick={() => setKeyPendingDelete(k)}
+                                    aria-label={`Delete ${k.name || "API key"}`}
+                                    title="Delete API key"
                                 >
                                     <Trash2 className="size-4" />
                                 </Button>
@@ -366,12 +367,33 @@ function TeamCard({
                     variant="ghost"
                     size="sm"
                     className="text-destructive"
-                    onClick={removeTeam}
+                    onClick={() => setTeamDeleteConfirmationOpen(true)}
                 >
                     <Trash2 className="size-4" />
                     Delete team
                 </Button>
             </CardFooter>
+            <DeleteConfirmationDialog
+                open={keyPendingDelete !== null}
+                onOpenChange={(open) => {
+                    if (!open) setKeyPendingDelete(null);
+                }}
+                title="Delete API key?"
+                description={`This will permanently revoke ${keyPendingDelete?.name || "this API key"}. Any integration using it will stop working.`}
+                confirmLabel="Delete key"
+                onConfirm={async () => {
+                    if (!keyPendingDelete) return;
+                    await removeKey(keyPendingDelete.id);
+                }}
+            />
+            <DeleteConfirmationDialog
+                open={teamDeleteConfirmationOpen}
+                onOpenChange={setTeamDeleteConfirmationOpen}
+                title="Delete team?"
+                description={`This will permanently delete ${team.name} and all of its contacts, templates, broadcasts, sequences, ESP configuration, and API keys. This action cannot be undone.`}
+                confirmLabel="Delete team"
+                onConfirm={removeTeam}
+            />
         </Card>
     );
 }

@@ -9,7 +9,7 @@ export const responses = {
     mail_already_sent: "This broadcast has already been sent",
     cannot_delete_last_email: "Cannot delete the last email in a sequence",
     mandatory_tags_missing:
-        "The email content must include both the {{unsubscribe_link}} and {{address}} merge tags",
+        "Marketing email content must contain exactly one final managed footer",
     duplicate_title: "An item with this title already exists",
 };
 

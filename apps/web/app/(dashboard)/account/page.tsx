@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bell, CreditCard, Sparkles, UserRound } from "lucide-react";
+import { CreditCard, Sparkles, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { Button } from "@/components/ui/codelit/button";
 import {
     Card,
     CardContent,
@@ -12,9 +13,16 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/codelit/input";
+import { Label } from "@/components/ui/codelit/label";
+import {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+} from "@/components/ui/codelit/tabs";
 
-const ACCOUNT_TABS = ["general", "billing", "notifications"] as const;
+const ACCOUNT_TABS = ["general", "billing"] as const;
 type AccountTab = (typeof ACCOUNT_TABS)[number];
 
 interface Account {
@@ -32,6 +40,21 @@ export default function AccountPage() {
     const tabParam = searchParams.get("tab");
     const selectedTab = isAccountTab(tabParam) ? tabParam : "general";
     const [account, setAccount] = useState<Account | null>(null);
+    const [name, setName] = useState("");
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
+    const [profileError, setProfileError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (tabParam !== "notifications") return;
+
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete("tab");
+        const query = params.toString();
+        router.replace(`/account${query ? `?${query}` : ""}`, {
+            scroll: false,
+        });
+    }, [router, searchParams, tabParam]);
 
     useEffect(() => {
         fetch("/api/auth/get-session", { cache: "no-store" })
@@ -40,8 +63,46 @@ export default function AccountPage() {
                 const session = (await response.json()) as { user?: Account };
                 return session.user ?? null;
             })
-            .then(setAccount);
+            .then((user) => {
+                setAccount(user);
+                setName(user?.name ?? "");
+            });
     }, []);
+
+    async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        const trimmedName = name.trim();
+
+        if (!trimmedName) {
+            setProfileError("Enter your name to continue.");
+            return;
+        }
+
+        setIsSavingProfile(true);
+        setProfileError(null);
+
+        try {
+            const response = await fetch("/api/auth/update-user", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ name: trimmedName }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Unable to update your profile.");
+            }
+
+            setAccount((current) =>
+                current ? { ...current, name: trimmedName } : current,
+            );
+            setName(trimmedName);
+            setIsEditingProfile(false);
+        } catch {
+            setProfileError("Unable to update your profile. Please try again.");
+        } finally {
+            setIsSavingProfile(false);
+        }
+    }
 
     function selectTab(tab: string) {
         const params = new URLSearchParams(searchParams.toString());
@@ -61,7 +122,7 @@ export default function AccountPage() {
             <div className="max-w-3xl">
                 <PageHeader
                     title="Account"
-                    description="Manage your profile, plan, billing, and account notifications."
+                    description="Manage your profile, plan, and billing."
                 />
 
                 <Tabs
@@ -72,9 +133,6 @@ export default function AccountPage() {
                     <TabsList>
                         <TabsTrigger value="general">General</TabsTrigger>
                         <TabsTrigger value="billing">Billing</TabsTrigger>
-                        <TabsTrigger value="notifications">
-                            Notifications
-                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="general">
@@ -85,19 +143,91 @@ export default function AccountPage() {
                                     Profile
                                 </CardTitle>
                                 <CardDescription>
-                                    Your account identity is managed through
-                                    your sign-in provider.
+                                    Update the name shown in SendLit. Email
+                                    changes require verification and are not
+                                    available yet.
                                 </CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3 text-sm">
-                                <div>
-                                    <p className="text-muted-foreground">
-                                        Name
-                                    </p>
-                                    <p className="font-medium">
-                                        {account?.name || "Not provided"}
-                                    </p>
-                                </div>
+                            <CardContent className="space-y-4 text-sm">
+                                {isEditingProfile ? (
+                                    <form
+                                        className="space-y-4"
+                                        onSubmit={saveProfile}
+                                    >
+                                        <div className="space-y-2">
+                                            <Label htmlFor="profile-name">
+                                                Name
+                                            </Label>
+                                            <Input
+                                                id="profile-name"
+                                                value={name}
+                                                onChange={(event) =>
+                                                    setName(event.target.value)
+                                                }
+                                                autoComplete="name"
+                                                disabled={isSavingProfile}
+                                                aria-invalid={Boolean(
+                                                    profileError,
+                                                )}
+                                            />
+                                        </div>
+                                        {profileError && (
+                                            <p
+                                                className="text-destructive"
+                                                role="alert"
+                                            >
+                                                {profileError}
+                                            </p>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <Button
+                                                type="submit"
+                                                disabled={isSavingProfile}
+                                            >
+                                                {isSavingProfile
+                                                    ? "Saving…"
+                                                    : "Save changes"}
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                disabled={isSavingProfile}
+                                                onClick={() => {
+                                                    setName(
+                                                        account?.name ?? "",
+                                                    );
+                                                    setProfileError(null);
+                                                    setIsEditingProfile(false);
+                                                }}
+                                            >
+                                                Cancel
+                                            </Button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <p className="text-muted-foreground">
+                                                Name
+                                            </p>
+                                            <p className="font-medium">
+                                                {account?.name ||
+                                                    "Not provided"}
+                                            </p>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => {
+                                                setName(account?.name ?? "");
+                                                setProfileError(null);
+                                                setIsEditingProfile(true);
+                                            }}
+                                        >
+                                            Edit profile
+                                        </Button>
+                                    </>
+                                )}
                                 <div>
                                     <p className="text-muted-foreground">
                                         Email
@@ -131,24 +261,6 @@ export default function AccountPage() {
                                         subscriptions are available.
                                     </p>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-
-                    <TabsContent value="notifications">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                    <Bell className="size-4" />
-                                    Notifications
-                                </CardTitle>
-                                <CardDescription>
-                                    Choose how SendLit communicates about your
-                                    account and billing.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="text-sm text-muted-foreground">
-                                Notification preferences are not configured yet.
                             </CardContent>
                         </Card>
                     </TabsContent>

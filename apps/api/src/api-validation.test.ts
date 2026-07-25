@@ -8,6 +8,8 @@ import {
 } from "../../../packages/api-contract/src/schemas/contacts";
 import {
     createTemplateBodySchema,
+    duplicateTemplateBodySchema,
+    listTemplatesQuerySchema,
     updateTemplateBodySchema,
 } from "../../../packages/api-contract/src/schemas/templates";
 import {
@@ -214,6 +216,43 @@ describe("API input validation schemas", () => {
                 content: defaultEmail,
             }).success,
         ).toBe(true);
+        expect(
+            createTemplateBodySchema.parse({
+                title: "Compatibility default",
+                content: defaultEmail,
+            }).purpose,
+        ).toBe("marketing");
+        expect(
+            createTemplateBodySchema.safeParse({
+                title: "Receipt",
+                purpose: "transactional",
+                content: defaultEmail,
+            }).success,
+        ).toBe(true);
+        expect(
+            createTemplateBodySchema.safeParse({
+                title: "Invalid",
+                purpose: "bulk",
+                content: defaultEmail,
+            }).success,
+        ).toBe(false);
+        expect(
+            listTemplatesQuerySchema.safeParse({ purpose: "transactional" })
+                .success,
+        ).toBe(true);
+        expect(
+            listTemplatesQuerySchema.safeParse({ purpose: "bulk" }).success,
+        ).toBe(false);
+        expect(
+            duplicateTemplateBodySchema.safeParse({
+                purpose: "marketing",
+            }).success,
+        ).toBe(true);
+        expect(
+            updateTemplateBodySchema.parse({
+                purpose: "transactional",
+            } as any),
+        ).not.toHaveProperty("purpose");
     });
 
     it("validates sequence type, filters, email actions, and pagination", () => {
@@ -484,5 +523,54 @@ describe("OpenAPI authentication metadata", () => {
             openApiDocument.paths["/suppressions/{suppressionId}/release"]
                 ?.post,
         ).toBeTruthy();
+    });
+
+    it("documents template purposes, required variables, and mismatch responses", () => {
+        const createTemplate = openApiDocument.paths["/templates"]?.post as any;
+        const listTemplates = openApiDocument.paths["/templates"]?.get as any;
+        const duplicateTemplate = openApiDocument.paths[
+            "/templates/{templateId}/duplicate"
+        ]?.post as any;
+        const sendEmail = openApiDocument.paths["/emails"]?.post as any;
+        const createSequence = openApiDocument.paths["/sequences"]?.post as any;
+        const updateSequenceEmail = openApiDocument.paths[
+            "/sequences/{sequenceId}/emails/{emailId}"
+        ]?.patch as any;
+
+        expect(
+            createTemplate.requestBody.content["application/json"].schema
+                .properties.purpose.enum,
+        ).toEqual(["marketing", "transactional"]);
+        expect(
+            createTemplate.responses[201].content["application/json"].schema
+                .properties.requiredVariables,
+        ).toMatchObject({ type: "array" });
+        expect(listTemplates.parameters).toContainEqual(
+            expect.objectContaining({
+                name: "purpose",
+                schema: expect.objectContaining({
+                    enum: ["marketing", "transactional"],
+                }),
+            }),
+        );
+        expect(duplicateTemplate.responses[422]).toBeTruthy();
+
+        const send422 = JSON.stringify(
+            sendEmail.responses[422].content["application/json"].schema,
+        );
+        expect(send422).toContain("missing_template_variables");
+        expect(send422).toContain("template_not_transactional");
+        expect(sendEmail.description).toContain("sent verbatim");
+
+        const sequence422 = JSON.stringify(
+            createSequence.responses[422].content["application/json"].schema,
+        );
+        expect(sequence422).toContain("template_not_marketing");
+        expect(
+            JSON.stringify(
+                updateSequenceEmail.responses[422].content["application/json"]
+                    .schema,
+            ),
+        ).toContain("template_not_marketing");
     });
 });

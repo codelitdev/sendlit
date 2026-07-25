@@ -24,10 +24,10 @@ import {
 } from "./queries";
 import { serializeDates } from "../utils/serialize";
 import { omitInternal } from "../utils/public";
+import { MAILING_ADDRESS_REQUIRED } from "../settings/general/constants";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireTeam);
+router.use("/sequences", requireAuth, requireTeam);
 
 const s = initServer();
 
@@ -55,6 +55,12 @@ const impl = s.router(contract.sequences, {
             });
             return { status: 201, body: toBody(sequence) };
         } catch (err: any) {
+            if (err.message === "template_not_marketing") {
+                return {
+                    status: 422,
+                    body: { error: "template_not_marketing" },
+                };
+            }
             return { status: 400, body: { error: err.message } };
         }
     },
@@ -105,6 +111,12 @@ const impl = s.router(contract.sequences, {
                 return { status: 404, body: { error: "Sequence not found" } };
             return { status: 201, body: toBody(sequence) };
         } catch (err: any) {
+            if (err.message === "template_not_marketing") {
+                return {
+                    status: 422,
+                    body: { error: "template_not_marketing" },
+                };
+            }
             return { status: 400, body: { error: err.message } };
         }
     },
@@ -120,6 +132,12 @@ const impl = s.router(contract.sequences, {
                 return { status: 404, body: { error: "Sequence not found" } };
             return { status: 200, body: toBody(sequence) };
         } catch (err: any) {
+            if (err.message === "template_not_marketing") {
+                return {
+                    status: 422,
+                    body: { error: "template_not_marketing" },
+                };
+            }
             return { status: 400, body: { error: err.message } };
         }
     },
@@ -154,12 +172,19 @@ const impl = s.router(contract.sequences, {
             });
             return { status: 200, body: toBody(sequence) };
         } catch (err: any) {
-            return err.message === "esp_not_configured"
+            return err.message === MAILING_ADDRESS_REQUIRED
                 ? {
                       status: 422,
-                      body: { error: "Team ESP is not configured." },
+                      body: {
+                          error: "A mailing address is required before sending email.",
+                      },
                   }
-                : { status: 400, body: { error: err.message } };
+                : err.message === "esp_not_configured"
+                  ? {
+                        status: 422,
+                        body: { error: "Team ESP is not configured." },
+                    }
+                  : { status: 400, body: { error: err.message } };
         }
     },
     pause: async ({ params, req }) => {

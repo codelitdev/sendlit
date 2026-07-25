@@ -59,6 +59,7 @@ export function SequenceEmailEditor({
     return (
         <EmailEditorScreen
             exitFallbackHref={exitFallbackHref}
+            purpose="marketing"
             header={
                 <h1 className="truncate text-base font-semibold">
                     {email.subject || "Untitled email"}

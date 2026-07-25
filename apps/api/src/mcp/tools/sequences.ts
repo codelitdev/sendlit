@@ -125,7 +125,7 @@ export function registerSequenceTools(server: McpServer): void {
         "create_sequence",
         {
             description:
-                "Creates a new broadcast or sequence, seeding its first email from an existing template.",
+                "Creates a new broadcast or sequence from a marketing template or marketing system starter. Transactional templates return template_not_marketing.",
             inputSchema: {
                 type: z.enum(mailTypes),
                 templateId: z.string().min(1),
@@ -214,7 +214,7 @@ export function registerSequenceTools(server: McpServer): void {
         "add_sequence_email",
         {
             description:
-                "Adds a new email step to a sequence, seeded from an existing template.",
+                "Adds a new email step to a sequence from a marketing template. Transactional templates return template_not_marketing.",
             inputSchema: {
                 sequenceId: z.string(),
                 templateId: z.string().min(1),
@@ -337,7 +337,7 @@ export function registerSequenceTools(server: McpServer): void {
         "start_sequence",
         {
             description:
-                "Starts a broadcast (schedules it for delivery) or activates a sequence (begins enrolling contacts on its trigger). Requires at least one published email.",
+                "Starts a broadcast (schedules it for delivery) or activates a sequence (begins enrolling contacts on its trigger). Requires a mailing address and at least one published email.",
             inputSchema: { sequenceId: z.string() },
             outputSchema: sequenceSchema,
             annotations: {
