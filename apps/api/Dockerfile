@@ -11,6 +11,7 @@ COPY pnpm-workspace.yaml ./
 COPY apps/api ./apps/api
 COPY packages/api-contract ./packages/api-contract
 COPY packages/email-editor ./packages/email-editor
+COPY packages/email-blocks ./packages/email-blocks
 
 RUN pnpm install --frozen-lockfile
 
@@ -20,6 +21,7 @@ COPY --from=deps /app/ ./
 
 RUN pnpm --filter=@sendlit/email-editor build
 RUN pnpm --filter=@sendlit/api-contract build
+RUN pnpm --filter=@sendlit/email-blocks build
 RUN pnpm --filter=@sendlit/api build
 
 FROM base AS runner
@@ -36,6 +38,9 @@ COPY --chown=nodeuser:nodejs --from=builder /app/pnpm-workspace.yaml ./
 
 COPY --chown=nodeuser:nodejs --from=builder /app/packages/email-editor/package.json ./packages/email-editor/package.json
 COPY --chown=nodeuser:nodejs --from=builder /app/packages/email-editor/dist ./packages/email-editor/dist
+
+COPY --chown=nodeuser:nodejs --from=builder /app/packages/email-blocks/package.json ./packages/email-blocks/package.json
+COPY --chown=nodeuser:nodejs --from=builder /app/packages/email-blocks/dist ./packages/email-blocks/dist
 
 COPY --chown=nodeuser:nodejs --from=builder /app/packages/api-contract/package.json ./packages/api-contract/package.json
 COPY --chown=nodeuser:nodejs --from=builder /app/packages/api-contract/dist ./packages/api-contract/dist
