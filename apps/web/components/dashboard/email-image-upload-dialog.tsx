@@ -8,6 +8,7 @@ import {
     type DragEvent,
 } from "react";
 import { ImageIcon, Search, Upload } from "lucide-react";
+import { Loader } from "@codelitdev/design-system";
 import { Button } from "@/components/ui/codelit/button";
 import {
     Dialog,
@@ -448,7 +449,11 @@ export function EmailImageUploadDialog({
                                 onClick={loadMedia}
                                 disabled={loadingMedia}
                             >
-                                <Search className="size-4" />
+                                {loadingMedia ? (
+                                    <Loader size={16} />
+                                ) : (
+                                    <Search className="size-4" />
+                                )}
                             </Button>
                         </div>
 
@@ -524,7 +529,11 @@ export function EmailImageUploadDialog({
                                         onClick={searchUnsplash}
                                         disabled={loadingUnsplash}
                                     >
-                                        <Search className="size-4" />
+                                        {loadingUnsplash ? (
+                                            <Loader size={16} />
+                                        ) : (
+                                            <Search className="size-4" />
+                                        )}
                                     </Button>
                                 </div>
 

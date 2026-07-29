@@ -8,6 +8,7 @@ import {
     getMatchingPublicContactIds,
     getSequenceRowById,
     lockBroadcast,
+    markBroadcastSent,
 } from "./queries";
 import type { ContactFilterWithAggregator } from "../contacts/segment";
 
@@ -16,6 +17,11 @@ import type { ContactFilterWithAggregator } from "../contacts/segment";
  * `DATE_OCCURRED` rules (used to schedule broadcasts). Tag/subscriber based
  * triggers are handled immediately by `automation/fire-event.ts` instead of
  * being polled here.
+ *
+ * Empty-audience broadcasts: after lock, mark completed here via
+ * `markBroadcastSent`. The sequence/mail workers only complete broadcasts when
+ * the last `ongoing_sequences` row finishes, so a zero-recipient fire would
+ * otherwise stay `active` forever.
  */
 export async function processRules() {
     // eslint-disable-next-line no-constant-condition
@@ -99,6 +105,22 @@ export async function processRule(rule: {
         rule.teamId,
         sequenceRow.filter as ContactFilterWithAggregator | null,
     );
+    // lockBroadcast must run before markBroadcastSent: the latter jsonb_set's
+    // `{broadcast,sentAt}` and needs `report.broadcast` to already exist.
     await lockBroadcast(sequenceRow.id, publicContactIds);
+
+    if (sequenceRow.type === "broadcast" && contactIds.length === 0) {
+        await markBroadcastSent(sequenceRow.sequenceId);
+        captureEvent({
+            event: "broadcast_sent",
+            source: "automation.process_rules",
+            teamId: rule.teamId,
+            properties: {
+                sequence_id: sequenceRow.sequenceId,
+                recipients_count: 0,
+            },
+        });
+    }
+
     await deleteRule(rule.ruleId);
 }

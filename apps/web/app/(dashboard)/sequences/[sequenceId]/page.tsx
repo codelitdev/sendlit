@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/codelit/select";
 import { Switch } from "@/components/ui/codelit/switch";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { EspPicker } from "@/components/dashboard/esp-picker";
 import { ApiError } from "@/lib/api-client";
@@ -282,8 +283,7 @@ export default function SequenceEditorPage({
     }
 
     if (error && !sequence) return <Banner>{error}</Banner>;
-    if (!sequence || !meta)
-        return <p className="text-sm text-muted-foreground">Loading…</p>;
+    if (!sequence || !meta) return <Loading />;
 
     return (
         <ScrollablePage>

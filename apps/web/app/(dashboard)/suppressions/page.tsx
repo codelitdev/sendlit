@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
@@ -222,9 +223,7 @@ export default function SuppressionsPage() {
             <Card>
                 <CardContent className="p-0">
                     {items === null ? (
-                        <p className="p-6 text-sm text-muted-foreground">
-                            Loading…
-                        </p>
+                        <Loading className="p-6" />
                     ) : items.length === 0 ? (
                         <p className="p-6 text-sm text-muted-foreground">
                             No suppressions match this filter.

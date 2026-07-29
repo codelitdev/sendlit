@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -121,8 +122,7 @@ export default function ContactDetailPage({
     }
 
     if (error) return <Banner>{error}</Banner>;
-    if (!contact)
-        return <p className="text-sm text-muted-foreground">Loading…</p>;
+    if (!contact) return <Loading />;
 
     return (
         <ScrollablePage>

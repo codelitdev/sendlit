@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
 import { ApiError } from "@/lib/api-client";
 import { getTemplate, updateTemplate } from "@/lib/api";
@@ -41,7 +42,7 @@ export default function TemplateEditorPage({
 
     if (error) return <Banner>{error}</Banner>;
     if (title === null || content === null || purpose === null)
-        return <p className="text-sm text-muted-foreground">Loading…</p>;
+        return <Loading />;
 
     return (
         <EmailEditorScreen

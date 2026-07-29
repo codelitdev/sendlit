@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { Check, LogOut } from "lucide-react";
+import { Loader } from "@codelitdev/design-system";
 import { Button } from "@/components/ui/codelit/button";
 import { IconButton } from "@/components/ui/codelit/icon-button";
 import { Badge } from "@/components/ui/badge";
@@ -218,7 +219,11 @@ export function EmailEditorScreen({
                 </div>
                 <div className="flex items-center gap-2">
                     <Button onClick={save} disabled={saving}>
-                        {saved ? <Check className="size-4" /> : null}
+                        {saving ? (
+                            <Loader size={16} />
+                        ) : saved ? (
+                            <Check className="size-4" />
+                        ) : null}
                         {saved ? "Saved" : saving ? "Saving…" : saveLabel}
                     </Button>
                     <IconButton

@@ -244,6 +244,37 @@ describe("sequence queries", () => {
         ).resolves.toMatchObject({ status: "active" });
     });
 
+    it("rejects starting a broadcast with no matching recipients", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        await tdb.delete(contacts).where(eq(contacts.teamId, team.id));
+        const template = await makeTemplate(team.id);
+        const broadcast = await createSequence({
+            teamId: team.id,
+            type: "broadcast",
+            templateId: template.templateId,
+        });
+        await tdb
+            .update(sequenceEmails)
+            .set({ published: true })
+            .where(eq(sequenceEmails.id, broadcast.emails[0].id));
+
+        await expect(
+            startSequence({
+                teamId: team.id,
+                sequenceId: broadcast.sequenceId,
+            }),
+        ).rejects.toThrow(responses.broadcast_no_recipients);
+
+        await expect(
+            getSequenceBySequenceId(team.id, broadcast.sequenceId),
+        ).resolves.toMatchObject({ status: "draft" });
+        const createdRules = await tdb
+            .select()
+            .from(rules)
+            .where(eq(rules.sequenceId, broadcast.id));
+        expect(createdRules).toHaveLength(0);
+    });
+
     it("does not start or create a rule when no ESP is configured", async () => {
         const { team } = await seedTeamAndContact(tdb);
         const template = await makeTemplate(team.id);

@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { EspPicker } from "@/components/dashboard/esp-picker";
 import { ApiError } from "@/lib/api-client";
@@ -260,7 +261,7 @@ export default function BroadcastEditorPage({
 
     if (error && !sequence) return <Banner>{error}</Banner>;
     if (!sequence || !meta || !email) {
-        return <p className="text-sm text-muted-foreground">Loading…</p>;
+        return <Loading />;
     }
 
     const status = presentBroadcastStatus(sequence);

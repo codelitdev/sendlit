@@ -87,7 +87,7 @@ vi.mock("@/components/ui/codelit/tabs", async () => {
     };
 });
 import TemplatesPage from "./page";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/codelit/tooltip";
 
 const content = { style: {}, meta: {}, content: [] };
 const templates = [

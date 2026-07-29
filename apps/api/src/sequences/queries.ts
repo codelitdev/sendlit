@@ -30,6 +30,7 @@ import { syncEmailContentMediaReferences } from "../media/email-content";
 import { deleteMediaReferencesForResource } from "../media/queries";
 import { getEspConfigById, resolveEspConfig } from "../settings/esp/queries";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
+import { getMatchingContactIds } from "../automation/queries";
 
 export type Sequence = typeof sequences.$inferSelect;
 export type SequenceEmail = typeof sequenceEmails.$inferSelect;
@@ -613,6 +614,19 @@ export async function startSequence({
 
     // Broadcasts don't require a filter: an empty/null filter means the
     // whole audience (buildContactFilterCondition returns no condition).
+    // Refuse to start a broadcast that currently matches nobody — otherwise
+    // the schedule would fire, lock an empty snapshot, and (without the
+    // empty-audience completion path) look stuck in "sending". Multi-step
+    // sequences are allowed with an empty list; they enroll later via triggers.
+    if (sequence.type === "broadcast") {
+        const recipientIds = await getMatchingContactIds(
+            teamId,
+            sequence.filter as ContactFilterWithAggregator | null,
+        );
+        if (recipientIds.length === 0) {
+            throw new Error(responses.broadcast_no_recipients);
+        }
+    }
 
     await addRule({
         teamId,

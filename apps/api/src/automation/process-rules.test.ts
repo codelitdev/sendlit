@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     getPublicIds: vi.fn(),
     getSequence: vi.fn(),
     lockBroadcast: vi.fn(),
+    markBroadcastSent: vi.fn(),
     captureError: vi.fn(),
     captureEvent: vi.fn(),
 }));
@@ -20,6 +21,7 @@ vi.mock("./queries", () => ({
     getMatchingPublicContactIds: mocks.getPublicIds,
     getSequenceRowById: mocks.getSequence,
     lockBroadcast: mocks.lockBroadcast,
+    markBroadcastSent: mocks.markBroadcastSent,
 }));
 vi.mock("../observability/posthog", () => ({
     captureError: mocks.captureError,
@@ -44,9 +46,11 @@ beforeEach(() => {
     mocks.getInternalIds.mockResolvedValue(["contact-internal"]);
     mocks.getPublicIds.mockResolvedValue(["cnt_public"]);
     mocks.lockBroadcast.mockResolvedValue(undefined);
+    mocks.markBroadcastSent.mockResolvedValue(undefined);
     mocks.getSequence.mockResolvedValue({
         id: "sequence-internal",
         sequenceId: "seq_public",
+        type: "broadcast",
         filter: { aggregator: "and", filters: [] },
     });
 });
@@ -84,12 +88,23 @@ describe("scheduled broadcast rule processing", () => {
         expect(mocks.lockBroadcast).toHaveBeenCalledWith("sequence-internal", [
             "cnt_public",
         ]);
+        expect(mocks.markBroadcastSent).not.toHaveBeenCalled();
         expect(order).toEqual(["enroll", "lock", "delete"]);
     });
 
-    it("handles an empty audience and still consumes the due rule", async () => {
+    it("completes an empty-audience broadcast after lock and still consumes the rule", async () => {
         mocks.getInternalIds.mockResolvedValue([]);
         mocks.getPublicIds.mockResolvedValue([]);
+        const order: string[] = [];
+        mocks.lockBroadcast.mockImplementation(async () => {
+            order.push("lock");
+        });
+        mocks.markBroadcastSent.mockImplementation(async () => {
+            order.push("complete");
+        });
+        mocks.deleteRule.mockImplementation(async () => {
+            order.push("delete");
+        });
 
         await processRule(rule);
 
@@ -100,6 +115,34 @@ describe("scheduled broadcast rule processing", () => {
             "sequence-internal",
             [],
         );
+        expect(mocks.markBroadcastSent).toHaveBeenCalledWith("seq_public");
+        expect(mocks.captureEvent).toHaveBeenCalledWith(
+            expect.objectContaining({
+                event: "broadcast_sent",
+                source: "automation.process_rules",
+                properties: expect.objectContaining({
+                    sequence_id: "seq_public",
+                    recipients_count: 0,
+                }),
+            }),
+        );
+        expect(mocks.deleteRule).toHaveBeenCalledWith("rule_1");
+        expect(order).toEqual(["lock", "complete", "delete"]);
+    });
+
+    it("does not mark non-broadcast sequences completed on empty match", async () => {
+        mocks.getInternalIds.mockResolvedValue([]);
+        mocks.getPublicIds.mockResolvedValue([]);
+        mocks.getSequence.mockResolvedValue({
+            id: "sequence-internal",
+            sequenceId: "seq_public",
+            type: "sequence",
+            filter: { aggregator: "and", filters: [] },
+        });
+
+        await processRule(rule);
+
+        expect(mocks.markBroadcastSent).not.toHaveBeenCalled();
         expect(mocks.deleteRule).toHaveBeenCalledWith("rule_1");
     });
 

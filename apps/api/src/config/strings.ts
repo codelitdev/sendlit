@@ -6,6 +6,9 @@ export const responses = {
     no_published_emails: "This sequence has no published emails",
     sequence_details_missing: "Sequence details are missing",
     sequence_not_active: "This sequence is not active",
+    /** Broadcast start rejected when the current filter matches nobody. */
+    broadcast_no_recipients:
+        "This broadcast has no matching recipients. Add contacts or widen the audience filter before sending.",
     mail_already_sent: "This broadcast has already been sent",
     cannot_delete_last_email: "Cannot delete the last email in a sequence",
     mandatory_tags_missing:

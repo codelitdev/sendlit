@@ -169,6 +169,8 @@ async function cleanUpResources(
     // once every recipient has been delivered to. Multi-step "sequence" type
     // automations stay "active" indefinitely so future contacts can still be
     // enrolled by their trigger (see `automation/fire-event.ts`).
+    // Zero-recipient broadcasts never create ongoing rows; they complete in
+    // `processRule` instead (see automation/process-rules.ts).
     if (completed && sequenceType === "broadcast" && publicSequenceId) {
         const remaining = await countOngoingSequencesForSequence(
             ongoingSequence.sequenceId,

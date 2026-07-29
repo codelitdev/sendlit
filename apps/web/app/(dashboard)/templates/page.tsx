@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/codelit/dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
@@ -38,7 +39,7 @@ import {
     Tooltip,
     TooltipContent,
     TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/codelit/tooltip";
 
 const TEMPLATE_PREVIEW_CONTEXT = {
     footer: {
@@ -157,7 +158,7 @@ export default function TemplatesPage() {
             />
 
             {visibleTemplates === null ? (
-                <p className="text-sm text-muted-foreground">Loading…</p>
+                <Loading />
             ) : visibleTemplates.length === 0 ? (
                 <Card>
                     <CardContent className="p-6 text-sm text-muted-foreground">

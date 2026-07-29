@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
 import { ApiError } from "@/lib/api-client";
 import { getSequence, updateSequenceEmail } from "@/lib/api";
@@ -53,8 +54,7 @@ export function SequenceEmailEditor({
     }, [sequenceId, emailId]);
 
     if (error) return <Banner>{error}</Banner>;
-    if (!email)
-        return <p className="text-sm text-muted-foreground">Loading…</p>;
+    if (!email) return <Loading />;
 
     return (
         <EmailEditorScreen

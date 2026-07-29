@@ -13,6 +13,7 @@ import {
     Users,
     Workflow,
 } from "lucide-react";
+import { Loader } from "@codelitdev/design-system";
 import {
     Sidebar,
     SidebarContent,
@@ -56,6 +57,7 @@ export function AppSidebar() {
     const [currentTeamId, setCurrentTeamId] = useState<string | null>(null);
     const [account, setAccount] = useState<CurrentAccount | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [loadingTeams, setLoadingTeams] = useState(true);
 
     useEffect(() => {
         let cancelled = false;
@@ -100,6 +102,8 @@ export function AppSidebar() {
                         ? err.message
                         : "Failed to load teams",
                 );
+            } finally {
+                if (!cancelled) setLoadingTeams(false);
             }
         }
         load();
@@ -113,6 +117,15 @@ export function AppSidebar() {
             <SidebarHeader>
                 {teams.length > 0 ? (
                     <TeamSwitcher teams={teams} currentTeamId={currentTeamId} />
+                ) : loadingTeams ? (
+                    <SidebarMenu>
+                        <SidebarMenuItem className="flex h-12 items-center gap-2 px-2">
+                            <Loader size={18} />
+                            <span className="truncate text-sm font-medium text-muted-foreground group-data-[collapsible=icon]:hidden">
+                                Loading…
+                            </span>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
                 ) : (
                     <SidebarMenu>
                         <SidebarMenuItem className="flex h-12 items-center gap-2 px-2">

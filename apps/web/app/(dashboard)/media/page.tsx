@@ -17,6 +17,7 @@ import {
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
+import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
@@ -158,7 +159,7 @@ export default function MediaPage() {
             {error && <Banner className="mb-4">{error}</Banner>}
 
             {items === null ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
+                <Loading />
             ) : items.length === 0 ? (
                 <Card>
                     <CardContent className="p-6 text-sm text-muted-foreground">

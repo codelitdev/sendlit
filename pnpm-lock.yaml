@@ -453,8 +453,8 @@ importers:
   apps/web:
     dependencies:
       '@codelitdev/design-system':
-        specifier: 0.1.0-alpha.2
-        version: 0.1.0-alpha.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        specifier: 0.1.0-alpha.6
+        version: 0.1.0-alpha.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.18
         version: 1.1.18(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1051,8 +1051,8 @@ packages:
   '@changesets/write@0.4.0':
     resolution: {integrity: sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q==}
 
-  '@codelitdev/design-system@0.1.0-alpha.2':
-    resolution: {integrity: sha512-ROHBHXzk2OIeDwGJYMySgE1KgdFruk8tvUxXLy57Oo4QjO3CGuc2lAtTNT1okQhpR79SAdRScESmy2plDGzWgw==}
+  '@codelitdev/design-system@0.1.0-alpha.6':
+    resolution: {integrity: sha512-hMqlHp0o1p+qufYWGP1GXfQFjIcei5epOOpjRO0b86MXHA0Tzg845HfK6ALxSGJ6wEu2ksdCNQ8aXDHIjmdc6g==}
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -9226,7 +9226,7 @@ snapshots:
       human-id: 4.2.0
       prettier: 2.8.8
 
-  '@codelitdev/design-system@0.1.0-alpha.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@codelitdev/design-system@0.1.0-alpha.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)

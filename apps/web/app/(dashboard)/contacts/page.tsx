@@ -29,6 +29,7 @@ import {
     type Contact,
     type ContactFilterWithAggregator,
 } from "@sendlit/email-blocks";
+import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 
@@ -115,9 +116,7 @@ export default function ContactsPage() {
             <Card>
                 <CardContent className="p-0">
                     {contacts === null ? (
-                        <p className="p-6 text-sm text-muted-foreground">
-                            Loading…
-                        </p>
+                        <Loading className="p-6" />
                     ) : contacts.length === 0 ? (
                         <p className="p-6 text-sm text-muted-foreground">
                             No contacts yet. Create one to get started.

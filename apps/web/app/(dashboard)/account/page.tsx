@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CreditCard, Sparkles, UserRound } from "lucide-react";
+import { Loader } from "@codelitdev/design-system";
+import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
@@ -186,6 +188,9 @@ export default function AccountPage() {
                                                 type="submit"
                                                 disabled={isSavingProfile}
                                             >
+                                                {isSavingProfile ? (
+                                                    <Loader size={16} />
+                                                ) : null}
                                                 {isSavingProfile
                                                     ? "Saving…"
                                                     : "Save changes"}
@@ -234,9 +239,13 @@ export default function AccountPage() {
                                     <p className="text-muted-foreground">
                                         Email
                                     </p>
-                                    <p className="font-medium">
-                                        {account?.email || "Loading…"}
-                                    </p>
+                                    {account ? (
+                                        <p className="font-medium">
+                                            {account.email}
+                                        </p>
+                                    ) : (
+                                        <Loading />
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>

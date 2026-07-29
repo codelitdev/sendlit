@@ -15,6 +15,7 @@ import {
     DialogTitle,
 } from "@/components/ui/codelit/dialog";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -202,7 +203,7 @@ export function EspFeedbackDialog({
                 {error && <Banner>{error}</Banner>}
 
                 {loading ? (
-                    <p className="text-sm text-muted-foreground">Loading…</p>
+                    <Loading />
                 ) : (
                     <div className="space-y-4">
                         <p className="text-sm text-muted-foreground">

@@ -228,7 +228,12 @@ Phase 5 — **done**:
       Idempotent, keyed by a consumer-supplied `externalId` (e.g.
       `courselit:<domainId>`) rather than the owner's email, since two of a
       consumer's own tenants may share an owner email (which would otherwise
-      incorrectly merge them into one team).
+      incorrectly merge them into one team). Ownership is still assigned: the
+      request body includes `ownerEmail`, which is resolved via
+      `findOrCreateBareAccount` (email lowercased; account created if missing);
+      that account becomes the team's `ownerAccountId` and its sole
+      `team_members` row with role `owner`. There is no fixed platform/system
+      owner account — whichever email the consumer sends is the owner.
     - `src/bootstrap.ts`: a _separate_, boot-time-only convenience directly
       ported from MediaLit's `createAdminUser()` — if `SUPER_ADMIN_EMAIL` is
       set and no account exists for it yet, creates one (with its default team

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/codelit/badge";
 import { Card, CardContent } from "@/components/ui/codelit/card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { NewSequenceDialog } from "@/components/dashboard/new-sequence-dialog";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
@@ -91,7 +92,7 @@ export function SequenceListPage({
             {error && <Banner className="mb-4">{error}</Banner>}
 
             {sequences === null ? (
-                <p className="text-sm text-muted-foreground">Loading…</p>
+                <Loading />
             ) : sequences.length === 0 ? (
                 <Card>
                     <CardContent className="p-6 text-sm text-muted-foreground">

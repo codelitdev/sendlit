@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { Loading } from "@/components/dashboard/loading";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
@@ -230,7 +231,7 @@ export default function SettingsPage() {
     }
 
     if (generalSettings === undefined || esps === null) {
-        return <p className="text-sm text-muted-foreground">Loading…</p>;
+        return <Loading />;
     }
 
     return (

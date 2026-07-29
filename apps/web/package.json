@@ -17,7 +17,7 @@
         "@radix-ui/react-select": "^2.2.2",
         "@radix-ui/react-slot": "^1.2.3",
         "@radix-ui/react-switch": "^1.2.5",
-        "@codelitdev/design-system": "0.1.0-alpha.2",
+        "@codelitdev/design-system": "0.1.0-alpha.6",
         "@sendlit/api-contract": "workspace:*",
         "@sendlit/email-blocks": "workspace:*",
         "@sendlit/email-editor": "workspace:*",

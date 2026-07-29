@@ -10,7 +10,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui/codelit/dropdown-menu";
 import {
     SidebarMenu,
     SidebarMenuButton,

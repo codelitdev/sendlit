@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Hanken_Grotesk, Spline_Sans_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/codelit/tooltip";
 
 const hankenGrotesk = Hanken_Grotesk({
     subsets: ["latin"],
