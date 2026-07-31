@@ -1,2 +1,0 @@
-ALTER TABLE "email_templates" ADD COLUMN "purpose" text DEFAULT 'marketing' NOT NULL;--> statement-breakpoint
-ALTER TABLE "email_templates" ADD CONSTRAINT "email_templates_purpose_check" CHECK ("email_templates"."purpose" in ('marketing', 'transactional'));

@@ -4,13 +4,13 @@ import { requireTeam } from "./require-team";
 const mocks = vi.hoisted(() => ({
     getTeamByTeamId: vi.fn(),
     getTeamMembership: vi.fn(),
-    listTeamsForAccount: vi.fn(),
+    listTeamsForUser: vi.fn(),
 }));
 
 vi.mock("../team/queries", () => ({
     getTeamByTeamId: mocks.getTeamByTeamId,
     getTeamMembership: mocks.getTeamMembership,
-    listTeamsForAccount: mocks.listTeamsForAccount,
+    listTeamsForUser: mocks.listTeamsForUser,
 }));
 
 function res() {
@@ -24,7 +24,7 @@ describe("requireTeam", () => {
     beforeEach(() => {
         mocks.getTeamByTeamId.mockReset();
         mocks.getTeamMembership.mockReset();
-        mocks.listTeamsForAccount.mockReset();
+        mocks.listTeamsForUser.mockReset();
         mocks.getTeamByTeamId.mockImplementation(async (teamId: string) => ({
             id: teamId,
             teamId,
@@ -39,7 +39,7 @@ describe("requireTeam", () => {
         await requireTeam(req, response as any, next);
 
         expect(next).toHaveBeenCalled();
-        expect(mocks.listTeamsForAccount).not.toHaveBeenCalled();
+        expect(mocks.listTeamsForUser).not.toHaveBeenCalled();
     });
 
     it("rejects unauthenticated requests before resolving a team", async () => {
@@ -56,7 +56,7 @@ describe("requireTeam", () => {
 
         await requireTeam(
             {
-                accountId: "account-1",
+                userId: "user-1",
                 headers: { "x-sendlit-team-id": "team-1" },
             } as any,
             response as any,
@@ -65,7 +65,7 @@ describe("requireTeam", () => {
 
         expect(mocks.getTeamMembership).toHaveBeenCalledWith(
             "team-1",
-            "account-1",
+            "user-1",
         );
         expect(response.status).toHaveBeenCalledWith(403);
         expect(response.json).toHaveBeenCalledWith(
@@ -76,7 +76,7 @@ describe("requireTeam", () => {
     it("uses an explicit team header when membership exists", async () => {
         mocks.getTeamMembership.mockResolvedValueOnce({ role: "owner" });
         const req = {
-            accountId: "account-1",
+            userId: "user-1",
             headers: { "x-sendlit-team-id": "team-1" },
         } as any;
         const next = vi.fn();
@@ -88,23 +88,23 @@ describe("requireTeam", () => {
     });
 
     it("auto-selects the only team and requires a header for multiple teams", async () => {
-        mocks.listTeamsForAccount.mockResolvedValueOnce([
+        mocks.listTeamsForUser.mockResolvedValueOnce([
             { id: "team-1", teamId: "team-1", name: "Solo" },
         ]);
-        const soloReq = { accountId: "account-1", headers: {} } as any;
+        const soloReq = { userId: "user-1", headers: {} } as any;
         const soloNext = vi.fn();
 
         await requireTeam(soloReq, res() as any, soloNext);
         expect(soloReq.teamId).toBe("team-1");
         expect(soloNext).toHaveBeenCalled();
 
-        mocks.listTeamsForAccount.mockResolvedValueOnce([
+        mocks.listTeamsForUser.mockResolvedValueOnce([
             { id: "team-1", teamId: "team-1", name: "One" },
             { id: "team-2", teamId: "team-2", name: "Two" },
         ]);
         const response = res();
         await requireTeam(
-            { accountId: "account-1", headers: {} } as any,
+            { userId: "user-1", headers: {} } as any,
             response as any,
             vi.fn(),
         );

@@ -38,8 +38,10 @@ describe("api key queries (integration)", () => {
 
         expect(await getApiKeysByTeamId(team.id)).toHaveLength(1);
 
-        await deleteApiKey(team.id, apiKey.id);
-        expect(await getApiKeysByTeamId(team.id)).toHaveLength(0);
+        await deleteApiKey(team.id, apiKey.teamApiKeyId);
+        expect(await getApiKeysByTeamId(team.id)).toMatchObject([
+            { teamApiKeyId: apiKey.teamApiKeyId, revokedAt: expect.any(Date) },
+        ]);
         expect(await getApiKeyBySecret(secret)).toBeNull();
     });
 

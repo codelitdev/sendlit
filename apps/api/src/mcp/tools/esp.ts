@@ -23,14 +23,13 @@ import {
     successMessageSchema,
     testEspResultSchema,
 } from "./schemas";
-import { getAuthAccount, getTeamId } from "./auth";
+import { getAuthUser, getTeamId } from "./auth";
 
 function toPublicShape(config: EspConfig | null) {
     if (!config) return null;
     return {
         espId: config.espId,
         name: config.name,
-        isDefault: config.isDefault,
         provider: config.provider,
         host: config.host,
         port: config.port,
@@ -39,6 +38,8 @@ function toPublicShape(config: EspConfig | null) {
         hasPassword: Boolean(config.encryptedSecret),
         fromName: config.fromName,
         fromEmail: config.fromEmail,
+        status: config.status,
+        secretVersion: config.secretVersion,
         lastTestedAt: config.lastTestedAt,
         lastTestStatus: config.lastTestStatus,
         lastTestError: config.lastTestError,
@@ -171,7 +172,7 @@ export function registerEspTools(server: McpServer): void {
             const result = await testEspConfig({
                 config,
                 to: args.to,
-                account: getAuthAccount(extra),
+                account: getAuthUser(extra),
                 source: "mcp.send_test_email",
             });
             return jsonResult({
@@ -205,10 +206,9 @@ export function registerEspTools(server: McpServer): void {
         "create_esp",
         {
             description:
-                "Creates a new user-managed ESP configuration for the team. The team's first ESP automatically becomes the default; pass `isDefault: true` to make a later one the default instead.",
+                "Creates a new team-owned ESP configuration. Delivery selection is managed separately.",
             inputSchema: {
                 name: z.string().trim().min(1).max(100),
-                isDefault: z.boolean().optional(),
                 ...connectionFields,
             },
             outputSchema: espConfigSchema,
@@ -257,11 +257,10 @@ export function registerEspTools(server: McpServer): void {
         "update_esp",
         {
             description:
-                "Updates a user-managed ESP configuration by its ESP ID. Pass `isDefault: true` to atomically switch the team's default. Omit `password` to keep the existing secret; send an empty string to clear it.",
+                "Updates a team-owned ESP configuration by its ESP ID. Omit `password` to keep the existing secret; send an empty string to clear it.",
             inputSchema: {
                 espId: z.string().min(1),
                 name: z.string().trim().min(1).max(100).optional(),
-                isDefault: z.literal(true).optional(),
                 provider: connectionFields.provider.optional(),
                 host: connectionFields.host.optional(),
                 port: connectionFields.port.optional(),
@@ -286,7 +285,6 @@ export function registerEspTools(server: McpServer): void {
                 const config = await updateEspConfig(teamId, espId, patch);
                 if (!config) return NOT_FOUND;
                 invalidateEspTransport(teamId, config.id);
-                if (patch.isDefault) invalidateTeamTransport(teamId);
                 return jsonResult(toPublicShape(config));
             } catch (err: any) {
                 return errorResult(err.message);
@@ -297,8 +295,7 @@ export function registerEspTools(server: McpServer): void {
     server.registerTool(
         "delete_esp",
         {
-            description:
-                "Removes a user-managed ESP configuration by its ESP ID. Fails if it's referenced by an active/paused sequence or a queued transactional email. Deleting the default promotes another user ESP when one exists.",
+            description: "Removes an eligible never-activated draft team ESP.",
             inputSchema: { espId: z.string().min(1) },
             outputSchema: successMessageSchema,
             annotations: {
@@ -316,13 +313,12 @@ export function registerEspTools(server: McpServer): void {
                 await deleteEspConfig(teamId, args.espId);
             } catch (err: any) {
                 return errorResult(
-                    err.message === "esp_in_use"
-                        ? "ESP is in use by an active sequence or a queued transactional email and cannot be removed."
+                    err.message === "delivery_source_in_use"
+                        ? "ESP is in use and cannot be removed."
                         : err.message,
                 );
             }
             invalidateEspTransport(teamId, config.id);
-            if (config.isDefault) invalidateTeamTransport(teamId);
             return jsonResult({ message: "ESP configuration removed." });
         },
     );
@@ -351,7 +347,7 @@ export function registerEspTools(server: McpServer): void {
             const result = await testEspConfig({
                 config,
                 to: args.to,
-                account: getAuthAccount(extra),
+                account: getAuthUser(extra),
                 source: "mcp.test_esp",
             });
             return jsonResult({

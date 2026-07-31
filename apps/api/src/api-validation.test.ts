@@ -60,12 +60,14 @@ describe("API input validation schemas", () => {
                 secure: false,
             }).success,
         ).toBe(false);
+        // Delivery defaults now belong to team delivery settings, never to an
+        // ESP row. Updating an ESP must not be able to repoint queued work.
         expect(
             updateEspConfigBodySchema.safeParse({ isDefault: false }).success,
         ).toBe(false);
         expect(
             updateEspConfigBodySchema.safeParse({ isDefault: true }).success,
-        ).toBe(true);
+        ).toBe(false);
     });
 
     it("validates contact create/update bodies and paginated query strings", () => {
@@ -394,8 +396,8 @@ describe("API input validation schemas", () => {
         expect(
             provisionTeamBodySchema.safeParse({
                 externalId: "consumer:tenant-1",
-                ownerEmail: "owner@example.com",
                 name: "Tenant 1",
+                delivery: { useOrganizationDefault: true },
             }).success,
         ).toBe(true);
     });
@@ -492,18 +494,11 @@ describe("OpenAPI authentication metadata", () => {
                 in: "header",
                 name: "x-sendlit-apikey",
             },
-            provisioningSecretAuth: {
-                type: "apiKey",
-                in: "header",
-                name: "X-Sendlit-Provisioning-Secret",
-            },
         });
         expect(openApiDocument.security).toContainEqual({ apiKeyAuth: [] });
         expect(
-            openApiDocument.paths["/provisioning/teams"]?.post,
-        ).toMatchObject({
-            security: [{ provisioningSecretAuth: [] }],
-        });
+            openApiDocument.paths["/provisioning/teams"]?.post?.description,
+        ).toContain("scoped organization key as a Bearer token");
     });
 
     it("generates paths for the feedback, delivery-events, and suppressions routes", () => {

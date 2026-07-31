@@ -19,6 +19,8 @@ import transactionalRoutes from "./transactional/routes";
 import espRoutes from "./settings/esp/routes";
 import generalSettingsRoutes from "./settings/general/routes";
 import teamRoutes from "./team/routes";
+import organizationRoutes from "./organization/routes";
+import deliveryRoutes from "./delivery/routes";
 import provisioningRoutes from "./provisioning/routes";
 import trackingRoutes from "./tracking/routes";
 import overviewRoutes from "./overview/routes";
@@ -44,8 +46,12 @@ import "./delivery-feedback/feedback-worker";
 import { startAutomation } from "./automation/start";
 import { startFeedbackReceiptPoller } from "./delivery-feedback/poller";
 import { startRetentionLoop } from "./delivery-feedback/retention-loop";
+import { startMailDispatchOutbox } from "./mail/dispatch-outbox";
+import { startDeliveryLifecycleJobs } from "./delivery/lifecycle-jobs";
 
 const app = express();
+startMailDispatchOutbox();
+startDeliveryLifecycleJobs();
 
 app.set("trust proxy", process.env.ENABLE_TRUST_PROXY === "true" ? 1 : false);
 
@@ -91,11 +97,13 @@ app.use(
 app.use(mcpRoutes);
 app.use(trackingRoutes);
 app.use(provisioningRoutes);
+app.use(organizationRoutes);
 
-// Team management is account-scoped: `/teams` must be registered before the
+// Team management is user-scoped: `/teams` must be registered before the
 // routers below, whose blanket `requireTeam` middleware otherwise intercepts
 // it for multi-team accounts before `teamRoutes` can create/list teams.
 app.use(teamRoutes);
+app.use(deliveryRoutes);
 
 app.use(contactsRoutes);
 app.use(segmentsRoutes);

@@ -1,10 +1,12 @@
 import { and, count, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { db } from "../db/client";
-import { transactionalEmails } from "../db/schema";
+import {
+    mailDispatchOutbox,
+    outboundMessages,
+    transactionalEmails,
+} from "../db/schema";
 import { getTeam } from "../team/queries";
-import { getAccount } from "../account/queries";
-import { resolveEspConfig } from "../settings/esp/queries";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTemplate } from "../templates/queries";
 import { findContactByEmail } from "../contacts/queries";
@@ -12,7 +14,6 @@ import {
     MissingTemplateVariablesError,
     renderEmailContent,
 } from "../mail/render";
-import { addTransactionalMailJob } from "../mail/queue";
 import { getEmailFrom } from "../utils/mail";
 import { normalizeEmail } from "../utils/email";
 import {
@@ -22,7 +23,13 @@ import {
 import { captureEvent } from "../observability/posthog";
 import { serializeDates } from "../utils/serialize";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
-import { createCustomRouteOutboundMessage } from "../delivery-feedback/outbound-send";
+import {
+    resolveDeliverySource,
+    type DeliverySourceSelection,
+} from "../delivery/queries";
+import { generateRfcMessageId } from "../utils/rfc-message-id";
+import { getActiveFeedbackConnectionForEspConfig } from "../delivery-feedback/feedback-connection-queries";
+import { reserveOrganizationQuota } from "../delivery/quota";
 
 export type TransactionalEmail = typeof transactionalEmails.$inferSelect;
 export type { TransactionalEmailStatus };
@@ -199,7 +206,7 @@ export async function createTransactionalEmail({
     idempotencyKey,
     trackOpens = false,
     trackClicks = false,
-    espId,
+    deliverySource,
 }: {
     teamId: string;
     to: string;
@@ -212,7 +219,7 @@ export async function createTransactionalEmail({
     idempotencyKey?: string;
     trackOpens?: boolean;
     trackClicks?: boolean;
-    espId?: string;
+    deliverySource?: DeliverySourceSelection;
 }): Promise<TransactionalEmail> {
     // Reject before persisting or queueing so an unconfigured team cannot
     // create delivery work that would later fail in a worker.
@@ -259,12 +266,7 @@ export async function createTransactionalEmail({
     const team = await getTeam(teamId);
     if (!team) throw new Error("esp_not_configured");
 
-    const espConfig = await resolveEspConfig(teamId, espId);
-    if (!espConfig) {
-        throw new Error(espId ? "esp_not_found" : "esp_not_configured");
-    }
-
-    const ownerAccount = await getAccount(team.ownerAccountId);
+    const pin = await resolveDeliverySource(teamId, deliverySource);
 
     let renderedHtml: string;
     let resolvedTemplateId: string | null = null;
@@ -319,23 +321,20 @@ export async function createTransactionalEmail({
     }
 
     const from = getEmailFrom({
-        name: espConfig.fromName || team.name,
-        email:
-            espConfig.fromEmail ||
-            ownerAccount?.email ||
-            process.env.EMAIL_FROM ||
-            "",
+        name: pin.fromName,
+        email: pin.fromEmail,
     });
 
     const contact = await findContactByEmail(teamId, normalizedTo);
 
     const insertValues = {
         teamId,
-        deliveryRoute: "custom",
-        outboxId: espConfig.id,
+        deliverySourceType: pin.type,
+        outboxId: pin.espConfigId,
+        espGrantId: pin.espGrantId,
         toEmail: normalizedTo,
         fromEmail: from,
-        replyTo: replyTo ?? null,
+        replyTo: replyTo ?? pin.replyTo,
         subject,
         templateId: resolvedTemplateId,
         html: renderedHtml,
@@ -351,55 +350,76 @@ export async function createTransactionalEmail({
     // requests: `ON CONFLICT ... DO NOTHING` against the partial unique
     // index, re-selecting the winner's row on conflict, rather than a
     // check-then-insert (see docs/transactional-emails.md#post-emails).
-    let row: TransactionalEmail | undefined;
-    if (idempotencyKey) {
-        [row] = await db
-            .insert(transactionalEmails)
-            .values(insertValues)
-            .onConflictDoNothing({
-                target: [
-                    transactionalEmails.teamId,
-                    transactionalEmails.idempotencyKey,
-                ],
-                where: sql`${transactionalEmails.idempotencyKey} IS NOT NULL`,
+    const connection = await getActiveFeedbackConnectionForEspConfig(
+        pin.espConfigId,
+    );
+    const row = await db.transaction(async (tx) => {
+        let [created] = idempotencyKey
+            ? await tx
+                  .insert(transactionalEmails)
+                  .values(insertValues)
+                  .onConflictDoNothing({
+                      target: [
+                          transactionalEmails.teamId,
+                          transactionalEmails.idempotencyKey,
+                      ],
+                      where: sql`${transactionalEmails.idempotencyKey} IS NOT NULL`,
+                  })
+                  .returning()
+            : await tx
+                  .insert(transactionalEmails)
+                  .values(insertValues)
+                  .returning();
+        if (!created && idempotencyKey) {
+            [created] = await tx
+                .select()
+                .from(transactionalEmails)
+                .where(
+                    and(
+                        eq(transactionalEmails.teamId, teamId),
+                        eq(transactionalEmails.idempotencyKey, idempotencyKey),
+                    ),
+                )
+                .limit(1);
+            if (!created) throw new Error("idempotency_conflict");
+            return created;
+        }
+        const [outbound] = await tx
+            .insert(outboundMessages)
+            .values({
+                teamId,
+                deliverySourceType: pin.type,
+                espConfigId: pin.espConfigId,
+                espGrantId: pin.espGrantId,
+                feedbackConnectionId: connection?.id ?? null,
+                sourceType: "transactional",
+                submissionKey: `transactional:${created.id}`,
+                transactionalEmailId: created.id,
+                recipientEmail: to,
+                normalizedRecipient: normalizedTo,
+                provider: pin.provider,
+                rfcMessageId: generateRfcMessageId(),
             })
             .returning();
-        if (!row) {
-            const existing = await findTransactionalEmailByIdempotencyKey(
-                teamId,
-                idempotencyKey,
-            );
-            if (existing) return existing;
+        if (pin.type === "organization") {
+            await reserveOrganizationQuota(tx, {
+                outboundMessageId: outbound.id,
+                grantId: pin.espGrantId!,
+            });
         }
-    }
-    if (!row) {
-        [row] = await db
-            .insert(transactionalEmails)
-            .values(insertValues)
-            .returning();
-    }
-
-    // Outbound ledger row must exist before transport submission (which
-    // happens later, in the worker) — see
-    // docs/bounces-and-complaints.md#1-outbound-message-ledger.
-    await createCustomRouteOutboundMessage({
-        teamId,
-        espConfigId: espConfig.id,
-        provider: espConfig.provider,
-        sourceType: "transactional",
-        submissionKey: `transactional:${row.id}`,
-        transactionalEmailId: row.id,
-        recipientEmail: to,
-        normalizedRecipient: normalizedTo,
+        await tx.insert(mailDispatchOutbox).values({
+            outboundMessageId: outbound.id,
+            queueName: "mail",
+            jobName: "transactional",
+        });
+        return created;
     });
-
-    await addTransactionalMailJob({ transactionalEmailId: row.id });
 
     captureEvent({
         event: "transactional_email_queued",
         source: "transactional.send",
         teamId,
-        properties: { txe_id: row.txeId, esp_id: espConfig.espId },
+        properties: { txe_id: row.txeId, delivery_source: pin.type },
     });
 
     return row;

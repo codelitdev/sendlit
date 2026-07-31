@@ -304,11 +304,12 @@ describe("createTransactionalEmail resolution errors", () => {
         expect(queue.addTransactionalMailJob).not.toHaveBeenCalled();
     });
 
-    it("throws esp_not_configured when the team has no ESP config", async () => {
+    it("reports an unavailable source when the team has no usable delivery", async () => {
         const { team } = await seedTeamAndContact(tdb);
         await db
-            .delete(schema.espConfigs)
-            .where(eq(schema.espConfigs.teamId, team.id));
+            .update(schema.teamDeliverySettings)
+            .set({ teamEspEnabled: false, defaultSource: null })
+            .where(eq(schema.teamDeliverySettings.teamId, team.id));
 
         await expect(
             createTransactionalEmail({
@@ -317,7 +318,7 @@ describe("createTransactionalEmail resolution errors", () => {
                 subject: "Hi",
                 html: "<p>hi</p>",
             }),
-        ).rejects.toThrow("esp_not_configured");
+        ).rejects.toThrow("delivery_source_unavailable");
     });
 
     it("rejects a suppressed recipient without creating a row or enqueuing", async () => {
@@ -346,9 +347,7 @@ describe("createTransactionalEmail resolution errors", () => {
     });
 
     it("does not apply platform quota to a user-managed ESP", async () => {
-        const { team } = await seedTeamAndContact(tdb, {
-            account: { dailyMailLimit: 0 },
-        });
+        const { team } = await seedTeamAndContact(tdb);
 
         await expect(
             createTransactionalEmail({
@@ -360,7 +359,7 @@ describe("createTransactionalEmail resolution errors", () => {
         ).resolves.toMatchObject({ status: "queued" });
     });
 
-    it("pins an explicitly selected ESP and rejects a foreign or missing espId", async () => {
+    it("pins an explicitly selected ESP and rejects a foreign or missing ESP", async () => {
         const { team } = await seedTeamAndContact(tdb);
         const other = await seedTeamAndContact(tdb);
         const secondEsp = await createEspConfig(team.id, {
@@ -378,13 +377,17 @@ describe("createTransactionalEmail resolution errors", () => {
             port: 587,
             secure: false,
         });
+        await db
+            .update(schema.espConfigs)
+            .set({ status: "active", activatedAt: new Date() })
+            .where(eq(schema.espConfigs.id, secondEsp.id));
 
         const row = await createTransactionalEmail({
             teamId: team.id,
             to: "a@example.com",
             subject: "Hi",
             html: "<p>hi</p>",
-            espId: secondEsp.espId,
+            deliverySource: { type: "team", espId: secondEsp.espId },
         });
         expect(row.outboxId).toBe(secondEsp.id);
         expect(row.fromEmail).toContain("marketing@example.com");
@@ -395,18 +398,18 @@ describe("createTransactionalEmail resolution errors", () => {
                 to: "a@example.com",
                 subject: "Hi",
                 html: "<p>hi</p>",
-                espId: foreignEsp.espId,
+                deliverySource: { type: "team", espId: foreignEsp.espId },
             }),
-        ).rejects.toThrow("esp_not_found");
+        ).rejects.toThrow("esp_not_configured");
         await expect(
             createTransactionalEmail({
                 teamId: team.id,
                 to: "a@example.com",
                 subject: "Hi",
                 html: "<p>hi</p>",
-                espId: "esp_does_not_exist",
+                deliverySource: { type: "team", espId: "esp_does_not_exist" },
             }),
-        ).rejects.toThrow("esp_not_found");
+        ).rejects.toThrow("esp_not_configured");
     });
 });
 

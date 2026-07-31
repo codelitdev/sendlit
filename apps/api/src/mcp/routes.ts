@@ -74,7 +74,7 @@ function getMcpAuth(req: any) {
         // "clientId" here is the resolved *team* id (see `auth/require-team.ts`) —
         // every MCP tool operates on team-scoped resources.
         clientId: String(req.teamId || ""),
-        account: req.account,
+        user: req.user,
         scopes: (req.scopes as string[] | undefined) || [],
     };
 }

@@ -27,6 +27,11 @@ import {
     markOutboundAccepted,
     markOutboundBounced,
 } from "../delivery-feedback/outbound-queries";
+import { resolvePinnedDeliverySource } from "../delivery/queries";
+import {
+    commitQuotaForOutbound,
+    releaseQuotaForOutbound,
+} from "../delivery/quota";
 
 async function processCampaignJob(job: Job) {
     const { to, from, subject, body, headers, teamId } = job.data;
@@ -81,13 +86,21 @@ async function processTransactionalJob(job: Job) {
             await markTransactionalEmailFailed(row.id, "Team not found");
             return;
         }
-        if (row.deliveryRoute !== "custom" || !row.outboxId) {
+        if (!row.outboxId) {
             await markTransactionalEmailFailed(
                 row.id,
                 "Team ESP is not configured.",
             );
             return;
         }
+        const pin = await resolvePinnedDeliverySource({
+            teamId: row.teamId,
+            type: row.deliverySourceType as "organization" | "team",
+            espConfigId: row.outboxId,
+            espGrantId: row.espGrantId,
+        });
+
+        outbound = await getOutboundMessageByTransactionalEmailId(row.id);
 
         // Recheck immediately before transport — closes the race between
         // enqueue and a bounce/complaint that suppressed this recipient in the
@@ -95,10 +108,11 @@ async function processTransactionalJob(job: Job) {
         // docs/bounces-and-complaints.md#8-suppression-model.
         if (await isRecipientSuppressed(row.teamId, row.toEmail)) {
             await markTransactionalEmailSuppressed(row.id);
+            if (outbound) {
+                await releaseQuotaForOutbound(outbound.id, "suppressed");
+            }
             return;
         }
-
-        outbound = await getOutboundMessageByTransactionalEmailId(row.id);
 
         // Tracking rewrites are applied here, at send time, from the row's
         // opt-in flags — the stored `html` snapshot stays pre-rewrite (see
@@ -137,6 +151,7 @@ async function processTransactionalJob(job: Job) {
                 (row.headers as Record<string, string> | null) ?? undefined,
             teamId: row.teamId,
             espConfigId: row.outboxId,
+            secretVersion: pin.secretVersion,
             messageId: outbound?.rfcMessageId ?? undefined,
         });
         await markTransactionalEmailSent(row.id);
@@ -144,6 +159,7 @@ async function processTransactionalJob(job: Job) {
             await markOutboundAccepted(outbound.id, {
                 providerMessageId: result.providerResponse,
             });
+            await commitQuotaForOutbound(outbound.id);
         }
     } catch (err: any) {
         const responseCode = err?.responseCode;
@@ -164,6 +180,7 @@ async function processTransactionalJob(job: Job) {
             await markTransactionalEmailBounced(row.id, err.message);
             if (outbound) {
                 await markOutboundBounced(outbound.id);
+                await releaseQuotaForOutbound(outbound.id, "provider_rejected");
             }
             // Mirrors this synchronous SMTP signal into the suppression
             // system directly — there is no webhook receipt/event backing
@@ -191,6 +208,9 @@ async function processTransactionalJob(job: Job) {
         const isFinalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
         if (isFinalAttempt) {
             await markTransactionalEmailFailed(row.id, err.message);
+            if (outbound) {
+                await releaseQuotaForOutbound(outbound.id, "terminal_failure");
+            }
         } else {
             await releaseTransactionalEmailClaim(row.id);
         }

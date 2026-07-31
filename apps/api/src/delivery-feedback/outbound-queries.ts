@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { outboundMessages } from "../db/schema";
-import type { DeliveryRoute, OutboundSourceType } from "../config/constants";
+import type { OutboundSourceType } from "../config/constants";
 
 export type OutboundMessage = typeof outboundMessages.$inferSelect;
 
@@ -13,8 +13,9 @@ export type OutboundMessage = typeof outboundMessages.$inferSelect;
  */
 export async function createOutboundMessage(input: {
     teamId: string;
-    deliveryRoute: DeliveryRoute;
-    espConfigId: string | null;
+    deliverySourceType: "organization" | "team";
+    espConfigId: string;
+    espGrantId: string | null;
     feedbackConnectionId: string | null;
     sourceType: OutboundSourceType;
     submissionKey?: string | null;
@@ -29,8 +30,9 @@ export async function createOutboundMessage(input: {
         .insert(outboundMessages)
         .values({
             teamId: input.teamId,
-            deliveryRoute: input.deliveryRoute,
+            deliverySourceType: input.deliverySourceType,
             espConfigId: input.espConfigId,
+            espGrantId: input.espGrantId,
             feedbackConnectionId: input.feedbackConnectionId,
             sourceType: input.sourceType,
             submissionKey: input.submissionKey ?? null,

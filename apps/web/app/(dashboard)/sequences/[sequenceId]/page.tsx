@@ -19,21 +19,23 @@ import { Switch } from "@/components/ui/codelit/switch";
 import { Banner } from "@/components/dashboard/banner";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
-import { EspPicker } from "@/components/dashboard/esp-picker";
+import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import { ApiError } from "@/lib/api-client";
+import { presentDeliverySourceError } from "@/lib/delivery-source";
 import {
     addSequenceEmail,
     deleteSequenceEmail,
     getSequence,
     getSequenceStats,
-    listEsps,
+    listSendingOptions,
     listSystemTemplates,
     listTemplates,
     pauseSequence,
     startSequence,
     updateSequence,
     updateSequenceEmail,
-    type EspConfig,
+    type DeliverySourceSelection,
+    type SendingOption,
     type SystemTemplate,
 } from "@/lib/api";
 import {
@@ -63,7 +65,7 @@ interface SequenceMeta {
     title: string;
     triggerType?: string | null;
     triggerData?: string | null;
-    espId?: string | null;
+    deliverySource?: DeliverySourceSelection | null;
 }
 
 const MILLIS_IN_DAY = 86400000;
@@ -106,7 +108,7 @@ export default function SequenceEditorPage({
     );
     const [templates, setTemplates] = useState<EmailTemplate[]>([]);
     const [templatesLoading, setTemplatesLoading] = useState(false);
-    const [esps, setEsps] = useState<EspConfig[]>([]);
+    const [sendingOptions, setSendingOptions] = useState<SendingOption[]>([]);
 
     useSetBreadcrumb([
         { label: "Sequences", href: "/sequences" },
@@ -121,7 +123,7 @@ export default function SequenceEditorPage({
                 title: s.title,
                 triggerType: s.triggerType,
                 triggerData: s.triggerData,
-                espId: s.espId,
+                deliverySource: s.deliverySource,
             });
             const nextSelected =
                 s.emails.find(
@@ -167,12 +169,12 @@ export default function SequenceEditorPage({
         Promise.all([
             listSystemTemplates("marketing"),
             listTemplates("marketing"),
-            listEsps(),
+            listSendingOptions(),
         ])
-            .then(([system, own, espResult]) => {
+            .then(([system, own, sendingOptionsResult]) => {
                 setSystemTemplates(system);
                 setTemplates(own);
-                setEsps(espResult.items);
+                setSendingOptions(sendingOptionsResult.items);
             })
             .catch((err) =>
                 setError(
@@ -198,7 +200,9 @@ export default function SequenceEditorPage({
                 title: meta.title,
                 triggerType: meta.triggerType || undefined,
                 triggerData: meta.triggerData || undefined,
-                ...(espEditable ? { espId: meta.espId ?? null } : {}),
+                ...(espEditable
+                    ? { deliverySource: meta.deliverySource ?? null }
+                    : {}),
             });
             setSequence(updated);
         } catch (err) {
@@ -249,7 +253,11 @@ export default function SequenceEditorPage({
                     : await startSequence(sequenceId);
             setSequence(updated);
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Action failed");
+            setError(
+                err instanceof ApiError
+                    ? presentDeliverySourceError(err.message)
+                    : "Action failed",
+            );
         }
     }
 
@@ -322,7 +330,7 @@ export default function SequenceEditorPage({
 
                 <div className="mb-6">
                     <Card>
-                        <CardHeader className="flex-row items-center justify-between space-y-0">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
                             <CardTitle className="text-base">
                                 Details &amp; trigger
                             </CardTitle>
@@ -350,19 +358,20 @@ export default function SequenceEditorPage({
                                     placeholder="e.g. Onboarding drip"
                                 />
                             </div>
-                            {esps.length > 1 && (
-                                <div className="space-y-1.5">
-                                    <Label>Sending ESP</Label>
-                                    <EspPicker
-                                        esps={esps}
-                                        value={meta.espId}
-                                        onChange={(espId) =>
-                                            setMeta({ ...meta, espId })
-                                        }
-                                        disabled={!espEditable}
-                                    />
-                                </div>
-                            )}
+                            <div className="space-y-1.5">
+                                <Label>Delivery source</Label>
+                                <DeliverySourcePicker
+                                    options={sendingOptions}
+                                    value={meta.deliverySource}
+                                    onChange={(deliverySource) =>
+                                        setMeta({
+                                            ...meta,
+                                            deliverySource,
+                                        })
+                                    }
+                                    disabled={!espEditable}
+                                />
+                            </div>
                             <TriggerPicker
                                 triggerType={meta.triggerType}
                                 triggerData={meta.triggerData}
@@ -416,7 +425,7 @@ export default function SequenceEditorPage({
                     <div>
                         {emailDraft ? (
                             <Card>
-                                <CardHeader className="flex-row items-center justify-between space-y-0">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0">
                                     <CardTitle className="text-base">
                                         Edit email
                                     </CardTitle>

@@ -66,8 +66,10 @@ import {
     deleteEsp,
     feedbackCapableProviders,
     getGeneralSettings,
+    getTeamDeliverySettings,
     listEsps,
     testEsp,
+    setTeamEspAsDefault,
     updateEsp,
     updateGeneralSettings,
     type EspConfig,
@@ -83,7 +85,6 @@ const PROVIDERS: { value: EspProvider; label: string }[] = [
     { value: "postmark", label: "Postmark" },
     { value: "ses", label: "Amazon SES" },
     { value: "resend", label: "Resend" },
-    { value: "custom", label: "Other" },
 ];
 
 const PROVIDER_LABEL: Record<EspProvider, string> = Object.fromEntries(
@@ -109,6 +110,9 @@ export default function SettingsPage() {
     >(undefined);
     const [mailingAddress, setMailingAddress] = useState("");
     const [esps, setEsps] = useState<EspConfig[] | null>(null);
+    const [defaultTeamEspId, setDefaultTeamEspId] = useState<string | null>(
+        null,
+    );
     const [error, setError] = useState<string | null>(null);
     const [savingGeneral, setSavingGeneral] = useState(false);
     const [generalSaved, setGeneralSaved] = useState(false);
@@ -127,13 +131,15 @@ export default function SettingsPage() {
 
     async function load() {
         try {
-            const [general, { items }] = await Promise.all([
+            const [general, { items }, deliverySettings] = await Promise.all([
                 getGeneralSettings(),
                 listEsps(),
+                getTeamDeliverySettings(),
             ]);
             setGeneralSettings(general);
             setMailingAddress(general.mailingAddress ?? "");
             setEsps(items);
+            setDefaultTeamEspId(deliverySettings.defaultTeamEspId);
         } catch (err) {
             setError(
                 err instanceof ApiError
@@ -187,7 +193,7 @@ export default function SettingsPage() {
     async function handleSetDefault(espId: string) {
         setError(null);
         try {
-            await updateEsp(espId, { isDefault: true });
+            await setTeamEspAsDefault(espId);
             await load();
         } catch (err) {
             setError(
@@ -406,7 +412,8 @@ export default function SettingsPage() {
                                                     <TableCell className="font-medium">
                                                         <span className="inline-flex items-center gap-2">
                                                             {esp.name}
-                                                            {esp.isDefault && (
+                                                            {defaultTeamEspId ===
+                                                                esp.espId && (
                                                                 <Badge variant="secondary">
                                                                     Default
                                                                 </Badge>
@@ -445,7 +452,8 @@ export default function SettingsPage() {
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center justify-end gap-1">
-                                                            {!esp.isDefault && (
+                                                            {defaultTeamEspId !==
+                                                                esp.espId && (
                                                                 <IconButton
                                                                     title="Set as default"
                                                                     aria-label={`Set ${esp.name} as default`}

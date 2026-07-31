@@ -169,6 +169,8 @@ export const testEspResultSchema = z.object({
 export const teamSchema = z.object({
     teamId: z.string(),
     name: z.string(),
+    organizationId: z.string().optional(),
+    organizationName: z.string().optional(),
 });
 
 /** The secret is stored hashed; listings only expose `keyPrefix`. Only
@@ -191,13 +193,11 @@ export const espProviders = [
     "postmark",
     "ses",
     "resend",
-    "custom",
 ] as const;
 
 export const espConfigSchema = z.object({
     espId: z.string(),
     name: z.string(),
-    isDefault: z.boolean(),
     provider: z.enum(espProviders),
     host: z.string(),
     port: z.number(),
@@ -206,6 +206,8 @@ export const espConfigSchema = z.object({
     hasPassword: z.boolean(),
     fromName: z.string().nullable().optional(),
     fromEmail: z.string().nullable().optional(),
+    status: z.string(),
+    secretVersion: z.number(),
     lastTestedAt: z.string().or(z.date()).nullable().optional(),
     lastTestStatus: z.string().nullable().optional(),
     lastTestError: z.string().nullable().optional(),
@@ -250,7 +252,7 @@ export const deliveryEventSchema = z.object({
     eventId: z.string(),
     provider: z.string(),
     espId: z.string().nullable(),
-    deliveryRoute: z.enum(["custom", "platform"]).nullable(),
+    deliverySourceType: z.enum(["organization", "team"]).nullable(),
     messageId: z.string().nullable(),
     recipientEmail: z.string().nullable(),
     eventType: z.string(),

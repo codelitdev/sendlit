@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
 const authState = vi.hoisted(() => ({
-    accountId: "",
+    userId: "",
     authKind: "session",
 }));
 
@@ -13,14 +13,14 @@ vi.mock("../db/client", async () => {
 });
 vi.mock("../auth/middleware", () => ({
     requireAuth: (req: any, _res: any, next: () => void) => {
-        req.accountId = authState.accountId;
+        req.userId = authState.userId;
         req.authKind = authState.authKind;
         next();
     },
 }));
 
 import { db } from "../db/client";
-import { apiKeys, teamMembers, teams } from "../db/schema";
+import { teamApiKeys, teamMembers, teams } from "../db/schema";
 import { createApiKey } from "../apikey/queries";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
 import { requestApp } from "../test/http";
@@ -37,13 +37,13 @@ function app() {
 
 beforeEach(async () => {
     await truncateAll(tdb);
-    authState.accountId = "";
+    authState.userId = "";
     authState.authKind = "session";
 });
 
 describe("team management route authorization", () => {
     it("rejects team management through a team API key", async () => {
-        authState.authKind = "api-key";
+        authState.authKind = "team_key";
 
         const response = await requestApp(app(), "/teams");
 
@@ -51,23 +51,11 @@ describe("team management route authorization", () => {
         expect(response.json()).toMatchObject({ error: "user_auth_required" });
     });
 
-    it("does not reveal another account's team or API keys", async () => {
+    it("does not reveal another user's team or API keys", async () => {
         const first = await seedTeamAndContact(tdb);
         const second = await seedTeamAndContact(tdb);
-        await tdb.insert(teamMembers).values([
-            {
-                teamId: first.team.id,
-                accountId: first.account.id,
-                role: "owner",
-            },
-            {
-                teamId: second.team.id,
-                accountId: second.account.id,
-                role: "owner",
-            },
-        ]);
         await createApiKey(second.team.id, "Private integration");
-        authState.accountId = first.account.id;
+        authState.userId = first.account.id;
 
         const response = await requestApp(
             app(),
@@ -78,26 +66,19 @@ describe("team management route authorization", () => {
         expect(response.body).not.toContain("Private integration");
     });
 
-    it("prevents a non-owner member from deleting a team", async () => {
+    it("prevents a non-organization-admin member from deleting a team", async () => {
+        const organizationOwner = await seedTeamAndContact(tdb);
         const member = await seedTeamAndContact(tdb);
-        const ownedByAnother = await seedTeamAndContact(tdb);
-        await tdb.insert(teamMembers).values([
-            {
-                teamId: ownedByAnother.team.id,
-                accountId: ownedByAnother.account.id,
-                role: "owner",
-            },
-            {
-                teamId: ownedByAnother.team.id,
-                accountId: member.account.id,
-                role: "member",
-            },
-        ]);
-        authState.accountId = member.account.id;
+        await tdb.insert(teamMembers).values({
+            teamId: organizationOwner.team.id,
+            userId: member.account.id,
+            role: "member",
+        });
+        authState.userId = member.account.id;
 
         const response = await requestApp(
             app(),
-            `/teams/${ownedByAnother.team.teamId}`,
+            `/teams/${organizationOwner.team.teamId}`,
             { method: "DELETE" },
         );
 
@@ -105,18 +86,13 @@ describe("team management route authorization", () => {
         const [stillPresent] = await tdb
             .select()
             .from(teams)
-            .where(eq(teams.id, ownedByAnother.team.id));
+            .where(eq(teams.id, organizationOwner.team.id));
         expect(stillPresent).toBeTruthy();
     });
 
-    it("returns a new API key once without exposing hashes or internal team ids", async () => {
+    it("returns a new API key once without exposing hashes or internal ids", async () => {
         const owner = await seedTeamAndContact(tdb);
-        await tdb.insert(teamMembers).values({
-            teamId: owner.team.id,
-            accountId: owner.account.id,
-            role: "owner",
-        });
-        authState.accountId = owner.account.id;
+        authState.userId = owner.account.id;
 
         const created = await requestApp(
             app(),
@@ -135,14 +111,6 @@ describe("team management route authorization", () => {
         });
         expect(created.body).not.toContain("keyHash");
         expect(created.body).not.toContain(owner.team.id);
-
-        const listed = await requestApp(
-            app(),
-            `/teams/${owner.team.teamId}/keys`,
-        );
-        expect(listed.status).toBe(200);
-        expect(listed.body).not.toContain(created.json().key);
-        expect(listed.body).not.toContain("keyHash");
-        expect(await tdb.select().from(apiKeys)).toHaveLength(1);
+        expect(await tdb.select().from(teamApiKeys)).toHaveLength(1);
     });
 });

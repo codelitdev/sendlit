@@ -6,8 +6,12 @@ import {
 
 const transportCache = new Map<string, Transporter>();
 
-function cacheKey(teamId: string, espConfigId: string): string {
-    return `${teamId}:${espConfigId}`;
+function cacheKey(
+    teamId: string,
+    espConfigId: string,
+    secretVersion?: number,
+): string {
+    return `${teamId}:${espConfigId}:${secretVersion ?? "current"}`;
 }
 
 /** Call after a team's ESP config changes so the next send picks up the
@@ -49,8 +53,9 @@ function createEspTransport(
 export async function getEspTransport(
     teamId: string,
     espConfigId: string,
+    secretVersion?: number,
 ): Promise<Transporter | null> {
-    const key = cacheKey(teamId, espConfigId);
+    const key = cacheKey(teamId, espConfigId, secretVersion);
     const cached = transportCache.get(key);
     if (cached) return cached;
 

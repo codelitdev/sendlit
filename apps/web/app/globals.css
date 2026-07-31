@@ -57,6 +57,15 @@
     --sidebar-ring: var(--ring);
 }
 
+/* The design-system's light SendLit accent is slightly too bright for the
+   light foreground used on primary buttons. Keep the product hue, but use a
+   contrast-safe lightness for interactive primary controls. */
+[data-product="sendlit"] {
+    --primary: oklch(0.47 0.14 150);
+    --primary-hover: oklch(0.42 0.14 150);
+    --ring: oklch(0.47 0.14 150);
+}
+
 @layer base {
     * {
         @apply border-border outline-ring/50;

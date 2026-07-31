@@ -8,8 +8,6 @@ import {
     sequences,
 } from "../db/schema";
 import { getTeam } from "../team/queries";
-import { getAccount } from "../account/queries";
-import { getEspConfigById } from "../settings/esp/queries";
 import { getGeneralSettings } from "../settings/general/queries";
 import {
     addTagToContact,
@@ -36,10 +34,15 @@ import {
 } from "./queries";
 import { sequenceBounceLimit } from "../config/constants";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
-import { createCustomRouteOutboundMessage } from "../delivery-feedback/outbound-send";
+import { createPinnedOutboundMessage } from "../delivery-feedback/outbound-send";
 import { markOutboundAccepted } from "../delivery-feedback/outbound-queries";
 import { normalizeEmail } from "../utils/email";
 import { validateTemplateContent } from "../templates/validation";
+import { resolvePinnedDeliverySource } from "../delivery/queries";
+import {
+    commitQuotaForOutbound,
+    reserveOrganizationQuotaForOutbound,
+} from "../delivery/quota";
 
 type OngoingSequenceRow = typeof ongoingSequences.$inferSelect;
 type SequenceEmailRow = typeof sequenceEmails.$inferSelect;
@@ -200,19 +203,18 @@ async function attemptMailSending({
     ongoingSequence: OngoingSequenceRow;
     email: SequenceEmailRow;
 }) {
-    if (sequence.deliveryRoute !== "custom" || !sequence.outboxId) {
+    if (!sequence.deliverySourceType || !sequence.outboxId) {
         throw new Error("Team ESP is not configured.");
     }
-    const outbox = await getEspConfigById(sequence.outboxId, team.id);
-    if (!outbox) throw new Error("Team ESP is not configured.");
-    const ownerAccount = await getAccount(team.ownerAccountId);
+    const pin = await resolvePinnedDeliverySource({
+        teamId: team.id,
+        type: sequence.deliverySourceType as "organization" | "team",
+        espConfigId: sequence.outboxId,
+        espGrantId: sequence.espGrantId,
+    });
     const from = getEmailFrom({
-        name: outbox?.fromName || team.name,
-        email:
-            outbox?.fromEmail ||
-            ownerAccount?.email ||
-            process.env.EMAIL_FROM ||
-            "",
+        name: pin.fromName,
+        email: pin.fromEmail,
     });
     const to = contact.email;
     const subject = email.subject;
@@ -294,23 +296,31 @@ async function attemptMailSending({
     try {
         // Outbound ledger row must exist before transport submission — see
         // docs/bounces-and-complaints.md#1-outbound-message-ledger.
-        const { outbound, rfcMessageId } =
-            await createCustomRouteOutboundMessage({
-                teamId: team.id,
-                espConfigId: outbox.id,
-                provider: outbox.provider,
-                sourceType: "campaign",
-                submissionKey: `campaign:${ongoingSequence.id}:${email.id}`,
-                recipientEmail: to,
-                normalizedRecipient: normalizeEmail(to),
+        const { outbound, rfcMessageId } = await createPinnedOutboundMessage({
+            teamId: team.id,
+            deliverySourceType: pin.type,
+            espConfigId: pin.espConfigId,
+            espGrantId: pin.espGrantId,
+            provider: pin.provider,
+            sourceType: "campaign",
+            submissionKey: `campaign:${ongoingSequence.id}:${email.id}`,
+            recipientEmail: to,
+            normalizedRecipient: normalizeEmail(to),
+        });
+        if (pin.type === "organization") {
+            await reserveOrganizationQuotaForOutbound({
+                outboundMessageId: outbound.id,
+                grantId: pin.espGrantId!,
             });
+        }
         const result = await sendMail({
             from,
             to,
             subject,
             html: contentWithTrackedLinks,
             teamId: team.id,
-            espConfigId: outbox.id,
+            espConfigId: pin.espConfigId,
+            secretVersion: pin.secretVersion,
             messageId: rfcMessageId,
         });
         const [delivery] = await db
@@ -326,6 +336,7 @@ async function attemptMailSending({
             providerMessageId: result.providerResponse,
             campaignDeliveryId: delivery.id,
         });
+        await commitQuotaForOutbound(outbound.id);
         await applyEmailAction({ team, contact, sequence, email });
     } catch (err: any) {
         const retryCount = ongoingSequence.retryCount + 1;

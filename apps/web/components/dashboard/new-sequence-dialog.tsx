@@ -12,14 +12,15 @@ import {
 } from "@/components/ui/codelit/dialog";
 import { Label } from "@/components/ui/codelit/label";
 import { Banner } from "@/components/dashboard/banner";
-import { EspPicker } from "@/components/dashboard/esp-picker";
+import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import { ApiError } from "@/lib/api-client";
 import {
     createSequence,
-    listEsps,
+    listSendingOptions,
     listSystemTemplates,
     listTemplates,
-    type EspConfig,
+    type DeliverySourceSelection,
+    type SendingOption,
     type SystemTemplate,
 } from "@/lib/api";
 import { TemplateChooser, type EmailTemplate } from "@sendlit/email-blocks";
@@ -47,25 +48,26 @@ export function NewSequenceDialog({
         [],
     );
     const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-    const [esps, setEsps] = useState<EspConfig[]>([]);
-    const [espId, setEspId] = useState<string | null>(null);
+    const [sendingOptions, setSendingOptions] = useState<SendingOption[]>([]);
+    const [deliverySource, setDeliverySource] =
+        useState<DeliverySourceSelection | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
         if (!open) return;
-        setEspId(null);
+        setDeliverySource(null);
         setLoading(true);
         Promise.all([
             listSystemTemplates("marketing"),
             listTemplates("marketing"),
-            listEsps(),
+            listSendingOptions(),
         ])
-            .then(([system, own, espResult]) => {
+            .then(([system, own, sendingOptionsResult]) => {
                 setSystemTemplates(system);
                 setTemplates(own);
-                setEsps(espResult.items);
+                setSendingOptions(sendingOptionsResult.items);
             })
             .catch((err) =>
                 setError(
@@ -84,7 +86,7 @@ export function NewSequenceDialog({
             const sequence = await createSequence({
                 type,
                 templateId: choice.templateId,
-                espId: espId ?? undefined,
+                deliverySource: deliverySource ?? undefined,
             });
             setOpen(false);
             onCreated(sequence.sequenceId);
@@ -110,17 +112,15 @@ export function NewSequenceDialog({
                     <DialogTitle>{label}</DialogTitle>
                 </DialogHeader>
                 {error && <Banner>{error}</Banner>}
-                {esps.length > 1 && (
-                    <div className="space-y-1.5">
-                        <Label>Send via</Label>
-                        <EspPicker
-                            esps={esps}
-                            value={espId}
-                            onChange={setEspId}
-                            disabled={submitting}
-                        />
-                    </div>
-                )}
+                <div className="space-y-1.5">
+                    <Label>Send via</Label>
+                    <DeliverySourcePicker
+                        options={sendingOptions}
+                        value={deliverySource}
+                        onChange={setDeliverySource}
+                        disabled={submitting || loading}
+                    />
+                </div>
                 <TemplateChooser
                     className="mt-8"
                     purpose="marketing"

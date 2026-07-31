@@ -33,6 +33,21 @@ describe("team switch", () => {
         expect(response.headers.get("set-cookie")).not.toContain("HttpOnly");
     });
 
+    it("keeps the organization context when switching teams", async () => {
+        const { POST } = await import("./route");
+        const response = await POST(
+            request({
+                teamId: "team_123",
+                organizationId: "org_123",
+                redirectTo: "/",
+            }),
+        );
+
+        expect(response.headers.get("set-cookie")).toContain(
+            "sendlit_organization_id=org_123",
+        );
+    });
+
     it("redirects using WEB_CLIENT even when req.url is the container bind address", async () => {
         vi.stubEnv("WEB_CLIENT", "https://app.sendlit.clqa.site");
         vi.resetModules();

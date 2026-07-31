@@ -111,6 +111,8 @@ export interface MediaReference {
 
 export interface Team {
     teamId: string;
+    organizationId?: string;
+    organizationName?: string;
     name: string;
     ownerAccountId?: string;
     externalId?: string | null;
@@ -406,10 +408,35 @@ export function listSequences(type: MailType) {
     );
 }
 
+export type DeliverySourceSelection =
+    { type: "organization" } | { type: "team"; espId?: string };
+
+export type SendingOption =
+    | {
+          type: "organization";
+          name: string;
+          fromName: string | null;
+          fromEmail: string | null;
+          replyTo: string | null;
+          isDefault: boolean;
+          available: boolean;
+          countsAgainstQuota: true;
+      }
+    | {
+          type: "team";
+          espId: string;
+          name: string;
+          fromName: string | null;
+          fromEmail: string | null;
+          isDefault: boolean;
+          available: boolean;
+          countsAgainstQuota: false;
+      };
+
 export function createSequence(input: {
     type: MailType;
     templateId: string;
-    espId?: string;
+    deliverySource?: DeliverySourceSelection;
 }) {
     return unwrap<Sequence>(client.sequences.create({ body: input }));
 }
@@ -427,9 +454,9 @@ export function updateSequence(
         filter?: ContactFilterWithAggregator;
         emailsOrder?: string[];
         /** `undefined` leaves the current selection unchanged; `null` clears
-         * it so the team's default ESP resolves at start. Only settable while
+         * it so the team's default delivery source resolves at start. Only settable while
          * the sequence/broadcast is still `draft` or `paused`. */
-        espId?: string | null;
+        deliverySource?: DeliverySourceSelection | null;
     },
 ) {
     const { filter, ...rest } = patch;
@@ -513,12 +540,11 @@ export function getOverview(rangeDays = 7) {
 // ---- ESP (email sending provider) ----------------------------------------
 
 export type EspProvider =
-    "smtp" | "sendgrid" | "mailgun" | "postmark" | "ses" | "resend" | "custom";
+    "smtp" | "sendgrid" | "mailgun" | "postmark" | "ses" | "resend";
 
 export interface EspConfig {
     espId: string;
     name: string;
-    isDefault: boolean;
     provider: EspProvider;
     host: string;
     port: number;
@@ -530,6 +556,11 @@ export interface EspConfig {
     lastTestedAt: string | null;
     lastTestStatus: "success" | "failed" | null;
     lastTestError: string | null;
+    status: "draft" | "active" | "suspended" | "draining" | "retired";
+    secretVersion: number;
+    activatedAt: string | null;
+    drainUntil: string | null;
+    retiredAt: string | null;
     updatedAt: string;
 }
 
@@ -545,35 +576,19 @@ export interface EspConnectionInput {
     fromEmail?: string;
 }
 
-/** Backward-compatible singleton alias over the team's default ESP — prefer
- * the collection functions below (`listEsps`/`createEsp`/...) for new UI. */
-export function getEspConfig() {
-    return unwrap<EspConfig | null>(client.settings.esp.get());
-}
-
-export function updateEspConfig(input: EspConnectionInput) {
-    return unwrap<EspConfig>(client.settings.esp.upsert({ body: input }));
-}
-
-export function deleteEspConfig() {
-    return unwrap<void>(client.settings.esp.remove());
-}
-
-export function testEspConfig(to?: string) {
-    return unwrap<{ success: boolean; error?: string }>(
-        client.settings.esp.test({ body: { to } }),
-    );
-}
-
 // ---- ESP collection (multiple user-managed ESPs per team) -----------------
 
 export function listEsps() {
     return unwrap<{ items: EspConfig[] }>(client.settings.esps.list());
 }
 
-export function createEsp(
-    input: EspConnectionInput & { name: string; isDefault?: boolean },
-) {
+/** All sources available to the active team. Shared organization ESPs are
+ * deliberately redacted and expose only safe sender metadata. */
+export function listSendingOptions() {
+    return unwrap<{ items: SendingOption[] }>(client.delivery.sendingOptions());
+}
+
+export function createEsp(input: EspConnectionInput & { name: string }) {
     return unwrap<EspConfig>(client.settings.esps.create({ body: input }));
 }
 
@@ -585,12 +600,25 @@ export function updateEsp(
     espId: string,
     patch: Partial<EspConnectionInput> & {
         name?: string;
-        /** A default can only be replaced by promoting another ESP. */
-        isDefault?: true;
     },
 ) {
     return unwrap<EspConfig>(
         client.settings.esps.update({ params: { espId }, body: patch }),
+    );
+}
+
+export function getTeamDeliverySettings() {
+    return unwrap<{
+        defaultSource: "organization" | "team" | null;
+        defaultTeamEspId: string | null;
+    }>(client.delivery.getSettings());
+}
+
+export function setTeamEspAsDefault(espId: string) {
+    return unwrap(
+        client.delivery.updateSettings({
+            body: { deliverySource: { type: "team", espId } },
+        }),
     );
 }
 
@@ -666,6 +694,463 @@ export function deleteEspFeedback(espId: string) {
     return unwrap<void>(client.feedback.remove({ params: { espId } }));
 }
 
+// ---- Organizations --------------------------------------------------------
+
+/** Organization administration is intentionally separate from the selected
+ * team. These calls still go through the session-cookie BFF, so organization
+ * keys and ESP credentials never enter browser storage. */
+async function organizationRequest<T>(
+    path: string,
+    init: RequestInit = {},
+): Promise<T> {
+    const response = await fetch(`/api/proxy${path}`, {
+        ...init,
+        headers: {
+            ...(init.body ? { "Content-Type": "application/json" } : {}),
+            ...init.headers,
+        },
+    });
+    if (response.ok) {
+        if (response.status === 204) return undefined as T;
+        return (await response.json()) as T;
+    }
+    if (response.status === 401 && typeof window !== "undefined") {
+        window.location.href = "/login";
+        return new Promise<T>(() => {});
+    }
+    const body = (await response.json().catch(() => null)) as {
+        error?: string;
+    } | null;
+    throw new ApiError(
+        response.status,
+        body?.error || `Request failed (${response.status})`,
+    );
+}
+
+export interface Organization {
+    organizationId: string;
+    name: string;
+    status: "active" | "suspended" | "closed";
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface OrganizationTeam {
+    teamId: string;
+    name: string;
+    status: "active" | "sending_suspended" | "archived";
+    externalId: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+}
+
+export interface OrganizationMember {
+    userId: string;
+    email: string;
+    name: string;
+    image: string | null;
+    role: "owner" | "admin" | "member";
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface OrganizationUsageWindow {
+    limit: number | null;
+    accepted: number;
+    reserved: number;
+    remaining: number | null;
+    resetsAt: string;
+}
+
+export interface OrganizationUsage {
+    day: OrganizationUsageWindow;
+    month: OrganizationUsageWindow;
+}
+
+export interface OrganizationAuditEvent {
+    action: string;
+    actorType: "user" | "organization_key" | "team_key" | "system";
+    teamId: string | null;
+    espId: string | null;
+    grantId: string | null;
+    metadata: Record<string, unknown>;
+    createdAt: string;
+}
+
+export interface OrganizationApiKey {
+    keyId: string;
+    name: string;
+    keyPrefix: string;
+    scopes: OrganizationApiKeyScope[];
+    expiresAt: string | null;
+    lastUsedAt: string | null;
+    revokedAt: string | null;
+    createdAt: string;
+}
+
+export interface CreatedOrganizationApiKey extends OrganizationApiKey {
+    key: string;
+}
+
+export type OrganizationApiKeyScope =
+    | "organization:read"
+    | "teams:provision"
+    | "teams:read"
+    | "teams:manage"
+    | "teams:keys"
+    | "esps:read"
+    | "esps:manage"
+    | "grants:manage"
+    | "usage:read";
+
+export interface OrganizationEspGrant {
+    grantId: string;
+    teamId: string;
+    espId: string;
+    status: "active" | "draining" | "suspended" | "revoked";
+    drainUntil: string | null;
+    fromName: string | null;
+    replyTo: string | null;
+    dailyLimit: number | null;
+    monthlyLimit: number | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface OrganizationDeliveryPolicy {
+    defaultEspId: string | null;
+    autoGrantDefaultEsp: boolean;
+    defaultDailyLimit: number | null;
+    defaultMonthlyLimit: number | null;
+    aggregateDailyLimit: number | null;
+    aggregateMonthlyLimit: number | null;
+    teamEspEnabledByDefault: boolean;
+    teamCanChangeDefault: boolean;
+    updatedAt: string;
+}
+
+export function listOrganizations() {
+    return organizationRequest<{ items: Organization[] }>("/organizations");
+}
+
+export function createOrganization(name: string) {
+    return organizationRequest<Organization>("/organizations", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+    });
+}
+
+export function updateOrganization(organizationId: string, name: string) {
+    return organizationRequest<Organization>(
+        `/organizations/${organizationId}`,
+        {
+            method: "PATCH",
+            body: JSON.stringify({ name }),
+        },
+    );
+}
+
+export function listOrganizationMembers(organizationId: string) {
+    return organizationRequest<{ items: OrganizationMember[] }>(
+        `/organizations/${organizationId}/members`,
+    );
+}
+
+export function addOrganizationMember(
+    organizationId: string,
+    input: { email: string; role: OrganizationMember["role"] },
+) {
+    return organizationRequest<OrganizationMember>(
+        `/organizations/${organizationId}/members`,
+        { method: "POST", body: JSON.stringify(input) },
+    );
+}
+
+export function updateOrganizationMember(
+    organizationId: string,
+    userId: string,
+    role: OrganizationMember["role"],
+) {
+    return organizationRequest<OrganizationMember>(
+        `/organizations/${organizationId}/members/${userId}`,
+        { method: "PATCH", body: JSON.stringify({ role }) },
+    );
+}
+
+export function removeOrganizationMember(
+    organizationId: string,
+    userId: string,
+) {
+    return organizationRequest<void>(
+        `/organizations/${organizationId}/members/${userId}`,
+        { method: "DELETE" },
+    );
+}
+
+export function listOrganizationTeams(organizationId: string) {
+    return organizationRequest<{ items: OrganizationTeam[] }>(
+        `/organizations/${organizationId}/teams`,
+    );
+}
+
+export function getOrganizationDeliveryPolicy(organizationId: string) {
+    return organizationRequest<OrganizationDeliveryPolicy>(
+        `/organizations/${organizationId}/delivery-policy`,
+    );
+}
+
+export function updateOrganizationDeliveryPolicy(
+    organizationId: string,
+    input: Partial<
+        Pick<
+            OrganizationDeliveryPolicy,
+            | "defaultEspId"
+            | "autoGrantDefaultEsp"
+            | "defaultDailyLimit"
+            | "defaultMonthlyLimit"
+            | "aggregateDailyLimit"
+            | "aggregateMonthlyLimit"
+            | "teamEspEnabledByDefault"
+            | "teamCanChangeDefault"
+        >
+    >,
+) {
+    return organizationRequest<OrganizationDeliveryPolicy>(
+        `/organizations/${organizationId}/delivery-policy`,
+        { method: "PUT", body: JSON.stringify(input) },
+    );
+}
+
+export function getOrganizationUsage(organizationId: string) {
+    return organizationRequest<OrganizationUsage>(
+        `/organizations/${organizationId}/usage`,
+    );
+}
+
+export function listOrganizationAuditEvents(organizationId: string) {
+    return organizationRequest<{ items: OrganizationAuditEvent[] }>(
+        `/organizations/${organizationId}/audit-events`,
+    );
+}
+
+export function createOrganizationTeam(organizationId: string, name: string) {
+    return organizationRequest<OrganizationTeam>(
+        `/organizations/${organizationId}/teams`,
+        { method: "POST", body: JSON.stringify({ name }) },
+    );
+}
+
+export function renameOrganizationTeam(
+    organizationId: string,
+    teamId: string,
+    name: string,
+) {
+    return organizationRequest<OrganizationTeam>(
+        `/organizations/${organizationId}/teams/${teamId}`,
+        { method: "PATCH", body: JSON.stringify({ name }) },
+    );
+}
+
+export function archiveOrganizationTeam(
+    organizationId: string,
+    teamId: string,
+) {
+    return organizationRequest<void>(
+        `/organizations/${organizationId}/teams/${teamId}`,
+        { method: "DELETE" },
+    );
+}
+
+export function listOrganizationEsps(organizationId: string) {
+    return organizationRequest<{ items: EspConfig[] }>(
+        `/organizations/${organizationId}/esps`,
+    );
+}
+
+export function createOrganizationEsp(
+    organizationId: string,
+    input: EspConnectionInput & { name: string },
+) {
+    return organizationRequest<EspConfig>(
+        `/organizations/${organizationId}/esps`,
+        {
+            method: "POST",
+            body: JSON.stringify(input),
+        },
+    );
+}
+
+export function updateOrganizationEsp(
+    organizationId: string,
+    espId: string,
+    input: Partial<EspConnectionInput> & { name?: string },
+) {
+    return organizationRequest<EspConfig>(
+        `/organizations/${organizationId}/esps/${espId}`,
+        { method: "PATCH", body: JSON.stringify(input) },
+    );
+}
+
+export function testOrganizationEsp(
+    organizationId: string,
+    espId: string,
+    to?: string,
+) {
+    return organizationRequest<{ success: boolean; error?: string }>(
+        `/organizations/${organizationId}/esps/${espId}/test`,
+        { method: "POST", body: JSON.stringify({ to }) },
+    );
+}
+
+export function activateOrganizationEsp(organizationId: string, espId: string) {
+    return organizationRequest<EspConfig>(
+        `/organizations/${organizationId}/esps/${espId}/activate`,
+        { method: "POST" },
+    );
+}
+
+export function suspendOrganizationEsp(organizationId: string, espId: string) {
+    return organizationRequest<EspConfig>(
+        `/organizations/${organizationId}/esps/${espId}/suspend`,
+        { method: "POST" },
+    );
+}
+
+export function resumeOrganizationEsp(organizationId: string, espId: string) {
+    return organizationRequest<EspConfig>(
+        `/organizations/${organizationId}/esps/${espId}/resume`,
+        { method: "POST" },
+    );
+}
+
+export function retireOrganizationEsp(
+    organizationId: string,
+    espId: string,
+    input:
+        { transition: "drain"; drainUntil?: string } | { transition: "cancel" },
+) {
+    return organizationRequest<EspConfig>(
+        `/organizations/${organizationId}/esps/${espId}/retire`,
+        { method: "POST", body: JSON.stringify(input) },
+    );
+}
+
+export function deleteOrganizationEsp(organizationId: string, espId: string) {
+    return organizationRequest<void>(
+        `/organizations/${organizationId}/esps/${espId}`,
+        { method: "DELETE" },
+    );
+}
+
+export function getOrganizationEspFeedback(
+    organizationId: string,
+    espId: string,
+) {
+    return organizationRequest<FeedbackConnection | null>(
+        `/organizations/${organizationId}/esps/${espId}/feedback`,
+    );
+}
+
+export function upsertOrganizationEspFeedback(
+    organizationId: string,
+    espId: string,
+    input: { credential: string; expectedTopicArn?: string },
+) {
+    return organizationRequest<FeedbackConnection>(
+        `/organizations/${organizationId}/esps/${espId}/feedback`,
+        { method: "PUT", body: JSON.stringify(input) },
+    );
+}
+
+export function testOrganizationEspFeedback(
+    organizationId: string,
+    espId: string,
+) {
+    return organizationRequest<{ success: boolean; error?: string }>(
+        `/organizations/${organizationId}/esps/${espId}/feedback/test`,
+        { method: "POST" },
+    );
+}
+
+export function deleteOrganizationEspFeedback(
+    organizationId: string,
+    espId: string,
+) {
+    return organizationRequest<void>(
+        `/organizations/${organizationId}/esps/${espId}/feedback`,
+        { method: "DELETE" },
+    );
+}
+
+export function listOrganizationKeys(organizationId: string) {
+    return organizationRequest<{ items: OrganizationApiKey[] }>(
+        `/organizations/${organizationId}/keys`,
+    );
+}
+
+export function createOrganizationKey(
+    organizationId: string,
+    input: {
+        name: string;
+        scopes: OrganizationApiKeyScope[];
+        expiresAt?: string | null;
+    },
+) {
+    return organizationRequest<CreatedOrganizationApiKey>(
+        `/organizations/${organizationId}/keys`,
+        { method: "POST", body: JSON.stringify(input) },
+    );
+}
+
+export function revokeOrganizationKey(organizationId: string, keyId: string) {
+    return organizationRequest<void>(
+        `/organizations/${organizationId}/keys/${keyId}`,
+        { method: "DELETE" },
+    );
+}
+
+export function getOrganizationEspGrant(
+    organizationId: string,
+    teamId: string,
+) {
+    return organizationRequest<OrganizationEspGrant | null>(
+        `/organizations/${organizationId}/teams/${teamId}/esp-grant`,
+    );
+}
+
+export function upsertOrganizationEspGrant(
+    organizationId: string,
+    teamId: string,
+    input: {
+        espId: string;
+        fromName?: string | null;
+        replyTo?: string | null;
+        dailyLimit?: number | null;
+        monthlyLimit?: number | null;
+        makeDefault?: boolean;
+    },
+) {
+    return organizationRequest<OrganizationEspGrant>(
+        `/organizations/${organizationId}/teams/${teamId}/esp-grant`,
+        { method: "PUT", body: JSON.stringify(input) },
+    );
+}
+
+export function transitionOrganizationEspGrant(
+    organizationId: string,
+    teamId: string,
+    input:
+        | { action: "suspend" }
+        | { action: "resume" }
+        | { action: "drain"; drainUntil?: string }
+        | { action: "cancel" },
+) {
+    return organizationRequest<OrganizationEspGrant>(
+        `/organizations/${organizationId}/teams/${teamId}/esp-grant/transition`,
+        { method: "POST", body: JSON.stringify(input) },
+    );
+}
+
 export type DeliveryEventType =
     | "accepted"
     | "delivered"
@@ -682,7 +1167,7 @@ export interface DeliveryEvent {
     eventId: string;
     provider: string;
     espId: string | null;
-    deliveryRoute: "custom" | "platform" | null;
+    deliverySourceType: "organization" | "team" | null;
     messageId: string | null;
     recipientEmail: string | null;
     eventType: DeliveryEventType;

@@ -1,2 +1,0 @@
-ALTER TABLE "ongoing_sequences" ADD COLUMN "processing_started_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "transactional_emails" ADD COLUMN "processing_started_at" timestamp with time zone;

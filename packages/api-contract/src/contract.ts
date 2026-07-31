@@ -32,10 +32,10 @@ import {
 import {
     createEspConfigBodySchema,
     espConfigSchema,
+    retireEspConfigBodySchema,
     testEspConfigBodySchema,
     testEspConfigResponseSchema,
     updateEspConfigBodySchema,
-    upsertEspConfigBodySchema,
 } from "./schemas/esp";
 import {
     generalSettingsSchema,
@@ -48,8 +48,11 @@ import {
     createTeamBodySchema,
     provisionTeamBodySchema,
     provisionTeamResponseSchema,
+    provisionedTeamSchema,
+    provisionedTeamUsageSchema,
     renameTeamBodySchema,
     teamSchema,
+    updateProvisionedTeamBodySchema,
 } from "./schemas/teams";
 import {
     createSegmentBodySchema,
@@ -86,6 +89,29 @@ import {
     releaseSuppressionBodySchema,
     suppressionSchema,
 } from "./schemas/suppressions";
+import {
+    addOrganizationMemberBodySchema,
+    createOrganizationApiKeyBodySchema,
+    createOrganizationBodySchema,
+    createdOrganizationApiKeySchema,
+    organizationAuditEventSchema,
+    organizationApiKeySchema,
+    organizationMemberSchema,
+    organizationSchema,
+    updateOrganizationBodySchema,
+    updateOrganizationMemberBodySchema,
+    organizationUsageSchema,
+} from "./schemas/organizations";
+import {
+    espGrantSchema,
+    organizationDeliveryPolicySchema,
+    sendingOptionSchema,
+    teamDeliverySettingsSchema,
+    transitionEspGrantBodySchema,
+    updateOrganizationDeliveryPolicyBodySchema,
+    updateTeamDeliverySettingsBodySchema,
+    upsertEspGrantBodySchema,
+} from "./schemas/delivery";
 
 const c = initContract();
 
@@ -518,59 +544,6 @@ const transactionalContract = c.router(
     { metadata: { tag: "Transactional Emails" } },
 );
 
-/**
- * Backward-compatible singleton alias over the team's *default* user-managed
- * ESP (get/upsert/remove/test) — the pre-multi-ESP shape, kept so existing
- * integrations don't break. New integrations should prefer the collection
- * contract below (`espCollectionContract`, `/settings/esps`), which supports
- * multiple team-scoped configurations. Both are nested under `settings`
- * rather than sitting as a sibling top-level group, alongside future
- * per-team settings (e.g. branding).
- */
-const espSettingsContract = c.router(
-    {
-        get: {
-            method: "GET",
-            path: "/settings/esp",
-            responses: { 200: espConfigSchema.nullable() },
-            summary: "Get the team's ESP configuration",
-            description:
-                "Returns the team's configured email sending provider. Never includes the password/secret.",
-        },
-        upsert: {
-            method: "PUT",
-            path: "/settings/esp",
-            body: upsertEspConfigBodySchema,
-            responses: { 200: espConfigSchema },
-            summary: "Create or update the team's ESP configuration",
-            description:
-                "Omit password to keep the existing secret unchanged; send an empty string to clear it.",
-        },
-        remove: {
-            method: "DELETE",
-            path: "/settings/esp",
-            responses: { 204: c.noBody(), 409: errorSchema },
-            summary:
-                "Remove the team's ESP configuration (future campaign sends fail until a new ESP is configured)",
-        },
-        test: {
-            method: "POST",
-            path: "/settings/esp/test",
-            body: testEspConfigBodySchema,
-            responses: {
-                200: testEspConfigResponseSchema,
-                400: errorSchema,
-                422: errorSchema,
-                502: testEspConfigResponseSchema,
-            },
-            summary: "Send a test email through the team's configured ESP",
-            description:
-                "Sends to the given address, or the current user's own email if omitted. Always attempts real delivery. Requires a non-empty mailing address in the team's general settings.",
-        },
-    },
-    { metadata: { tag: "Settings" } },
-);
-
 const espCollectionContract = c.router(
     {
         list: {
@@ -583,20 +556,30 @@ const espCollectionContract = c.router(
             method: "POST",
             path: "/settings/esps",
             body: createEspConfigBodySchema,
-            responses: { 201: espConfigSchema },
+            responses: { 201: espConfigSchema, 403: errorSchema },
             summary: "Create a user-managed ESP configuration",
         },
         get: {
             method: "GET",
             path: "/settings/esps/:espId",
-            responses: { 200: espConfigSchema, 404: errorSchema },
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
             summary: "Get a user-managed ESP configuration",
         },
         update: {
             method: "PATCH",
             path: "/settings/esps/:espId",
             body: updateEspConfigBodySchema,
-            responses: { 200: espConfigSchema, 404: errorSchema },
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
             summary: "Update a user-managed ESP configuration",
         },
         remove: {
@@ -604,6 +587,7 @@ const espCollectionContract = c.router(
             path: "/settings/esps/:espId",
             responses: {
                 204: c.noBody(),
+                403: errorSchema,
                 404: errorSchema,
                 409: errorSchema,
             },
@@ -616,6 +600,7 @@ const espCollectionContract = c.router(
             responses: {
                 200: testEspConfigResponseSchema,
                 400: errorSchema,
+                403: errorSchema,
                 422: errorSchema,
                 404: errorSchema,
                 502: testEspConfigResponseSchema,
@@ -623,6 +608,55 @@ const espCollectionContract = c.router(
             summary: "Send a test email through a user-managed ESP",
             description:
                 "Requires a non-empty mailing address in the team's general settings.",
+        },
+        activate: {
+            method: "POST",
+            path: "/settings/esps/:espId/activate",
+            body: c.noBody(),
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+                422: errorSchema,
+            },
+            summary: "Activate a verified team ESP",
+        },
+        suspend: {
+            method: "POST",
+            path: "/settings/esps/:espId/suspend",
+            body: c.noBody(),
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Suspend a team ESP",
+        },
+        resume: {
+            method: "POST",
+            path: "/settings/esps/:espId/resume",
+            body: c.noBody(),
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Resume a team ESP",
+        },
+        retire: {
+            method: "POST",
+            path: "/settings/esps/:espId/retire",
+            body: retireEspConfigBodySchema,
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Drain or cancel a team ESP",
         },
     },
     { metadata: { tag: "Settings" } },
@@ -654,7 +688,6 @@ const generalSettingsContract = c.router(
 );
 
 const settingsContract = c.router({
-    esp: espSettingsContract,
     esps: espCollectionContract,
     general: generalSettingsContract,
 });
@@ -665,13 +698,17 @@ const teamsContract = c.router(
             method: "GET",
             path: "/teams",
             responses: { 200: itemsList(teamSchema) },
-            summary: "List the teams the current account belongs to",
+            summary: "List the teams the current user belongs to",
         },
         create: {
             method: "POST",
             path: "/teams",
             body: createTeamBodySchema,
-            responses: { 201: teamSchema },
+            responses: {
+                201: teamSchema,
+                403: errorSchema,
+                409: errorSchema,
+            },
             summary: "Create a new team",
         },
         rename: {
@@ -685,8 +722,7 @@ const teamsContract = c.router(
             method: "DELETE",
             path: "/teams/:teamId",
             responses: { 204: c.noBody(), 403: errorSchema, 404: errorSchema },
-            summary:
-                "Delete a team and everything scoped to it (contacts, templates, sequences, ...)",
+            summary: "Archive a team",
         },
         listKeys: {
             method: "GET",
@@ -723,14 +759,539 @@ const provisioningContract = c.router(
                 200: provisionTeamResponseSchema,
                 400: errorSchema,
                 401: errorSchema,
+                403: errorSchema,
+                409: errorSchema,
                 500: errorSchema,
             },
             summary: "Find-or-create a team for a consumer-supplied tenant id",
             description:
-                "Server-to-server endpoint for multi-tenant consumers (e.g. CourseLit) to provision one SendLit team per one of their own tenants. Requires the X-Sendlit-Provisioning-Secret header.",
+                "Server-to-server endpoint for multi-tenant consumers (e.g. CourseLit) to provision one SendLit team per tenant. Requires a scoped organization key as a Bearer token.",
+        },
+        getTeam: {
+            method: "GET",
+            path: "/provisioning/teams/:teamId",
+            responses: {
+                200: provisionedTeamSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary:
+                "Get a provisioned team within the authenticated organization",
+        },
+        updateTeam: {
+            method: "PATCH",
+            path: "/provisioning/teams/:teamId",
+            body: updateProvisionedTeamBodySchema,
+            responses: {
+                200: provisionedTeamSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Update a provisioned team's sender, limits, or settings",
+        },
+        createTeamKey: {
+            method: "POST",
+            path: "/provisioning/teams/:teamId/keys",
+            body: createApiKeyBodySchema,
+            responses: {
+                201: createdApiKeySchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Replace a provisioned team's integration key",
+        },
+        suspendTeam: {
+            method: "POST",
+            path: "/provisioning/teams/:teamId/suspend",
+            body: c.noBody(),
+            responses: {
+                200: provisionedTeamSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Suspend new sends for a provisioned team",
+        },
+        resumeTeam: {
+            method: "POST",
+            path: "/provisioning/teams/:teamId/resume",
+            body: c.noBody(),
+            responses: {
+                200: provisionedTeamSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Resume sends for a provisioned team",
+        },
+        archiveTeam: {
+            method: "DELETE",
+            path: "/provisioning/teams/:teamId",
+            responses: { 204: c.noBody(), 403: errorSchema, 404: errorSchema },
+            summary: "Archive a provisioned team",
+        },
+        getTeamUsage: {
+            method: "GET",
+            path: "/provisioning/teams/:teamId/usage",
+            responses: {
+                200: provisionedTeamUsageSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary:
+                "Get organization-delivery quota usage for a provisioned team",
         },
     },
     { metadata: { tag: "Teams" } },
+);
+
+const organizationsContract = c.router(
+    {
+        list: {
+            method: "GET",
+            path: "/organizations",
+            responses: {
+                200: itemsList(organizationSchema),
+                403: errorSchema,
+            },
+            summary: "List organizations for the current user",
+        },
+        create: {
+            method: "POST",
+            path: "/organizations",
+            body: createOrganizationBodySchema,
+            responses: { 201: organizationSchema, 403: errorSchema },
+            summary: "Create an organization",
+        },
+        get: {
+            method: "GET",
+            path: "/organizations/:organizationId",
+            responses: {
+                200: organizationSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Get an organization",
+        },
+        update: {
+            method: "PATCH",
+            path: "/organizations/:organizationId",
+            body: updateOrganizationBodySchema,
+            responses: {
+                200: organizationSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Update an organization",
+        },
+        close: {
+            method: "DELETE",
+            path: "/organizations/:organizationId",
+            responses: {
+                204: c.noBody(),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Close an organization",
+        },
+        listMembers: {
+            method: "GET",
+            path: "/organizations/:organizationId/members",
+            responses: {
+                200: itemsList(organizationMemberSchema),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "List organization members",
+        },
+        addMember: {
+            method: "POST",
+            path: "/organizations/:organizationId/members",
+            body: addOrganizationMemberBodySchema,
+            responses: {
+                201: organizationMemberSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Add an existing user to an organization",
+        },
+        updateMember: {
+            method: "PATCH",
+            path: "/organizations/:organizationId/members/:userId",
+            body: updateOrganizationMemberBodySchema,
+            responses: {
+                200: organizationMemberSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Change an organization member role",
+        },
+        removeMember: {
+            method: "DELETE",
+            path: "/organizations/:organizationId/members/:userId",
+            responses: {
+                204: c.noBody(),
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Remove an organization member",
+        },
+        listTeams: {
+            method: "GET",
+            path: "/organizations/:organizationId/teams",
+            responses: {
+                200: itemsList(teamSchema),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "List teams in an organization",
+        },
+        createTeam: {
+            method: "POST",
+            path: "/organizations/:organizationId/teams",
+            body: createTeamBodySchema,
+            responses: {
+                201: teamSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Create a human-managed team in an organization",
+        },
+        getTeam: {
+            method: "GET",
+            path: "/organizations/:organizationId/teams/:teamId",
+            responses: { 200: teamSchema, 403: errorSchema, 404: errorSchema },
+            summary: "Get organization team metadata",
+        },
+        updateTeam: {
+            method: "PATCH",
+            path: "/organizations/:organizationId/teams/:teamId",
+            body: renameTeamBodySchema,
+            responses: { 200: teamSchema, 403: errorSchema, 404: errorSchema },
+            summary: "Rename an organization team",
+        },
+        archiveTeam: {
+            method: "DELETE",
+            path: "/organizations/:organizationId/teams/:teamId",
+            responses: { 204: c.noBody(), 403: errorSchema, 404: errorSchema },
+            summary: "Archive an organization team",
+        },
+        listKeys: {
+            method: "GET",
+            path: "/organizations/:organizationId/keys",
+            responses: {
+                200: itemsList(organizationApiKeySchema),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "List organization API keys",
+        },
+        createKey: {
+            method: "POST",
+            path: "/organizations/:organizationId/keys",
+            body: createOrganizationApiKeyBodySchema,
+            responses: {
+                201: createdOrganizationApiKeySchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Create an organization API key",
+        },
+        revokeKey: {
+            method: "DELETE",
+            path: "/organizations/:organizationId/keys/:keyId",
+            responses: {
+                204: c.noBody(),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Revoke an organization API key",
+        },
+        listEsps: {
+            method: "GET",
+            path: "/organizations/:organizationId/esps",
+            responses: {
+                200: itemsList(espConfigSchema),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "List organization-owned ESP configurations",
+        },
+        createEsp: {
+            method: "POST",
+            path: "/organizations/:organizationId/esps",
+            body: createEspConfigBodySchema,
+            responses: {
+                201: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Create an organization-owned ESP configuration",
+        },
+        getEsp: {
+            method: "GET",
+            path: "/organizations/:organizationId/esps/:espId",
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Get an organization-owned ESP configuration",
+        },
+        updateEsp: {
+            method: "PATCH",
+            path: "/organizations/:organizationId/esps/:espId",
+            body: updateEspConfigBodySchema,
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Update an organization-owned ESP configuration",
+        },
+        testEsp: {
+            method: "POST",
+            path: "/organizations/:organizationId/esps/:espId/test",
+            body: testEspConfigBodySchema,
+            responses: {
+                200: testEspConfigResponseSchema,
+                400: errorSchema,
+                403: errorSchema,
+                404: errorSchema,
+                422: errorSchema,
+                502: testEspConfigResponseSchema,
+            },
+            summary: "Test an organization-owned ESP configuration",
+        },
+        activateEsp: {
+            method: "POST",
+            path: "/organizations/:organizationId/esps/:espId/activate",
+            body: c.noBody(),
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+                422: errorSchema,
+            },
+            summary: "Activate a verified organization ESP",
+        },
+        suspendEsp: {
+            method: "POST",
+            path: "/organizations/:organizationId/esps/:espId/suspend",
+            body: c.noBody(),
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Suspend an organization ESP",
+        },
+        resumeEsp: {
+            method: "POST",
+            path: "/organizations/:organizationId/esps/:espId/resume",
+            body: c.noBody(),
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Resume an organization ESP",
+        },
+        retireEsp: {
+            method: "POST",
+            path: "/organizations/:organizationId/esps/:espId/retire",
+            body: retireEspConfigBodySchema,
+            responses: {
+                200: espConfigSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Drain or cancel an organization ESP",
+        },
+        deleteEsp: {
+            method: "DELETE",
+            path: "/organizations/:organizationId/esps/:espId",
+            responses: {
+                204: c.noBody(),
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Delete an eligible never-activated organization ESP",
+        },
+        getEspFeedback: {
+            method: "GET",
+            path: "/organizations/:organizationId/esps/:espId/feedback",
+            responses: {
+                200: feedbackConnectionSchema.nullable(),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Get organization ESP feedback configuration",
+        },
+        upsertEspFeedback: {
+            method: "PUT",
+            path: "/organizations/:organizationId/esps/:espId/feedback",
+            body: upsertFeedbackConnectionBodySchema,
+            responses: {
+                200: feedbackConnectionSchema,
+                400: errorSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Configure organization ESP feedback",
+        },
+        rotateEspFeedback: {
+            method: "POST",
+            path: "/organizations/:organizationId/esps/:espId/feedback/rotate",
+            body: upsertFeedbackConnectionBodySchema,
+            responses: {
+                200: feedbackConnectionSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Rotate organization ESP feedback credentials",
+        },
+        testEspFeedback: {
+            method: "POST",
+            path: "/organizations/:organizationId/esps/:espId/feedback/test",
+            body: c.noBody(),
+            responses: {
+                200: testFeedbackConnectionResponseSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Verify organization ESP feedback configuration",
+        },
+        removeEspFeedback: {
+            method: "DELETE",
+            path: "/organizations/:organizationId/esps/:espId/feedback",
+            responses: {
+                204: c.noBody(),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Disable organization ESP feedback configuration",
+        },
+        getDeliveryPolicy: {
+            method: "GET",
+            path: "/organizations/:organizationId/delivery-policy",
+            responses: {
+                200: organizationDeliveryPolicySchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Get organization delivery policy",
+        },
+        updateDeliveryPolicy: {
+            method: "PUT",
+            path: "/organizations/:organizationId/delivery-policy",
+            body: updateOrganizationDeliveryPolicyBodySchema,
+            responses: {
+                200: organizationDeliveryPolicySchema,
+                403: errorSchema,
+                404: errorSchema,
+                422: errorSchema,
+            },
+            summary: "Update organization delivery policy",
+        },
+        getUsage: {
+            method: "GET",
+            path: "/organizations/:organizationId/usage",
+            responses: {
+                200: organizationUsageSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Get aggregate organization delivery quota usage",
+        },
+        listAuditEvents: {
+            method: "GET",
+            path: "/organizations/:organizationId/audit-events",
+            responses: {
+                200: itemsList(organizationAuditEventSchema),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "List recent organization audit events",
+        },
+        getEspGrant: {
+            method: "GET",
+            path: "/organizations/:organizationId/teams/:teamId/esp-grant",
+            responses: {
+                200: espGrantSchema.nullable(),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Get a team's organization ESP grant",
+        },
+        upsertEspGrant: {
+            method: "PUT",
+            path: "/organizations/:organizationId/teams/:teamId/esp-grant",
+            body: upsertEspGrantBodySchema,
+            responses: {
+                200: espGrantSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+                422: errorSchema,
+            },
+            summary: "Create or update a team's organization ESP grant",
+        },
+        transitionEspGrant: {
+            method: "POST",
+            path: "/organizations/:organizationId/teams/:teamId/esp-grant/transition",
+            body: transitionEspGrantBodySchema,
+            responses: {
+                200: espGrantSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Transition a team's organization ESP grant",
+        },
+    },
+    { metadata: { tag: "Organizations" } },
+);
+
+const deliveryContract = c.router(
+    {
+        sendingOptions: {
+            method: "GET",
+            path: "/sending-options",
+            responses: { 200: itemsList(sendingOptionSchema) },
+            summary: "List sanitized sending options for the active team",
+        },
+        getSettings: {
+            method: "GET",
+            path: "/settings/delivery",
+            responses: { 200: teamDeliverySettingsSchema },
+            summary: "Get team delivery settings",
+        },
+        updateSettings: {
+            method: "PATCH",
+            path: "/settings/delivery",
+            body: updateTeamDeliverySettingsBodySchema,
+            responses: {
+                200: teamDeliverySettingsSchema,
+                403: errorSchema,
+                409: errorSchema,
+                422: errorSchema,
+            },
+            summary: "Choose the team's default delivery source",
+        },
+    },
+    { metadata: { tag: "Delivery" } },
 );
 
 const overviewContract = c.router(
@@ -883,6 +1444,8 @@ export const contract = c.router({
     transactional: transactionalContract,
     settings: settingsContract,
     teams: teamsContract,
+    organizations: organizationsContract,
+    delivery: deliveryContract,
     provisioning: provisioningContract,
     overview: overviewContract,
     feedback: feedbackContract,

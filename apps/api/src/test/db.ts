@@ -2,6 +2,7 @@ import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
+import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 
 /**
@@ -39,19 +40,42 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
     // teams cascades to contacts, sequences, rules, ongoing_sequences,
     // email_deliveries, team_members, api_keys; sequences cascades to
     // sequence_emails.
+    await db.delete(schema.mailDispatchOutbox);
+    await db.delete(schema.organizationEspQuotaReservations);
+    await db.delete(schema.outboundMessages);
+    await db.delete(schema.transactionalEmails);
+    await db.delete(schema.emailDeliveryEvents);
+    await db.delete(schema.emailDeliveries);
+    await db.delete(schema.ongoingSequences);
+    await db.delete(schema.rules);
+    await db.delete(schema.sequenceEmails);
+    await db.delete(schema.sequences);
+    await db.delete(schema.espWebhookReceipts);
+    await db.delete(schema.espFeedbackConnections);
+    await db.delete(schema.organizationEspUsageBuckets);
+    await db.delete(schema.espConfigTeamGrants);
+    await db.delete(schema.teamDeliverySettings);
+    await db.delete(schema.espConfigs);
     await db.delete(schema.teams);
-    await db.delete(schema.accounts);
+    await db.delete(schema.organizationApiKeys);
+    await db.delete(schema.organizationAuditEvents);
+    await db.delete(schema.organizationMembers);
+    await db.delete(schema.organizationDeliveryPolicies);
+    await db.delete(schema.organizations);
+    await db.delete(schema.user);
 }
 
 /**
- * Seeds the minimal object graph most automation tests need: an account, a
- * team (default quota), and one contact. Individual tests add sequences /
+ * Seeds the minimal object graph most automation tests need: a Better Auth
+ * user, organization, team (with a team-owned default ESP), and one contact.
+ * Individual tests add sequences /
  * emails / ongoing rows on top.
  */
 export async function seedTeamAndContact(
     db: Awaited<ReturnType<typeof makeTestDb>>,
     overrides: {
-        account?: Partial<typeof schema.accounts.$inferInsert>;
+        account?: Partial<typeof schema.user.$inferInsert>;
+        organization?: Partial<typeof schema.organizations.$inferInsert>;
         team?: Partial<typeof schema.teams.$inferInsert>;
         contact?: Partial<typeof schema.contacts.$inferInsert>;
         espConfig?: Partial<typeof schema.espConfigs.$inferInsert>;
@@ -59,30 +83,65 @@ export async function seedTeamAndContact(
     } = {},
 ) {
     const [account] = await db
-        .insert(schema.accounts)
+        .insert(schema.user)
         .values({
+            id: crypto.randomUUID(),
+            name: "Test owner",
             email: `owner-${crypto.randomUUID()}@example.com`,
+            emailVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
             ...overrides.account,
         })
         .returning();
+
+    const [organization] = await db
+        .insert(schema.organizations)
+        .values({ name: "Test organization", ...overrides.organization })
+        .returning();
+    await db.insert(schema.organizationMembers).values({
+        organizationId: organization.id,
+        userId: account.id,
+        role: "owner",
+    });
+    await db.insert(schema.organizationDeliveryPolicies).values({
+        organizationId: organization.id,
+    });
 
     const [team] = await db
         .insert(schema.teams)
         .values({
             name: "Test team",
-            ownerAccountId: account.id,
+            organizationId: organization.id,
             ...overrides.team,
         })
         .returning();
 
     await db.insert(schema.espConfigs).values({
+        ownerScope: "team",
         teamId: team.id,
         name: "Default ESP",
-        isDefault: true,
         host: "smtp.example.com",
         fromName: "Test Sender",
         fromEmail: "sender@example.com",
+        status: "active",
         ...overrides.espConfig,
+    });
+
+    const [esp] = await db
+        .select({ id: schema.espConfigs.id })
+        .from(schema.espConfigs)
+        .where(eq(schema.espConfigs.teamId, team.id));
+    await db.insert(schema.teamDeliverySettings).values({
+        teamId: team.id,
+        defaultSource: "team",
+        defaultTeamEspConfigId: esp.id,
+    });
+
+    await db.insert(schema.teamMembers).values({
+        teamId: team.id,
+        userId: account.id,
+        role: "admin",
     });
 
     await db.insert(schema.settings).values({
@@ -103,5 +162,5 @@ export async function seedTeamAndContact(
         })
         .returning();
 
-    return { account, team, contact };
+    return { account, organization, team, contact };
 }

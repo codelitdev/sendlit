@@ -74,28 +74,18 @@ export const openApiDocument = generateOpenApi(
                     scheme: "bearer",
                     bearerFormat: "JWT",
                 },
-                provisioningSecretAuth: {
-                    type: "apiKey",
-                    in: "header",
-                    name: "X-Sendlit-Provisioning-Secret",
-                },
             },
         },
         security: [{ apiKeyAuth: [] }, { bearerAuth: [] }],
     },
     {
         operationMapper: (operation, route) => {
-            const path = (route as { path?: string }).path;
-
             return {
                 ...operation,
                 tags: (route.metadata as { tag?: string } | undefined)?.tag
                     ? [(route.metadata as { tag: string }).tag]
                     : operation.tags,
-                security:
-                    path === "/provisioning/teams"
-                        ? [{ provisioningSecretAuth: [] }]
-                        : operation.security,
+                security: operation.security,
             };
         },
     },

@@ -126,7 +126,7 @@ router.post(
             receipt = await createWebhookReceipt({
                 connectionId: connection.id,
                 teamId:
-                    connection.scope === "custom" ? connection.teamId : null,
+                    connection.ownerScope === "team" ? connection.teamId : null,
                 provider,
                 providerRequestId: verifyResult.providerRequestId ?? null,
                 rawBody,

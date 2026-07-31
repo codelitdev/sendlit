@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { espConfigs, outboundMessages } from "../db/schema";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
-import { createCustomRouteOutboundMessage } from "./outbound-send";
+import { createPinnedOutboundMessage } from "./outbound-send";
 
 const tdb = db as unknown as TestDb;
 
@@ -26,7 +26,9 @@ describe("outbound submission idempotency", () => {
             .where(eq(espConfigs.teamId, team.id));
         const input = {
             teamId: team.id,
+            deliverySourceType: "team" as const,
             espConfigId: esp.id,
+            espGrantId: null,
             provider: esp.provider,
             sourceType: "campaign" as const,
             submissionKey: "campaign:ongoing-1:email-1",
@@ -34,8 +36,8 @@ describe("outbound submission idempotency", () => {
             normalizedRecipient: "reader@example.com",
         };
 
-        const first = await createCustomRouteOutboundMessage(input);
-        const retry = await createCustomRouteOutboundMessage(input);
+        const first = await createPinnedOutboundMessage(input);
+        const retry = await createPinnedOutboundMessage(input);
 
         expect(retry.outbound.id).toBe(first.outbound.id);
         expect(retry.rfcMessageId).toBe(first.rfcMessageId);
@@ -55,18 +57,20 @@ describe("outbound submission idempotency", () => {
             .where(eq(espConfigs.teamId, team.id));
         const base = {
             teamId: team.id,
+            deliverySourceType: "team" as const,
             espConfigId: esp.id,
+            espGrantId: null,
             provider: esp.provider,
             sourceType: "campaign" as const,
             recipientEmail: "reader@example.com",
             normalizedRecipient: "reader@example.com",
         };
 
-        const first = await createCustomRouteOutboundMessage({
+        const first = await createPinnedOutboundMessage({
             ...base,
             submissionKey: "campaign:ongoing-1:email-1",
         });
-        const second = await createCustomRouteOutboundMessage({
+        const second = await createPinnedOutboundMessage({
             ...base,
             submissionKey: "campaign:ongoing-1:email-2",
         });

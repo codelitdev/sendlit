@@ -7,16 +7,18 @@ import {
 import type { OutboundSourceType } from "../config/constants";
 
 /**
- * Creates the outbound-ledger row for a `custom`-route send, snapshotting
+ * Creates the outbound-ledger row for an already-authorized pinned source,
  * the pinned ESP's provider and any active feedback connection, and
  * generates the RFC `Message-ID` to submit with the transport call. Called
  * before transport submission from both the transactional and campaign send
  * paths (`docs/bounces-and-complaints.md#1-outbound-message-ledger`) so a
  * later provider webhook has something to correlate against.
  */
-export async function createCustomRouteOutboundMessage({
+export async function createPinnedOutboundMessage({
     teamId,
+    deliverySourceType,
     espConfigId,
+    espGrantId,
     provider,
     sourceType,
     submissionKey,
@@ -26,7 +28,9 @@ export async function createCustomRouteOutboundMessage({
     normalizedRecipient,
 }: {
     teamId: string;
+    deliverySourceType: "organization" | "team";
     espConfigId: string;
+    espGrantId: string | null;
     provider: string;
     sourceType: OutboundSourceType;
     submissionKey: string;
@@ -40,8 +44,9 @@ export async function createCustomRouteOutboundMessage({
         await getActiveFeedbackConnectionForEspConfig(espConfigId);
     const outbound = await createOutboundMessage({
         teamId,
-        deliveryRoute: "custom",
+        deliverySourceType,
         espConfigId,
+        espGrantId,
         feedbackConnectionId: connection?.id ?? null,
         sourceType,
         submissionKey,

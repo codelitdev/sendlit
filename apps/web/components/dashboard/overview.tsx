@@ -14,13 +14,13 @@ import {
 import {
     getGeneralSettings,
     getOverview,
-    listEsps,
+    listSendingOptions,
     type Overview,
 } from "@/lib/api";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 
 interface SetupStatus {
-    hasEsp: boolean;
+    hasDeliverySource: boolean;
     hasMailingAddress: boolean;
 }
 
@@ -32,13 +32,16 @@ export function OverviewDashboard() {
     useEffect(() => {
         void Promise.all([
             getOverview(rangeDays),
-            listEsps(),
+            listSendingOptions(),
             getGeneralSettings(),
         ])
-            .then(([overview, esps, settings]) => {
+            .then(([overview, sendingOptions, settings]) => {
                 setData(overview);
                 setSetup({
-                    hasEsp: esps.items.length > 0,
+                    // A shared organization ESP is a complete delivery setup
+                    // for this team, even though its credentials are never
+                    // exposed through the team-facing settings API.
+                    hasDeliverySource: sendingOptions.items.length > 0,
                     hasMailingAddress: Boolean(settings.mailingAddress?.trim()),
                 });
             })
@@ -56,7 +59,7 @@ export function OverviewDashboard() {
         data.mail.failed +
         data.mail.bounced;
     const pendingSteps = [
-        !setup?.hasEsp && {
+        !setup?.hasDeliverySource && {
             title: "Set up an email service provider",
             description:
                 "Connect an ESP to send broadcasts, sequences, and transactional email.",

@@ -10,7 +10,9 @@ import {
     jsonb,
     index,
     uniqueIndex,
+    unique,
     check,
+    foreignKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { CustomFields } from "@sendlit/api-contract";
@@ -49,49 +51,114 @@ function publicIdCheck(name: string, column: any, prefix: string) {
  * (tracking pixels, rule processing) resolve public → internal id first.
  */
 
-/**
- * A SendLit "account" is a login identity (one email = one account, OTP-based —
- * mirrors MediaLit's OAuth user model). An account owns/belongs to one or more
- * `teams`; a team — not the account — is the actual tenant/data-scope: every
- * other resource (contacts, templates, sequences, ESP config, API keys, ...) is
- * scoped by `teamId`, never `accountId`. This is what lets a single account
- * manage several independent "newsletters"/workspaces, and lets a consumer
- * (e.g. a multi-tenant app like CourseLit) provision one team per one of its
- * own tenants without their contacts/sending-identity/quota colliding.
- */
-export const accounts = pgTable("accounts", {
-    id: uuid("id").$defaultFn(genId).primaryKey(),
+/** Durable customer/administration boundary above teams. */
+export const organizations = pgTable(
+    "organizations",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        organizationId: text("organization_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("org")),
+        name: text("name").notNull(),
+        status: text("status").notNull().default("active"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        organizationIdCheck: publicIdCheck(
+            "organizations_organization_id_check",
+            table.organizationId,
+            "org",
+        ),
+        statusCheck: check(
+            "organizations_status_check",
+            sql`${table.status} IN ('active', 'suspended', 'closed')`,
+        ),
+    }),
+);
+
+/** Better Auth's default human identity model and table. */
+export const user = pgTable("user", {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
     email: text("email").notNull().unique(),
-    name: text("name"),
-    // Mail quota lives on the account (the billable identity), not on teams —
-    // one account may own many teams, and its sending allowance is shared
-    // across all of them. Checked/incremented via the team's owner account
-    // (see `account/queries.ts`).
-    dailyMailLimit: integer("daily_mail_limit").notNull().default(1000),
-    monthlyMailLimit: integer("monthly_mail_limit").notNull().default(30000),
-    dailyMailCount: integer("daily_mail_count").notNull().default(0),
-    monthlyMailCount: integer("monthly_mail_count").notNull().default(0),
-    countersResetAt: timestamp("counters_reset_at", {
-        withTimezone: true,
-    }).defaultNow(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    image: text("image"),
+    defaultOrganizationId: uuid("default_organization_id").references(
+        () => organizations.id,
+        { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
 
-/** The tenant/data-scope boundary. Sending identity lives in `esp_configs`
- * and workspace settings in `settings` (both one row per team); mail
- * quota lives on the owning `accounts` row. `externalId` is an optional stable key for programmatic provisioning
- * by a consumer system (see `provisioning/routes.ts`) — e.g. `courselit:<domainId>` —
- * so a team can be found-or-created idempotently without relying on email
- * uniqueness (a consumer's own tenants may share an owner email).
- *
- * `teamId` is the public handle (`team_...`) returned to API/MCP/web
- * consumers and accepted back from them (route params, the
- * `X-Sendlit-Team-Id` header, provisioning responses). `id` remains
- * internal-only — every other table's `team_id` FK column still points at
- * it, and `req.teamId` (set by auth middleware) is always this internal id;
- * only the outermost edges (routes, the header, provisioning) ever see the
- * public `teamId` and translate it via `getTeamByTeamId`. */
+/** Explicit organization authorization; authentication alone grants nothing. */
+export const organizationMembers = pgTable(
+    "organization_members",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "cascade" }),
+        userId: text("user_id")
+            .notNull()
+            .references(() => user.id, { onDelete: "restrict" }),
+        role: text("role").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        organizationUserIdx: uniqueIndex(
+            "organization_members_organization_id_user_id_idx",
+        ).on(table.organizationId, table.userId),
+        roleCheck: check(
+            "organization_members_role_check",
+            sql`${table.role} IN ('owner', 'admin', 'member')`,
+        ),
+    }),
+);
+
+/** Immutable operational record for organization administration and
+ * integration-driven lifecycle changes. It intentionally stores references
+ * rather than secrets or raw API keys. */
+export const organizationAuditEvents = pgTable(
+    "organization_audit_events",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        actorType: text("actor_type").notNull(), // user|organization_key|team_key|system
+        actorId: text("actor_id"),
+        action: text("action").notNull(),
+        teamId: uuid("team_id"),
+        espConfigId: uuid("esp_config_id"),
+        espGrantId: uuid("esp_grant_id"),
+        metadata: jsonb("metadata").notNull().default({}),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        organizationCreatedIdx: index(
+            "organization_audit_events_organization_id_created_at_idx",
+        ).on(table.organizationId, table.createdAt),
+        teamCreatedIdx: index(
+            "organization_audit_events_team_id_created_at_idx",
+        ).on(table.teamId, table.createdAt),
+    }),
+);
+
+/** Team/workspace and email-data boundary. Every team belongs to one org. */
 export const teams = pgTable(
     "teams",
     {
@@ -100,22 +167,39 @@ export const teams = pgTable(
             .notNull()
             .unique()
             .$defaultFn(() => genPublicId("team")),
-        name: text("name").notNull(),
-        ownerAccountId: uuid("owner_account_id")
+        organizationId: uuid("organization_id")
             .notNull()
-            .references(() => accounts.id, { onDelete: "cascade" }),
-        externalId: text("external_id").unique(),
-        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        externalId: text("external_id"),
+        provisioningRequestHash: text("provisioning_request_hash"),
+        name: text("name").notNull(),
+        status: text("status").notNull().default("active"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
     },
     (table) => ({
         teamIdCheck: publicIdCheck("teams_team_id_check", table.teamId, "team"),
+        organizationExternalIdIdx: uniqueIndex(
+            "teams_organization_id_external_id_idx",
+        )
+            .on(table.organizationId, table.externalId)
+            .where(sql`${table.externalId} IS NOT NULL`),
+        idOrganizationIdx: unique("teams_id_organization_id_unique").on(
+            table.id,
+            table.organizationId,
+        ),
+        statusCheck: check(
+            "teams_status_check",
+            sql`${table.status} IN ('active', 'sending_suspended', 'archived')`,
+        ),
     }),
 );
 
-/** Which accounts can act on behalf of a team. Every team gets exactly one
- * `owner` row (its creator) today — member invitations are a follow-up — but
- * the shape already supports many accounts per team and many teams per account. */
+/** Team membership is independent from organization membership. */
 export const teamMembers = pgTable(
     "team_members",
     {
@@ -123,32 +207,32 @@ export const teamMembers = pgTable(
         teamId: uuid("team_id")
             .notNull()
             .references(() => teams.id, { onDelete: "cascade" }),
-        accountId: uuid("account_id")
+        userId: text("user_id")
             .notNull()
-            .references(() => accounts.id, { onDelete: "cascade" }),
-        role: text("role").notNull().default("owner"), // 'owner' | 'member'
-        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+            .references(() => user.id, { onDelete: "restrict" }),
+        role: text("role").notNull().default("member"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
     },
     (table) => ({
-        teamAccountIdx: uniqueIndex("team_members_team_id_account_id_idx").on(
+        teamUserIdx: uniqueIndex("team_members_team_id_user_id_idx").on(
             table.teamId,
-            table.accountId,
+            table.userId,
+        ),
+        roleCheck: check(
+            "team_members_role_check",
+            sql`${table.role} IN ('admin', 'member')`,
         ),
     }),
 );
 
-export const authUser = pgTable("auth_user", {
-    id: text("id").primaryKey(),
-    name: text("name").notNull(),
-    email: text("email").notNull().unique(),
-    emailVerified: boolean("email_verified").notNull().default(false),
-    image: text("image"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
-});
-
-export const authSession = pgTable(
-    "auth_session",
+/** Better Auth's remaining default core models/tables. */
+export const session = pgTable(
+    "session",
     {
         id: text("id").primaryKey(),
         expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -159,22 +243,22 @@ export const authSession = pgTable(
         userAgent: text("user_agent"),
         userId: text("user_id")
             .notNull()
-            .references(() => authUser.id, { onDelete: "cascade" }),
+            .references(() => user.id, { onDelete: "cascade" }),
     },
     (table) => ({
         userIdIdx: index("auth_session_user_id_idx").on(table.userId),
     }),
 );
 
-export const authAccount = pgTable(
-    "auth_account",
+export const account = pgTable(
+    "account",
     {
         id: text("id").primaryKey(),
         accountId: text("account_id").notNull(),
         providerId: text("provider_id").notNull(),
         userId: text("user_id")
             .notNull()
-            .references(() => authUser.id, { onDelete: "cascade" }),
+            .references(() => user.id, { onDelete: "cascade" }),
         accessToken: text("access_token"),
         refreshToken: text("refresh_token"),
         idToken: text("id_token"),
@@ -194,8 +278,8 @@ export const authAccount = pgTable(
     }),
 );
 
-export const authVerification = pgTable(
-    "auth_verification",
+export const verification = pgTable(
+    "verification",
     {
         id: text("id").primaryKey(),
         identifier: text("identifier").notNull(),
@@ -211,7 +295,7 @@ export const authVerification = pgTable(
     }),
 );
 
-export const jwks = pgTable("auth_jwks", {
+export const jwks = pgTable("jwks", {
     id: text("id").primaryKey(),
     publicKey: text("public_key").notNull(),
     privateKey: text("private_key").notNull(),
@@ -219,8 +303,8 @@ export const jwks = pgTable("auth_jwks", {
     expiresAt: timestamp("expires_at", { withTimezone: true }),
 });
 
-export const authOAuthClient = pgTable(
-    "auth_oauth_client",
+export const oauthClient = pgTable(
+    "oauth_client",
     {
         id: text("id").primaryKey(),
         clientId: text("client_id").notNull().unique(),
@@ -230,7 +314,7 @@ export const authOAuthClient = pgTable(
         enableEndSession: boolean("enable_end_session"),
         subjectType: text("subject_type"),
         scopes: text("scopes").array(),
-        userId: text("user_id").references(() => authUser.id, {
+        userId: text("user_id").references(() => user.id, {
             onDelete: "cascade",
         }),
         createdAt: timestamp("created_at", { withTimezone: true }),
@@ -260,22 +344,22 @@ export const authOAuthClient = pgTable(
     }),
 );
 
-export const authOAuthRefreshToken = pgTable(
-    "auth_oauth_refresh_token",
+export const oauthRefreshToken = pgTable(
+    "oauth_refresh_token",
     {
         id: text("id").primaryKey(),
         token: text("token").notNull().unique(),
         clientId: text("client_id")
             .notNull()
-            .references(() => authOAuthClient.clientId, {
+            .references(() => oauthClient.clientId, {
                 onDelete: "cascade",
             }),
-        sessionId: text("session_id").references(() => authSession.id, {
+        sessionId: text("session_id").references(() => session.id, {
             onDelete: "set null",
         }),
         userId: text("user_id")
             .notNull()
-            .references(() => authUser.id, { onDelete: "cascade" }),
+            .references(() => user.id, { onDelete: "cascade" }),
         referenceId: text("reference_id"),
         expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
@@ -296,27 +380,26 @@ export const authOAuthRefreshToken = pgTable(
     }),
 );
 
-export const authOAuthAccessToken = pgTable(
-    "auth_oauth_access_token",
+export const oauthAccessToken = pgTable(
+    "oauth_access_token",
     {
         id: text("id").primaryKey(),
         token: text("token").notNull().unique(),
         clientId: text("client_id")
             .notNull()
-            .references(() => authOAuthClient.clientId, {
+            .references(() => oauthClient.clientId, {
                 onDelete: "cascade",
             }),
-        sessionId: text("session_id").references(() => authSession.id, {
+        sessionId: text("session_id").references(() => session.id, {
             onDelete: "set null",
         }),
-        userId: text("user_id").references(() => authUser.id, {
+        userId: text("user_id").references(() => user.id, {
             onDelete: "cascade",
         }),
         referenceId: text("reference_id"),
-        refreshId: text("refresh_id").references(
-            () => authOAuthRefreshToken.id,
-            { onDelete: "set null" },
-        ),
+        refreshId: text("refresh_id").references(() => oauthRefreshToken.id, {
+            onDelete: "set null",
+        }),
         expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
         scopes: text("scopes").array().notNull(),
@@ -337,16 +420,16 @@ export const authOAuthAccessToken = pgTable(
     }),
 );
 
-export const authOAuthConsent = pgTable(
-    "auth_oauth_consent",
+export const oauthConsent = pgTable(
+    "oauth_consent",
     {
         id: text("id").primaryKey(),
         clientId: text("client_id")
             .notNull()
-            .references(() => authOAuthClient.clientId, {
+            .references(() => oauthClient.clientId, {
                 onDelete: "cascade",
             }),
-        userId: text("user_id").references(() => authUser.id, {
+        userId: text("user_id").references(() => user.id, {
             onDelete: "cascade",
         }),
         referenceId: text("reference_id"),
@@ -378,7 +461,7 @@ export const oauthPostLoginTeamSelections = pgTable(
     {
         sessionId: text("session_id")
             .primaryKey()
-            .references(() => authSession.id, { onDelete: "cascade" }),
+            .references(() => session.id, { onDelete: "cascade" }),
         teamId: uuid("team_id")
             .notNull()
             .references(() => teams.id, { onDelete: "cascade" }),
@@ -386,27 +469,81 @@ export const oauthPostLoginTeamSelections = pgTable(
     },
 );
 
-/** A key authenticates as exactly one team — never an account directly — so a
- * team can hand out several independently-revocable keys (e.g. one for a
- * CourseLit integration, another for a Zapier zap) without any of them being
- * able to see another team the owning account belongs to.
- *
- * The secret itself (`sl_live_...`) is never stored — only its SHA-256
- * (`keyHash`, what auth looks up) and its first few characters (`keyPrefix`,
- * for display in key lists). See `apikey/secret.ts`. `id` doubles as this
- * row's own public handle (used to list/revoke a specific key) — a separate
- * `<domain>_id` isn't needed since `keyPrefix`/`keyHash` already solve the
- * "identify a key without exposing its secret" problem this convention is for. */
-export const apiKeys = pgTable("api_keys", {
-    id: uuid("id").$defaultFn(genId).primaryKey(),
-    teamId: uuid("team_id")
-        .notNull()
-        .references(() => teams.id, { onDelete: "cascade" }),
-    keyHash: text("key_hash").notNull().unique(),
-    keyPrefix: text("key_prefix").notNull(),
-    name: text("name"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+/** Organization keys provision/manage resources only inside one organization. */
+export const organizationApiKeys = pgTable(
+    "organization_api_keys",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        organizationApiKeyId: text("organization_api_key_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("oak")),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "cascade" }),
+        name: text("name").notNull(),
+        keyHash: text("key_hash").notNull().unique(),
+        keyPrefix: text("key_prefix").notNull(),
+        scopes: text("scopes").array().notNull().default([]),
+        expiresAt: timestamp("expires_at", { withTimezone: true }),
+        lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+        revokedAt: timestamp("revoked_at", { withTimezone: true }),
+        createdByUserId: text("created_by_user_id").references(() => user.id, {
+            onDelete: "set null",
+        }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        organizationApiKeyIdCheck: publicIdCheck(
+            "organization_api_keys_public_id_check",
+            table.organizationApiKeyId,
+            "oak",
+        ),
+        organizationIdx: index("organization_api_keys_organization_id_idx").on(
+            table.organizationId,
+        ),
+    }),
+);
+
+/** A team key authenticates as exactly one team and never as a user/org. */
+export const teamApiKeys = pgTable(
+    "team_api_keys",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        teamApiKeyId: text("team_api_key_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("tak")),
+        teamId: uuid("team_id")
+            .notNull()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        keyHash: text("key_hash").notNull().unique(),
+        keyPrefix: text("key_prefix").notNull(),
+        name: text("name").notNull(),
+        expiresAt: timestamp("expires_at", { withTimezone: true }),
+        lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+        revokedAt: timestamp("revoked_at", { withTimezone: true }),
+        createdByType: text("created_by_type").notNull().default("user"),
+        createdById: text("created_by_id"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        teamApiKeyIdCheck: publicIdCheck(
+            "team_api_keys_public_id_check",
+            table.teamApiKeyId,
+            "tak",
+        ),
+        teamIdx: index("team_api_keys_team_id_idx").on(table.teamId),
+        createdByTypeCheck: check(
+            "team_api_keys_created_by_type_check",
+            sql`${table.createdByType} IN ('user', 'organization_key', 'system')`,
+        ),
+    }),
+);
 
 /** A contact is a recipient/subscriber. Equivalent of CourseLit's `User` model,
  * stripped of everything course/product related. `contactId` is the public
@@ -650,26 +787,24 @@ export const segments = pgTable(
     }),
 );
 
-/** User-managed ESP (Email Service Provider) transport configuration. Teams
- * may create multiple rows and choose one default sending identity.
- * `encryptedSecret` holds an AES-256-GCM encrypted JSON blob (see
- * `utils/secret-crypto.ts`) and is never returned to API clients. This is
- * also the only place a user-managed sender identity (`fromName`/`fromEmail`)
- * lives. Platform delivery configuration is deployment-level and is never
- * persisted here. */
+/** One immutable ownership model for organization- and team-owned ESPs. */
 export const espConfigs = pgTable(
     "esp_configs",
     {
         id: uuid("id").$defaultFn(genId).primaryKey(),
-        teamId: uuid("team_id")
-            .notNull()
-            .references(() => teams.id, { onDelete: "cascade" }),
         espId: text("esp_id")
             .notNull()
             .unique()
             .$defaultFn(() => genPublicId("esp")),
+        ownerScope: text("owner_scope").notNull(),
+        organizationId: uuid("organization_id").references(
+            () => organizations.id,
+            { onDelete: "restrict" },
+        ),
+        teamId: uuid("team_id").references(() => teams.id, {
+            onDelete: "restrict",
+        }),
         name: text("name").notNull(),
-        isDefault: boolean("is_default").notNull().default(false),
         provider: text("provider").notNull().default("smtp"),
         host: text("host").notNull(),
         port: integer("port").notNull().default(587),
@@ -678,11 +813,20 @@ export const espConfigs = pgTable(
         encryptedSecret: text("encrypted_secret"),
         fromName: text("from_name"),
         fromEmail: text("from_email"),
+        status: text("status").notNull().default("draft"),
+        secretVersion: integer("secret_version").notNull().default(1),
         lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
         lastTestStatus: text("last_test_status"), // success | failed
         lastTestError: text("last_test_error"),
-        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-        updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+        activatedAt: timestamp("activated_at", { withTimezone: true }),
+        drainUntil: timestamp("drain_until", { withTimezone: true }),
+        retiredAt: timestamp("retired_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
     },
     (table) => ({
         espIdCheck: publicIdCheck(
@@ -690,10 +834,177 @@ export const espConfigs = pgTable(
             table.espId,
             "esp",
         ),
+        organizationIdx: index("esp_configs_organization_id_idx").on(
+            table.organizationId,
+        ),
         teamIdx: index("esp_configs_team_id_idx").on(table.teamId),
-        teamDefaultIdx: uniqueIndex("esp_configs_team_id_default_idx")
+        idOrganizationIdx: unique("esp_configs_id_organization_id_unique").on(
+            table.id,
+            table.organizationId,
+        ),
+        idTeamIdx: unique("esp_configs_id_team_id_unique").on(
+            table.id,
+            table.teamId,
+        ),
+        ownerCheck: check(
+            "esp_configs_owner_check",
+            sql`(${table.ownerScope} = 'organization' AND ${table.organizationId} IS NOT NULL AND ${table.teamId} IS NULL)
+                OR (${table.ownerScope} = 'team' AND ${table.organizationId} IS NULL AND ${table.teamId} IS NOT NULL)`,
+        ),
+        statusCheck: check(
+            "esp_configs_status_check",
+            sql`${table.status} IN ('draft', 'active', 'suspended', 'draining', 'retired')`,
+        ),
+    }),
+);
+
+export const organizationDeliveryPolicies = pgTable(
+    "organization_delivery_policies",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .unique()
+            .references(() => organizations.id, { onDelete: "cascade" }),
+        defaultEspConfigId: uuid("default_esp_config_id"),
+        autoGrantDefaultEsp: boolean("auto_grant_default_esp")
+            .notNull()
+            .default(false),
+        defaultDailyLimit: integer("default_daily_limit"),
+        defaultMonthlyLimit: integer("default_monthly_limit"),
+        aggregateDailyLimit: integer("aggregate_daily_limit"),
+        aggregateMonthlyLimit: integer("aggregate_monthly_limit"),
+        teamEspEnabledByDefault: boolean("team_esp_enabled_by_default")
+            .notNull()
+            .default(true),
+        teamCanChangeDefault: boolean("team_can_change_default")
+            .notNull()
+            .default(true),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        defaultEspFk: foreignKey({
+            name: "organization_delivery_policies_default_esp_fk",
+            columns: [table.defaultEspConfigId, table.organizationId],
+            foreignColumns: [espConfigs.id, espConfigs.organizationId],
+        }).onDelete("restrict"),
+        limitCheck: check(
+            "organization_delivery_policies_limit_check",
+            sql`(${table.defaultDailyLimit} IS NULL OR ${table.defaultDailyLimit} >= 0)
+                AND (${table.defaultMonthlyLimit} IS NULL OR ${table.defaultMonthlyLimit} >= 0)
+                AND (${table.aggregateDailyLimit} IS NULL OR ${table.aggregateDailyLimit} >= 0)
+                AND (${table.aggregateMonthlyLimit} IS NULL OR ${table.aggregateMonthlyLimit} >= 0)`,
+        ),
+    }),
+);
+
+export const espConfigTeamGrants = pgTable(
+    "esp_config_team_grants",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        grantId: text("grant_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("egr")),
+        organizationId: uuid("organization_id").notNull(),
+        espConfigId: uuid("esp_config_id").notNull(),
+        teamId: uuid("team_id").notNull(),
+        status: text("status").notNull().default("active"),
+        drainUntil: timestamp("drain_until", { withTimezone: true }),
+        fromName: text("from_name"),
+        replyTo: text("reply_to"),
+        dailyLimit: integer("daily_limit"),
+        monthlyLimit: integer("monthly_limit"),
+        createdByType: text("created_by_type").notNull(),
+        createdById: text("created_by_id"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        grantIdCheck: publicIdCheck(
+            "esp_config_team_grants_public_id_check",
+            table.grantId,
+            "egr",
+        ),
+        activeTeamIdx: uniqueIndex(
+            "esp_config_team_grants_non_revoked_team_idx",
+        )
             .on(table.teamId)
-            .where(sql`${table.isDefault} = true`),
+            .where(sql`${table.status} <> 'revoked'`),
+        idOrganizationUnique: unique(
+            "esp_config_team_grants_id_organization_id_unique",
+        ).on(table.id, table.organizationId),
+        pinUnique: unique("esp_config_team_grants_id_team_esp_unique").on(
+            table.id,
+            table.teamId,
+            table.espConfigId,
+        ),
+        teamOrganizationFk: foreignKey({
+            name: "esp_config_team_grants_team_organization_fk",
+            columns: [table.teamId, table.organizationId],
+            foreignColumns: [teams.id, teams.organizationId],
+        }).onDelete("restrict"),
+        espOrganizationFk: foreignKey({
+            name: "esp_config_team_grants_esp_organization_fk",
+            columns: [table.espConfigId, table.organizationId],
+            foreignColumns: [espConfigs.id, espConfigs.organizationId],
+        }).onDelete("restrict"),
+        statusCheck: check(
+            "esp_config_team_grants_status_check",
+            sql`${table.status} IN ('active', 'draining', 'suspended', 'revoked')`,
+        ),
+        limitCheck: check(
+            "esp_config_team_grants_limit_check",
+            sql`(${table.dailyLimit} IS NULL OR ${table.dailyLimit} >= 0)
+                AND (${table.monthlyLimit} IS NULL OR ${table.monthlyLimit} >= 0)`,
+        ),
+        createdByTypeCheck: check(
+            "esp_config_team_grants_created_by_type_check",
+            sql`${table.createdByType} IN ('user', 'organization_key', 'system')`,
+        ),
+    }),
+);
+
+export const teamDeliverySettings = pgTable(
+    "team_delivery_settings",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        teamId: uuid("team_id")
+            .notNull()
+            .unique()
+            .references(() => teams.id, { onDelete: "cascade" }),
+        teamEspEnabled: boolean("team_esp_enabled").notNull().default(true),
+        teamCanChangeDefault: boolean("team_can_change_default")
+            .notNull()
+            .default(true),
+        defaultSource: text("default_source"),
+        defaultTeamEspConfigId: uuid("default_team_esp_config_id"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        defaultTeamEspFk: foreignKey({
+            name: "team_delivery_settings_default_team_esp_fk",
+            columns: [table.defaultTeamEspConfigId, table.teamId],
+            foreignColumns: [espConfigs.id, espConfigs.teamId],
+        }).onDelete("restrict"),
+        defaultSourceCheck: check(
+            "team_delivery_settings_default_source_check",
+            sql`${table.defaultSource} IS NULL OR ${table.defaultSource} IN ('organization', 'team')`,
+        ),
     }),
 );
 
@@ -728,13 +1039,17 @@ export const sequences = pgTable(
         type: text("type").notNull(), // 'broadcast' | 'sequence'
         title: text("title").notNull().default(""),
         status: text("status").notNull().default("draft"), // draft|active|paused|completed
-        // Resolved at activation. Drafts may leave this null; active custom
-        // delivery must pin a user-owned outbox. `platform` is reserved for a
-        // future deployment-level transport and never references esp_configs.
-        deliveryRoute: text("delivery_route"), // custom | platform
+        deliverySourceIntent: jsonb("delivery_source_intent"),
+        // Resolved and pinned atomically at activation. Drafts may leave these
+        // null while retaining their public source intent in the API layer.
+        deliverySourceType: text("delivery_source_type"), // organization | team
         outboxId: uuid("outbox_id").references(() => espConfigs.id, {
-            onDelete: "set null",
+            onDelete: "restrict",
         }),
+        espGrantId: uuid("esp_grant_id").references(
+            () => espConfigTeamGrants.id,
+            { onDelete: "restrict" },
+        ),
         triggerType: text("trigger_type"), // Constants.EventType
         triggerData: text("trigger_data"),
         // UserFilterWithAggregator — see contacts/segment.ts
@@ -752,6 +1067,22 @@ export const sequences = pgTable(
             "sequences_sequence_id_check",
             table.sequenceId,
             "seq",
+        ),
+        deliveryPinCheck: check(
+            "sequences_delivery_pin_check",
+            sql`(
+                ${table.deliverySourceType} IS NULL
+                AND ${table.outboxId} IS NULL
+                AND ${table.espGrantId} IS NULL
+            ) OR (
+                ${table.deliverySourceType} = 'team'
+                AND ${table.outboxId} IS NOT NULL
+                AND ${table.espGrantId} IS NULL
+            ) OR (
+                ${table.deliverySourceType} = 'organization'
+                AND ${table.outboxId} IS NOT NULL
+                AND ${table.espGrantId} IS NOT NULL
+            )`,
         ),
     }),
 );
@@ -918,10 +1249,14 @@ export const transactionalEmails = pgTable(
             .notNull()
             .unique()
             .$defaultFn(() => genPublicId("txe")),
-        deliveryRoute: text("delivery_route").notNull().default("custom"),
+        deliverySourceType: text("delivery_source_type").notNull(),
         outboxId: uuid("outbox_id").references(() => espConfigs.id, {
-            onDelete: "set null",
+            onDelete: "restrict",
         }),
+        espGrantId: uuid("esp_grant_id").references(
+            () => espConfigTeamGrants.id,
+            { onDelete: "restrict" },
+        ),
         toEmail: text("to_email").notNull(),
         // Resolved sender identity at enqueue time (team ESP fromName/fromEmail
         // fallback chain, same as `attemptMailSending`) — never caller-supplied.
@@ -946,7 +1281,7 @@ export const transactionalEmails = pgTable(
         contactId: uuid("contact_id").references(() => contacts.id, {
             onDelete: "set null",
         }),
-        status: text("status").notNull().default("queued"), // queued|sent|failed|bounced
+        status: text("status").notNull().default("queued"), // queued|sent|failed|bounced|suppressed|cancelled
         processingStartedAt: timestamp("processing_started_at", {
             withTimezone: true,
         }),
@@ -980,6 +1315,18 @@ export const transactionalEmails = pgTable(
             table.teamId,
             table.status,
         ),
+        deliveryPinCheck: check(
+            "transactional_emails_delivery_pin_check",
+            sql`(
+                ${table.deliverySourceType} = 'team'
+                AND ${table.outboxId} IS NOT NULL
+                AND ${table.espGrantId} IS NULL
+            ) OR (
+                ${table.deliverySourceType} = 'organization'
+                AND ${table.outboxId} IS NOT NULL
+                AND ${table.espGrantId} IS NOT NULL
+            )`,
+        ),
     }),
 );
 
@@ -998,12 +1345,16 @@ export const espFeedbackConnections = pgTable(
             .notNull()
             .unique()
             .$defaultFn(() => genPublicId("whc")),
-        scope: text("scope").notNull(), // custom | platform
+        ownerScope: text("owner_scope").notNull(), // organization | team
+        organizationId: uuid("organization_id").references(
+            () => organizations.id,
+            { onDelete: "restrict" },
+        ),
         teamId: uuid("team_id").references(() => teams.id, {
-            onDelete: "cascade",
+            onDelete: "restrict",
         }),
         espConfigId: uuid("esp_config_id").references(() => espConfigs.id, {
-            onDelete: "set null",
+            onDelete: "restrict",
         }),
         provider: text("provider").notNull(),
         encryptedCredentials: text("encrypted_credentials"),
@@ -1033,6 +1384,18 @@ export const espFeedbackConnections = pgTable(
             "whc",
         ),
         teamIdx: index("esp_feedback_connections_team_id_idx").on(table.teamId),
+        ownerCheck: check(
+            "esp_feedback_connections_owner_check",
+            sql`(
+                ${table.ownerScope} = 'organization'
+                AND ${table.organizationId} IS NOT NULL
+                AND ${table.teamId} IS NULL
+            ) OR (
+                ${table.ownerScope} = 'team'
+                AND ${table.organizationId} IS NULL
+                AND ${table.teamId} IS NOT NULL
+            )`,
+        ),
         // At most one non-retired connection per user ESP — a provider
         // change retires the old row (status -> retiring) and inserts a new
         // one rather than mutating provider in place.
@@ -1065,10 +1428,14 @@ export const outboundMessages = pgTable(
         teamId: uuid("team_id")
             .notNull()
             .references(() => teams.id, { onDelete: "cascade" }),
-        deliveryRoute: text("delivery_route").notNull(), // custom | platform
+        deliverySourceType: text("delivery_source_type").notNull(),
         espConfigId: uuid("esp_config_id").references(() => espConfigs.id, {
-            onDelete: "set null",
+            onDelete: "restrict",
         }),
+        espGrantId: uuid("esp_grant_id").references(
+            () => espConfigTeamGrants.id,
+            { onDelete: "restrict" },
+        ),
         feedbackConnectionId: uuid("feedback_connection_id").references(
             () => espFeedbackConnections.id,
             { onDelete: "set null" },
@@ -1121,6 +1488,180 @@ export const outboundMessages = pgTable(
         recipientHistoryIdx: index(
             "outbound_messages_team_id_recipient_created_at_idx",
         ).on(table.teamId, table.normalizedRecipient, table.createdAt),
+        deliveryPinCheck: check(
+            "outbound_messages_delivery_pin_check",
+            sql`(
+                ${table.deliverySourceType} = 'team'
+                AND ${table.espConfigId} IS NOT NULL
+                AND ${table.espGrantId} IS NULL
+            ) OR (
+                ${table.deliverySourceType} = 'organization'
+                AND ${table.espConfigId} IS NOT NULL
+                AND ${table.espGrantId} IS NOT NULL
+            )`,
+        ),
+    }),
+);
+
+/** Atomic quota counters for organization-owned delivery. */
+export const organizationEspUsageBuckets = pgTable(
+    "organization_esp_usage_buckets",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        bucketScope: text("bucket_scope").notNull(), // grant | organization
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        grantId: uuid("grant_id").references(() => espConfigTeamGrants.id, {
+            onDelete: "restrict",
+        }),
+        periodType: text("period_type").notNull(), // day | month
+        periodStart: timestamp("period_start", {
+            withTimezone: true,
+        }).notNull(),
+        reservedCount: integer("reserved_count").notNull().default(0),
+        acceptedCount: integer("accepted_count").notNull().default(0),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        scopeCheck: check(
+            "organization_esp_usage_buckets_scope_check",
+            sql`(
+                ${table.bucketScope} = 'grant' AND ${table.grantId} IS NOT NULL
+            ) OR (
+                ${table.bucketScope} = 'organization' AND ${table.grantId} IS NULL
+            )`,
+        ),
+        periodCheck: check(
+            "organization_esp_usage_buckets_period_check",
+            sql`${table.periodType} IN ('day', 'month')`,
+        ),
+        countCheck: check(
+            "organization_esp_usage_buckets_count_check",
+            sql`${table.reservedCount} >= 0 AND ${table.acceptedCount} >= 0`,
+        ),
+        grantPeriodIdx: uniqueIndex(
+            "organization_esp_usage_buckets_grant_period_idx",
+        )
+            .on(table.grantId, table.periodType, table.periodStart)
+            .where(sql`${table.grantId} IS NOT NULL`),
+        organizationPeriodIdx: uniqueIndex(
+            "organization_esp_usage_buckets_organization_period_idx",
+        )
+            .on(table.organizationId, table.periodType, table.periodStart)
+            .where(sql`${table.bucketScope} = 'organization'`),
+        grantOrganizationFk: foreignKey({
+            name: "organization_esp_usage_buckets_grant_organization_fk",
+            columns: [table.grantId, table.organizationId],
+            foreignColumns: [
+                espConfigTeamGrants.id,
+                espConfigTeamGrants.organizationId,
+            ],
+        }).onDelete("restrict"),
+    }),
+);
+
+export const organizationEspQuotaReservations = pgTable(
+    "organization_esp_quota_reservations",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        reservationId: text("reservation_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("qrs")),
+        outboundMessageId: uuid("outbound_message_id")
+            .notNull()
+            .unique()
+            .references(() => outboundMessages.id, { onDelete: "restrict" }),
+        grantId: uuid("grant_id")
+            .notNull()
+            .references(() => espConfigTeamGrants.id, {
+                onDelete: "restrict",
+            }),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        dayPeriodStart: timestamp("day_period_start", {
+            withTimezone: true,
+        }).notNull(),
+        monthPeriodStart: timestamp("month_period_start", {
+            withTimezone: true,
+        }).notNull(),
+        state: text("state").notNull().default("reserved"),
+        releaseReason: text("release_reason"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        committedAt: timestamp("committed_at", { withTimezone: true }),
+        releasedAt: timestamp("released_at", { withTimezone: true }),
+    },
+    (table) => ({
+        reservationIdCheck: publicIdCheck(
+            "organization_esp_quota_reservations_reservation_id_check",
+            table.reservationId,
+            "qrs",
+        ),
+        stateCheck: check(
+            "organization_esp_quota_reservations_state_check",
+            sql`${table.state} IN ('reserved', 'committed', 'released')`,
+        ),
+        grantOrganizationFk: foreignKey({
+            name: "organization_esp_quota_reservations_grant_organization_fk",
+            columns: [table.grantId, table.organizationId],
+            foreignColumns: [
+                espConfigTeamGrants.id,
+                espConfigTeamGrants.organizationId,
+            ],
+        }).onDelete("restrict"),
+    }),
+);
+
+/** Transactional hand-off between PostgreSQL and BullMQ. */
+export const mailDispatchOutbox = pgTable(
+    "mail_dispatch_outbox",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        dispatchId: text("dispatch_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("mdj")),
+        outboundMessageId: uuid("outbound_message_id")
+            .notNull()
+            .unique()
+            .references(() => outboundMessages.id, { onDelete: "restrict" }),
+        queueName: text("queue_name").notNull(),
+        jobName: text("job_name").notNull(),
+        state: text("state").notNull().default("pending"),
+        availableAt: timestamp("available_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+        publishAttempts: integer("publish_attempts").notNull().default(0),
+        lastError: text("last_error"),
+        publishedAt: timestamp("published_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        dispatchIdCheck: publicIdCheck(
+            "mail_dispatch_outbox_dispatch_id_check",
+            table.dispatchId,
+            "mdj",
+        ),
+        stateCheck: check(
+            "mail_dispatch_outbox_state_check",
+            sql`${table.state} IN ('pending', 'publishing', 'published', 'cancelled')`,
+        ),
+        dueIdx: index("mail_dispatch_outbox_due_idx").on(
+            table.state,
+            table.availableAt,
+        ),
     }),
 );
 
@@ -1291,7 +1832,7 @@ export const emailSuppressions = pgTable(
             .notNull()
             .defaultNow(),
         releasedAt: timestamp("released_at", { withTimezone: true }),
-        releasedBy: uuid("released_by").references(() => accounts.id, {
+        releasedBy: text("released_by").references(() => user.id, {
             onDelete: "set null",
         }),
         releaseReason: text("release_reason"),
@@ -1334,7 +1875,7 @@ export const emailSuppressionActions = pgTable(
         ),
         action: text("action").notNull(), // created | reason_changed | released | reactivated
         actorType: text("actor_type").notNull(), // system | workspace_user | sendlit_operator
-        actorUserId: uuid("actor_user_id").references(() => accounts.id, {
+        actorUserId: text("actor_user_id").references(() => user.id, {
             onDelete: "set null",
         }),
         explanation: text("explanation"),

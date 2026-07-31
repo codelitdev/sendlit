@@ -79,7 +79,7 @@ const impl = s.router(contract.transactional, {
                 idempotencyKey: body.idempotencyKey,
                 trackOpens: body.trackOpens,
                 trackClicks: body.trackClicks,
-                espId: body.espId,
+                deliverySource: body.deliverySource,
             });
             return {
                 status: 202,
@@ -157,6 +157,22 @@ const impl = s.router(contract.transactional, {
                     return {
                         status: 422,
                         body: { error: "recipient_suppressed" },
+                    };
+                case "organization_team_quota_exhausted":
+                case "organization_quota_exhausted":
+                    return {
+                        status: 429,
+                        body: { error: err.message },
+                    };
+                case "delivery_source_required":
+                case "delivery_source_unavailable":
+                case "organization_delivery_disabled":
+                case "organization_sending_suspended":
+                case "team_sending_suspended":
+                case "team_esp_disabled":
+                    return {
+                        status: 422,
+                        body: { error: err.message },
                     };
                 default:
                     throw err;

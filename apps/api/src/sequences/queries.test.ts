@@ -21,12 +21,12 @@ import {
     contacts,
     emailDeliveries,
     emailEvents,
-    espConfigs,
     media,
     mediaReferences,
     rules,
     sequences,
     sequenceEmails,
+    teamDeliverySettings,
 } from "../db/schema";
 import { deleteMedia, sealMedia } from "../media/service";
 import { EmailEventAction, EventType } from "../config/constants";
@@ -292,11 +292,14 @@ describe("sequence queries", () => {
             sequenceId: sequence.sequenceId,
             title: "Welcome sequence",
         });
-        await tdb.delete(espConfigs).where(eq(espConfigs.teamId, team.id));
+        await tdb
+            .update(teamDeliverySettings)
+            .set({ teamEspEnabled: false, defaultSource: null })
+            .where(eq(teamDeliverySettings.teamId, team.id));
 
         await expect(
             startSequence({ teamId: team.id, sequenceId: sequence.sequenceId }),
-        ).rejects.toThrow("esp_not_configured");
+        ).rejects.toThrow("delivery_source_unavailable");
 
         await expect(
             getSequenceBySequenceId(team.id, sequence.sequenceId),
@@ -308,7 +311,7 @@ describe("sequence queries", () => {
         expect(createdRules).toHaveLength(0);
     });
 
-    it("pins an explicitly selected ESP and rejects a foreign or missing espId", async () => {
+    it("stores an explicit delivery-source intent on drafts", async () => {
         const { team } = await seedTeamAndContact(tdb);
         const other = await seedTeamAndContact(tdb);
         const template = await makeTemplate(team.id);
@@ -331,33 +334,33 @@ describe("sequence queries", () => {
             teamId: team.id,
             type: "sequence",
             templateId: template.templateId,
+            deliverySource: { type: "team", espId: secondEsp.espId },
+        });
+        expect(sequence.deliverySource).toEqual({
+            type: "team",
             espId: secondEsp.espId,
         });
-        expect(sequence.espId).toBe(secondEsp.espId);
 
+        // Drafts retain an intent for editing. Ownership and availability are
+        // resolved once at activation, rather than making draft editing depend
+        // on a currently-active ESP.
         await expect(
             createSequence({
                 teamId: team.id,
                 type: "sequence",
                 templateId: template.templateId,
-                espId: foreignEsp.espId,
+                deliverySource: { type: "team", espId: foreignEsp.espId },
             }),
-        ).rejects.toThrow("esp_not_found");
-        await expect(
-            createSequence({
-                teamId: team.id,
-                type: "sequence",
-                templateId: template.templateId,
-                espId: "esp_does_not_exist",
-            }),
-        ).rejects.toThrow("esp_not_found");
+        ).resolves.toMatchObject({
+            deliverySource: { type: "team", espId: foreignEsp.espId },
+        });
 
         const updated = await updateSequence({
             teamId: team.id,
             sequenceId: sequence.sequenceId,
-            espId: null,
+            deliverySource: null,
         });
-        expect(updated?.espId).toBeNull();
+        expect(updated?.deliverySource).toBeNull();
     });
 
     it("pauses only active, unsent sequences and preserves active broadcast locks", async () => {

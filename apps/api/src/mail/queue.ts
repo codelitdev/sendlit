@@ -16,14 +16,16 @@ export default mailQueue;
  */
 export async function addTransactionalMailJob({
     transactionalEmailId,
+    dispatchId,
 }: {
     transactionalEmailId: string;
+    dispatchId?: string;
 }) {
     await mailQueue.add(
         "transactional",
         { transactionalEmailId },
         {
-            jobId: transactionalEmailId,
+            jobId: dispatchId ?? transactionalEmailId,
             priority: 1,
             attempts: 3,
             backoff: { type: "exponential", delay: 30_000 },

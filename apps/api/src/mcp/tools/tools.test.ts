@@ -42,10 +42,11 @@ const mocks = vi.hoisted(() => ({
     getTeam: vi.fn(),
     getTeamByTeamId: vi.fn(),
     getTeamMembership: vi.fn(),
-    listTeamsForAccount: vi.fn(),
+    listTeamViewsForUser: vi.fn(),
     createTeam: vi.fn(),
-    deleteTeam: vi.fn(),
+    archiveTeam: vi.fn(),
     renameTeam: vi.fn(),
+    getOrganizationMembership: vi.fn(),
     createApiKey: vi.fn(),
     deleteApiKey: vi.fn(),
     getApiKeysByTeamId: vi.fn(),
@@ -133,10 +134,14 @@ vi.mock("../../team/queries", () => ({
     getTeam: mocks.getTeam,
     getTeamByTeamId: mocks.getTeamByTeamId,
     getTeamMembership: mocks.getTeamMembership,
-    listTeamsForAccount: mocks.listTeamsForAccount,
+    listTeamViewsForUser: mocks.listTeamViewsForUser,
     createTeam: mocks.createTeam,
-    deleteTeam: mocks.deleteTeam,
+    archiveTeam: mocks.archiveTeam,
     renameTeam: mocks.renameTeam,
+}));
+
+vi.mock("../../organization/queries", () => ({
+    getOrganizationMembership: mocks.getOrganizationMembership,
 }));
 
 vi.mock("../../apikey/queries", () => ({
@@ -172,7 +177,7 @@ vi.mock("../../transactional/queries", () => ({
 }));
 
 import { AUTH_ERROR, NOT_FOUND, jsonResult } from "./responses";
-import { getAuthAccount, getTeamId } from "./auth";
+import { getAuthUser, getTeamId } from "./auth";
 import { registerContactTools } from "./contacts";
 import { registerEspTools } from "./esp";
 import { registerSequenceTools } from "./sequences";
@@ -199,7 +204,7 @@ function makeToolRegistry(register: (server: any) => void) {
 const auth = {
     authInfo: {
         clientId: "team-1",
-        account: { id: "account-1", email: "owner@example.com", name: "Owner" },
+        user: { id: "user-1", email: "owner@example.com", name: "Owner" },
     },
 };
 
@@ -213,10 +218,10 @@ describe("MCP tool auth helpers and response helpers", () => {
     it("extracts team/account auth context and emits structured JSON results", () => {
         expect(getTeamId(auth)).toBe("team-1");
         expect(getTeamId({ authInfo: {} })).toBeNull();
-        expect(getAuthAccount(auth)).toEqual(
-            expect.objectContaining({ id: "account-1" }),
+        expect(getAuthUser(auth)).toEqual(
+            expect.objectContaining({ id: "user-1" }),
         );
-        expect(getAuthAccount({ authInfo: {} })).toBeNull();
+        expect(getAuthUser({ authInfo: {} })).toBeNull();
 
         expect(jsonResult({ ok: true })).toEqual({
             content: [{ type: "text", text: JSON.stringify({ ok: true }) }],
@@ -439,8 +444,8 @@ describe("MCP ESP tools", () => {
     it("lists user-managed ESP configurations", async () => {
         const tools = makeToolRegistry(registerEspTools);
         mocks.listEspConfigs.mockResolvedValue([
-            { espId: "esp_1", name: "Primary", isDefault: true },
-            { espId: "esp_2", name: "Backup", isDefault: false },
+            { espId: "esp_1", name: "Primary" },
+            { espId: "esp_2", name: "Backup" },
         ]);
 
         const result = await tools.get("list_esps")!.handler(auth);
@@ -448,8 +453,8 @@ describe("MCP ESP tools", () => {
         expect(mocks.listEspConfigs).toHaveBeenCalledWith("team-1");
         expect(result.structuredContent).toMatchObject({
             items: [
-                { espId: "esp_1", isDefault: true },
-                { espId: "esp_2", isDefault: false },
+                { espId: "esp_1", name: "Primary" },
+                { espId: "esp_2", name: "Backup" },
             ],
         });
     });
@@ -459,7 +464,6 @@ describe("MCP ESP tools", () => {
         mocks.createEspConfig.mockResolvedValue({
             espId: "esp_2",
             name: "Backup",
-            isDefault: false,
             provider: "smtp",
             host: "smtp.example.com",
             port: 587,
@@ -505,21 +509,20 @@ describe("MCP ESP tools", () => {
             id: "internal-2",
             espId: "esp_2",
             name: "Backup",
-            isDefault: true,
+            provider: "smtp",
         });
 
         const result = await tools
             .get("update_esp")!
-            .handler({ espId: "esp_2", isDefault: true }, auth);
+            .handler({ espId: "esp_2", provider: "smtp" }, auth);
 
         expect(mocks.updateEspConfig).toHaveBeenCalledWith("team-1", "esp_2", {
-            isDefault: true,
+            provider: "smtp",
         });
         expect(mocks.invalidateEspTransport).toHaveBeenCalledWith(
             "team-1",
             "internal-2",
         );
-        expect(mocks.invalidateTeamTransport).toHaveBeenCalledWith("team-1");
         expect(result.structuredContent).toMatchObject({ espId: "esp_2" });
     });
 
@@ -530,7 +533,9 @@ describe("MCP ESP tools", () => {
             espId: "esp_2",
             isDefault: false,
         });
-        mocks.deleteEspConfig.mockRejectedValue(new Error("esp_in_use"));
+        mocks.deleteEspConfig.mockRejectedValue(
+            new Error("delivery_source_in_use"),
+        );
 
         const result = await tools
             .get("delete_esp")!
@@ -575,19 +580,36 @@ describe("MCP team and template tools", () => {
                 .handler({ authInfo: { clientId: "team-1" } }),
         ).resolves.toEqual(AUTH_ERROR);
 
-        mocks.listTeamsForAccount.mockResolvedValue([
-            { id: "team-1", teamId: "team-1", name: "Main", ignored: true },
+        mocks.listTeamViewsForUser.mockResolvedValue([
+            {
+                id: "team-1",
+                teamId: "team-1",
+                name: "Main",
+                organizationPublicId: "org-1",
+                organizationName: "Acme",
+                ignored: true,
+            },
         ]);
         await expect(
             tools.get("list_teams")!.handler(auth),
         ).resolves.toMatchObject({
-            structuredContent: { items: [{ teamId: "team-1", name: "Main" }] },
+            structuredContent: {
+                items: [
+                    {
+                        teamId: "team-1",
+                        name: "Main",
+                        organizationId: "org-1",
+                        organizationName: "Acme",
+                    },
+                ],
+            },
         });
-        expect(mocks.listTeamsForAccount).toHaveBeenCalledWith("account-1");
+        expect(mocks.listTeamViewsForUser).toHaveBeenCalledWith("user-1");
     });
 
     it("creates teams for the authenticated account", async () => {
         const tools = makeToolRegistry(registerTeamTools);
+        mocks.getOrganizationMembership.mockResolvedValue({ role: "owner" });
         mocks.createTeam.mockResolvedValue({
             id: "internal-team-2",
             teamId: "team-2",
@@ -595,7 +617,20 @@ describe("MCP team and template tools", () => {
         });
 
         await expect(
-            tools.get("create_team")!.handler({ name: "Second Team" }, auth),
+            tools.get("create_team")!.handler(
+                { name: "Second Team" },
+                {
+                    authInfo: {
+                        clientId: "team-1",
+                        user: {
+                            id: "user-1",
+                            email: "owner@example.com",
+                            name: "Owner",
+                            defaultOrganizationId: "org-1",
+                        },
+                    },
+                },
+            ),
         ).resolves.toMatchObject({
             structuredContent: {
                 teamId: "team-2",
@@ -603,7 +638,8 @@ describe("MCP team and template tools", () => {
             },
         });
         expect(mocks.createTeam).toHaveBeenCalledWith({
-            ownerAccountId: "account-1",
+            organizationId: "org-1",
+            creatorUserId: "user-1",
             name: "Second Team",
         });
     });
@@ -614,23 +650,30 @@ describe("MCP team and template tools", () => {
             id: "internal-team-2",
             teamId: "team-2",
             name: "Second Team",
+            organizationId: "org-1",
         });
         mocks.getTeamMembership.mockResolvedValueOnce({ role: "member" });
+        mocks.getOrganizationMembership.mockResolvedValueOnce({
+            role: "member",
+        });
 
         await expect(
             tools.get("delete_team")!.handler({ teamId: "team-2" }, auth),
         ).resolves.toMatchObject({
             isError: true,
         });
-        expect(mocks.deleteTeam).not.toHaveBeenCalled();
+        expect(mocks.archiveTeam).not.toHaveBeenCalled();
 
-        mocks.getTeamMembership.mockResolvedValueOnce({ role: "owner" });
+        mocks.getTeamMembership.mockResolvedValueOnce({ role: "admin" });
+        mocks.getOrganizationMembership.mockResolvedValueOnce({
+            role: "owner",
+        });
         await expect(
             tools.get("delete_team")!.handler({ teamId: "team-2" }, auth),
         ).resolves.toMatchObject({
-            structuredContent: { message: "Team deleted." },
+            structuredContent: { message: "Team archived." },
         });
-        expect(mocks.deleteTeam).toHaveBeenCalledWith("internal-team-2");
+        expect(mocks.archiveTeam).toHaveBeenCalledWith("internal-team-2");
     });
 
     it("keeps template ID inputs non-empty across template tools", () => {

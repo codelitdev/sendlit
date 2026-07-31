@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { emailContentSchema } from "./common";
+import { deliverySourceSelectionSchema } from "./delivery";
 
 export const mailTypes = ["broadcast", "sequence"] as const;
 export const sequenceStatus = [
@@ -125,7 +126,7 @@ export const sequenceSchema = z.object({
     type: z.string(),
     title: z.string(),
     status: z.string(),
-    espId: z.string().nullable(),
+    deliverySource: deliverySourceSelectionSchema.nullable(),
     triggerType: z.string().nullable().optional(),
     triggerData: z.string().nullable().optional(),
     filter: z.any().nullable().optional(),
@@ -147,7 +148,7 @@ export const listSequencesQuerySchema = z.object({
 export const createSequenceBodySchema = z.object({
     type: z.enum(mailTypes),
     templateId: z.string().min(1),
-    espId: z.string().min(1).optional(),
+    deliverySource: deliverySourceSelectionSchema.optional(),
 });
 
 export const updateSequenceBodySchema = z.object({
@@ -156,8 +157,8 @@ export const updateSequenceBodySchema = z.object({
     triggerData: z.string().optional(),
     filter: contactFilterSchema.optional(),
     emailsOrder: z.array(z.string()).optional(),
-    /** `null` clears the selection so the default is resolved on next start. */
-    espId: z.string().min(1).nullable().optional(),
+    /** `null` clears the intent so the default is resolved on next start. */
+    deliverySource: deliverySourceSelectionSchema.nullable().optional(),
 });
 
 export const addSequenceEmailBodySchema = z.object({

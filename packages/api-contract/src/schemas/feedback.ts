@@ -3,7 +3,7 @@ import { z } from "zod";
 /** Providers that ship a reviewed webhook adapter — see
  * `docs/bounces-and-complaints.md`'s provider support matrix. A provider not
  * in this list (including SES, still its own rollout phase) has no
- * `/feedback` support yet; SMTP/custom never will (synchronous-only). */
+ * `/feedback` support yet; custom SMTP never will (synchronous-only). */
 export const feedbackCapableProviders = ["resend", "postmark"] as const;
 
 export const feedbackConnectionStatus = [

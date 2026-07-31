@@ -4,10 +4,10 @@ import { contract } from "@sendlit/api-contract";
 import { requireAuth } from "../auth/middleware";
 import {
     createTeam,
-    deleteTeam,
+    archiveTeam,
     getTeamByTeamId,
     getTeamMembership,
-    listTeamsForAccount,
+    listTeamViewsForUser,
     renameTeam,
     type Team,
 } from "./queries";
@@ -17,6 +17,8 @@ import {
     getApiKeysByTeamId,
 } from "../apikey/queries";
 import { serializeDates } from "../utils/serialize";
+import { getUser } from "../user/queries";
+import { getOrganizationMembership } from "../organization/queries";
 
 const router = Router();
 // This router is mounted at the API root. Scope account-level middleware to
@@ -47,31 +49,48 @@ const s = initServer();
 /** API keys are how CourseLit-style integrations (and MCP clients) actually
  * access a team. A team can hold several, independently named/revocable \u2014
  * e.g. one per integration \u2014 without any of them exposing another team. */
-async function requireMembership(teamId: string, accountId: string) {
-    return getTeamMembership(teamId, accountId);
+async function requireMembership(teamId: string, userId: string) {
+    return getTeamMembership(teamId, userId);
 }
 
 /** `teams.teamId` is this row's *own* public identifier, not an internal
  * tenant-FK to another resource — so, unlike `omitInternal()`, only drop
  * `id`, never `teamId`. */
-function toPublicTeam(team: Team) {
-    const { id: _id, ...publicTeam } = team;
-    return publicTeam;
+function toPublicTeam(
+    team: Team & { organizationPublicId?: string; organizationName?: string },
+) {
+    const {
+        id: _id,
+        organizationId: _organizationId,
+        organizationPublicId,
+        organizationName,
+        provisioningRequestHash: _provisioningRequestHash,
+        ...publicTeam
+    } = team;
+    return {
+        ...publicTeam,
+        ...(organizationPublicId
+            ? { organizationId: organizationPublicId }
+            : {}),
+        ...(organizationName ? { organizationName } : {}),
+        status: publicTeam.status as
+            "active" | "sending_suspended" | "archived",
+    };
 }
 
 /** Resolves a route's public `:teamId` param to its internal id, 404-ing if
  * it doesn't resolve to a team the caller is even a member of. */
-async function resolveTeamParam(teamId: string, accountId: string) {
+async function resolveTeamParam(teamId: string, userId: string) {
     const team = await getTeamByTeamId(teamId);
     if (!team) return null;
-    const membership = await requireMembership(team.id, accountId);
+    const membership = await requireMembership(team.id, userId);
     if (!membership) return null;
     return { team, membership };
 }
 
 const impl = s.router(contract.teams, {
     list: async ({ req }) => {
-        const teams = await listTeamsForAccount((req as any).accountId);
+        const teams = await listTeamViewsForUser((req as any).userId);
         return {
             status: 200,
             body: { items: serializeDates(teams.map(toPublicTeam)) },
@@ -81,8 +100,29 @@ const impl = s.router(contract.teams, {
         // No default API key here — the dashboard has no surface to show its
         // one-time secret at creation time. Users mint keys explicitly via
         // `createKey`, which does return the secret once.
+        const identity = await getUser((req as any).userId);
+        if (!identity?.defaultOrganizationId) {
+            return {
+                status: 409,
+                body: { error: "user_onboarding_pending" },
+            } as const;
+        }
+        const organizationMembership = await getOrganizationMembership(
+            identity.defaultOrganizationId,
+            identity.id,
+        );
+        if (
+            !organizationMembership ||
+            !["owner", "admin"].includes(organizationMembership.role)
+        ) {
+            return {
+                status: 403,
+                body: { error: "organization_permission_required" },
+            } as const;
+        }
         const team = await createTeam({
-            ownerAccountId: (req as any).accountId,
+            organizationId: identity.defaultOrganizationId,
+            creatorUserId: identity.id,
             name: body.name,
         });
         return { status: 201, body: serializeDates(toPublicTeam(team)) };
@@ -90,7 +130,7 @@ const impl = s.router(contract.teams, {
     rename: async ({ params, body, req }) => {
         const resolved = await resolveTeamParam(
             params.teamId,
-            (req as any).accountId,
+            (req as any).userId,
         );
         if (!resolved)
             return { status: 404, body: { error: "Team not found" } };
@@ -100,23 +140,30 @@ const impl = s.router(contract.teams, {
     remove: async ({ params, req }) => {
         const resolved = await resolveTeamParam(
             params.teamId,
-            (req as any).accountId,
+            (req as any).userId,
         );
         if (!resolved)
             return { status: 404, body: { error: "Team not found" } };
-        if (resolved.membership.role !== "owner") {
+        const organizationMembership = await getOrganizationMembership(
+            resolved.team.organizationId,
+            (req as any).userId,
+        );
+        if (
+            !organizationMembership ||
+            !["owner", "admin"].includes(organizationMembership.role)
+        ) {
             return {
                 status: 403,
-                body: { error: "Only the team owner can delete it" },
+                body: { error: "Organization administration is required" },
             };
         }
-        await deleteTeam(resolved.team.id);
+        await archiveTeam(resolved.team.id);
         return { status: 204, body: undefined };
     },
     listKeys: async ({ params, req }) => {
         const resolved = await resolveTeamParam(
             params.teamId,
-            (req as any).accountId,
+            (req as any).userId,
         );
         if (!resolved)
             return { status: 404, body: { error: "Team not found" } };
@@ -128,7 +175,20 @@ const impl = s.router(contract.teams, {
             status: 200,
             body: {
                 items: serializeDates(
-                    keys.map(({ keyHash: _, teamId: _t, ...key }) => key),
+                    keys.map(
+                        ({
+                            id: _id,
+                            keyHash: _keyHash,
+                            teamId: _teamId,
+                            teamApiKeyId,
+                            createdByType: _createdByType,
+                            createdById: _createdById,
+                            ...key
+                        }) => ({
+                            ...key,
+                            keyId: teamApiKeyId,
+                        }),
+                    ),
                 ),
             },
         };
@@ -136,23 +196,30 @@ const impl = s.router(contract.teams, {
     createKey: async ({ params, body, req }) => {
         const resolved = await resolveTeamParam(
             params.teamId,
-            (req as any).accountId,
+            (req as any).userId,
         );
         if (!resolved)
             return { status: 404, body: { error: "Team not found" } };
         const {
-            apiKey: { keyHash: _, teamId: _t, ...apiKey },
+            apiKey: { keyHash: _, teamId: _t, teamApiKeyId, ...apiKey },
             secret,
-        } = await createApiKey(resolved.team.id, body.name);
+        } = await createApiKey(resolved.team.id, body.name, {
+            createdByType: "user",
+            createdById: (req as any).userId,
+        });
         return {
             status: 201,
-            body: { ...serializeDates(apiKey), key: secret },
+            body: {
+                ...serializeDates(apiKey),
+                keyId: teamApiKeyId,
+                key: secret,
+            },
         };
     },
     removeKey: async ({ params, req }) => {
         const resolved = await resolveTeamParam(
             params.teamId,
-            (req as any).accountId,
+            (req as any).userId,
         );
         if (!resolved)
             return { status: 404, body: { error: "Team not found" } };

@@ -2,7 +2,7 @@ import express from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
-const requestContext = vi.hoisted(() => ({ teamId: "", account: null as any }));
+const requestContext = vi.hoisted(() => ({ teamId: "", userId: "" }));
 const transportMocks = vi.hoisted(() => ({
     invalidateEsp: vi.fn(),
     invalidateTeam: vi.fn(),
@@ -14,7 +14,8 @@ vi.mock("../../db/client", async () => {
 });
 vi.mock("../../auth/middleware", () => ({
     requireAuth: (req: any, _res: any, next: () => void) => {
-        req.account = requestContext.account;
+        req.authKind = "session";
+        req.userId = requestContext.userId;
         next();
     },
 }));
@@ -34,7 +35,7 @@ vi.mock("./test", () => ({
 vi.mock("../../observability/posthog", () => ({ captureEvent: vi.fn() }));
 
 import { db } from "../../db/client";
-import { espConfigs, sequences } from "../../db/schema";
+import { espConfigs } from "../../db/schema";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../../test/db";
 import { seedSequence } from "../../test/fixtures";
 import { requestApp } from "../../test/http";
@@ -53,6 +54,8 @@ function app() {
 beforeEach(async () => {
     await truncateAll(tdb);
     vi.clearAllMocks();
+    requestContext.teamId = "";
+    requestContext.userId = "";
 });
 
 describe("ESP settings routes", () => {
@@ -64,6 +67,7 @@ describe("ESP settings routes", () => {
             .from(espConfigs)
             .where(eq(espConfigs.teamId, second.team.id));
         requestContext.teamId = first.team.id;
+        requestContext.userId = first.account.id;
 
         const response = await requestApp(
             app(),
@@ -86,6 +90,7 @@ describe("ESP settings routes", () => {
             password: "super-secret",
         });
         requestContext.teamId = owner.team.id;
+        requestContext.userId = owner.account.id;
 
         const response = await requestApp(
             app(),
@@ -99,7 +104,7 @@ describe("ESP settings routes", () => {
         expect(response.body).not.toContain(config.id);
     });
 
-    it("invalidates the pinned cache and the default cache when changing the default", async () => {
+    it("invalidates the pinned cache when updating a team-owned ESP", async () => {
         const owner = await seedTeamAndContact(tdb);
         const config = await createEspConfig(owner.team.id, {
             name: "Marketing",
@@ -109,6 +114,7 @@ describe("ESP settings routes", () => {
             secure: false,
         });
         requestContext.teamId = owner.team.id;
+        requestContext.userId = owner.account.id;
 
         const response = await requestApp(
             app(),
@@ -116,7 +122,7 @@ describe("ESP settings routes", () => {
             {
                 method: "PATCH",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ isDefault: true }),
+                body: JSON.stringify({ host: "smtp.updated.example.com" }),
             },
         );
 
@@ -125,9 +131,7 @@ describe("ESP settings routes", () => {
             owner.team.id,
             config.id,
         );
-        expect(transportMocks.invalidateTeam).toHaveBeenCalledWith(
-            owner.team.id,
-        );
+        expect(transportMocks.invalidateTeam).not.toHaveBeenCalled();
     });
 
     it("refuses to delete a pinned ESP and retains its transport cache", async () => {
@@ -141,13 +145,11 @@ describe("ESP settings routes", () => {
         });
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: owner.team.id,
+            outboxId: config.id,
             emails: [{ emailId: "email_1" }],
         });
-        await tdb
-            .update(sequences)
-            .set({ outboxId: config.id, deliveryRoute: "custom" })
-            .where(eq(sequences.id, sequenceRow.id));
         requestContext.teamId = owner.team.id;
+        requestContext.userId = owner.account.id;
 
         const response = await requestApp(
             app(),

@@ -39,7 +39,12 @@ import type { HydratedSequence } from "../../sequences/queries";
 // than exposed, since it's an internal join key, not a public ID.
 function toPublicSequence(sequence: HydratedSequence) {
     return {
-        ...omitInternal(sequence, ["outboxId", "deliveryRoute"]),
+        ...omitInternal(sequence, [
+            "outboxId",
+            "espGrantId",
+            "deliverySourceType",
+            "deliverySourceIntent",
+        ]),
         emails: sequence.emails.map((email) =>
             omitInternal(email, ["sequenceId"]),
         ),
@@ -129,7 +134,15 @@ export function registerSequenceTools(server: McpServer): void {
             inputSchema: {
                 type: z.enum(mailTypes),
                 templateId: z.string().min(1),
-                espId: z.string().min(1).optional(),
+                deliverySource: z
+                    .discriminatedUnion("type", [
+                        z.object({ type: z.literal("organization") }),
+                        z.object({
+                            type: z.literal("team"),
+                            espId: z.string().min(1).optional(),
+                        }),
+                    ])
+                    .optional(),
             },
             outputSchema: sequenceSchema,
             annotations: {
@@ -146,7 +159,7 @@ export function registerSequenceTools(server: McpServer): void {
                     teamId,
                     type: args.type,
                     templateId: args.templateId,
-                    espId: args.espId,
+                    deliverySource: args.deliverySource,
                 });
                 return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
@@ -183,7 +196,16 @@ export function registerSequenceTools(server: McpServer): void {
                         "Audience filter for broadcasts (tag/email/subscription/signedUp)",
                     ),
                 emailsOrder: z.array(z.string()).optional(),
-                espId: z.string().min(1).nullable().optional(),
+                deliverySource: z
+                    .discriminatedUnion("type", [
+                        z.object({ type: z.literal("organization") }),
+                        z.object({
+                            type: z.literal("team"),
+                            espId: z.string().min(1).optional(),
+                        }),
+                    ])
+                    .nullable()
+                    .optional(),
             },
             outputSchema: sequenceSchema,
             annotations: {

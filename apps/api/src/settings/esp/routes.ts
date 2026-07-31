@@ -6,11 +6,10 @@ import { requireTeam } from "../../auth/require-team";
 import {
     createEspConfig,
     deleteEspConfig,
-    getEspConfig,
     getEspConfigByEspId,
     listEspConfigs,
     updateEspConfig,
-    upsertEspConfig,
+    transitionEspConfig,
     type EspConfig,
 } from "./queries";
 import {
@@ -19,17 +18,26 @@ import {
 } from "../../mail/transport";
 import { testEspConfig } from "./test";
 import { captureEvent } from "../../observability/posthog";
+import { getTeamDeliverySetting } from "../../delivery/queries";
+import { getTeamMembership } from "../../team/queries";
 
 const router = Router();
 router.use(["/settings/esp", "/settings/esps"], requireAuth, requireTeam);
 
 const s = initServer();
 
+async function canManageTeamEsp(req: any): Promise<boolean> {
+    const delivery = await getTeamDeliverySetting(req.teamId);
+    if (!delivery?.teamEspEnabled) return false;
+    if (req.authKind === "team_key") return true;
+    const membership = await getTeamMembership(req.teamId, req.userId);
+    return membership?.role === "admin";
+}
+
 function toPublicShape(config: EspConfig) {
     return {
         espId: config.espId,
         name: config.name,
-        isDefault: config.isDefault,
         provider: config.provider,
         host: config.host,
         port: config.port,
@@ -38,9 +46,15 @@ function toPublicShape(config: EspConfig) {
         hasPassword: Boolean(config.encryptedSecret),
         fromName: config.fromName,
         fromEmail: config.fromEmail,
+        status: config.status as
+            "draft" | "active" | "suspended" | "draining" | "retired",
+        secretVersion: config.secretVersion,
         lastTestedAt: config.lastTestedAt?.toISOString() ?? null,
         lastTestStatus: config.lastTestStatus as "success" | "failed" | null,
         lastTestError: config.lastTestError,
+        activatedAt: config.activatedAt?.toISOString() ?? null,
+        drainUntil: config.drainUntil?.toISOString() ?? null,
+        retiredAt: config.retiredAt?.toISOString() ?? null,
         updatedAt: config.updatedAt?.toISOString(),
     };
 }
@@ -53,7 +67,7 @@ function captureUpsert(config: EspConfig, source: string): void {
         properties: {
             esp_id: config.espId,
             provider: config.provider,
-            is_default: config.isDefault,
+            status: config.status,
             has_password: Boolean(config.encryptedSecret),
             has_from_email: Boolean(config.fromEmail),
             has_username: Boolean(config.username),
@@ -103,6 +117,9 @@ const collectionImpl = s.router(contract.settings.esps, {
     },
     create: async ({ body, req }) => {
         const teamId = (req as any).teamId;
+        if (!(await canManageTeamEsp(req))) {
+            return { status: 403, body: { error: "team_esp_disabled" } };
+        }
         const config = await createEspConfig(teamId, body);
         invalidateTeamTransport(teamId);
         captureUpsert(config, "settings.esps.create");
@@ -118,30 +135,34 @@ const collectionImpl = s.router(contract.settings.esps, {
     },
     update: async ({ params, body, req }) => {
         const teamId = (req as any).teamId;
+        if (!(await canManageTeamEsp(req))) {
+            return { status: 403, body: { error: "team_esp_disabled" } };
+        }
         const config = await updateEspConfig(teamId, params.espId, body);
         if (!config) return { status: 404, body: { error: "ESP not found" } };
         invalidateEspTransport(teamId, config.id);
-        if (body.isDefault) invalidateTeamTransport(teamId);
         captureUpsert(config, "settings.esps.update");
         return { status: 200, body: toPublicShape(config) };
     },
     remove: async ({ params, req }) => {
         const teamId = (req as any).teamId;
+        if (!(await canManageTeamEsp(req))) {
+            return { status: 403, body: { error: "team_esp_disabled" } };
+        }
         const config = await getEspConfigByEspId(teamId, params.espId);
         if (!config) return { status: 404, body: { error: "ESP not found" } };
         try {
             await deleteEspConfig(teamId, params.espId);
         } catch (err: any) {
-            if (err.message === "esp_in_use") {
+            if (err.message === "delivery_source_in_use") {
                 return {
                     status: 409,
-                    body: { error: "ESP is in use and cannot be removed" },
+                    body: { error: "delivery_source_in_use" },
                 };
             }
             throw err;
         }
         invalidateEspTransport(teamId, config.id);
-        if (config.isDefault) invalidateTeamTransport(teamId);
         captureEvent({
             event: "esp_config_removed",
             source: "settings.esps.remove",
@@ -151,6 +172,9 @@ const collectionImpl = s.router(contract.settings.esps, {
         return { status: 204, body: undefined };
     },
     test: async ({ params, body, req }) => {
+        if (!(await canManageTeamEsp(req))) {
+            return { status: 403, body: { error: "team_esp_disabled" } };
+        }
         const config = await getEspConfigByEspId(
             (req as any).teamId,
             params.espId,
@@ -159,65 +183,101 @@ const collectionImpl = s.router(contract.settings.esps, {
         return testConfig({
             config,
             to: body.to,
-            account: (req as any).account,
+            account: (req as any).user,
         });
     },
-});
-
-/** Advisory compatibility adapter: singleton operations target the default. */
-const legacyImpl = s.router(contract.settings.esp, {
-    get: async ({ req }) => {
-        const config = await getEspConfig((req as any).teamId);
-        return {
-            status: 200,
-            body: config ? toPublicShape(config) : null,
-        };
-    },
-    upsert: async ({ body, req }) => {
-        const teamId = (req as any).teamId;
-        const config = await upsertEspConfig(teamId, body);
-        invalidateTeamTransport(teamId);
-        captureUpsert(config, "settings.esp.upsert");
-        return { status: 200, body: toPublicShape(config) };
-    },
-    remove: async ({ req }) => {
-        const teamId = (req as any).teamId;
+    activate: async ({ params, req }) => {
+        if (!(await canManageTeamEsp(req))) {
+            return { status: 403, body: { error: "team_esp_disabled" } };
+        }
+        const config = await getEspConfigByEspId(
+            (req as any).teamId,
+            params.espId,
+        );
+        if (!config) {
+            return { status: 404, body: { error: "esp_not_found" } };
+        }
         try {
-            await deleteEspConfig(teamId);
-        } catch (err: any) {
-            if (err.message === "esp_in_use") {
+            const updated = await transitionEspConfig(config, "activate");
+            return { status: 200, body: toPublicShape(updated) };
+        } catch (error: any) {
+            if (error.message === "esp_verification_required") {
                 return {
-                    status: 409,
-                    body: { error: "ESP is in use and cannot be removed" },
+                    status: 422,
+                    body: { error: "esp_verification_required" },
                 };
             }
-            throw err;
-        }
-        invalidateTeamTransport(teamId);
-        captureEvent({
-            event: "esp_config_removed",
-            source: "settings.esp.remove",
-            teamId,
-        });
-        return { status: 204, body: undefined };
-    },
-    test: async ({ body, req }) => {
-        const config = await getEspConfig((req as any).teamId);
-        if (!config) {
             return {
-                status: 400,
-                body: { error: "No ESP configured for this team yet." },
+                status: 409,
+                body: { error: "invalid_lifecycle_transition" },
             };
         }
-        return testConfig({
-            config,
-            to: body.to,
-            account: (req as any).account,
-        });
+    },
+    suspend: async ({ params, req }) => {
+        if (!(await canManageTeamEsp(req))) {
+            return { status: 403, body: { error: "team_esp_disabled" } };
+        }
+        const config = await getEspConfigByEspId(
+            (req as any).teamId,
+            params.espId,
+        );
+        if (!config) return { status: 404, body: { error: "esp_not_found" } };
+        try {
+            const updated = await transitionEspConfig(config, "suspend");
+            return { status: 200, body: toPublicShape(updated) };
+        } catch {
+            return {
+                status: 409,
+                body: { error: "invalid_lifecycle_transition" },
+            };
+        }
+    },
+    resume: async ({ params, req }) => {
+        if (!(await canManageTeamEsp(req))) {
+            return { status: 403, body: { error: "team_esp_disabled" } };
+        }
+        const config = await getEspConfigByEspId(
+            (req as any).teamId,
+            params.espId,
+        );
+        if (!config) return { status: 404, body: { error: "esp_not_found" } };
+        try {
+            const updated = await transitionEspConfig(config, "resume");
+            return { status: 200, body: toPublicShape(updated) };
+        } catch {
+            return {
+                status: 409,
+                body: { error: "invalid_lifecycle_transition" },
+            };
+        }
+    },
+    retire: async ({ params, body, req }) => {
+        if (!(await canManageTeamEsp(req))) {
+            return { status: 403, body: { error: "team_esp_disabled" } };
+        }
+        const config = await getEspConfigByEspId(
+            (req as any).teamId,
+            params.espId,
+        );
+        if (!config) return { status: 404, body: { error: "esp_not_found" } };
+        try {
+            const updated = await transitionEspConfig(config, "retire", {
+                cancel: body.transition === "cancel",
+                drainUntil:
+                    body.transition === "drain" && body.drainUntil
+                        ? new Date(body.drainUntil)
+                        : undefined,
+            });
+            return { status: 200, body: toPublicShape(updated) };
+        } catch {
+            return {
+                status: 409,
+                body: { error: "invalid_lifecycle_transition" },
+            };
+        }
     },
 });
 
 createExpressEndpoints(contract.settings.esps, collectionImpl, router);
-createExpressEndpoints(contract.settings.esp, legacyImpl, router);
 
 export default router;

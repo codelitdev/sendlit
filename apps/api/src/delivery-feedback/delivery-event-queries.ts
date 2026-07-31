@@ -90,7 +90,7 @@ interface DeliveryEventFilters {
     /** Internal `esp_configs.id` — resolved from the public `espId` by the
      * route layer. */
     espConfigId?: string;
-    deliveryRoute?: DeliveryRoute;
+    deliverySourceType?: DeliveryRoute;
     createdAfter?: number;
     createdBefore?: number;
 }
@@ -99,7 +99,7 @@ function listConditions({
     teamId,
     eventType,
     espConfigId,
-    deliveryRoute,
+    deliverySourceType,
     createdAfter,
     createdBefore,
 }: DeliveryEventFilters) {
@@ -108,8 +108,10 @@ function listConditions({
         conditions.push(eq(emailDeliveryEvents.eventType, eventType));
     if (espConfigId)
         conditions.push(eq(outboundMessages.espConfigId, espConfigId));
-    if (deliveryRoute)
-        conditions.push(eq(outboundMessages.deliveryRoute, deliveryRoute));
+    if (deliverySourceType)
+        conditions.push(
+            eq(outboundMessages.deliverySourceType, deliverySourceType),
+        );
     if (createdAfter !== undefined) {
         conditions.push(
             gte(emailDeliveryEvents.occurredAt, new Date(createdAfter)),

@@ -55,7 +55,7 @@ async function seedConnectionAndOutbound(
         .values({
             teamId: team.id,
             espConfigId: esp.id,
-            scope: "custom",
+            ownerScope: "team",
             provider: "postmark",
             encryptedCredentials: encryptSecret("webhook-secret"),
             status: "healthy",
@@ -65,7 +65,8 @@ async function seedConnectionAndOutbound(
     const recipient = overrides.recipient ?? "ada@example.com";
     let outbound = await createOutboundMessage({
         teamId: team.id,
-        deliveryRoute: "custom",
+        deliverySourceType: "team",
+        espGrantId: null,
         espConfigId: esp.id,
         feedbackConnectionId: connection.id,
         sourceType: "transactional",
@@ -218,7 +219,8 @@ describe("outbound ledger + delivery projection (integration)", () => {
         // outbound under a's connection.
         const sibling = await createOutboundMessage({
             teamId: a.team.id,
-            deliveryRoute: "custom",
+            deliverySourceType: "team",
+            espGrantId: null,
             espConfigId: a.esp.id,
             feedbackConnectionId: a.connection.id,
             sourceType: "transactional",
@@ -262,8 +264,9 @@ describe("outbound ledger + delivery projection (integration)", () => {
             messages.push(
                 await createOutboundMessage({
                     teamId: team.id,
-                    deliveryRoute: "custom",
-                    espConfigId: outbound.espConfigId,
+                    deliverySourceType: "team",
+                    espGrantId: null,
+                    espConfigId: outbound.espConfigId!,
                     feedbackConnectionId: connection.id,
                     sourceType: "transactional",
                     recipientEmail: recipient,
@@ -291,8 +294,9 @@ describe("outbound ledger + delivery projection (integration)", () => {
         // A newer delivered on a fourth message resets the streak.
         const deliveredMsg = await createOutboundMessage({
             teamId: team.id,
-            deliveryRoute: "custom",
-            espConfigId: outbound.espConfigId,
+            deliverySourceType: "team",
+            espGrantId: null,
+            espConfigId: outbound.espConfigId!,
             feedbackConnectionId: connection.id,
             sourceType: "transactional",
             recipientEmail: recipient,

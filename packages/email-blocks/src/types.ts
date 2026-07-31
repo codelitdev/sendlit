@@ -78,9 +78,10 @@ export interface Sequence {
     type: MailType | string;
     title: string;
     status: SequenceStatus | string;
-    /** Public id of the user-managed ESP pinned to this sequence/broadcast,
-     * or `null` when unresolved (falls back to the team's default ESP). */
-    espId?: string | null;
+    /** Requested source while draft/paused. `null` resolves the team default
+     * at activation; an organization source never exposes credentials. */
+    deliverySource?:
+        { type: "organization" } | { type: "team"; espId?: string } | null;
     triggerType?: TriggerType | string | null;
     triggerData?: string | null;
     filter?: ContactFilterWithAggregator | null;

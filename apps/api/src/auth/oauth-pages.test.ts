@@ -4,8 +4,7 @@ import { Socket } from "net";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getSession = vi.fn(async () => null as any);
-const ensureSendLitAccountForBetterAuthUserId = vi.fn(async () => null as any);
-const listTeamsForAccount = vi.fn(async () => [] as any[]);
+const listTeamsForUser = vi.fn(async () => [] as any[]);
 const getOAuthTeamSelection = vi.fn(async () => null as string | null);
 const getTeamByTeamId = vi.fn(async () => null as any);
 const getTeamMembership = vi.fn(async () => null as any);
@@ -14,13 +13,12 @@ const setOAuthTeamSelection = vi.fn(async () => {});
 vi.mock("./better-auth", () => ({
     webClientUrl: "http://localhost:3000",
     auth: { api: { getSession } },
-    ensureSendLitAccountForBetterAuthUserId,
 }));
 vi.mock("better-auth/node", () => ({
     fromNodeHeaders: (headers: unknown) => headers,
 }));
 vi.mock("../team/queries", () => ({
-    listTeamsForAccount,
+    listTeamsForUser,
     getOAuthTeamSelection,
     getTeamByTeamId,
     getTeamMembership,
@@ -33,8 +31,7 @@ describe("Hosted login pages", () => {
     beforeEach(async () => {
         vi.clearAllMocks();
         getSession.mockResolvedValue(null);
-        ensureSendLitAccountForBetterAuthUserId.mockResolvedValue(null);
-        listTeamsForAccount.mockResolvedValue([]);
+        listTeamsForUser.mockResolvedValue([]);
         getOAuthTeamSelection.mockResolvedValue(null);
         getTeamByTeamId.mockResolvedValue(null);
         getTeamMembership.mockResolvedValue(null);
@@ -194,10 +191,7 @@ describe("Hosted login pages", () => {
 
         it("auto-continues instead of showing a picker for a single-team account", async () => {
             getSession.mockResolvedValue(session);
-            ensureSendLitAccountForBetterAuthUserId.mockResolvedValue({
-                id: "account-1",
-            });
-            listTeamsForAccount.mockResolvedValue([teamA]);
+            listTeamsForUser.mockResolvedValue([teamA]);
 
             const res = await request("/oauth/select-team?client_id=abc");
 
@@ -208,10 +202,7 @@ describe("Hosted login pages", () => {
 
         it("renders a radio option per team, using the public team id as the value", async () => {
             getSession.mockResolvedValue(session);
-            ensureSendLitAccountForBetterAuthUserId.mockResolvedValue({
-                id: "account-1",
-            });
-            listTeamsForAccount.mockResolvedValue([teamA, teamB]);
+            listTeamsForUser.mockResolvedValue([teamA, teamB]);
 
             const res = await request("/oauth/select-team?client_id=abc");
 
@@ -238,9 +229,6 @@ describe("Hosted login pages", () => {
 
         it("requires a teamId", async () => {
             getSession.mockResolvedValue(session);
-            ensureSendLitAccountForBetterAuthUserId.mockResolvedValue({
-                id: "account-1",
-            });
 
             const res = await jsonRequest("/oauth/select-team", {});
 
@@ -250,9 +238,6 @@ describe("Hosted login pages", () => {
 
         it("rejects an unknown team id", async () => {
             getSession.mockResolvedValue(session);
-            ensureSendLitAccountForBetterAuthUserId.mockResolvedValue({
-                id: "account-1",
-            });
             getTeamByTeamId.mockResolvedValue(null);
 
             const res = await jsonRequest("/oauth/select-team", {
@@ -265,9 +250,6 @@ describe("Hosted login pages", () => {
 
         it("rejects a team the account doesn't belong to", async () => {
             getSession.mockResolvedValue(session);
-            ensureSendLitAccountForBetterAuthUserId.mockResolvedValue({
-                id: "account-1",
-            });
             getTeamByTeamId.mockResolvedValue(teamB);
             getTeamMembership.mockResolvedValue(null);
 
@@ -281,9 +263,6 @@ describe("Hosted login pages", () => {
 
         it("records the selection against the internal team id, keyed by session", async () => {
             getSession.mockResolvedValue(session);
-            ensureSendLitAccountForBetterAuthUserId.mockResolvedValue({
-                id: "account-1",
-            });
             getTeamByTeamId.mockResolvedValue(teamB);
             getTeamMembership.mockResolvedValue({ role: "owner" });
 
@@ -302,10 +281,7 @@ describe("Hosted login pages", () => {
     describe("GET /oauth/consent", () => {
         it("shows the previously selected team for a multi-team account", async () => {
             getSession.mockResolvedValue(session);
-            ensureSendLitAccountForBetterAuthUserId.mockResolvedValue({
-                id: "account-1",
-            });
-            listTeamsForAccount.mockResolvedValue([teamA, teamB]);
+            listTeamsForUser.mockResolvedValue([teamA, teamB]);
             getOAuthTeamSelection.mockResolvedValue(teamB.id);
 
             const res = await request(

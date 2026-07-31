@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "crypto";
 /** Stripe-style prefix: identifies leaked SendLit keys in secret scanners and
  * makes the credential type obvious at a glance without exposing the secret. */
 export const API_KEY_PREFIX = "sl_live_";
+export const ORGANIZATION_API_KEY_PREFIX = "sl_org_live_";
 
 /** Characters of the secret shown in list/UI surfaces (`sl_live_a1b2`). */
 const DISPLAY_PREFIX_LENGTH = 12;
@@ -11,6 +12,12 @@ const DISPLAY_PREFIX_LENGTH = 12;
  * copy-paste/URL safe. */
 export function generateApiKeySecret(): string {
     return `${API_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
+}
+
+export function generateOrganizationApiKeySecret(): string {
+    return `${ORGANIZATION_API_KEY_PREFIX}${randomBytes(32).toString(
+        "base64url",
+    )}`;
 }
 
 /** Keys are stored hashed, like passwords — but as a plain SHA-256, not

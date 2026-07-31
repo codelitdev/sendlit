@@ -4,13 +4,12 @@ import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
-import { eq } from "drizzle-orm";
 import { createTransport } from "nodemailer";
 import { db } from "../db/client";
 import * as schema from "../db/schema";
 import logger from "../services/log";
-import { createAccount, findAccountByEmail } from "../account/queries";
-import { getOAuthTeamSelection, listTeamsForAccount } from "../team/queries";
+import { ensureDefaultOrganization } from "../organization/queries";
+import { getOAuthTeamSelection, listTeamsForUser } from "../team/queries";
 
 export const webClientUrl = process.env.WEB_CLIENT || "http://localhost:3000";
 const apiUrl = process.env.API_PUBLIC_URL || process.env.BETTER_AUTH_URL;
@@ -94,45 +93,16 @@ async function sendOtpEmail(email: string, otp: string) {
     });
 }
 
-export async function ensureSendLitAccountForUser(user: {
-    email: string;
-    name?: string | null;
-}) {
-    const email = user.email.toLowerCase();
-    const existing = await findAccountByEmail(email);
-    if (existing) return existing;
-
-    return createAccount(email, user.name || undefined);
-}
-
-export async function ensureSendLitAccountForBetterAuthUserId(userId: string) {
-    const [user] = await db
-        .select()
-        .from(schema.authUser)
-        .where(eq(schema.authUser.id, userId))
-        .limit(1);
-
-    if (!user) return null;
-    return ensureSendLitAccountForUser({
-        email: user.email,
-        name: user.name,
-    });
-}
-
 /** The internal team id an OAuth end-user picked on `/oauth/select-team`
- * (`null` for a single-team account, which never sees that screen — see
+ * (`null` for a single-team user, which never sees that screen — see
  * `oauthPostLoginTeamSelections` in `db/schema.ts`). Shared by
  * `postLogin.shouldRedirect` and `postLogin.consentReferenceId` below so both
  * always agree on the same account/selection lookup. */
 async function resolveOAuthTeamSelection(
-    betterAuthUserId: string,
+    userId: string,
     sessionId: string,
 ): Promise<{ requiresSelection: boolean; selectedTeamId: string | null }> {
-    const account =
-        await ensureSendLitAccountForBetterAuthUserId(betterAuthUserId);
-    if (!account) return { requiresSelection: false, selectedTeamId: null };
-
-    const teams = await listTeamsForAccount(account.id);
+    const teams = await listTeamsForUser(userId);
     if (teams.length <= 1) {
         return { requiresSelection: false, selectedTeamId: null };
     }
@@ -165,18 +135,17 @@ export const auth = betterAuth({
           }
         : undefined,
     user: {
-        modelName: "authUser",
+        additionalFields: {
+            defaultOrganizationId: {
+                type: "string",
+                required: false,
+                input: false,
+            },
+        },
     },
     session: {
-        modelName: "authSession",
         expiresIn: 60 * 60 * 24 * 30,
         updateAge: 60 * 60 * 24,
-    },
-    account: {
-        modelName: "authAccount",
-    },
-    verification: {
-        modelName: "authVerification",
     },
     socialProviders:
         googleClientId && googleClientSecret
@@ -191,12 +160,7 @@ export const auth = betterAuth({
         user: {
             create: {
                 async after(user) {
-                    if (user.email) {
-                        await ensureSendLitAccountForUser({
-                            email: user.email,
-                            name: user.name,
-                        });
-                    }
+                    await ensureDefaultOrganization(user.id);
                 },
             },
         },
@@ -216,20 +180,6 @@ export const auth = betterAuth({
         }),
         jwt(),
         oauthProvider({
-            schema: {
-                oauthClient: {
-                    modelName: "authOAuthClient",
-                },
-                oauthAccessToken: {
-                    modelName: "authOAuthAccessToken",
-                },
-                oauthRefreshToken: {
-                    modelName: "authOAuthRefreshToken",
-                },
-                oauthConsent: {
-                    modelName: "authOAuthConsent",
-                },
-            },
             // Self-hosted by this API (see ./oauth-pages.ts), not the web
             // dashboard — so a new MCP/OAuth client can complete its first
             // authorization even where the web app isn't deployed at all.

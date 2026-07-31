@@ -20,9 +20,13 @@ import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirma
 import { ApiError } from "@/lib/api-client";
 import {
     deleteEspFeedback,
+    deleteOrganizationEspFeedback,
     getEspFeedback,
+    getOrganizationEspFeedback,
     testEspFeedback,
+    testOrganizationEspFeedback,
     upsertEspFeedback,
+    upsertOrganizationEspFeedback,
     type EspConfig,
     type FeedbackConnection,
     type FeedbackConnectionStatus,
@@ -97,10 +101,15 @@ const DEFAULT_CREDENTIAL_COPY: CredentialCopy = {
 export function EspFeedbackDialog({
     esp,
     onOpenChange,
+    organizationId,
 }: {
     /** `null` closes the dialog. */
     esp: EspConfig | null;
     onOpenChange: (open: boolean) => void;
+    /** When set, administer the organization-owned ESP rather than the
+     * selected team's ESP. The API surface remains identical while keeping
+     * credentials and feedback topology organization-scoped. */
+    organizationId?: string;
 }) {
     const [connection, setConnection] = useState<FeedbackConnection | null>(
         null,
@@ -124,7 +133,10 @@ export function EspFeedbackDialog({
         setTestResult(null);
         setCredential("");
         setLoading(true);
-        getEspFeedback(esp.espId)
+        (organizationId
+            ? getOrganizationEspFeedback(organizationId, esp.espId)
+            : getEspFeedback(esp.espId)
+        )
             .then(setConnection)
             .catch((err) =>
                 setError(
@@ -134,7 +146,7 @@ export function EspFeedbackDialog({
                 ),
             )
             .finally(() => setLoading(false));
-    }, [esp]);
+    }, [esp, organizationId]);
 
     if (!esp) return null;
 
@@ -146,7 +158,15 @@ export function EspFeedbackDialog({
         setSaving(true);
         setError(null);
         try {
-            const updated = await upsertEspFeedback(esp.espId, { credential });
+            const updated = organizationId
+                ? await upsertOrganizationEspFeedback(
+                      organizationId,
+                      esp.espId,
+                      {
+                          credential,
+                      },
+                  )
+                : await upsertEspFeedback(esp.espId, { credential });
             setConnection(updated);
             setCredential("");
         } catch (err) {
@@ -166,7 +186,9 @@ export function EspFeedbackDialog({
         setTestResult(null);
         setError(null);
         try {
-            const result = await testEspFeedback(esp.espId);
+            const result = organizationId
+                ? await testOrganizationEspFeedback(organizationId, esp.espId)
+                : await testEspFeedback(esp.espId);
             setTestResult(result);
         } catch (err) {
             setTestResult({
@@ -182,7 +204,11 @@ export function EspFeedbackDialog({
         if (!esp) return;
         setError(null);
         try {
-            await deleteEspFeedback(esp.espId);
+            if (organizationId) {
+                await deleteOrganizationEspFeedback(organizationId, esp.espId);
+            } else {
+                await deleteEspFeedback(esp.espId);
+            }
             setConnection(null);
         } catch (err) {
             setError(

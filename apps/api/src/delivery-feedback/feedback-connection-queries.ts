@@ -49,6 +49,26 @@ export async function getFeedbackConnectionForTeamEsp(
     return row ?? null;
 }
 
+export async function getFeedbackConnectionForOrganizationEsp(
+    organizationId: string,
+    espConfigId: string,
+): Promise<FeedbackConnection | null> {
+    const [row] = await db
+        .select()
+        .from(espFeedbackConnections)
+        .where(
+            and(
+                eq(espFeedbackConnections.organizationId, organizationId),
+                eq(espFeedbackConnections.ownerScope, "organization"),
+                eq(espFeedbackConnections.espConfigId, espConfigId),
+                ne(espFeedbackConnections.status, "retiring"),
+                ne(espFeedbackConnections.status, "disabled"),
+            ),
+        )
+        .limit(1);
+    return row ?? null;
+}
+
 /** Resolves a public webhook `connectionId` for the *unauthenticated*
  * provider-facing route — scoped only by connection id and provider match,
  * never by team/session. Returns `null` for a disabled connection so a
@@ -104,7 +124,7 @@ export async function upsertFeedbackConnection({
             .values({
                 teamId,
                 espConfigId,
-                scope: "custom",
+                ownerScope: "team",
                 provider,
                 encryptedCredentials,
                 expectedTopicArn: expectedTopicArn ?? null,
@@ -128,6 +148,55 @@ export async function upsertFeedbackConnection({
             expectedTopicArn: expectedTopicArn ?? existing.expectedTopicArn,
             // A credential rotation on a previously-erroring connection
             // deserves a fresh chance rather than staying flagged `error`.
+            status: existing.status === "error" ? "pending" : existing.status,
+            lastErrorCode: null,
+            updatedAt: new Date(),
+        })
+        .where(eq(espFeedbackConnections.id, existing.id))
+        .returning();
+    return row;
+}
+
+export async function upsertOrganizationFeedbackConnection(input: {
+    organizationId: string;
+    espConfigId: string;
+    provider: FeedbackCapableProvider;
+    credential: string;
+    expectedTopicArn?: string | null;
+}): Promise<FeedbackConnection> {
+    const existing = await getFeedbackConnectionForOrganizationEsp(
+        input.organizationId,
+        input.espConfigId,
+    );
+    const encryptedCredentials = encryptSecret(input.credential);
+    if (!existing) {
+        const [row] = await db
+            .insert(espFeedbackConnections)
+            .values({
+                organizationId: input.organizationId,
+                ownerScope: "organization",
+                espConfigId: input.espConfigId,
+                provider: input.provider,
+                encryptedCredentials,
+                expectedTopicArn: input.expectedTopicArn ?? null,
+                status: "pending",
+            })
+            .returning();
+        return row;
+    }
+    const [row] = await db
+        .update(espFeedbackConnections)
+        .set({
+            previousEncryptedCredentials: existing.encryptedCredentials,
+            previousCredentialExpiresAt: existing.encryptedCredentials
+                ? new Date(
+                      Date.now() +
+                          CREDENTIAL_ROTATION_GRACE_HOURS * 60 * 60 * 1000,
+                  )
+                : null,
+            encryptedCredentials,
+            expectedTopicArn:
+                input.expectedTopicArn ?? existing.expectedTopicArn,
             status: existing.status === "error" ? "pending" : existing.status,
             lastErrorCode: null,
             updatedAt: new Date(),
@@ -174,6 +243,29 @@ export async function disableFeedbackConnection(
         .where(
             and(
                 eq(espFeedbackConnections.teamId, teamId),
+                eq(espFeedbackConnections.espConfigId, espConfigId),
+                ne(espFeedbackConnections.status, "disabled"),
+            ),
+        )
+        .returning();
+    return Boolean(row);
+}
+
+export async function disableOrganizationFeedbackConnection(
+    organizationId: string,
+    espConfigId: string,
+): Promise<boolean> {
+    const [row] = await db
+        .update(espFeedbackConnections)
+        .set({
+            status: "disabled",
+            disabledAt: new Date(),
+            updatedAt: new Date(),
+        })
+        .where(
+            and(
+                eq(espFeedbackConnections.organizationId, organizationId),
+                eq(espFeedbackConnections.ownerScope, "organization"),
                 eq(espFeedbackConnections.espConfigId, espConfigId),
                 ne(espFeedbackConnections.status, "disabled"),
             ),

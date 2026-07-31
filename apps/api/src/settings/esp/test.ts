@@ -1,7 +1,11 @@
 import { sendTestMail } from "../../mail/send";
 import { getEmailFrom } from "../../utils/mail";
 import { captureError, captureEvent } from "../../observability/posthog";
-import { recordEspTestResult, type EspConfig } from "./queries";
+import {
+    decryptEspCredentials,
+    recordEspTestResult,
+    type EspConfig,
+} from "./queries";
 import { MAILING_ADDRESS_REQUIRED } from "../general/constants";
 
 export interface TestEspConfigResult {
@@ -41,23 +45,48 @@ export async function testEspConfig({
 
     const from = getEmailFrom({
         name: config.fromName || account?.name || "SendLit",
-        email: config.fromEmail || account?.email || "",
+        email: config.fromEmail || "",
     });
 
     try {
-        await sendTestMail({
-            from,
-            to: destination,
-            subject: "SendLit test email",
-            html: "<p>This is a test email from your SendLit ESP configuration. If you're reading this, it works!</p>",
-            teamId: config.teamId,
-            espConfigId: config.id,
-        });
+        if (config.ownerScope === "organization") {
+            const credentials = decryptEspCredentials(config);
+            const transport = createTransport({
+                host: credentials.host,
+                port: credentials.port,
+                secure: credentials.secure,
+                auth: credentials.username
+                    ? {
+                          user: credentials.username,
+                          pass: credentials.password || "",
+                      }
+                    : undefined,
+            });
+            await transport.sendMail({
+                from,
+                to: destination,
+                subject: "SendLit test email",
+                html: "<p>This is a test email from your SendLit ESP configuration. If you're reading this, it works!</p>",
+            });
+            transport.close();
+        } else {
+            await sendTestMail({
+                from,
+                to: destination,
+                subject: "SendLit test email",
+                html: "<p>This is a test email from your SendLit ESP configuration. If you're reading this, it works!</p>",
+                teamId: config.teamId!,
+                espConfigId: config.id,
+            });
+        }
         await recordEspTestResult(
-            config.teamId,
+            config.ownerScope === "organization"
+                ? config.organizationId!
+                : config.teamId!,
             "success",
             undefined,
             config.espId,
+            config.ownerScope as "organization" | "team",
         );
         captureEvent({
             event: "esp_test_succeeded",
@@ -75,10 +104,13 @@ export async function testEspConfig({
             };
         }
         await recordEspTestResult(
-            config.teamId,
+            config.ownerScope === "organization"
+                ? config.organizationId!
+                : config.teamId!,
             "failed",
             err.message,
             config.espId,
+            config.ownerScope as "organization" | "team",
         );
         captureError({
             error: err,
@@ -90,3 +122,4 @@ export async function testEspConfig({
         return { success: false, error: err.message };
     }
 }
+import { createTransport } from "nodemailer";

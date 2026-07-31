@@ -6,11 +6,9 @@ import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { db } from "../db/client";
 import {
-    accounts,
     ongoingSequences,
     sequenceEmails,
     sequences,
-    teams,
     transactionalEmails,
 } from "../db/schema";
 
@@ -28,70 +26,55 @@ createExpressEndpoints(
                 Date.now() - rangeDays * 24 * 60 * 60 * 1000,
             );
             const rangeEnd = Date.now() + rangeDays * 24 * 60 * 60 * 1000;
-            const [active, ongoing, scheduled, mailRows, accountRow] =
-                await Promise.all([
-                    db
-                        .select({ value: count() })
-                        .from(sequences)
-                        .where(
-                            and(
-                                eq(sequences.teamId, teamId),
-                                eq(sequences.type, "sequence"),
-                                eq(sequences.status, "active"),
-                            ),
+            const [active, ongoing, scheduled, mailRows] = await Promise.all([
+                db
+                    .select({ value: count() })
+                    .from(sequences)
+                    .where(
+                        and(
+                            eq(sequences.teamId, teamId),
+                            eq(sequences.type, "sequence"),
+                            eq(sequences.status, "active"),
                         ),
-                    db
-                        .select({ value: count() })
-                        .from(ongoingSequences)
-                        .innerJoin(
-                            sequences,
-                            eq(ongoingSequences.sequenceId, sequences.id),
-                        )
-                        .where(eq(sequences.teamId, teamId)),
-                    db
-                        .select({ value: count() })
-                        .from(sequences)
-                        .innerJoin(
-                            sequenceEmails,
-                            eq(sequenceEmails.sequenceId, sequences.id),
-                        )
-                        .where(
-                            and(
-                                eq(sequences.teamId, teamId),
-                                eq(sequences.type, "broadcast"),
-                                eq(sequences.status, "active"),
-                                gt(sequenceEmails.delayInMillis, Date.now()),
-                                lt(sequenceEmails.delayInMillis, rangeEnd),
-                            ),
+                    ),
+                db
+                    .select({ value: count() })
+                    .from(ongoingSequences)
+                    .innerJoin(
+                        sequences,
+                        eq(ongoingSequences.sequenceId, sequences.id),
+                    )
+                    .where(eq(sequences.teamId, teamId)),
+                db
+                    .select({ value: count() })
+                    .from(sequences)
+                    .innerJoin(
+                        sequenceEmails,
+                        eq(sequenceEmails.sequenceId, sequences.id),
+                    )
+                    .where(
+                        and(
+                            eq(sequences.teamId, teamId),
+                            eq(sequences.type, "broadcast"),
+                            eq(sequences.status, "active"),
+                            gt(sequenceEmails.delayInMillis, Date.now()),
+                            lt(sequenceEmails.delayInMillis, rangeEnd),
                         ),
-                    db
-                        .select({
-                            status: transactionalEmails.status,
-                            value: count(),
-                        })
-                        .from(transactionalEmails)
-                        .where(
-                            and(
-                                eq(transactionalEmails.teamId, teamId),
-                                gt(transactionalEmails.createdAt, rangeStart),
-                            ),
-                        )
-                        .groupBy(transactionalEmails.status),
-                    db
-                        .select({
-                            dailyUsed: accounts.dailyMailCount,
-                            dailyLimit: accounts.dailyMailLimit,
-                            monthlyUsed: accounts.monthlyMailCount,
-                            monthlyLimit: accounts.monthlyMailLimit,
-                        })
-                        .from(teams)
-                        .innerJoin(
-                            accounts,
-                            eq(teams.ownerAccountId, accounts.id),
-                        )
-                        .where(eq(teams.id, teamId))
-                        .limit(1),
-                ]);
+                    ),
+                db
+                    .select({
+                        status: transactionalEmails.status,
+                        value: count(),
+                    })
+                    .from(transactionalEmails)
+                    .where(
+                        and(
+                            eq(transactionalEmails.teamId, teamId),
+                            gt(transactionalEmails.createdAt, rangeStart),
+                        ),
+                    )
+                    .groupBy(transactionalEmails.status),
+            ]);
             const mail = { sent: 0, queued: 0, failed: 0, bounced: 0 };
             for (const row of mailRows)
                 if (row.status in mail)
@@ -105,7 +88,7 @@ createExpressEndpoints(
                     ongoingContacts: ongoing[0]?.value ?? 0,
                     scheduledBroadcasts,
                     mail,
-                    quota: accountRow[0] ?? {
+                    quota: {
                         dailyUsed: 0,
                         dailyLimit: 0,
                         monthlyUsed: 0,

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
 
 vi.mock("../db/client", async () => {
     const { makeTestDb } = await import("../test/db.js");
@@ -10,7 +9,7 @@ vi.mock("./service", () => ({
 }));
 
 import { db } from "../db/client";
-import { media, mediaReferences, teams } from "../db/schema";
+import { media, mediaReferences } from "../db/schema";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
 import { deleteMedia as deleteMediaFile } from "./service";
 import {
@@ -122,7 +121,7 @@ describe("media queries", () => {
         ]);
     });
 
-    it("deletes team MediaLit files before team rows cascade away", async () => {
+    it("cleans a team's MediaLit files without requiring physical team deletion", async () => {
         const { team } = await seedTeamAndContact(tdb);
         const row = await createUploadedMedia({
             teamId: team.id,
@@ -140,9 +139,10 @@ describe("media queries", () => {
         });
 
         await deleteTeamMediaFiles(team.id);
-        await tdb.delete(teams).where(eq(teams.id, team.id));
 
         expect(deleteMediaFile).toHaveBeenCalledWith("media-lit-team");
-        expect(await tdb.select().from(mediaReferences)).toHaveLength(0);
+        // Teams are archived in the organization model. Retention/purge is an
+        // explicit later workflow, so this helper must not assume a cascade.
+        expect(await tdb.select().from(mediaReferences)).toHaveLength(1);
     });
 });

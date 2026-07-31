@@ -4,6 +4,9 @@
     "description": "",
     "main": "index.js",
     "scripts": {
+        "dev:api": "pnpm --filter @sendlit/api dev",
+        "dev:web": "pnpm --filter @sendlit/web dev",
+        "dev:docs": "pnpm --filter @sendlit/docs dev",
         "ci:publish": "pnpm publish -r --no-git-checks",
         "lint": "eslint packages apps --quiet",
         "prettier": "prettier --write packages apps *.md",

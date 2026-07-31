@@ -243,7 +243,7 @@ function TeamCard({
 
     return (
         <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="flex items-center gap-2 text-base font-medium">
                     {team.name}
                     {isCurrent && <Badge variant="success">Current</Badge>}

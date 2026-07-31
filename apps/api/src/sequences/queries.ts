@@ -28,41 +28,44 @@ import type { ContactFilterWithAggregator } from "../contacts/segment";
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { syncEmailContentMediaReferences } from "../media/email-content";
 import { deleteMediaReferencesForResource } from "../media/queries";
-import { getEspConfigById, resolveEspConfig } from "../settings/esp/queries";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getMatchingContactIds } from "../automation/queries";
+import {
+    resolveDeliverySource,
+    type DeliverySourceSelection,
+} from "../delivery/queries";
 
 export type Sequence = typeof sequences.$inferSelect;
 export type SequenceEmail = typeof sequenceEmails.$inferSelect;
 export type HydratedSequence = Sequence & {
     emails: SequenceEmail[];
-    espId: string | null;
+    deliverySource: DeliverySourceSelection | null;
 };
 
 async function hydrate(sequence: Sequence): Promise<HydratedSequence> {
-    const [emails, outbox] = await Promise.all([
-        db
-            .select()
-            .from(sequenceEmails)
-            .where(eq(sequenceEmails.sequenceId, sequence.id))
-            .orderBy(asc(sequenceEmails.createdAt)),
-        sequence.outboxId
-            ? getEspConfigById(sequence.outboxId, sequence.teamId)
-            : Promise.resolve(null),
-    ]);
-    return { ...sequence, emails, espId: outbox?.espId ?? null };
+    const emails = await db
+        .select()
+        .from(sequenceEmails)
+        .where(eq(sequenceEmails.sequenceId, sequence.id))
+        .orderBy(asc(sequenceEmails.createdAt));
+    const deliverySource =
+        (sequence.deliverySourceIntent as DeliverySourceSelection | null) ??
+        (sequence.deliverySourceType
+            ? { type: sequence.deliverySourceType as "organization" | "team" }
+            : null);
+    return { ...sequence, emails, deliverySource };
 }
 
 export async function createSequence({
     teamId,
     type,
     templateId,
-    espId,
+    deliverySource,
 }: {
     teamId: string;
     type: MailType;
     templateId: string;
-    espId?: string;
+    deliverySource?: DeliverySourceSelection;
 }): Promise<HydratedSequence> {
     const template = await resolveStartingTemplate(
         teamId,
@@ -72,9 +75,6 @@ export async function createSequence({
     if (!template) {
         throw new Error(responses.item_not_found);
     }
-
-    const outbox = espId ? await resolveEspConfig(teamId, espId) : null;
-    if (espId && !outbox) throw new Error("esp_not_found");
 
     const [sequence] = await db
         .insert(sequences)
@@ -87,8 +87,7 @@ export async function createSequence({
                     ? EventType.DATE_OCCURRED
                     : EventType.SUBSCRIBER_ADDED,
             filter: { aggregator: "or", filters: [] },
-            deliveryRoute: outbox ? "custom" : null,
-            outboxId: outbox?.id ?? null,
+            deliverySourceIntent: deliverySource ?? null,
         })
         .returning();
 
@@ -227,7 +226,7 @@ export async function updateSequence({
     triggerData,
     filter,
     emailsOrder,
-    espId,
+    deliverySource,
 }: {
     teamId: string;
     sequenceId: string;
@@ -236,7 +235,7 @@ export async function updateSequence({
     triggerData?: string;
     filter?: ContactFilterWithAggregator;
     emailsOrder?: string[];
-    espId?: string | null;
+    deliverySource?: DeliverySourceSelection | null;
 }): Promise<HydratedSequence | null> {
     const current = await getSequenceBySequenceId(teamId, sequenceId);
     if (!current) return null;
@@ -246,14 +245,11 @@ export async function updateSequence({
     if (triggerData !== undefined) patch.triggerData = triggerData;
     if (filter !== undefined) patch.filter = filter as any;
     if (emailsOrder !== undefined) patch.emailsOrder = emailsOrder;
-    if (espId !== undefined) {
+    if (deliverySource !== undefined) {
         if (!["draft", "paused"].includes(current.status)) {
             throw new Error("esp_cannot_change_after_start");
         }
-        const outbox = espId ? await resolveEspConfig(teamId, espId) : null;
-        if (espId && !outbox) throw new Error("esp_not_found");
-        patch.deliveryRoute = outbox ? "custom" : null;
-        patch.outboxId = outbox?.id ?? null;
+        patch.deliverySourceIntent = deliverySource as any;
     }
 
     const [row] = await db
@@ -590,10 +586,11 @@ export async function startSequence({
         throw new Error(responses.no_published_emails);
     }
 
-    const outbox = sequence.outboxId
-        ? await getEspConfigById(sequence.outboxId, teamId)
-        : await resolveEspConfig(teamId);
-    if (!outbox) throw new Error("esp_not_configured");
+    const pin = await resolveDeliverySource(
+        teamId,
+        (sequence.deliverySourceIntent as DeliverySourceSelection | null) ??
+            undefined,
+    );
 
     if (sequence.type === "sequence") {
         // Sender identity is no longer stored per-sequence — the send path
@@ -643,8 +640,9 @@ export async function startSequence({
         .update(sequences)
         .set({
             status: "active",
-            deliveryRoute: "custom",
-            outboxId: outbox.id,
+            deliverySourceType: pin.type,
+            outboxId: pin.espConfigId,
+            espGrantId: pin.espGrantId,
             updatedAt: new Date(),
         })
         .where(eq(sequences.id, sequence.id))

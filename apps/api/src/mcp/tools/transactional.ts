@@ -75,7 +75,15 @@ export function registerTransactionalTools(server: McpServer): void {
                     ),
                 trackOpens: z.boolean().optional(),
                 trackClicks: z.boolean().optional(),
-                espId: z.string().min(1).optional(),
+                deliverySource: z
+                    .discriminatedUnion("type", [
+                        z.object({ type: z.literal("organization") }),
+                        z.object({
+                            type: z.literal("team"),
+                            espId: z.string().min(1).optional(),
+                        }),
+                    ])
+                    .optional(),
             },
             outputSchema: transactionalEmailSchema.pick({
                 txeId: true,
@@ -103,7 +111,7 @@ export function registerTransactionalTools(server: McpServer): void {
                     idempotencyKey: args.idempotencyKey,
                     trackOpens: args.trackOpens,
                     trackClicks: args.trackClicks,
-                    espId: args.espId,
+                    deliverySource: args.deliverySource,
                 });
                 return jsonResult({ txeId: row.txeId, status: row.status });
             } catch (err: any) {

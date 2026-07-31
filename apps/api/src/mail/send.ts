@@ -15,6 +15,8 @@ interface MailInput {
     teamId: string;
     /** Internal id of the user ESP pinned when the send was accepted. */
     espConfigId?: string;
+    /** Credential revision included in the transport cache identity. */
+    secretVersion?: number;
     /** RFC 5322 `Message-ID` value (no angle brackets — nodemailer adds
      * them). Callers that need webhook correlation generate this up front
      * and persist it on `outbound_messages.rfcMessageId` before calling
@@ -36,9 +38,13 @@ export interface SendMailResult {
     providerResponse: string | null;
 }
 
-async function resolveTeamTransporter(teamId: string, espConfigId?: string) {
+async function resolveTeamTransporter(
+    teamId: string,
+    espConfigId?: string,
+    secretVersion?: number,
+) {
     const teamTransporter = espConfigId
-        ? await getEspTransport(teamId, espConfigId)
+        ? await getEspTransport(teamId, espConfigId, secretVersion)
         : await getTeamTransport(teamId);
     if (!teamTransporter) {
         throw new Error(MISSING_TEAM_ESP_ERROR);
@@ -54,6 +60,7 @@ export async function sendMail({
     headers,
     teamId,
     espConfigId,
+    secretVersion,
     messageId,
 }: MailInput): Promise<SendMailResult> {
     let result: SendMailResult = { messageId: null, providerResponse: null };
@@ -61,24 +68,23 @@ export async function sendMail({
         // This is the final guard for all delivery paths, including queued
         // work accepted before a team clears its address.
         await assertMailingAddressConfigured(teamId);
-        const transporter = await resolveTeamTransporter(teamId, espConfigId);
-        if (process.env.NODE_ENV === "production") {
-            const info = await transporter.sendMail({
-                from,
-                to,
-                subject,
-                html,
-                headers,
-                messageId,
-            });
-            result = {
-                messageId: info?.messageId ?? null,
-                providerResponse: info?.response ?? null,
-            };
-        } else {
-            // eslint-disable-next-line no-console
-            console.log("Mail sent", from, to, subject, new Date());
-        }
+        const transporter = await resolveTeamTransporter(
+            teamId,
+            espConfigId,
+            secretVersion,
+        );
+        const info = await transporter.sendMail({
+            from,
+            to,
+            subject,
+            html,
+            headers,
+            messageId,
+        });
+        result = {
+            messageId: info?.messageId ?? null,
+            providerResponse: info?.response ?? null,
+        };
     } catch (error) {
         captureError({
             error,

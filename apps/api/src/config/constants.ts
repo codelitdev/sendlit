@@ -31,6 +31,7 @@ export const transactionalEmailStatus = [
     "failed",
     "bounced",
     "suppressed",
+    "cancelled",
 ] as const;
 export type TransactionalEmailStatus =
     (typeof transactionalEmailStatus)[number];
@@ -87,6 +88,7 @@ export const outboundDeliveryStatus = [
     "delivered",
     "bounced",
     "failed",
+    "cancelled",
 ] as const;
 export type OutboundDeliveryStatus = (typeof outboundDeliveryStatus)[number];
 
@@ -96,7 +98,7 @@ export type OutboundFeedbackStatus = (typeof outboundFeedbackStatus)[number];
 export const outboundSourceType = ["campaign", "transactional"] as const;
 export type OutboundSourceType = (typeof outboundSourceType)[number];
 
-export const deliveryRoutes = ["custom", "platform"] as const;
+export const deliveryRoutes = ["organization", "team"] as const;
 export type DeliveryRoute = (typeof deliveryRoutes)[number];
 
 export const feedbackConnectionScope = ["custom", "platform"] as const;

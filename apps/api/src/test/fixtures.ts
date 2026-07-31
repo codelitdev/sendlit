@@ -40,12 +40,16 @@ export async function seedSequence(
         type = "sequence",
         status = "active",
         report,
+        outboxId,
         emails,
     }: {
         teamId: string;
         type?: "sequence" | "broadcast";
         status?: string;
         report?: Record<string, unknown>;
+        /** Use a specific team-owned ESP for pin-sensitive tests. When
+         * omitted, use the seeded team's first ESP. */
+        outboxId?: string;
         emails: Array<{
             emailId: string;
             subject?: string;
@@ -66,8 +70,8 @@ export async function seedSequence(
             teamId,
             type,
             status,
-            deliveryRoute: outbox ? "custom" : null,
-            outboxId: outbox?.id ?? null,
+            deliverySourceType: (outboxId ?? outbox?.id) ? "team" : null,
+            outboxId: outboxId ?? outbox?.id ?? null,
             // Broadcasts reach ongoing_sequences via `processRule`, which runs
             // `lockBroadcast` and thus guarantees `report.broadcast` exists
             // before any delivery — `markBroadcastSent`'s jsonb_set relies on

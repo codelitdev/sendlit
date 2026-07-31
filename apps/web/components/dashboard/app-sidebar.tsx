@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
     Home,
+    Building2,
     Images,
     Mail,
     MailCheck,
@@ -28,8 +29,21 @@ import { NavUser, type CurrentAccount } from "@/components/dashboard/nav-user";
 import { TeamSwitcher } from "@/components/dashboard/team-switcher";
 import { Banner } from "@/components/dashboard/banner";
 import { ApiError } from "@/lib/api-client";
-import { listTeams, type Team } from "@/lib/api";
-import { resolveCurrentTeamId } from "@/lib/tokens";
+import {
+    listOrganizations,
+    listTeams,
+    type Organization,
+    type Team,
+} from "@/lib/api";
+import {
+    clearTeamIdCookie,
+    ORGANIZATION_CONTEXT_CHANGED,
+    TEAMS_CHANGED,
+    resolveCurrentOrganizationId,
+    resolveCurrentTeamIdForOrganization,
+    setOrganizationIdCookie,
+    setTeamIdCookie,
+} from "@/lib/tokens";
 
 const NAV: NavMainItem[] = [
     { url: "/", title: "Home", icon: Home },
@@ -49,11 +63,14 @@ const ACTIVITY_NAV: NavMainItem[] = [
 ];
 
 const SECONDARY_NAV: NavMainItem[] = [
+    { url: "/organizations", title: "Organizations", icon: Building2 },
     { url: "/settings", title: "Settings", icon: Settings },
 ];
 
 export function AppSidebar() {
     const [teams, setTeams] = useState<Team[]>([]);
+    const [organizations, setOrganizations] = useState<Organization[]>([]);
+    const [organizationId, setOrganizationId] = useState<string | null>(null);
     const [currentTeamId, setCurrentTeamId] = useState<string | null>(null);
     const [account, setAccount] = useState<CurrentAccount | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -63,30 +80,43 @@ export function AppSidebar() {
         let cancelled = false;
         async function load() {
             try {
-                const [teamsResult, userInfoResult] = await Promise.allSettled([
-                    listTeams(),
-                    fetch("/api/auth/get-session", {
-                        cache: "no-store",
-                    }).then(async (res) => {
-                        if (res.status === 401) {
-                            window.location.href = "/login";
-                            return new Promise<CurrentAccount>(() => {});
-                        }
-                        if (!res.ok) return null;
-                        const session = (await res.json()) as {
-                            user?: CurrentAccount;
-                        };
-                        return session.user ?? null;
-                    }),
-                ]);
+                const [teamsResult, organizationsResult, userInfoResult] =
+                    await Promise.allSettled([
+                        listTeams(),
+                        listOrganizations(),
+                        fetch("/api/auth/get-session", {
+                            cache: "no-store",
+                        }).then(async (res) => {
+                            if (res.status === 401) {
+                                window.location.href = "/login";
+                                return new Promise<CurrentAccount>(() => {});
+                            }
+                            if (!res.ok) return null;
+                            const session = (await res.json()) as {
+                                user?: CurrentAccount;
+                            };
+                            return session.user ?? null;
+                        }),
+                    ]);
                 if (cancelled) return;
 
-                if (teamsResult.status === "fulfilled") {
-                    const { items } = teamsResult.value;
-                    setTeams(items);
-                    setCurrentTeamId(resolveCurrentTeamId(items));
-                } else {
+                if (teamsResult.status === "rejected") {
                     throw teamsResult.reason;
+                }
+                if (organizationsResult.status === "rejected") {
+                    throw organizationsResult.reason;
+                }
+                const { items } = teamsResult.value;
+                const { items: organizationItems } = organizationsResult.value;
+                setTeams(items);
+                setOrganizations(organizationItems);
+                const initialOrganizationId = resolveCurrentOrganizationId(
+                    items,
+                    organizationItems,
+                );
+                setOrganizationId(initialOrganizationId);
+                if (initialOrganizationId) {
+                    setOrganizationIdCookie(initialOrganizationId);
                 }
 
                 if (
@@ -112,11 +142,61 @@ export function AppSidebar() {
         };
     }, []);
 
+    useEffect(() => {
+        const reloadTeams = () => {
+            void listTeams()
+                .then(({ items }) => setTeams(items))
+                .catch((err: unknown) => {
+                    setError(
+                        err instanceof ApiError
+                            ? err.message
+                            : "Failed to refresh teams",
+                    );
+                });
+        };
+        window.addEventListener(TEAMS_CHANGED, reloadTeams);
+        return () => window.removeEventListener(TEAMS_CHANGED, reloadTeams);
+    }, []);
+
+    useEffect(() => {
+        const onOrganizationChanged = (event: Event) => {
+            const nextOrganizationId = (event as CustomEvent<string>).detail;
+            if (typeof nextOrganizationId === "string" && nextOrganizationId) {
+                setOrganizationId(nextOrganizationId);
+            }
+        };
+        window.addEventListener(
+            ORGANIZATION_CONTEXT_CHANGED,
+            onOrganizationChanged,
+        );
+        return () =>
+            window.removeEventListener(
+                ORGANIZATION_CONTEXT_CHANGED,
+                onOrganizationChanged,
+            );
+    }, []);
+
+    useEffect(() => {
+        if (!organizationId) return;
+        const nextTeamId = resolveCurrentTeamIdForOrganization(
+            teams,
+            organizationId,
+        );
+        setCurrentTeamId(nextTeamId);
+        if (nextTeamId) setTeamIdCookie(nextTeamId);
+        else clearTeamIdCookie();
+    }, [organizationId, teams]);
+
     return (
         <Sidebar collapsible="icon">
             <SidebarHeader>
-                {teams.length > 0 ? (
-                    <TeamSwitcher teams={teams} currentTeamId={currentTeamId} />
+                {teams.length > 0 || organizations.length > 0 ? (
+                    <TeamSwitcher
+                        teams={teams}
+                        organizations={organizations}
+                        currentOrganizationId={organizationId}
+                        currentTeamId={currentTeamId}
+                    />
                 ) : loadingTeams ? (
                     <SidebarMenu>
                         <SidebarMenuItem className="flex h-12 items-center gap-2 px-2">
@@ -133,7 +213,9 @@ export function AppSidebar() {
                                 <Send className="size-4" />
                             </div>
                             <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
-                                SendLit
+                                {organizationId
+                                    ? "No team in this organization"
+                                    : "SendLit"}
                             </span>
                         </SidebarMenuItem>
                     </SidebarMenu>

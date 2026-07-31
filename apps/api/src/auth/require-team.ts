@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import {
     getTeamByTeamId,
     getTeamMembership,
-    listTeamsForAccount,
+    listTeamsForUser,
 } from "../team/queries";
 
 function getHeaderValue(value: unknown): string | undefined {
@@ -32,7 +32,7 @@ export async function requireTeam(
 ): Promise<void> {
     const anyReq = req as any;
     if (anyReq.teamId) return next();
-    if (!anyReq.accountId) {
+    if (!anyReq.userId) {
         res.status(401).json({ error: "unauthorized" });
         return;
     }
@@ -49,7 +49,7 @@ export async function requireTeam(
         }
         let membership;
         try {
-            membership = await getTeamMembership(team.id, anyReq.accountId);
+            membership = await getTeamMembership(team.id, anyReq.userId);
         } catch {
             res.status(400).json({
                 error: "invalid_team_id",
@@ -68,7 +68,7 @@ export async function requireTeam(
         return next();
     }
 
-    const teams = await listTeamsForAccount(anyReq.accountId);
+    const teams = await listTeamsForUser(anyReq.userId);
     if (teams.length === 1) {
         anyReq.teamId = teams[0].id;
         return next();
@@ -76,7 +76,7 @@ export async function requireTeam(
     if (teams.length === 0) {
         res.status(409).json({
             error: "no_team",
-            error_description: "This account doesn't belong to any team yet.",
+            error_description: "This user doesn't belong to any team yet.",
         });
         return;
     }
@@ -84,7 +84,7 @@ export async function requireTeam(
     res.status(409).json({
         error: "team_required",
         error_description:
-            "This account belongs to multiple teams — specify one via the X-Sendlit-Team-Id header.",
+            "This user belongs to multiple teams — specify one via the X-Sendlit-Team-Id header.",
         teams: teams.map((t) => ({ teamId: t.teamId, name: t.name })),
     });
 }

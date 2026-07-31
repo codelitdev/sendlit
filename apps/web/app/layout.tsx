@@ -3,6 +3,7 @@ import "./globals.css";
 import { Hanken_Grotesk, Spline_Sans_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/codelit/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 
 const hankenGrotesk = Hanken_Grotesk({
     subsets: ["latin"],
@@ -34,7 +35,10 @@ export default function RootLayout({
             )}
         >
             <body className="antialiased">
-                <TooltipProvider>{children}</TooltipProvider>
+                <TooltipProvider>
+                    {children}
+                    <Toaster />
+                </TooltipProvider>
             </body>
         </html>
     );

@@ -4,8 +4,8 @@ import { eq } from "drizzle-orm";
 import { auth, authIssuer, validOAuthAudiences } from "../src/auth/better-auth";
 import { db, pool } from "../src/db/client";
 import * as schema from "../src/db/schema";
-import { findAccountByEmail } from "../src/account/queries";
-import { getTeamByTeamId, listTeamsForAccount } from "../src/team/queries";
+import { findUserByEmail } from "../src/user/queries";
+import { getTeamByTeamId, listTeamsForUser } from "../src/team/queries";
 
 const DEFAULT_SCOPES = [
     "openid",
@@ -47,14 +47,14 @@ function parseArgs(argv: string[]) {
 async function findAuthUserByEmail(email: string) {
     const [user] = await db
         .select()
-        .from(schema.authUser)
-        .where(eq(schema.authUser.email, email))
+        .from(schema.user)
+        .where(eq(schema.user.email, email))
         .limit(1);
     return user ?? null;
 }
 
-async function validateTeam(accountId: string, teamId?: string) {
-    const teams = await listTeamsForAccount(accountId);
+async function validateTeam(userId: string, teamId?: string) {
+    const teams = await listTeamsForUser(userId);
 
     if (teamId) {
         const team = await getTeamByTeamId(teamId);
@@ -81,13 +81,13 @@ async function validateTeam(accountId: string, teamId?: string) {
 async function main() {
     const { email, teamId } = parseArgs(process.argv.slice(2));
 
-    const [account, authUser] = await Promise.all([
-        findAccountByEmail(email),
+    const [user, authUser] = await Promise.all([
+        findUserByEmail(email),
         findAuthUserByEmail(email),
     ]);
 
-    if (!account) {
-        throw new Error(`No SendLit account exists for ${email}.`);
+    if (!user) {
+        throw new Error(`No SendLit user exists for ${email}.`);
     }
 
     if (!authUser) {
@@ -96,7 +96,7 @@ async function main() {
         );
     }
 
-    await validateTeam(account.id, teamId);
+    await validateTeam(user.id, teamId);
 
     const now = Math.floor(Date.now() / 1000);
     const response = await auth.api.signJWT({

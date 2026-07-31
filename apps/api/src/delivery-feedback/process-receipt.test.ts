@@ -45,7 +45,8 @@ describe("processWebhookReceipt (integration)", () => {
 
         const outbound = await createOutboundMessage({
             teamId: team.id,
-            deliveryRoute: "custom",
+            deliverySourceType: "team",
+            espGrantId: null,
             espConfigId: esp.id,
             feedbackConnectionId: connection.id,
             sourceType: "transactional",

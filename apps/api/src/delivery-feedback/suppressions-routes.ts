@@ -70,7 +70,7 @@ const impl = s.router(contract.suppressions, {
                 teamId,
                 suppressionId: params.suppressionId,
                 actorType: "workspace_user",
-                actorUserId: (req as any).accountId ?? null,
+                actorUserId: (req as any).userId ?? null,
                 explanation: body.explanation,
             });
             captureEvent({

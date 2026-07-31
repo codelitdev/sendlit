@@ -14,9 +14,9 @@ vi.mock("../mail/send", () => ({
 import { db } from "../db/client";
 import { sendMail } from "../mail/send";
 import {
-    accounts,
     contacts,
     emailDeliveries,
+    espConfigs,
     ongoingSequences,
     sequenceEmails,
     sequences,
@@ -139,13 +139,6 @@ describe("processOngoingSequence", () => {
             .where(eq(ongoingSequences.id, row.id));
         expect(after.sentEmailIds).toEqual(["email_e1"]);
         expect(after.nextEmailScheduledTime).toBe(scheduledAt + 3_600_000);
-
-        const [accountAfter] = await tdb
-            .select()
-            .from(accounts)
-            .where(eq(accounts.id, account.id));
-        expect(accountAfter.dailyMailCount).toBe(0);
-        expect(accountAfter.monthlyMailCount).toBe(0);
     });
 
     it("rejects corrupted marketing content without a final managed footer before transport", async () => {
@@ -397,9 +390,7 @@ describe("processOngoingSequence", () => {
     });
 
     it("sends through a user ESP when platform quota is exhausted", async () => {
-        const { team, contact } = await seedTeamAndContact(tdb, {
-            account: { dailyMailLimit: 5, dailyMailCount: 5 },
-        });
+        const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
             emails: [{ emailId: "email_e1" }],
@@ -426,13 +417,13 @@ describe("processOngoingSequence", () => {
             teamId: team.id,
             emails: [{ emailId: "email_e1" }],
         });
-        // The pinned outbox no longer exists (FK `ON DELETE SET NULL` — see
-        // `db/schema.ts#sequences.outboxId`), simulating an ESP deleted after
-        // the sequence was started, while `deliveryRoute` is still "custom".
+        // Pins are immutable and historical ESPs are retained. Simulate a
+        // retired source after activation; the worker must fail closed rather
+        // than resolving a current default.
         await tdb
-            .update(sequences)
-            .set({ outboxId: null })
-            .where(eq(sequences.id, sequenceRow.id));
+            .update(espConfigs)
+            .set({ status: "retired" })
+            .where(eq(espConfigs.teamId, team.id));
         const row = await seedOngoingSequence(tdb, {
             teamId: team.id,
             sequenceId: sequenceRow.id,
@@ -440,7 +431,7 @@ describe("processOngoingSequence", () => {
         });
 
         await expect(processOngoingSequence(row.id)).rejects.toThrow(
-            "Team ESP is not configured.",
+            "delivery_source_unavailable",
         );
 
         expect(mockedSendMail).not.toHaveBeenCalled();

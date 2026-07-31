@@ -63,7 +63,7 @@ function makeToolRegistry() {
     return tools;
 }
 
-const auth = { authInfo: { clientId: "team-1", account: { id: "account-1" } } };
+const auth = { authInfo: { clientId: "team-1", user: { id: "user-1" } } };
 
 beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();
@@ -163,7 +163,7 @@ describe("MCP delivery-feedback tools", () => {
                 teamId: "team-1",
                 suppressionId: "sup_1",
                 actorType: "workspace_user",
-                actorUserId: "account-1",
+                actorUserId: "user-1",
             }),
         );
         expect(result.isError).toBe(true);

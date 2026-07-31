@@ -3,14 +3,31 @@ title: Teams
 description: Isolate contacts, sending configuration, and API access by workspace.
 ---
 
-A team is SendLit’s tenant boundary. Contacts, templates, broadcasts, sequences, media, sending providers, API keys, mailing address, and quota belong to a team.
+A team is SendLit’s workspace and tenant boundary. Contacts, templates,
+broadcasts, sequences, media, team-owned sending providers, API keys, mailing
+address, and quota belong to a team.
+
+Teams belong to an organization. The organization can own shared mailboxes and
+grant one to a team without revealing its credentials. See
+[Organizations](/workspace/organizations) for the ownership, grant, and
+access model.
 
 ## Create and switch teams
 
-Use the team switcher in the dashboard header to move between existing teams. Create a team from **Add team**. The selected team is also the default scope for dashboard API calls.
+Use the team switcher in the dashboard header to move between active teams of
+which you are an explicit member. Create a human-managed team from
+**Organizations → Teams and mailbox sharing**. The creator becomes a team
+administrator. The selected team is also the default scope for dashboard API
+calls.
+
+Organization ownership alone does not make every organization team appear in
+the switcher. This prevents an infrastructure administrator from automatically
+seeing a customer team's contacts or email content.
 
 ## API keys
 
 Manage keys from the Teams page or through the Teams API. Keys are team-scoped and shown in full only once when created. Store the secret immediately; if it is lost or exposed, revoke it and create a replacement.
 
-For multi-tenant provisioning, use the provisioning endpoint with `X-Sendlit-Provisioning-Secret` instead of sharing a dashboard key.
+For multi-tenant provisioning, use an organization API key with the
+`teams:provision` scope. It is sent as a Bearer token to the provisioning API;
+the old shared provisioning secret is not used.

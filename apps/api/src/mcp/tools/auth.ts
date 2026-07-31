@@ -1,4 +1,4 @@
-import type { Account } from "../../account/queries";
+import type { User } from "../../user/queries";
 
 /** MCP tool handlers receive the resolved team id via `extra.authInfo.clientId`
  * (see `mcp/routes.ts`'s `getMcpAuth`, populated by `auth/middleware.ts` +
@@ -13,6 +13,6 @@ export function getTeamId(extra: any): string | null {
  * sessions (a key has no single owning account; a team can have several
  * members). Only used for cosmetic fallbacks (e.g. "send the test email to
  * me"), never for authorization. */
-export function getAuthAccount(extra: any): Account | null {
-    return extra?.authInfo?.account || null;
+export function getAuthUser(extra: any): User | null {
+    return extra?.authInfo?.user || null;
 }

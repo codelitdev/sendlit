@@ -39,7 +39,12 @@ const s = initServer();
 // rather than exposed, since it's an internal join key, not a public ID.
 function toBody(sequence: HydratedSequence): any {
     return serializeDates({
-        ...omitInternal(sequence, ["outboxId", "deliveryRoute"]),
+        ...omitInternal(sequence, [
+            "outboxId",
+            "espGrantId",
+            "deliverySourceType",
+            "deliverySourceIntent",
+        ]),
         emails: sequence.emails.map((email) =>
             omitInternal(email, ["sequenceId"]),
         ),

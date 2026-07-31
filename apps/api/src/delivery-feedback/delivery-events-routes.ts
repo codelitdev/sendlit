@@ -35,12 +35,13 @@ async function toPublicEvents(teamId: string, events: DeliveryEvent[]) {
         return {
             eventId: event.eventId,
             provider: event.provider,
-            espId: outbound?.espConfigId
-                ? (espIdByConfigId.get(outbound.espConfigId) ?? null)
-                : null,
-            deliveryRoute:
-                (outbound?.deliveryRoute as
-                    "custom" | "platform" | undefined) ?? null,
+            espId:
+                outbound?.deliverySourceType === "team" && outbound?.espConfigId
+                    ? (espIdByConfigId.get(outbound.espConfigId) ?? null)
+                    : null,
+            deliverySourceType:
+                (outbound?.deliverySourceType as
+                    "organization" | "team" | undefined) ?? null,
             messageId: outbound?.messageId ?? null,
             recipientEmail: event.recipientEmail,
             eventType: event.eventType as any,
@@ -68,7 +69,7 @@ const impl = s.router(contract.deliveryEvents, {
             teamId,
             eventType: query.eventType,
             espConfigId,
-            deliveryRoute: query.deliveryRoute,
+            deliverySourceType: query.deliverySourceType,
             createdAfter: query.createdAfter,
             createdBefore: query.createdBefore,
         };

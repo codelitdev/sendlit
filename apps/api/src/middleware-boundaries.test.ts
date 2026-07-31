@@ -11,7 +11,7 @@ vi.mock("./auth/middleware", () => ({
     requireAuth: (req: any, _res: any, next: () => void) => {
         middlewareCalls.auth(req.path);
         req.authKind = "session";
-        req.accountId = "account-1";
+        req.userId = "user-1";
         next();
     },
 }));
@@ -167,7 +167,7 @@ const cases: BoundaryCase[] = [
         name: "provisioning",
         router: provisioningRoutes,
         ownPath: "/provisioning/teams",
-        expectedAuth: 0,
+        expectedAuth: 1,
         expectedTeam: 0,
     },
 ];

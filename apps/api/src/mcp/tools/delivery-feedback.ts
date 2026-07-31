@@ -38,7 +38,7 @@ import {
     suppressionSchema,
     testEspResultSchema,
 } from "./schemas";
-import { getAuthAccount, getTeamId } from "./auth";
+import { getAuthUser, getTeamId } from "./auth";
 
 function webhookUrlFor(connection: {
     provider: string;
@@ -97,12 +97,13 @@ async function toPublicEvents(teamId: string, events: DeliveryEvent[]) {
         return {
             eventId: event.eventId,
             provider: event.provider,
-            espId: outbound?.espConfigId
-                ? (espIdByConfigId.get(outbound.espConfigId) ?? null)
-                : null,
-            deliveryRoute:
-                (outbound?.deliveryRoute as
-                    "custom" | "platform" | undefined) ?? null,
+            espId:
+                outbound?.deliverySourceType === "team" && outbound?.espConfigId
+                    ? (espIdByConfigId.get(outbound.espConfigId) ?? null)
+                    : null,
+            deliverySourceType:
+                (outbound?.deliverySourceType as
+                    "organization" | "team" | undefined) ?? null,
             messageId: outbound?.messageId ?? null,
             recipientEmail: event.recipientEmail,
             eventType: event.eventType,
@@ -277,7 +278,7 @@ export function registerDeliveryFeedbackTools(server: McpServer): void {
                 "Returns a paginated list of normalized bounce/complaint/delivery events for the team, most recent first.",
             inputSchema: {
                 espId: z.string().min(1).optional(),
-                deliveryRoute: z.enum(["custom", "platform"]).optional(),
+                deliverySourceType: z.enum(["organization", "team"]).optional(),
                 eventType: z
                     .enum([
                         "accepted",
@@ -325,7 +326,7 @@ export function registerDeliveryFeedbackTools(server: McpServer): void {
                 teamId,
                 eventType: args.eventType,
                 espConfigId,
-                deliveryRoute: args.deliveryRoute,
+                deliverySourceType: args.deliverySourceType,
                 createdAfter: args.createdAfter,
                 createdBefore: args.createdBefore,
             };
@@ -464,7 +465,7 @@ export function registerDeliveryFeedbackTools(server: McpServer): void {
                     teamId,
                     suppressionId: args.suppressionId,
                     actorType: "workspace_user",
-                    actorUserId: getAuthAccount(extra)?.id ?? null,
+                    actorUserId: getAuthUser(extra)?.id ?? null,
                     explanation: args.explanation,
                 });
                 return jsonResult(toPublicSuppression(suppression));

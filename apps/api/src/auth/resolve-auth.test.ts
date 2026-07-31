@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../account/queries", () => ({
-    getAccount: vi.fn(),
-}));
 vi.mock("../apikey/queries", () => ({
     getApiKeyBySecret: vi.fn(),
+    getOrganizationApiKeyBySecret: vi.fn(),
 }));
 vi.mock("../team/queries", () => ({
     getTeamMembership: vi.fn(),
+}));
+vi.mock("../organization/queries", () => ({
+    ensureDefaultOrganization: vi.fn(),
+}));
+vi.mock("../user/queries", () => ({
+    getUser: vi.fn(),
 }));
 vi.mock("./better-auth", () => ({
     auth: {
@@ -15,8 +19,6 @@ vi.mock("./better-auth", () => ({
             getSession: vi.fn(async () => null),
         },
     },
-    ensureSendLitAccountForBetterAuthUserId: vi.fn(),
-    ensureSendLitAccountForUser: vi.fn(),
     oauthResourceClient: {
         getActions: vi.fn(() => ({
             verifyAccessToken: vi.fn(async () => null),
@@ -33,8 +35,8 @@ import {
     type AuthDependencies,
 } from "./resolve-auth";
 
-const account = {
-    id: "account-1",
+const user = {
+    id: "user-1",
     email: "owner@example.com",
     name: "Owner",
     createdAt: new Date(),
@@ -43,19 +45,25 @@ const account = {
 
 function deps(overrides: Partial<AuthDependencies> = {}): AuthDependencies {
     return {
-        getAccount: vi.fn(async () => account as any),
+        getUser: vi.fn(async () => user as any),
         getApiKeyBySecret: vi.fn(async () => ({
             id: "key-id",
             teamId: "team-1",
             keyHash: "hash-of-api-key",
             keyPrefix: "sl_live_api-",
             name: "Default",
+            teamApiKeyId: "tak_1",
+            expiresAt: null,
+            lastUsedAt: null,
+            revokedAt: null,
+            createdByType: "user",
+            createdById: null,
             createdAt: new Date(),
         })),
+        getOrganizationApiKeyBySecret: vi.fn(async () => null),
         getBetterAuthSession: vi.fn(async () => null),
         verifyBetterAuthBearerToken: vi.fn(async () => null),
-        ensureAccountForBetterAuthUserId: vi.fn(async () => account as any),
-        ensureAccountForUser: vi.fn(async () => account as any),
+        ensureDefaultOrganization: vi.fn(async () => ({ id: "org-1" })),
         getTeamMembership: vi.fn(async () => null),
         ...overrides,
     };
@@ -99,13 +107,11 @@ describe("resolveAuth", () => {
         ).resolves.toMatchObject({
             status: "authenticated",
             kind: "oauth",
-            accountId: account.id,
+            userId: user.id,
             clientId: "mcp-client",
             scopes: ["contacts:read", "templates:write"],
         });
-        expect(authDeps.ensureAccountForBetterAuthUserId).toHaveBeenCalledWith(
-            "better-auth-user-1",
-        );
+        expect(authDeps.getUser).toHaveBeenCalledWith("better-auth-user-1");
         expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
     });
 
@@ -120,7 +126,7 @@ describe("resolveAuth", () => {
             getTeamMembership: vi.fn(async () => ({
                 id: "membership-1",
                 teamId: "team-abc",
-                accountId: account.id,
+                userId: user.id,
                 role: "owner",
                 createdAt: new Date(),
             })),
@@ -135,7 +141,7 @@ describe("resolveAuth", () => {
         });
         expect(authDeps.getTeamMembership).toHaveBeenCalledWith(
             "team-abc",
-            account.id,
+            user.id,
         );
     });
 
@@ -183,7 +189,7 @@ describe("resolveAuth", () => {
             resolveAuth({ apiKeyHeader: "api-key" }, deps()),
         ).resolves.toMatchObject({
             status: "authenticated",
-            kind: "apikey",
+            kind: "team_key",
             apiKey: "api-key",
             teamId: "team-1",
         });
@@ -192,7 +198,7 @@ describe("resolveAuth", () => {
             resolveAuth({ bodyApiKey: ["body-key"] }, deps()),
         ).resolves.toMatchObject({
             status: "authenticated",
-            kind: "apikey",
+            kind: "team_key",
             apiKey: "body-key",
             teamId: "team-1",
         });
@@ -201,7 +207,7 @@ describe("resolveAuth", () => {
     it("prefers an explicitly supplied API key over a browser session", async () => {
         const authDeps = deps({
             getBetterAuthSession: vi.fn(async () => ({
-                user: { email: "owner@example.com", name: "Owner" },
+                user: { id: user.id },
             })),
         });
 
@@ -215,7 +221,7 @@ describe("resolveAuth", () => {
             ),
         ).resolves.toMatchObject({
             status: "authenticated",
-            kind: "apikey",
+            kind: "team_key",
             teamId: "team-1",
         });
         expect(authDeps.getBetterAuthSession).not.toHaveBeenCalled();
@@ -236,7 +242,7 @@ describe("resolveAuth", () => {
     it("authenticates Better Auth web sessions from forwarded cookies", async () => {
         const authDeps = deps({
             getBetterAuthSession: vi.fn(async () => ({
-                user: { email: "owner@example.com", name: "Owner" },
+                user: { id: user.id },
             })),
         });
 
@@ -248,12 +254,9 @@ describe("resolveAuth", () => {
         ).resolves.toMatchObject({
             status: "authenticated",
             kind: "session",
-            accountId: account.id,
+            userId: user.id,
         });
-        expect(authDeps.ensureAccountForUser).toHaveBeenCalledWith({
-            email: "owner@example.com",
-            name: "Owner",
-        });
+        expect(authDeps.getUser).toHaveBeenCalledWith(user.id);
         expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
     });
 });
@@ -271,8 +274,8 @@ describe("sendAuthError", () => {
         expect(
             sendAuthError(res, {
                 status: "authenticated",
-                kind: "apikey",
-                account: null,
+                kind: "team_key",
+                user: null,
                 apiKey: "k",
                 teamId: "t",
             }),

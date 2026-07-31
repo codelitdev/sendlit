@@ -19,16 +19,20 @@ function applyAuthToRequest(
     if (auth.status !== "authenticated") return;
 
     req.authKind = auth.kind;
-    req.account = auth.account;
+    req.user = auth.user;
 
-    if (auth.kind === "apikey") {
+    if (auth.kind === "team_key") {
         req.apikey = auth.apiKey;
         // A key authenticates as exactly one, fixed team — no further
         // resolution needed (see `require-team.ts`).
         req.teamId = auth.teamId;
+    } else if (auth.kind === "organization_key") {
+        req.organizationId = auth.organizationId;
+        req.organizationApiKeyId = auth.organizationApiKeyId;
+        req.organizationScopes = auth.organizationScopes;
     } else {
-        req.accountId = auth.accountId;
-        // A multi-team account's OAuth token may already carry a verified
+        req.userId = auth.userId;
+        // A multi-team user's OAuth token may already carry a verified
         // team (picked on `/oauth/select-team` — see `resolve-auth.ts`).
         // Leaving it unset here falls through to `require-team.ts`'s header
         // / sole-team resolution, same as before this existed.

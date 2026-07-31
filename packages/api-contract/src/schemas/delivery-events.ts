@@ -15,7 +15,7 @@ export const deliveryEventType = [
 
 export const bounceClass = ["permanent", "transient", "undetermined"] as const;
 
-export const deliveryRoutes = ["custom", "platform"] as const;
+export const deliverySourceTypes = ["organization", "team"] as const;
 
 /** One immutable canonical event, normalized from a provider webhook — see
  * `docs/bounces-and-complaints.md#5-canonical-delivery-events`. */
@@ -23,7 +23,7 @@ export const deliveryEventSchema = z.object({
     eventId: z.string(),
     provider: z.string(),
     espId: z.string().nullable(),
-    deliveryRoute: z.enum(deliveryRoutes).nullable(),
+    deliverySourceType: z.enum(deliverySourceTypes).nullable(),
     /** Public `msg_...` id of the correlated outbound message, when the
      * event was matched to one — see the PRD's correlation section. */
     messageId: z.string().nullable(),
@@ -39,7 +39,7 @@ export const deliveryEventSchema = z.object({
 
 export const listDeliveryEventsQuerySchema = z.object({
     espId: z.string().optional(),
-    deliveryRoute: z.enum(deliveryRoutes).optional(),
+    deliverySourceType: z.enum(deliverySourceTypes).optional(),
     eventType: z.enum(deliveryEventType).optional(),
     createdAfter: z.coerce.number().int().optional(),
     createdBefore: z.coerce.number().int().optional(),

@@ -2,10 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
     createTeam,
-    deleteTeam,
+    archiveTeam,
     getTeamByTeamId,
     getTeamMembership,
-    listTeamsForAccount,
+    listTeamViewsForUser,
     renameTeam,
 } from "../../team/queries";
 import {
@@ -20,14 +20,14 @@ import {
     successMessageSchema,
     teamSchema,
 } from "./schemas";
-import { getAuthAccount, getTeamId } from "./auth";
+import { getAuthUser, getTeamId } from "./auth";
+import { getOrganizationMembership } from "../../organization/queries";
 
 export function registerTeamTools(server: McpServer): void {
     server.registerTool(
         "list_teams",
         {
-            description:
-                "Returns all teams the authenticated account belongs to.",
+            description: "Returns all teams the authenticated user belongs to.",
             outputSchema: z.object({ items: z.array(teamSchema) }),
             annotations: {
                 readOnlyHint: true,
@@ -36,14 +36,16 @@ export function registerTeamTools(server: McpServer): void {
             },
         },
         async (extra: any) => {
-            const account = getAuthAccount(extra);
-            if (!account) return AUTH_ERROR;
+            const user = getAuthUser(extra);
+            if (!user) return AUTH_ERROR;
             try {
-                const teams = await listTeamsForAccount(account.id);
+                const teams = await listTeamViewsForUser(user.id);
                 return jsonResult({
                     items: teams.map((t) => ({
                         teamId: t.teamId,
                         name: t.name,
+                        organizationId: t.organizationPublicId,
+                        organizationName: t.organizationName,
                     })),
                 });
             } catch {
@@ -56,7 +58,7 @@ export function registerTeamTools(server: McpServer): void {
         "create_team",
         {
             description:
-                "Creates a new team owned by the authenticated account.",
+                "Creates a new team in the authenticated user's default organization.",
             inputSchema: {
                 name: z.string().min(1).describe("Team name"),
             },
@@ -68,11 +70,21 @@ export function registerTeamTools(server: McpServer): void {
             },
         },
         async (args: any, extra: any) => {
-            const account = getAuthAccount(extra);
-            if (!account) return AUTH_ERROR;
+            const user = getAuthUser(extra);
+            if (!user?.defaultOrganizationId) return AUTH_ERROR;
             try {
+                const membership = await getOrganizationMembership(
+                    user.defaultOrganizationId,
+                    user.id,
+                );
+                if (
+                    !membership ||
+                    !["owner", "admin"].includes(membership.role)
+                )
+                    return AUTH_ERROR;
                 const team = await createTeam({
-                    ownerAccountId: account.id,
+                    organizationId: user.defaultOrganizationId,
+                    creatorUserId: user.id,
                     name: args.name,
                 });
                 return jsonResult({
@@ -119,7 +131,7 @@ export function registerTeamTools(server: McpServer): void {
         "delete_team",
         {
             description:
-                "Permanently deletes a team. Only the team owner can delete it.",
+                "Archives a team. Organization administration is required.",
             inputSchema: {
                 teamId: z.string().describe("Team ID"),
             },
@@ -131,26 +143,33 @@ export function registerTeamTools(server: McpServer): void {
             },
         },
         async (args: any, extra: any) => {
-            const account = getAuthAccount(extra);
-            if (!account) return AUTH_ERROR;
+            const user = getAuthUser(extra);
+            if (!user) return AUTH_ERROR;
             try {
                 const team = await getTeamByTeamId(args.teamId);
                 if (!team) return NOT_FOUND;
-                const membership = await getTeamMembership(team.id, account.id);
+                const membership = await getTeamMembership(team.id, user.id);
                 if (!membership) return NOT_FOUND;
-                if (membership.role !== "owner") {
+                const organizationMembership = await getOrganizationMembership(
+                    team.organizationId,
+                    user.id,
+                );
+                if (
+                    !organizationMembership ||
+                    !["owner", "admin"].includes(organizationMembership.role)
+                ) {
                     return {
                         content: [
                             {
                                 type: "text" as const,
-                                text: "Only the team owner can delete it.",
+                                text: "Organization administration is required.",
                             },
                         ],
                         isError: true,
                     };
                 }
-                await deleteTeam(team.id);
-                return jsonResult({ message: "Team deleted." });
+                await archiveTeam(team.id);
+                return jsonResult({ message: "Team archived." });
             } catch {
                 return INTERNAL_ERROR;
             }
@@ -176,7 +195,7 @@ export function registerTeamTools(server: McpServer): void {
                 const keys = await getApiKeysByTeamId(teamId);
                 return jsonResult({
                     items: keys.map((k) => ({
-                        id: k.id,
+                        id: k.teamApiKeyId,
                         keyPrefix: k.keyPrefix,
                         name: k.name,
                         createdAt: k.createdAt,
@@ -210,12 +229,17 @@ export function registerTeamTools(server: McpServer): void {
             const teamId = getTeamId(extra);
             if (!teamId) return AUTH_ERROR;
             try {
+                const user = getAuthUser(extra);
                 const { apiKey, secret } = await createApiKey(
                     teamId,
                     args.name,
+                    {
+                        createdByType: user ? "user" : "system",
+                        createdById: user?.id,
+                    },
                 );
                 return jsonResult({
-                    id: apiKey.id,
+                    id: apiKey.teamApiKeyId,
                     key: secret,
                     keyPrefix: apiKey.keyPrefix,
                     name: apiKey.name,

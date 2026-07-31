@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
 
 vi.mock("../db/client", async () => {
     const { makeTestDb } = await import("../test/db.js");
@@ -7,16 +6,14 @@ vi.mock("../db/client", async () => {
 });
 
 import { db } from "../db/client";
-import { accounts } from "../db/schema";
 import { getApiKeysByTeamId } from "../apikey/queries";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
-import { hasMailQuotaRemaining, incrementMailCount } from "../account/queries";
 import {
     createTeam,
-    findOrCreateBareAccount,
     findOrCreateTeamByExternalId,
     getTeamMembership,
-    listTeamsForAccount,
+    archiveTeam,
+    listTeamsForUser,
 } from "./queries";
 
 const tdb = db as unknown as TestDb;
@@ -25,102 +22,74 @@ beforeEach(async () => {
     await truncateAll(tdb);
 });
 
-async function createAccount(email = "owner@example.com") {
-    const [account] = await tdb.insert(accounts).values({ email }).returning();
-    return account;
-}
-
 describe("team queries", () => {
-    it("creates a team with owner membership and no API key by default", async () => {
-        const account = await createAccount();
-
+    it("creates a team in an organization with an admin membership", async () => {
+        const { account, organization } = await seedTeamAndContact(tdb);
         const team = await createTeam({
-            ownerAccountId: account.id,
+            organizationId: organization.id,
+            creatorUserId: account.id,
             name: "Main",
         });
 
         await expect(getTeamMembership(team.id, account.id)).resolves.toEqual(
-            expect.objectContaining({ role: "owner" }),
+            expect.objectContaining({ role: "admin" }),
         );
-        await expect(listTeamsForAccount(account.id)).resolves.toEqual([
-            expect.objectContaining({ id: team.id, name: "Main" }),
-        ]);
+        await expect(listTeamsForUser(account.id)).resolves.toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: team.id, name: "Main" }),
+            ]),
+        );
         await expect(getApiKeysByTeamId(team.id)).resolves.toEqual([]);
-        expect(team.defaultApiKeySecret).toBeUndefined();
     });
 
-    it("mints a default API key when withDefaultApiKey is requested", async () => {
-        const account = await createAccount();
-
+    it("mints a one-time team key only when the caller requests one", async () => {
+        const { organization } = await seedTeamAndContact(tdb);
         const team = await createTeam({
-            ownerAccountId: account.id,
-            name: "Main",
+            organizationId: organization.id,
+            name: "Provisioned",
             withDefaultApiKey: true,
+            createdBy: { type: "system" },
         });
 
-        expect(team.defaultApiKeySecret).toEqual(expect.any(String));
+        expect(team.defaultApiKeySecret).toMatch(/^sl_live_/);
         await expect(getApiKeysByTeamId(team.id)).resolves.toEqual([
             expect.objectContaining({ teamId: team.id, name: "Default" }),
         ]);
     });
 
-    it("finds or creates provisioned teams by external id without merging owners", async () => {
-        const owner = await findOrCreateBareAccount(
-            "OWNER@Example.com",
-            "Owner",
-        );
+    it("does not expose archived teams in user-facing team enumeration", async () => {
+        const { account, organization } = await seedTeamAndContact(tdb);
+        const archived = await createTeam({
+            organizationId: organization.id,
+            creatorUserId: account.id,
+            name: "Archived",
+        });
+        await archiveTeam(archived.id);
 
-        const first = await findOrCreateTeamByExternalId({
-            externalId: "consumer:one",
-            ownerAccountId: owner.id,
-            name: "Tenant One",
-        });
+        await expect(listTeamsForUser(account.id)).resolves.not.toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: archived.id }),
+            ]),
+        );
+    });
+
+    it("provisions idempotently within one organization", async () => {
+        const { organization } = await seedTeamAndContact(tdb);
+        const input = {
+            organizationId: organization.id,
+            externalId: "school:one",
+            name: "School One",
+            provisioningRequestHash: "request-hash",
+            createdBy: { type: "system" as const },
+        };
+
+        const first = await findOrCreateTeamByExternalId(input);
         const again = await findOrCreateTeamByExternalId({
-            externalId: "consumer:one",
-            ownerAccountId: owner.id,
-            name: "Renamed",
-        });
-        const second = await findOrCreateTeamByExternalId({
-            externalId: "consumer:two",
-            ownerAccountId: owner.id,
-            name: "Tenant Two",
+            ...input,
+            name: "Renamed School",
         });
 
         expect(again.id).toBe(first.id);
-        expect(again.name).toBe("Tenant One");
-        expect(second.id).not.toBe(first.id);
-        expect(owner.email).toBe("owner@example.com");
-    });
-
-    it("enforces and resets mail quota counters", async () => {
-        const { account } = await seedTeamAndContact(tdb, {
-            account: {
-                dailyMailLimit: 1,
-                monthlyMailLimit: 2,
-                dailyMailCount: 0,
-                monthlyMailCount: 0,
-            },
-        });
-
-        expect(await hasMailQuotaRemaining(account.id)).toBe(true);
-        await incrementMailCount(account.id);
-        expect(await hasMailQuotaRemaining(account.id)).toBe(false);
-
-        await tdb
-            .update(accounts)
-            .set({
-                countersResetAt: new Date(Date.now() - 31 * 24 * 60 * 60_000),
-                dailyMailCount: 100,
-                monthlyMailCount: 100,
-            })
-            .where(eq(accounts.id, account.id));
-
-        expect(await hasMailQuotaRemaining(account.id)).toBe(true);
-        const [resetAccount] = await tdb
-            .select()
-            .from(accounts)
-            .where(eq(accounts.id, account.id));
-        expect(resetAccount.dailyMailCount).toBe(0);
-        expect(resetAccount.monthlyMailCount).toBe(0);
+        expect(again.name).toBe("School One");
     });
 });

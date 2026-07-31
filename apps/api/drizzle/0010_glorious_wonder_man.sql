@@ -1,2 +1,0 @@
-ALTER TABLE "outbound_messages" ADD COLUMN "submission_key" text;--> statement-breakpoint
-ALTER TABLE "outbound_messages" ADD CONSTRAINT "outbound_messages_submission_key_unique" UNIQUE("submission_key");

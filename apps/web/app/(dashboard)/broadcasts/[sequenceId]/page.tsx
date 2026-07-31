@@ -19,19 +19,21 @@ import { Label } from "@/components/ui/codelit/label";
 import { Banner } from "@/components/dashboard/banner";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
-import { EspPicker } from "@/components/dashboard/esp-picker";
+import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import { ApiError } from "@/lib/api-client";
 import { broadcastScheduledFor, presentBroadcastStatus } from "@/lib/broadcast";
+import { presentDeliverySourceError } from "@/lib/delivery-source";
 import {
     getSequence,
     getSequenceStats,
     listContacts,
-    listEsps,
+    listSendingOptions,
     pauseSequence,
     startSequence,
     updateSequence,
     updateSequenceEmail,
-    type EspConfig,
+    type DeliverySourceSelection,
+    type SendingOption,
 } from "@/lib/api";
 import { useSegments } from "@/lib/use-segments";
 import {
@@ -57,7 +59,7 @@ const MARKETING_PREVIEW_CONTEXT = {
 interface BroadcastMeta {
     title: string;
     filter?: ContactFilterWithAggregator | null;
-    espId?: string | null;
+    deliverySource?: DeliverySourceSelection | null;
 }
 
 interface BroadcastEmailDraft {
@@ -95,7 +97,7 @@ export default function BroadcastEditorPage({
     const [scheduleAt, setScheduleAt] = useState("");
     const [working, setWorking] = useState(false);
     const [audienceCount, setAudienceCount] = useState<number>();
-    const [esps, setEsps] = useState<EspConfig[]>([]);
+    const [sendingOptions, setSendingOptions] = useState<SendingOption[]>([]);
     const { segmentProps, clearSelection } = useSegments(setError);
 
     useSetBreadcrumb([
@@ -104,9 +106,15 @@ export default function BroadcastEditorPage({
     ]);
 
     useEffect(() => {
-        listEsps()
-            .then(({ items }) => setEsps(items))
-            .catch(() => {});
+        listSendingOptions()
+            .then(({ items }) => setSendingOptions(items))
+            .catch((err) =>
+                setError(
+                    err instanceof ApiError
+                        ? err.message
+                        : "Failed to load delivery sources",
+                ),
+            );
     }, []);
 
     async function load() {
@@ -116,7 +124,7 @@ export default function BroadcastEditorPage({
             setMeta({
                 title: s.title,
                 filter: s.filter,
-                espId: s.espId,
+                deliverySource: s.deliverySource,
             });
             const firstEmail = s.emails[0];
             if (firstEmail) {
@@ -181,7 +189,9 @@ export default function BroadcastEditorPage({
             const updated = await updateSequence(sequenceId, {
                 title: meta.title,
                 filter: meta.filter || undefined,
-                ...(espEditable ? { espId: meta.espId ?? null } : {}),
+                ...(espEditable
+                    ? { deliverySource: meta.deliverySource ?? null }
+                    : {}),
             });
             const firstEmail = updated.emails[0];
             // Content is edited on its own full-screen editor route, so this
@@ -222,7 +232,11 @@ export default function BroadcastEditorPage({
             setConfirmSendOpen(false);
             setScheduleOpen(false);
         } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Action failed");
+            setError(
+                err instanceof ApiError
+                    ? presentDeliverySourceError(err.message)
+                    : "Action failed",
+            );
         } finally {
             setWorking(false);
         }
@@ -369,19 +383,20 @@ export default function BroadcastEditorPage({
                                     placeholder="e.g. October newsletter"
                                 />
                             </div>
-                            {esps.length > 1 && (
-                                <div className="space-y-1.5">
-                                    <Label>Sending ESP</Label>
-                                    <EspPicker
-                                        esps={esps}
-                                        value={meta.espId}
-                                        onChange={(espId) =>
-                                            setMeta({ ...meta, espId })
-                                        }
-                                        disabled={!editable}
-                                    />
-                                </div>
-                            )}
+                            <div className="space-y-1.5">
+                                <Label>Delivery source</Label>
+                                <DeliverySourcePicker
+                                    options={sendingOptions}
+                                    value={meta.deliverySource}
+                                    onChange={(deliverySource) =>
+                                        setMeta({
+                                            ...meta,
+                                            deliverySource,
+                                        })
+                                    }
+                                    disabled={!editable}
+                                />
+                            </div>
                             <div className="space-y-1.5">
                                 <Label>Audience</Label>
                                 <ContactFilterBuilder
@@ -400,7 +415,7 @@ export default function BroadcastEditorPage({
                     </Card>
 
                     <Card>
-                        <CardHeader className="flex-row items-center justify-between">
+                        <CardHeader className="flex flex-row items-center justify-between">
                             <CardTitle className="text-base">Content</CardTitle>
                             {editable && (
                                 <Button size="sm" variant="outline" asChild>

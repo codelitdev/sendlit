@@ -19,7 +19,10 @@ const badgeVariants = cva(
                     "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
                 ghost: "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
                 link: "text-primary underline-offset-4 hover:underline",
-                success: "border-transparent bg-success-soft text-success",
+                // Keep the success foreground dark enough for WCAG AA on the
+                // pale success background (the design token is too light at
+                // small text sizes).
+                success: "border-transparent bg-success-soft text-[#1f6b35]",
             },
         },
         defaultVariants: {

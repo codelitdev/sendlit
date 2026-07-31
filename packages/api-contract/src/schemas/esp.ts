@@ -7,7 +7,6 @@ export const espProviders = [
     "postmark",
     "ses",
     "resend",
-    "custom",
 ] as const;
 
 /** Public shape only — the encrypted password/secret is never returned to
@@ -16,7 +15,6 @@ export const espProviders = [
 export const espConfigSchema = z.object({
     espId: z.string(),
     name: z.string(),
-    isDefault: z.boolean(),
     // Plain string, not the enum — the DB column is unconstrained text and
     // validated on write (see `upsertEspConfigBodySchema`).
     provider: z.string(),
@@ -27,9 +25,14 @@ export const espConfigSchema = z.object({
     hasPassword: z.boolean(),
     fromName: z.string().nullable().optional(),
     fromEmail: z.string().nullable().optional(),
+    status: z.enum(["draft", "active", "suspended", "draining", "retired"]),
+    secretVersion: z.number().int().positive(),
     lastTestedAt: z.string().nullable().optional(),
     lastTestStatus: z.enum(["success", "failed"]).nullable().optional(),
     lastTestError: z.string().nullable().optional(),
+    activatedAt: z.string().nullable().optional(),
+    drainUntil: z.string().nullable().optional(),
+    retiredAt: z.string().nullable().optional(),
     updatedAt: z.string().optional(),
 });
 
@@ -47,7 +50,6 @@ export const upsertEspConfigBodySchema = z.object({
 
 export const createEspConfigBodySchema = upsertEspConfigBodySchema.extend({
     name: z.string().trim().min(1).max(100),
-    isDefault: z.boolean().optional(),
 });
 
 export const updateEspConfigBodySchema = z
@@ -61,7 +63,6 @@ export const updateEspConfigBodySchema = z
         password: z.string().optional(),
         fromName: z.string().optional(),
         fromEmail: z.union([z.string().email(), z.literal("")]).optional(),
-        isDefault: z.literal(true).optional(),
     })
     .refine((body) => Object.keys(body).length > 0, {
         message: "At least one field is required",
@@ -75,3 +76,11 @@ export const testEspConfigResponseSchema = z.object({
     success: z.boolean(),
     error: z.string().optional(),
 });
+
+export const retireEspConfigBodySchema = z.discriminatedUnion("transition", [
+    z.object({
+        transition: z.literal("drain"),
+        drainUntil: z.string().datetime().optional(),
+    }),
+    z.object({ transition: z.literal("cancel") }),
+]);

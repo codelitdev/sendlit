@@ -1,6 +1,5 @@
 import express from "express";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import * as schema from "../db/schema";
 import { db } from "../db/client";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
 import contactsRoutes from "../contacts/routes";
@@ -13,7 +12,6 @@ vi.mock("../db/client", async () => {
 const tdb = db as unknown as TestDb;
 
 const mocks = vi.hoisted(() => ({
-    ensureSendLitAccountForBetterAuthUserId: vi.fn(),
     verifyAccessToken: vi.fn(),
 }));
 
@@ -24,9 +22,6 @@ vi.mock("./better-auth", () => ({
         },
     },
     authIssuer: "https://sendlit.test/api/auth",
-    ensureSendLitAccountForBetterAuthUserId:
-        mocks.ensureSendLitAccountForBetterAuthUserId,
-    ensureSendLitAccountForUser: vi.fn(),
     mcpProtectedResourceMetadataUrl:
         "https://sendlit.test/.well-known/oauth-protected-resource/mcp",
     mcpResourceUrl: "https://sendlit.test/mcp",
@@ -115,7 +110,6 @@ async function request(
 describe("REST bearer token authentication", () => {
     beforeEach(async () => {
         await truncateAll(tdb);
-        mocks.ensureSendLitAccountForBetterAuthUserId.mockReset();
         mocks.verifyAccessToken.mockReset();
     });
 
@@ -128,28 +122,11 @@ describe("REST bearer token authentication", () => {
             account: { email: "owner@example.com" },
             contact: { email: "reader@example.com" },
         });
-        await tdb.insert(schema.teamMembers).values({
-            teamId: team.id,
-            accountId: account.id,
-            role: "owner",
-        });
-        await tdb.insert(schema.authUser).values({
-            id: "better-auth-user-1",
-            email: account.email,
-            name: "Owner",
-            emailVerified: true,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        });
-
         mocks.verifyAccessToken.mockResolvedValueOnce({
-            sub: "better-auth-user-1",
+            sub: account.id,
             azp: "sendlit-local-token",
             scope: "contacts:read",
         });
-        mocks.ensureSendLitAccountForBetterAuthUserId.mockResolvedValueOnce(
-            account,
-        );
 
         const response = await request(contactsRoutes, "/contacts", {
             headers: { authorization: "Bearer valid-oauth-token" },

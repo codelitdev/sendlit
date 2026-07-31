@@ -1,11 +1,15 @@
-import { getAccount, Account } from "../account/queries";
-import { getApiKeyBySecret, ApiKey } from "../apikey/queries";
+import {
+    getApiKeyBySecret,
+    getOrganizationApiKeyBySecret,
+    ApiKey,
+    OrganizationApiKey,
+} from "../apikey/queries";
+import { ensureDefaultOrganization } from "../organization/queries";
 import { getTeamMembership } from "../team/queries";
+import { getUser, User } from "../user/queries";
 import {
     auth,
     authIssuer,
-    ensureSendLitAccountForBetterAuthUserId,
-    ensureSendLitAccountForUser,
     mcpResourceUrl,
     oauthResourceClient,
     validOAuthAudiences,
@@ -31,27 +35,24 @@ export type AuthInput = {
 };
 
 export type AuthDependencies = {
-    getAccount: (id: string) => Promise<Account | null>;
+    getUser: (id: string) => Promise<User | null>;
     getApiKeyBySecret: (secret: string) => Promise<ApiKey | null>;
+    getOrganizationApiKeyBySecret: (
+        secret: string,
+    ) => Promise<OrganizationApiKey | null>;
     getBetterAuthSession: (
         headers: Record<string, string | string[] | undefined>,
-    ) => Promise<{ user: { email: string; name?: string | null } } | null>;
+    ) => Promise<{ user: { id: string } } | null>;
     verifyBetterAuthBearerToken: (
         token: string,
     ) => Promise<BearerJwtPayload | null>;
-    ensureAccountForBetterAuthUserId: (
-        userId: string,
-    ) => Promise<Account | null>;
-    ensureAccountForUser: (user: {
-        email: string;
-        name?: string | null;
-    }) => Promise<Account>;
+    ensureDefaultOrganization: (userId: string) => Promise<unknown | null>;
     /** Live re-check for a bearer token's `team_id` claim — an access token
      * can outlive a membership change (removal from a team), so the claim is
      * trusted only once this confirms it still holds. */
     getTeamMembership: (
         teamId: string,
-        accountId: string,
+        userId: string,
     ) => Promise<unknown | null>;
 };
 
@@ -59,8 +60,8 @@ export type AuthResult =
     | {
           status: "authenticated";
           kind: "oauth";
-          account: Account;
-          accountId: string;
+          user: User;
+          userId: string;
           clientId: string;
           scopes: string[];
           /** Resolved here only when the access token carries a `team_id`
@@ -74,22 +75,28 @@ export type AuthResult =
     | {
           status: "authenticated";
           kind: "session";
-          account: Account;
-          accountId: string;
+          user: User;
+          userId: string;
           clientId?: undefined;
           scopes: string[];
           teamId?: undefined;
       }
     | {
           status: "authenticated";
-          kind: "apikey";
-          /** A key has no single owning account any more (a team can have
-           * several members) — `account` is only populated for user auth. */
-          account: null;
-          accountId?: undefined;
+          kind: "team_key";
+          user: null;
+          userId?: undefined;
           apiKey: string;
-          /** A key always authenticates as exactly one, fixed team. */
           teamId: string;
+      }
+    | {
+          status: "authenticated";
+          kind: "organization_key";
+          user: null;
+          userId?: undefined;
+          organizationId: string;
+          organizationApiKeyId: string;
+          organizationScopes: string[];
       }
     | { status: "invalid_token" }
     | { status: "unauthorized" }
@@ -144,12 +151,13 @@ export function sendAuthError(
 }
 
 const defaultDependencies: AuthDependencies = {
-    getAccount,
+    getUser,
     getApiKeyBySecret,
+    getOrganizationApiKeyBySecret,
     async getBetterAuthSession(headers) {
         return auth.api.getSession({
             headers: fromNodeHeaders(headers),
-        }) as Promise<{ user: { email: string; name?: string | null } } | null>;
+        }) as Promise<{ user: { id: string } } | null>;
     },
     async verifyBetterAuthBearerToken(token) {
         try {
@@ -172,8 +180,7 @@ const defaultDependencies: AuthDependencies = {
             return null;
         }
     },
-    ensureAccountForBetterAuthUserId: ensureSendLitAccountForBetterAuthUserId,
-    ensureAccountForUser: ensureSendLitAccountForUser,
+    ensureDefaultOrganization,
     getTeamMembership,
 };
 
@@ -192,21 +199,36 @@ export async function resolveAuth(
     if (authorization) {
         const match = authorization.match(/^Bearer (.+)$/i);
         if (match) {
+            if (match[1].startsWith("sl_org_live_")) {
+                const organizationKey =
+                    await dependencies.getOrganizationApiKeyBySecret(match[1]);
+                if (!organizationKey) return { status: "unauthorized" };
+                return {
+                    status: "authenticated",
+                    kind: "organization_key",
+                    user: null,
+                    organizationId: organizationKey.organizationId,
+                    organizationApiKeyId: organizationKey.organizationApiKeyId,
+                    organizationScopes: organizationKey.scopes,
+                };
+            }
+
             const claims = await dependencies.verifyBetterAuthBearerToken(
                 match[1],
             );
             if (!claims?.sub) return { status: "invalid_token" };
 
-            const account = await dependencies.ensureAccountForBetterAuthUserId(
-                claims.sub,
-            );
-            if (!account) return { status: "unauthorized" };
+            const user = await dependencies.getUser(claims.sub);
+            if (!user) return { status: "unauthorized" };
+            if (!(await dependencies.ensureDefaultOrganization(user.id))) {
+                return { status: "unauthorized" };
+            }
 
             const teamId = claims.team_id
                 ? await (async () => {
                       const membership = await dependencies.getTeamMembership(
                           claims.team_id!,
-                          account.id,
+                          user.id,
                       );
                       // A membership can be revoked after the token was
                       // minted — an unverifiable claim is dropped, not
@@ -218,8 +240,8 @@ export async function resolveAuth(
             return {
                 status: "authenticated",
                 kind: "oauth",
-                account,
-                accountId: account.id,
+                user,
+                userId: user.id,
                 clientId: String(claims.azp || "better-auth"),
                 scopes:
                     typeof claims.scope === "string"
@@ -238,8 +260,8 @@ export async function resolveAuth(
 
         return {
             status: "authenticated",
-            kind: "apikey",
-            account: null,
+            kind: "team_key",
+            user: null,
             apiKey: submittedApiKey,
             teamId: apiKey.teamId,
         };
@@ -247,17 +269,18 @@ export async function resolveAuth(
 
     if (input.headers) {
         const session = await dependencies.getBetterAuthSession(input.headers);
-        if (session?.user?.email) {
-            const account = await dependencies.ensureAccountForUser({
-                email: session.user.email,
-                name: session.user.name,
-            });
+        if (session?.user?.id) {
+            const user = await dependencies.getUser(session.user.id);
+            if (!user) return { status: "unauthorized" };
+            if (!(await dependencies.ensureDefaultOrganization(user.id))) {
+                return { status: "unauthorized" };
+            }
 
             return {
                 status: "authenticated",
                 kind: "session",
-                account,
-                accountId: account.id,
+                user,
+                userId: user.id,
                 scopes: ["web"],
             };
         }

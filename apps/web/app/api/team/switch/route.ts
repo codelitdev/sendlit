@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { safeAppRedirect } from "@/lib/safe-app-redirect";
-import { TEAM_ID_COOKIE } from "@/lib/tokens";
+import { ORGANIZATION_ID_COOKIE, TEAM_ID_COOKIE } from "@/lib/tokens";
 
 /**
  * Sets which team the dashboard is "in" — a plain cookie (not a secret; the
@@ -16,6 +16,7 @@ import { TEAM_ID_COOKIE } from "@/lib/tokens";
 export async function POST(req: NextRequest) {
     const form = await req.formData();
     const teamId = String(form.get("teamId") || "");
+    const organizationId = String(form.get("organizationId") || "");
     const redirectTo = String(form.get("redirectTo") || "/");
 
     // 303: after a form POST, follow the redirect with GET (not re-POST).
@@ -33,6 +34,15 @@ export async function POST(req: NextRequest) {
             path: "/",
             maxAge: 60 * 60 * 24 * 365,
         });
+        if (organizationId) {
+            res.cookies.set(ORGANIZATION_ID_COOKIE, organizationId, {
+                httpOnly: false,
+                sameSite: "lax",
+                secure: isProd,
+                path: "/",
+                maxAge: 60 * 60 * 24 * 365,
+            });
+        }
     }
     return res;
 }

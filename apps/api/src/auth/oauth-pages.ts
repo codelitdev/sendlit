@@ -1,15 +1,11 @@
 import express, { Router, Response } from "express";
 import { fromNodeHeaders } from "better-auth/node";
-import {
-    auth,
-    ensureSendLitAccountForBetterAuthUserId,
-    webClientUrl,
-} from "./better-auth";
+import { auth, webClientUrl } from "./better-auth";
 import {
     getOAuthTeamSelection,
     getTeamByTeamId,
     getTeamMembership,
-    listTeamsForAccount,
+    listTeamsForUser,
     setOAuthTeamSelection,
     type Team,
 } from "../team/queries";
@@ -430,10 +426,7 @@ router.get("/oauth/select-team", async (req, res) => {
         return;
     }
 
-    const account = await ensureSendLitAccountForBetterAuthUserId(
-        session.user.id,
-    );
-    const teams = account ? await listTeamsForAccount(account.id) : [];
+    const teams = await listTeamsForUser(session.user.id);
     if (!needsTeamSelection(teams)) {
         // Nothing to pick (account only has one team, or none) — this
         // shouldn't normally be reachable since `shouldRedirect` already
@@ -563,14 +556,6 @@ router.post("/oauth/select-team", express.json(), async (req, res) => {
         return;
     }
 
-    const account = await ensureSendLitAccountForBetterAuthUserId(
-        session.user.id,
-    );
-    if (!account) {
-        res.status(401).json({ error: "unauthorized" });
-        return;
-    }
-
     const publicTeamId =
         typeof req.body?.teamId === "string" ? req.body.teamId : undefined;
     if (!publicTeamId) {
@@ -590,7 +575,7 @@ router.post("/oauth/select-team", express.json(), async (req, res) => {
         return;
     }
 
-    const membership = await getTeamMembership(team.id, account.id);
+    const membership = await getTeamMembership(team.id, session.user.id);
     if (!membership) {
         res.status(403).json({
             error: "not_a_team_member",
@@ -623,19 +608,14 @@ router.get("/oauth/consent", async (req, res) => {
     const session = await getRequestSession(req);
     let teamName: string | undefined;
     if (session?.user) {
-        const account = await ensureSendLitAccountForBetterAuthUserId(
-            session.user.id,
-        );
-        if (account) {
-            const [teams, selectedTeamId] = await Promise.all([
-                listTeamsForAccount(account.id),
-                getOAuthTeamSelection(session.session.id),
-            ]);
-            const team = needsTeamSelection(teams)
-                ? teams.find((t) => t.id === selectedTeamId)
-                : teams[0];
-            teamName = team?.name;
-        }
+        const [teams, selectedTeamId] = await Promise.all([
+            listTeamsForUser(session.user.id),
+            getOAuthTeamSelection(session.session.id),
+        ]);
+        const team = needsTeamSelection(teams)
+            ? teams.find((t) => t.id === selectedTeamId)
+            : teams[0];
+        teamName = team?.name;
     }
 
     const body = `

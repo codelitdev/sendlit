@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { deliverySourceSelectionSchema } from "./delivery";
 
 export const transactionalEmailStatus = [
     "queued",
@@ -77,7 +78,7 @@ export const sendEmailBodySchema = z
         idempotencyKey: z.string().min(1).max(256).optional(),
         trackOpens: z.boolean().optional(),
         trackClicks: z.boolean().optional(),
-        espId: z.string().min(1).optional(),
+        deliverySource: deliverySourceSelectionSchema.optional(),
     })
     .refine((body) => !!body.templateId !== !!body.html, {
         message: "Provide exactly one of templateId or html",

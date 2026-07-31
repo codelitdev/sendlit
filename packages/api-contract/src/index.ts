@@ -9,6 +9,8 @@ export * from "./schemas/transactional";
 export * from "./schemas/esp";
 export * from "./schemas/settings";
 export * from "./schemas/teams";
+export * from "./schemas/organizations";
+export * from "./schemas/delivery";
 export * from "./schemas/media";
 export * from "./schemas/feedback";
 export * from "./schemas/delivery-events";
