@@ -1036,6 +1036,7 @@ feedback_invalid_credentials
 feedback_test_failed
 feedback_connection_retiring
 esp_not_found
+esp_not_active
 recipient_suppressed
 suppression_not_releasable
 suppression_not_found

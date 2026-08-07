@@ -9,6 +9,25 @@ Use OAuth2 for user-authorized app integrations. Use a team API key for
 team-scoped server-to-server integrations. Use an organization API key for
 trusted platform provisioning and organization administration.
 
+## OAuth2 for user-authorized integrations
+
+OAuth2 is intended for integrations acting on behalf of a SendLit user. The
+authorization server is hosted by the SendLit API under `/api/auth/oauth2/*`.
+Discover its metadata before beginning authorization:
+
+```text
+GET /.well-known/oauth-authorization-server
+GET /.well-known/openid-configuration
+```
+
+MCP clients may use Dynamic Client Registration to create a public client. A
+registered public client must use Authorization Code with S256 PKCE. It may
+request only SendLit's supported scopes: `openid`, `profile`, `email`,
+`offline_access`, contact, template, media, broadcast, and sequence scopes.
+Unauthenticated registration is rate-limited to 20 requests per IP per minute.
+For a multi-team account, SendLit asks the user to choose the team during the
+OAuth flow; the resulting token is restricted to that chosen team.
+
 ## API keys
 
 API keys look like `sl_live_...` followed by a random secret, and are sent via the `x-sendlit-apikey` header. The `sl_live_` prefix makes leaked keys detectable by secret scanners, so treat anything matching it as a credential.

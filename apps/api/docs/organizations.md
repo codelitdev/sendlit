@@ -2160,31 +2160,32 @@ content, or unredacted webhook credentials.
 
 ## Failure semantics
 
-| Status | Code                                | Meaning                                              |
-| ------ | ----------------------------------- | ---------------------------------------------------- |
-| 400    | `invalid_delivery_source`           | Malformed/conflicting selection                      |
-| 401    | `invalid_organization_key`          | Missing, invalid, expired, or revoked key            |
-| 403    | `organization_scope_required`       | Key lacks required scope                             |
-| 403    | `not_an_organization_member`        | User has no membership                               |
-| 403    | `team_esp_disabled`                 | Organization policy forbids team ESP mutation/use    |
-| 403    | `organization_delivery_disabled`    | Team lacks an active organization grant              |
-| 403    | `team_sending_suspended`            | Team cannot dispatch                                 |
-| 404    | `organization_not_found`            | Missing/inaccessible organization                    |
-| 404    | `esp_not_found`                     | Missing/foreign ESP in the relevant owner scope      |
-| 409    | `provisioning_conflict`             | External ID exists with conflicting immutable fields |
-| 409    | `delivery_source_in_use`            | Unsafe source disable/delete                         |
-| 409    | `invalid_lifecycle_transition`      | ESP/grant transition is not permitted                |
-| 409    | `last_organization_owner`           | Operation would leave no owner                       |
-| 422    | `delivery_source_required`          | No unambiguous default                               |
-| 422    | `delivery_source_unavailable`       | Team has no active shared or team-owned source       |
-| 422    | `organization_esp_unavailable`      | Grant/ESP cannot currently send                      |
-| 422    | `esp_verification_required`         | ESP changed or has not passed its latest test        |
-| 422    | `provider_capability_required`      | Provider lacks a required organization capability    |
-| 422    | `team_esp_not_configured`           | Team source selected without ESP                     |
-| 422    | `sender_unverified`                 | Selected sender is not usable                        |
-| 429    | `organization_team_quota_exhausted` | Grant quota exhausted                                |
-| 429    | `organization_quota_exhausted`      | Aggregate organization quota exhausted               |
-| 503    | `user_onboarding_pending`           | Default organization bootstrap has not completed     |
+| Status | Code                                | Meaning                                                        |
+| ------ | ----------------------------------- | -------------------------------------------------------------- |
+| 400    | `invalid_delivery_source`           | Malformed/conflicting selection                                |
+| 401    | `invalid_organization_key`          | Missing, invalid, expired, or revoked key                      |
+| 403    | `organization_scope_required`       | Key lacks required scope                                       |
+| 403    | `not_an_organization_member`        | User has no membership                                         |
+| 403    | `team_esp_disabled`                 | Organization policy forbids team ESP mutation/use              |
+| 403    | `organization_delivery_disabled`    | Team lacks an active organization grant                        |
+| 403    | `team_sending_suspended`            | Team cannot dispatch                                           |
+| 404    | `organization_not_found`            | Missing/inaccessible organization                              |
+| 404    | `esp_not_found`                     | Missing/foreign ESP in the relevant owner scope                |
+| 409    | `provisioning_conflict`             | External ID exists with conflicting immutable fields           |
+| 409    | `delivery_source_in_use`            | Unsafe source disable/delete                                   |
+| 409    | `invalid_lifecycle_transition`      | ESP/grant transition is not permitted                          |
+| 409    | `last_organization_owner`           | Operation would leave no owner                                 |
+| 422    | `delivery_source_required`          | No unambiguous default                                         |
+| 422    | `delivery_source_unavailable`       | Team has no active shared or team-owned source                 |
+| 422    | `organization_esp_unavailable`      | Grant/ESP cannot currently send                                |
+| 422    | `esp_verification_required`         | ESP changed or has not passed its latest test                  |
+| 422    | `esp_not_active`                    | Team ESP exists but must be activated before default selection |
+| 422    | `provider_capability_required`      | Provider lacks a required organization capability              |
+| 422    | `team_esp_not_configured`           | Team source selected without ESP                               |
+| 422    | `sender_unverified`                 | Selected sender is not usable                                  |
+| 429    | `organization_team_quota_exhausted` | Grant quota exhausted                                          |
+| 429    | `organization_quota_exhausted`      | Aggregate organization quota exhausted                         |
+| 503    | `user_onboarding_pending`           | Default organization bootstrap has not completed               |
 
 ## REST, OpenAPI, MCP, and web requirements
 

@@ -20,6 +20,7 @@
     },
     "dependencies": {
         "@better-auth/oauth-provider": "^1.6.23",
+        "@codelitdev/oauth-server-kit": "0.1.0-alpha.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@sendlit/api-contract": "workspace:*",
         "@sendlit/email-blocks": "workspace:*",

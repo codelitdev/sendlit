@@ -38,6 +38,12 @@ GET /.well-known/openid-configuration
 
 OAuth authorization, consent, token, introspection, revocation, and userinfo endpoints are provided under `/api/auth/oauth2/*`.
 
+MCP clients may dynamically register a public OAuth client. Use Authorization
+Code with S256 PKCE, request only the scopes your client needs, and keep any
+refresh token in the client's secure credential store. Dynamic registration
+does not grant access by itself: every authorization still requires a SendLit
+user to sign in, select a team when necessary, and approve consent.
+
 API keys always select one fixed team. Dashboard-session clients that can access multiple teams must provide `X-Sendlit-Team-Id`; clients with exactly one team may omit it.
 
 OAuth clients (including MCP clients like Claude) have no way to send a custom header during authorization, so a multi-team account instead picks a team as part of the OAuth flow itself: after login, and before the consent screen, the account is shown a "select a team" step (mirroring how apps like Notion resolve their own multi-workspace ambiguity). The chosen team is baked into the issued access token and used for every subsequent request — no header needed. Accounts with exactly one team skip this step entirely.

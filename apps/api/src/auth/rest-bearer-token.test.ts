@@ -12,7 +12,7 @@ vi.mock("../db/client", async () => {
 const tdb = db as unknown as TestDb;
 
 const mocks = vi.hoisted(() => ({
-    verifyAccessToken: vi.fn(),
+    verifyOAuthAccessToken: vi.fn(),
 }));
 
 vi.mock("./better-auth", () => ({
@@ -26,11 +26,11 @@ vi.mock("./better-auth", () => ({
         "https://sendlit.test/.well-known/oauth-protected-resource/mcp",
     mcpResourceUrl: "https://sendlit.test/mcp",
     validOAuthAudiences: ["https://sendlit.test", "https://sendlit.test/mcp"],
-    oauthResourceClient: {
-        getActions: vi.fn(() => ({
-            verifyAccessToken: mocks.verifyAccessToken,
-        })),
-    },
+    oauthResourceClient: {},
+}));
+
+vi.mock("@codelitdev/oauth-server-kit", () => ({
+    verifyOAuthAccessToken: mocks.verifyOAuthAccessToken,
 }));
 
 vi.mock("better-auth/node", () => ({
@@ -110,7 +110,7 @@ async function request(
 describe("REST bearer token authentication", () => {
     beforeEach(async () => {
         await truncateAll(tdb);
-        mocks.verifyAccessToken.mockReset();
+        mocks.verifyOAuthAccessToken.mockReset();
     });
 
     afterAll(async () => {
@@ -122,10 +122,16 @@ describe("REST bearer token authentication", () => {
             account: { email: "owner@example.com" },
             contact: { email: "reader@example.com" },
         });
-        mocks.verifyAccessToken.mockResolvedValueOnce({
-            sub: account.id,
-            azp: "sendlit-local-token",
-            scope: "contacts:read",
+        mocks.verifyOAuthAccessToken.mockResolvedValueOnce({
+            status: "authenticated",
+            identity: {
+                method: "oauth",
+                issuer: "https://sendlit.test/api/auth",
+                subject: account.id,
+                clientId: "sendlit-local-token",
+                scopes: ["contacts:read"],
+                audiences: ["https://sendlit.test"],
+            },
         });
 
         const response = await request(contactsRoutes, "/contacts", {
@@ -142,9 +148,9 @@ describe("REST bearer token authentication", () => {
                 },
             ],
         });
-        expect(mocks.verifyAccessToken).toHaveBeenCalledWith(
-            "valid-oauth-token",
+        expect(mocks.verifyOAuthAccessToken).toHaveBeenCalledWith(
             expect.any(Object),
+            "valid-oauth-token",
         );
     });
 });

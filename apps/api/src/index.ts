@@ -3,6 +3,7 @@ loadDotFile();
 
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import { toNodeHandler } from "better-auth/node";
 import logger from "./services/log";
@@ -56,6 +57,23 @@ startDeliveryLifecycleJobs();
 app.set("trust proxy", process.env.ENABLE_TRUST_PROXY === "true" ? 1 : false);
 
 app.use(cors());
+// MCP clients use public dynamic client registration (DCR) during their first
+// OAuth connection. Keep that standards-based bootstrap available, while
+// bounding anonymous client creation independently from authenticated API
+// traffic. Better Auth still validates the allowed scopes and PKCE below.
+app.use(
+    "/api/auth/oauth2/register",
+    rateLimit({
+        windowMs: 60_000,
+        max: 20,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: {
+            error: "too_many_requests",
+            error_description: "Too many client registration requests.",
+        },
+    }),
+);
 app.all("/api/auth/*", toNodeHandler(auth));
 app.use(oauthPagesRoutes);
 // Mounted before global body parsing: this route needs the unmodified raw

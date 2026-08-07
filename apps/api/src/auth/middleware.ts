@@ -1,13 +1,13 @@
-import { NextFunction, Response } from "express";
-import { AuthResult, resolveAuth, sendAuthError } from "./resolve-auth";
+import type { NextFunction, Request, Response } from "express";
+import {
+    type AuthInput,
+    type AuthResult,
+    resolveAuth,
+    sendAuthError,
+} from "./resolve-auth";
 import { mcpProtectedResourceMetadataUrl } from "./better-auth";
 
-type AuthResolver = (input: {
-    authorization?: unknown;
-    apiKeyHeader?: unknown;
-    bodyApiKey?: unknown;
-    headers?: Record<string, string | string[] | undefined>;
-}) => Promise<AuthResult>;
+type AuthResolver = (input: AuthInput) => Promise<AuthResult>;
 
 type AuthMiddlewareMode = "rest" | "mcp";
 
@@ -53,22 +53,29 @@ export function createAuthMiddleware(
     resourceMetadataUrl?: string,
 ) {
     return async function authMiddleware(
-        req: any,
+        req: Request,
         res: Response,
         next: NextFunction,
     ): Promise<void> {
-        const auth = await authResolver({
-            authorization: req.headers.authorization,
-            apiKeyHeader: req.headers["x-sendlit-apikey"],
-            bodyApiKey: req.body?.apikey,
-            headers: req.headers,
-        });
+        try {
+            const auth = await authResolver({
+                authorization: req.headers.authorization,
+                apiKeyHeader: req.headers["x-sendlit-apikey"],
+                bodyApiKey: req.body?.apikey,
+                headers: req.headers,
+            });
 
-        if (sendAuthError(res, auth, resourceMetadataUrl)) return;
-        if (auth.status !== "authenticated") return;
+            if (sendAuthError(res, auth, resourceMetadataUrl)) return;
+            if (auth.status !== "authenticated") return;
 
-        applyAuthToRequest(req, auth, mode);
-        next();
+            applyAuthToRequest(req, auth, mode);
+            if (auth.kind === "oauth" || auth.kind === "session") {
+                req.auth = auth.identity;
+            }
+            next();
+        } catch (error) {
+            next(error);
+        }
     };
 }
 

@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
     listEspConfigs: vi.fn(),
     createEspConfig: vi.fn(),
     getEspConfigByEspId: vi.fn(),
+    transitionEspConfig: vi.fn(),
     updateEspConfig: vi.fn(),
     invalidateTeamTransport: vi.fn(),
     invalidateEspTransport: vi.fn(),
@@ -118,6 +119,7 @@ vi.mock("../../settings/esp/queries", () => ({
     listEspConfigs: mocks.listEspConfigs,
     createEspConfig: mocks.createEspConfig,
     getEspConfigByEspId: mocks.getEspConfigByEspId,
+    transitionEspConfig: mocks.transitionEspConfig,
     updateEspConfig: mocks.updateEspConfig,
 }));
 
@@ -567,6 +569,34 @@ describe("MCP ESP tools", () => {
         );
         expect(mocks.sendTestMail).toHaveBeenCalled();
         expect(result.structuredContent).toMatchObject({ success: true });
+    });
+
+    it("activates a verified user-managed ESP", async () => {
+        const tools = makeToolRegistry(registerEspTools);
+        const config = {
+            id: "internal-2",
+            espId: "esp_2",
+            status: "draft",
+            provider: "smtp",
+        };
+        mocks.getEspConfigByEspId.mockResolvedValue(config);
+        mocks.transitionEspConfig.mockResolvedValue({
+            ...config,
+            status: "active",
+        });
+
+        const result = await tools
+            .get("activate_esp")!
+            .handler({ espId: "esp_2" }, auth);
+
+        expect(mocks.transitionEspConfig).toHaveBeenCalledWith(
+            config,
+            "activate",
+        );
+        expect(result.structuredContent).toMatchObject({
+            espId: "esp_2",
+            status: "active",
+        });
     });
 });
 

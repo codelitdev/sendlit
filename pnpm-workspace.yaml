@@ -12,6 +12,7 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - '@codelitdev/design-system@0.1.0-alpha.0 || 0.1.0-alpha.2 || 0.1.0-alpha.3 || 0.1.0-alpha.4 || 0.1.0-alpha.5 || 0.1.0-alpha.6'
+  - '@codelitdev/oauth-server-kit@0.1.0-alpha.0'
 
 overrides:
   "@types/node": ^22.14.1

@@ -731,18 +731,18 @@ export async function updateTeamDeliverySource(
     } else {
         if (!setting.teamEspEnabled) throw new Error("team_esp_disabled");
         const [esp] = await db
-            .select({ id: espConfigs.id })
+            .select({ id: espConfigs.id, status: espConfigs.status })
             .from(espConfigs)
             .where(
                 and(
                     eq(espConfigs.teamId, teamId),
                     eq(espConfigs.ownerScope, "team"),
                     eq(espConfigs.espId, source.espId),
-                    eq(espConfigs.status, "active"),
                 ),
             )
             .limit(1);
         if (!esp) throw new Error("esp_not_found");
+        if (esp.status !== "active") throw new Error("esp_not_active");
         await db
             .update(teamDeliverySettings)
             .set({

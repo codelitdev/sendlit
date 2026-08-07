@@ -1,16 +1,33 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import {
-    oauthProviderAuthServerMetadata,
-    oauthProviderOpenIdConfigMetadata,
-} from "@better-auth/oauth-provider";
+import { createMcpOAuthDiscoveryRoutes } from "@codelitdev/oauth-server-kit/mcp";
 import { mcpAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { auth, mcpResourceUrl, oauthResourceClient } from "../auth/better-auth";
 import { createMCPSession } from "./server";
 
 const router = Router();
+
+router.use(
+    createMcpOAuthDiscoveryRoutes({
+        auth,
+        resourceUrl: mcpResourceUrl,
+        oauthResourceClient,
+        scopesSupported: [
+            "contacts:read",
+            "contacts:write",
+            "templates:read",
+            "templates:write",
+            "media:read",
+            "media:write",
+            "broadcasts:write",
+            "sequences:read",
+            "sequences:write",
+        ],
+        allowedOrigins: "*",
+    }),
+);
 
 const mcpLimiter = rateLimit({
     windowMs: 60_000,
@@ -78,80 +95,6 @@ function getMcpAuth(req: any) {
         scopes: (req.scopes as string[] | undefined) || [],
     };
 }
-
-function sendFetchResponse(res: any, response: Response) {
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-    return response.text().then((body) => res.send(body));
-}
-
-router.use(["/.well-known"], mcpCors);
-
-router.get(
-    "/.well-known/oauth-authorization-server",
-    mcpCors,
-    async (req, res) => {
-        const response = await oauthProviderAuthServerMetadata(auth)(
-            new Request(
-                `${req.protocol}://${req.get("host")}${req.originalUrl}`,
-                {
-                    headers: req.headers as HeadersInit,
-                },
-            ),
-        );
-        await sendFetchResponse(res, response);
-    },
-);
-
-router.get("/.well-known/openid-configuration", mcpCors, async (req, res) => {
-    const response = await oauthProviderOpenIdConfigMetadata(auth)(
-        new Request(`${req.protocol}://${req.get("host")}${req.originalUrl}`, {
-            headers: req.headers as HeadersInit,
-        }),
-    );
-    await sendFetchResponse(res, response);
-});
-
-async function protectedResourceMetadataHandler(_req: any, res: any) {
-    const metadata = await oauthResourceClient
-        .getActions()
-        .getProtectedResourceMetadata(
-            {
-                resource: mcpResourceUrl,
-                scopes_supported: [
-                    "contacts:read",
-                    "contacts:write",
-                    "templates:read",
-                    "templates:write",
-                    "media:read",
-                    "media:write",
-                    "broadcasts:write",
-                    "sequences:read",
-                    "sequences:write",
-                ],
-                bearer_methods_supported: ["header"],
-            },
-            { silenceWarnings: { oidcScopes: true } },
-        );
-    res.json(metadata);
-}
-
-// Registered at both the bare path (some clients look here first) and the
-// RFC 9728-canonical path derived from `mcpResourceUrl`'s own pathname
-// (`<origin>/.well-known/oauth-protected-resource/mcp`) — without the latter,
-// spec-compliant clients silently fail to discover this resource's metadata
-// (confirmed: this is exactly what broke VS Code's MCP OAuth flow) and never
-// learn to request a token scoped with `resource=mcpResourceUrl`.
-router.get(
-    "/.well-known/oauth-protected-resource",
-    mcpCors,
-    protectedResourceMetadataHandler,
-);
-router.get(
-    "/.well-known/oauth-protected-resource/mcp",
-    mcpCors,
-    protectedResourceMetadataHandler,
-);
 
 router.post(
     "/mcp",

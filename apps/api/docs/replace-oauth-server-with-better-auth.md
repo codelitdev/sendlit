@@ -3,6 +3,21 @@
 **Objective**
 Replace SendLit’s custom OAuth2/auth implementation with Better Auth to support secure first-party web login, MCP OAuth, REST API authentication, and social login with Google plus Email OTP.
 
+**Implementation status**
+
+Better Auth remains SendLit's product-local authorization server and owns its
+users, sessions, OAuth clients, consent, signing keys, and database adapter.
+The shared `@codelitdev/oauth-server-kit` now owns the reusable protocol layer:
+safe OAuth-provider defaults, hosted login/consent pages, session and bearer
+authentication results, and MCP/OAuth discovery metadata. SendLit continues to
+own organization keys, team keys, organization provisioning, team membership,
+multi-team OAuth selection, and authorization after authentication.
+
+MCP Dynamic Client Registration (DCR) is intentionally enabled. Clients may
+register public OAuth clients without prior credentials, but registration is
+limited to SendLit's declared OAuth scopes; public clients must use PKCE.
+Unauthenticated registration is rate-limited to 20 requests per IP per minute.
+
 **Background**
 SendLit currently has a custom OAuth2 implementation in `apps/api/src/oauth/*` and a BFF session/token flow in `apps/web/app/api/auth/*` and `apps/web/app/api/proxy/[...path]/route.ts`.
 
@@ -248,14 +263,20 @@ type AuthResult =
 
 Resolution order:
 
-1. API key if `x-sendlit-apikey` is present.
-2. OAuth bearer token if `Authorization: Bearer` is present.
-3. Better Auth session if cookies are present.
-4. Missing/unauthorized.
+1. An explicit organization key when `Authorization: Bearer sl_org_live_...`
+   is present.
+2. An OAuth bearer token for every other explicit `Authorization: Bearer`
+   credential.
+3. A team API key from `x-sendlit-apikey` or the legacy request body field.
+4. A Better Auth session if cookies are present.
+5. Missing/unauthorized.
 
 Important:
 
 - Invalid bearer token must not fall back to API key.
+- An organization key is SendLit product authentication, not an OAuth token;
+  it is accepted only for its explicit `sl_org_live_...` prefix and is then
+  authorized by its own SendLit scopes.
 - API key must remain team-scoped.
 - Session/OAuth account auth must still pass through team membership checks.
 
@@ -266,8 +287,10 @@ Important:
 - Dashboard must not store bearer tokens in localStorage.
 - OAuth public clients must use PKCE.
 - Dynamic client registration must be intentionally configured:
-    - unrestricted only if MCP requires it;
-    - otherwise require authenticated/admin registration.
+    - SendLit permits unauthenticated public-client registration for MCP;
+    - registration is limited to the declared OAuth scopes;
+    - public clients must use PKCE and registration is limited to 20 requests
+      per IP per minute.
 - Access tokens must have clear audience/resource validation.
 - OAuth scopes must map to SendLit permissions.
 - Login and consent pages must set anti-clickjacking headers:

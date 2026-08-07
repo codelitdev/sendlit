@@ -634,6 +634,12 @@ export function testEsp(espId: string, to?: string) {
     );
 }
 
+export function activateEsp(espId: string) {
+    return unwrap<EspConfig>(
+        client.settings.esps.activate({ params: { espId } }),
+    );
+}
+
 // ---- Bounce/complaint delivery feedback ------------------------------------
 
 /** Providers with a reviewed webhook adapter — see

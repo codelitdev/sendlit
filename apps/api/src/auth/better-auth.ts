@@ -4,17 +4,22 @@ import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
+import { createOAuthProviderOptions } from "@codelitdev/oauth-server-kit/better-auth";
+import type { HostedLoginMethod } from "@codelitdev/oauth-server-kit/express";
 import { createTransport } from "nodemailer";
 import { db } from "../db/client";
 import * as schema from "../db/schema";
 import logger from "../services/log";
 import { ensureDefaultOrganization } from "../organization/queries";
-import { getOAuthTeamSelection, listTeamsForUser } from "../team/queries";
+import {
+    createSendLitOAuthTeamSelectionHooks,
+    oauthTeamSelectionAdapter,
+} from "./oauth-team-selection";
 
 export const webClientUrl = process.env.WEB_CLIENT || "http://localhost:3000";
 const apiUrl = process.env.API_PUBLIC_URL || process.env.BETTER_AUTH_URL;
 const authBaseUrl = apiUrl || "http://localhost:5000";
-const authBasePath = "/api/auth";
+export const authBasePath = "/api/auth";
 
 /** Parent domain shared by `apps/web` and `apps/api` in production (e.g.
  * `sendlit.example.com`, covering both `app.sendlit.example.com` and
@@ -93,28 +98,20 @@ async function sendOtpEmail(email: string, otp: string) {
     });
 }
 
-/** The internal team id an OAuth end-user picked on `/oauth/select-team`
- * (`null` for a single-team user, which never sees that screen — see
- * `oauthPostLoginTeamSelections` in `db/schema.ts`). Shared by
- * `postLogin.shouldRedirect` and `postLogin.consentReferenceId` below so both
- * always agree on the same account/selection lookup. */
-async function resolveOAuthTeamSelection(
-    userId: string,
-    sessionId: string,
-): Promise<{ requiresSelection: boolean; selectedTeamId: string | null }> {
-    const teams = await listTeamsForUser(userId);
-    if (teams.length <= 1) {
-        return { requiresSelection: false, selectedTeamId: null };
-    }
+export { oauthTeamSelectionAdapter };
 
-    const selectedTeamId = await getOAuthTeamSelection(sessionId);
-    const stillValid =
-        selectedTeamId != null && teams.some((t) => t.id === selectedTeamId);
-    return {
-        requiresSelection: !stillValid,
-        selectedTeamId: stillValid ? selectedTeamId : null,
-    };
-}
+export const hostedLoginMethods: HostedLoginMethod[] = [
+    { type: "email-otp" },
+    ...(googleClientId && googleClientSecret
+        ? [
+              {
+                  type: "social" as const,
+                  providerId: "google",
+                  label: "Continue with Google",
+              },
+          ]
+        : []),
+];
 
 export const auth = betterAuth({
     appName: "SendLit",
@@ -180,57 +177,47 @@ export const auth = betterAuth({
         }),
         jwt(),
         oauthProvider({
-            // Self-hosted by this API (see ./oauth-pages.ts), not the web
-            // dashboard — so a new MCP/OAuth client can complete its first
-            // authorization even where the web app isn't deployed at all.
-            loginPage: `${authBaseUrl}/oauth/login`,
-            consentPage: `${authBaseUrl}/oauth/consent`,
-            allowDynamicClientRegistration: true,
-            allowUnauthenticatedClientRegistration: true,
-            scopes: [
-                "openid",
-                "profile",
-                "email",
-                "offline_access",
-                "contacts:read",
-                "contacts:write",
-                "templates:read",
-                "templates:write",
-                "media:read",
-                "media:write",
-                "broadcasts:write",
-                "sequences:read",
-                "sequences:write",
-            ],
-            validAudiences: validOAuthAudiences,
-            // Interposed between login and consent for a multi-team account
-            // (self-hosted at ./oauth-pages.ts, mirroring Notion's "select a
-            // workspace" step) — an OAuth/MCP client has no standard way to
-            // tell SendLit which team to scope its access to, so this is the
-            // only point in the flow where that can be resolved.
-            postLogin: {
+            ...createOAuthProviderOptions({
+                loginPage: `${authBaseUrl}/oauth/login`,
+                consentPage: `${authBaseUrl}/oauth/consent`,
+                // MCP clients may register their own public OAuth client.
+                // Registration is constrained to SendLit's supported scopes.
+                allowDynamicClientRegistration: true,
+                allowUnauthenticatedDynamicClientRegistration: true,
+                scopes: [
+                    "openid",
+                    "profile",
+                    "email",
+                    "offline_access",
+                    "contacts:read",
+                    "contacts:write",
+                    "templates:read",
+                    "templates:write",
+                    "media:read",
+                    "media:write",
+                    "broadcasts:write",
+                    "sequences:read",
+                    "sequences:write",
+                ],
+                validAudiences: validOAuthAudiences,
+                clientRegistrationDefaultScopes: ["openid", "profile", "email"],
+                clientRegistrationAllowedScopes: [
+                    "offline_access",
+                    "contacts:read",
+                    "contacts:write",
+                    "templates:read",
+                    "templates:write",
+                    "media:read",
+                    "media:write",
+                    "broadcasts:write",
+                    "sequences:read",
+                    "sequences:write",
+                ],
+            }),
+            ...createSendLitOAuthTeamSelectionHooks({
                 page: `${authBaseUrl}/oauth/select-team`,
-                shouldRedirect: async ({ user, session }) => {
-                    const { requiresSelection } =
-                        await resolveOAuthTeamSelection(user.id, session.id);
-                    return requiresSelection;
-                },
-                consentReferenceId: async ({ user, session }) => {
-                    const { selectedTeamId } = await resolveOAuthTeamSelection(
-                        user.id,
-                        session.id,
-                    );
-                    return selectedTeamId ?? undefined;
-                },
-            },
-            // Carries the picked team (the `referenceId` above) onto the
-            // minted access token so `resolve-auth.ts` can scope a request
-            // without relying on `X-Sendlit-Team-Id`, which generic OAuth
-            // clients never send. Single-team accounts have no referenceId
-            // and fall back to `require-team.ts`'s existing auto-select.
-            customAccessTokenClaims: async ({ referenceId }) => {
-                return referenceId ? { team_id: referenceId } : {};
-            },
+                adapter: oauthTeamSelectionAdapter,
+            }),
         }),
     ],
 });

@@ -30,6 +30,7 @@ import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { Loading } from "@/components/dashboard/loading";
 import { Banner } from "@/components/dashboard/banner";
 import { EspFeedbackDialog } from "@/components/dashboard/esp-feedback-dialog";
+import { EspConfigurationDialog } from "@/components/dashboard/esp-configuration-dialog";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/codelit/button";
@@ -964,13 +965,28 @@ function SharedEspsSection({
                     webhooks are required.
                 </p>
             </CardContent>
-            <OrganizationEspFormDialog
-                organizationId={organizationId}
-                esp={editing}
+            <EspConfigurationDialog
+                open={editing !== undefined}
+                esp={editing ?? null}
                 onOpenChange={(open) => {
                     if (!open) setEditing(undefined);
                 }}
-                onChanged={onChanged}
+                createTitle="New shared ESP"
+                createLabel="Create ESP"
+                saveLabel="Save ESP"
+                namePlaceholder="CourseLit delivery"
+                onSubmit={async (input) => {
+                    if (editing) {
+                        await updateOrganizationEsp(
+                            organizationId,
+                            editing.espId,
+                            input,
+                        );
+                    } else {
+                        await createOrganizationEsp(organizationId, input);
+                    }
+                    await onChanged();
+                }}
             />
             <EspFeedbackDialog
                 esp={feedbackEsp}

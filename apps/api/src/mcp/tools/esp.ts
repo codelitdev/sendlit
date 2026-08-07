@@ -6,6 +6,7 @@ import {
     getEspConfig,
     getEspConfigByEspId,
     listEspConfigs,
+    transitionEspConfig,
     updateEspConfig,
     upsertEspConfig,
     type EspConfig,
@@ -320,6 +321,40 @@ export function registerEspTools(server: McpServer): void {
             }
             invalidateEspTransport(teamId, config.id);
             return jsonResult({ message: "ESP configuration removed." });
+        },
+    );
+
+    server.registerTool(
+        "activate_esp",
+        {
+            description:
+                "Activates a verified team-owned ESP so it can be selected as the team's default or pinned for delivery. Run test_esp successfully after the latest credential or sender change before activating.",
+            inputSchema: { espId: z.string().min(1) },
+            outputSchema: espConfigSchema,
+            annotations: {
+                readOnlyHint: false,
+                destructiveHint: false,
+                openWorldHint: false,
+            },
+        },
+        async (args: any, extra: any) => {
+            const teamId = getTeamId(extra);
+            if (!teamId) return AUTH_ERROR;
+            const config = await getEspConfigByEspId(teamId, args.espId);
+            if (!config) return NOT_FOUND;
+            try {
+                return jsonResult(
+                    toPublicShape(
+                        await transitionEspConfig(config, "activate"),
+                    ),
+                );
+            } catch (err: any) {
+                return errorResult(
+                    err.message === "esp_verification_required"
+                        ? "ESP verification is required: send a successful test after its latest configuration change, and configure a sender email."
+                        : err.message,
+                );
+            }
         },
     );
 

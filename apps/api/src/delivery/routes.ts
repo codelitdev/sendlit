@@ -73,9 +73,11 @@ const impl = s.router(contract.delivery, {
                 return { status: 403, body: { error: error.message } };
             }
             if (
-                ["esp_not_found", "organization_esp_unavailable"].includes(
-                    error.message,
-                )
+                [
+                    "esp_not_found",
+                    "esp_not_active",
+                    "organization_esp_unavailable",
+                ].includes(error.message)
             ) {
                 return { status: 422, body: { error: error.message } };
             }

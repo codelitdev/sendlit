@@ -11,3 +11,9 @@
 ## Branch management
 
 - Never push on your own. Leave it to the human.
+
+## Testing Tips
+
+- From browser based smoke testing, boot up the API and Web app using `pnpm dev:api` and `pnpm dev:web` respectively.
+- The following docker containers need to be running: `postgres`, `redis`, `mailpit` for full integration testing.
+- Prefer Chrome DevTools MCP for browser-based debugging, in the headful mode.

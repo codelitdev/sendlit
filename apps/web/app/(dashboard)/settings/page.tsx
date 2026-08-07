@@ -60,8 +60,10 @@ import { Loading } from "@/components/dashboard/loading";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { EspConfigurationDialog } from "@/components/dashboard/esp-configuration-dialog";
 import { ApiError } from "@/lib/api-client";
 import {
+    activateEsp,
     createEsp,
     deleteEsp,
     feedbackCapableProviders,
@@ -123,6 +125,7 @@ export default function SettingsPage() {
     );
     const [feedbackEsp, setFeedbackEsp] = useState<EspConfig | null>(null);
     const [testingEspId, setTestingEspId] = useState<string | null>(null);
+    const [activatingEspId, setActivatingEspId] = useState<string | null>(null);
     const [testResult, setTestResult] = useState<{
         espId: string;
         success: boolean;
@@ -233,6 +236,23 @@ export default function SettingsPage() {
             });
         } finally {
             setTestingEspId(null);
+        }
+    }
+
+    async function handleActivate(esp: EspConfig) {
+        setActivatingEspId(esp.espId);
+        setError(null);
+        try {
+            await activateEsp(esp.espId);
+            await load();
+        } catch (err) {
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to activate ESP",
+            );
+        } finally {
+            setActivatingEspId(null);
         }
     }
 
@@ -401,8 +421,8 @@ export default function SettingsPage() {
                                             <TableRow>
                                                 <TableHead>Name</TableHead>
                                                 <TableHead>Provider</TableHead>
-                                                <TableHead>Host</TableHead>
-                                                <TableHead>Last test</TableHead>
+                                                <TableHead>Sender</TableHead>
+                                                <TableHead>Health</TableHead>
                                                 <TableHead />
                                             </TableRow>
                                         </TableHeader>
@@ -428,44 +448,85 @@ export default function SettingsPage() {
                                                         }
                                                     </TableCell>
                                                     <TableCell className="text-muted-foreground">
-                                                        {esp.host}:{esp.port}
+                                                        {esp.fromEmail ??
+                                                            "Not set"}
                                                     </TableCell>
                                                     <TableCell>
-                                                        {esp.lastTestStatus ? (
+                                                        <div className="flex gap-2">
                                                             <Badge
                                                                 variant={
-                                                                    esp.lastTestStatus ===
-                                                                    "success"
+                                                                    esp.status ===
+                                                                    "active"
                                                                         ? "success"
-                                                                        : "destructive"
+                                                                        : "secondary"
                                                                 }
                                                             >
-                                                                {
-                                                                    esp.lastTestStatus
-                                                                }
+                                                                {esp.status}
                                                             </Badge>
-                                                        ) : (
-                                                            <span className="text-muted-foreground">
-                                                                Not tested
-                                                            </span>
-                                                        )}
+                                                            {esp.lastTestStatus ? (
+                                                                <Badge
+                                                                    variant={
+                                                                        esp.lastTestStatus ===
+                                                                        "success"
+                                                                            ? "success"
+                                                                            : "destructive"
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        esp.lastTestStatus
+                                                                    }
+                                                                </Badge>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">
+                                                                    Not tested
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center justify-end gap-1">
-                                                            {defaultTeamEspId !==
-                                                                esp.espId && (
+                                                            {esp.status ===
+                                                                "draft" && (
                                                                 <IconButton
-                                                                    title="Set as default"
-                                                                    aria-label={`Set ${esp.name} as default`}
+                                                                    title={
+                                                                        esp.lastTestStatus ===
+                                                                        "success"
+                                                                            ? "Activate ESP"
+                                                                            : "Send a successful test before activating"
+                                                                    }
+                                                                    aria-label={`Activate ${esp.name}`}
+                                                                    disabled={
+                                                                        activatingEspId ===
+                                                                            esp.espId ||
+                                                                        esp.lastTestStatus !==
+                                                                            "success" ||
+                                                                        !esp.fromEmail
+                                                                    }
                                                                     onClick={() =>
-                                                                        handleSetDefault(
-                                                                            esp.espId,
+                                                                        void handleActivate(
+                                                                            esp,
                                                                         )
                                                                     }
                                                                 >
-                                                                    <Star className="size-4" />
+                                                                    <CheckCircle2 className="size-4" />
                                                                 </IconButton>
                                                             )}
+                                                            {esp.status ===
+                                                                "active" &&
+                                                                defaultTeamEspId !==
+                                                                    esp.espId && (
+                                                                    <IconButton
+                                                                        title="Set as default"
+                                                                        aria-label={`Set ${esp.name} as default`}
+                                                                        onClick={() =>
+                                                                            handleSetDefault(
+                                                                                esp.espId,
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <Star className="size-4" />
+                                                                    </IconButton>
+                                                                )}
                                                             <IconButton
                                                                 title="Send test email"
                                                                 aria-label={`Send test email via ${esp.name}`}
@@ -532,11 +593,18 @@ export default function SettingsPage() {
                             </Card>
                         )}
 
-                        <EspFormDialog
+                        <EspConfigurationDialog
                             open={espFormOpen}
                             onOpenChange={setEspFormOpen}
                             esp={editingEsp}
-                            onSaved={load}
+                            onSubmit={async (input) => {
+                                if (editingEsp) {
+                                    await updateEsp(editingEsp.espId, input);
+                                } else {
+                                    await createEsp(input);
+                                }
+                                await load();
+                            }}
                         />
                         <EspFeedbackDialog
                             esp={feedbackEsp}
