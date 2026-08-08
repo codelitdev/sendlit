@@ -107,14 +107,12 @@ describe("EmailEditorScreen", () => {
         const save = screen.getByRole("button", { name: "Save" });
         fireEvent.click(save);
 
-        expect(
-            (
-                screen.getByRole("button", {
-                    name: "Saving…",
-                }) as HTMLButtonElement
-            ).disabled,
-        ).toBe(true);
-        fireEvent.click(screen.getByRole("button", { name: "Saving…" }));
+        // Loader adds aria-label "Loading", so the accessible name is "Loading Saving…"
+        const savingButton = screen.getByRole("button", {
+            name: /Saving…/,
+        }) as HTMLButtonElement;
+        expect(savingButton.disabled).toBe(true);
+        fireEvent.click(savingButton);
         expect(onSave).toHaveBeenCalledOnce();
         finish();
         await screen.findByText("Saved");

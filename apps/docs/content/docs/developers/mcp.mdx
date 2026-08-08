@@ -6,7 +6,7 @@ description: Connect MCP clients to SendLit email operations.
 SendLit exposes the same team-scoped email capabilities through a Model Context Protocol (MCP) server. MCP clients connect to the Streamable HTTP endpoint:
 
 ```text
-https://api.sendlit.com/mcp
+https://api.sendlit.app/mcp
 ```
 
 For a local installation, replace the origin with the API origin configured in your environment, for example `http://localhost:5000/mcp`.
@@ -131,7 +131,7 @@ The exact configuration shape depends on the MCP client. For clients that suppor
 {
     "mcpServers": {
         "sendlit": {
-            "url": "https://api.sendlit.com/mcp",
+            "url": "https://api.sendlit.app/mcp",
             "headers": {
                 "x-sendlit-apikey": "${SENDLIT_API_KEY}"
             }

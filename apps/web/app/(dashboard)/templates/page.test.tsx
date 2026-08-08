@@ -87,6 +87,7 @@ vi.mock("@/components/ui/codelit/tabs", async () => {
     };
 });
 import TemplatesPage from "./page";
+import { BreadcrumbProvider } from "@/components/dashboard/breadcrumb-context";
 import { TooltipProvider } from "@/components/ui/codelit/tooltip";
 
 const content = { style: {}, meta: {}, content: [] };
@@ -122,9 +123,11 @@ afterEach(() => cleanup());
 
 function renderPage() {
     return render(
-        <TooltipProvider>
-            <TemplatesPage />
-        </TooltipProvider>,
+        <BreadcrumbProvider>
+            <TooltipProvider>
+                <TemplatesPage />
+            </TooltipProvider>
+        </BreadcrumbProvider>,
     );
 }
 

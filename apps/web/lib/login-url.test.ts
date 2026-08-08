@@ -5,11 +5,11 @@ describe("application login redirect", () => {
     it("uses the public API URL for browser redirects", () => {
         expect(
             getDashboardLoginUrl({
-                apiPublicUrl: "https://api.sendlit.com",
-                webClient: "https://app.sendlit.com",
+                apiPublicUrl: "https://api.sendlit.app",
+                webClient: "https://app.sendlit.app",
             }),
         ).toBe(
-            "https://api.sendlit.com/login?redirect=https%3A%2F%2Fapp.sendlit.com%2F",
+            "https://api.sendlit.app/login?redirect=https%3A%2F%2Fapp.sendlit.app%2F",
         );
     });
 });
