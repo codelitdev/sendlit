@@ -11,3 +11,10 @@ apps/docs/next-env.d.ts
 
 # Tool caches
 .eslintcache
+
+# IDE files
+.zed
+.vscode
+.claude
+.codex
+.agents

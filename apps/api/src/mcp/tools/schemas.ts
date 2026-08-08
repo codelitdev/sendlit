@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { contactFilterSchema, customFieldsSchema } from "@sendlit/api-contract";
+import {
+    contactFilterSchema,
+    customFieldsSchema,
+    emailContentSchema,
+} from "@sendlit/api-contract";
 import {
     mailTypes,
     sequenceStatus,
@@ -7,11 +11,7 @@ import {
     feedbackCapableProviders,
 } from "../../config/constants";
 
-export const emailContentSchema = z.object({
-    style: z.record(z.any()),
-    meta: z.record(z.any()),
-    content: z.array(z.record(z.any())),
-});
+export { emailContentSchema };
 
 export const contactSchema = z.object({
     contactId: z.string(),

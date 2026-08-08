@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { emailContentSchema } from "./common";
+import { emailContentInputSchema, emailContentSchema } from "./common";
 import { deliverySourceSelectionSchema } from "./delivery";
 
 export const mailTypes = ["broadcast", "sequence"] as const;
@@ -167,7 +167,7 @@ export const addSequenceEmailBodySchema = z.object({
 
 export const updateSequenceEmailBodySchema = z.object({
     subject: z.string().optional(),
-    content: emailContentSchema.optional(),
+    content: emailContentInputSchema.optional(),
     delayInMillis: z.number().optional(),
     templateId: z.string().min(1).optional(),
     actionType: z.enum(emailActionTypes).optional(),

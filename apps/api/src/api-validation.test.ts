@@ -212,6 +212,44 @@ describe("API input validation schemas", () => {
                 content: { content: [] },
             }).success,
         ).toBe(false);
+        const { link: _link, ...typography } = defaultEmail.style.typography;
+        expect(
+            createTemplateBodySchema.safeParse({
+                title: "Missing link typography",
+                content: {
+                    ...defaultEmail,
+                    style: {
+                        ...defaultEmail.style,
+                        typography,
+                    },
+                },
+            }).success,
+        ).toBe(false);
+        expect(
+            createTemplateBodySchema.safeParse({
+                title: "Unknown metadata",
+                content: {
+                    ...defaultEmail,
+                    meta: { previewText: "Hi", subject: "Not supported" },
+                },
+            }).success,
+        ).toBe(false);
+        expect(
+            createTemplateBodySchema.safeParse({
+                title: "UTM metadata",
+                content: {
+                    ...defaultEmail,
+                    meta: {
+                        previewText: "Hi",
+                        utm: {
+                            source: "newsletter",
+                            medium: "email",
+                            campaign: "launch",
+                        },
+                    },
+                },
+            }).success,
+        ).toBe(true);
         expect(
             updateTemplateBodySchema.safeParse({
                 title: "Welcome",

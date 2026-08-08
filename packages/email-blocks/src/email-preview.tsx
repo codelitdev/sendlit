@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, startTransition } from "react";
 import {
     defaultEmail,
+    normalizeEmail,
     renderEmailToHtml,
     type BlockComponent,
     type Email,
@@ -229,77 +230,4 @@ function toPixels(value: string): number {
     return Number.isFinite(parsed) ? parsed : 420;
 }
 
-function normalizeEmailForPreview(content: Email): Email {
-    const defaultStyle = defaultEmail.style;
-
-    return {
-        ...defaultEmail,
-        ...content,
-        meta: { ...defaultEmail.meta, ...(content.meta || {}) },
-        style: {
-            ...defaultStyle,
-            ...(content.style || {}),
-            colors: {
-                ...defaultStyle.colors,
-                ...(content.style?.colors || {}),
-            },
-            typography: {
-                ...defaultStyle.typography,
-                ...(content.style?.typography || {}),
-                header: {
-                    ...defaultStyle.typography.header,
-                    ...(content.style?.typography?.header || {}),
-                },
-                text: {
-                    ...defaultStyle.typography.text,
-                    ...(content.style?.typography?.text || {}),
-                },
-                link: {
-                    ...defaultStyle.typography.link,
-                    ...(content.style?.typography?.link || {}),
-                },
-            },
-            interactives: {
-                ...defaultStyle.interactives,
-                ...(content.style?.interactives || {}),
-                button: {
-                    ...defaultStyle.interactives.button,
-                    ...(content.style?.interactives?.button || {}),
-                    padding: {
-                        ...defaultStyle.interactives.button.padding,
-                        ...(content.style?.interactives?.button?.padding || {}),
-                    },
-                    border: {
-                        ...defaultStyle.interactives.button.border,
-                        ...(content.style?.interactives?.button?.border || {}),
-                    },
-                },
-                link: {
-                    ...defaultStyle.interactives.link,
-                    ...(content.style?.interactives?.link || {}),
-                    padding: {
-                        ...defaultStyle.interactives.link.padding,
-                        ...(content.style?.interactives?.link?.padding || {}),
-                    },
-                },
-            },
-            structure: {
-                ...defaultStyle.structure,
-                ...(content.style?.structure || {}),
-                page: {
-                    ...defaultStyle.structure.page,
-                    ...(content.style?.structure?.page || {}),
-                },
-                section: {
-                    ...defaultStyle.structure.section,
-                    ...(content.style?.structure?.section || {}),
-                    padding: {
-                        ...defaultStyle.structure.section.padding,
-                        ...(content.style?.structure?.section?.padding || {}),
-                    },
-                },
-            },
-        },
-        content: content.content || defaultEmail.content,
-    };
-}
+const normalizeEmailForPreview = normalizeEmail;

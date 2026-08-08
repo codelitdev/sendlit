@@ -24,6 +24,7 @@ import {
     Text,
     type UploaderProps,
 } from "@sendlit/email-editor/blocks";
+import { normalizeEmail } from "@sendlit/email-editor";
 import { EmailImageUploadDialog } from "@/components/dashboard/email-image-upload-dialog";
 import {
     createFooterBlock,
@@ -126,11 +127,15 @@ export function EmailEditorScreen({
     header?: ReactNode;
 }) {
     const router = useRouter();
+    const normalizedInitialContent = useMemo(
+        () => normalizeEmail(initialContent),
+        [initialContent],
+    );
     // The editor already owns the interactive document state. Keeping its
     // latest value in a ref avoids re-rendering this full-screen shell (and
     // passing a new `email` prop back to the editor) on every keystroke.
     // `save` always reads the current document from this ref.
-    const contentRef = useRef(initialContent);
+    const contentRef = useRef(normalizedInitialContent);
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -141,8 +146,8 @@ export function EmailEditorScreen({
     // A real external content change (for example, navigating to another
     // template without unmounting this screen) remains the source of truth.
     useEffect(() => {
-        contentRef.current = initialContent;
-    }, [initialContent]);
+        contentRef.current = normalizedInitialContent;
+    }, [normalizedInitialContent]);
 
     useEffect(() => {
         if (purpose !== "marketing") return;
@@ -278,7 +283,7 @@ export function EmailEditorScreen({
                     )}
                     <div className="min-h-0 flex-1">
                         <EmailEditor
-                            email={initialContent}
+                            email={normalizedInitialContent}
                             onChange={handleContentChange}
                             blocks={
                                 purpose === "marketing"

@@ -8,6 +8,7 @@ import { EditorLayout } from "./layout/editor-layout";
 import type { EmailBlock, Email, EmailStyle } from "../types/email-editor";
 import type { BlockRegistry } from "../types/block-registry";
 import { defaultEmail } from "../lib/default-email";
+import { normalizeEmail } from "../lib/normalize-email";
 import {
     canDeleteBlock,
     canDuplicateBlock,
@@ -49,10 +50,11 @@ function isObject(item: any) {
 }
 
 function getEmailWithBlockIds(email: Email): Email {
+    const normalized = normalizeEmail(email);
     return {
-        style: email.style,
-        meta: email.meta,
-        content: email.content.map((block) => ({
+        style: normalized.style,
+        meta: normalized.meta,
+        content: normalized.content.map((block) => ({
             ...block,
             id: generateId(),
             settings: block.settings || {},

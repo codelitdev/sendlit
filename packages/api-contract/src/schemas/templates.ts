@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { emailContentSchema } from "./common";
+import { emailContentInputSchema, emailContentSchema } from "./common";
 
 export const templatePurposes = ["marketing", "transactional"] as const;
 export const templatePurposeSchema = z
@@ -41,12 +41,12 @@ export const emailTemplateSchema = z.object({
 export const createTemplateBodySchema = z.object({
     title: z.string().min(1),
     purpose: templatePurposeSchema.default("marketing"),
-    content: emailContentSchema,
+    content: emailContentInputSchema,
 });
 
 export const updateTemplateBodySchema = z.object({
     title: z.string().min(1).optional(),
-    content: emailContentSchema.optional(),
+    content: emailContentInputSchema.optional(),
 });
 
 /** Built-in starting templates (`apps/api/src/templates/system-templates.ts`)

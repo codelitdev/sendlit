@@ -11,12 +11,14 @@ import {
 import { SYSTEM_TEMPLATES } from "../../templates/system-templates";
 import { AUTH_ERROR, INTERNAL_ERROR, NOT_FOUND, jsonResult } from "./responses";
 import {
-    emailContentSchema,
     successMessageSchema,
     systemTemplateSchema,
     templateSchema,
 } from "./schemas";
-import { templatePurposeSchema } from "@sendlit/api-contract";
+import {
+    emailContentInputSchema,
+    templatePurposeSchema,
+} from "@sendlit/api-contract";
 import { TemplateValidationError } from "../../templates/validation";
 import { getTeamId } from "./auth";
 import { omitInternal } from "../../utils/public";
@@ -112,8 +114,8 @@ export function registerTemplateTools(server: McpServer): void {
             inputSchema: {
                 title: z.string().min(1),
                 purpose: templatePurposeSchema,
-                content: emailContentSchema.describe(
-                    "The email body: { style, meta, content: EmailBlock[] } — see @sendlit/email-editor",
+                content: emailContentInputSchema.describe(
+                    "A complete SendLit email document. Include all style sections (colors, typography.header/text/link, interactives, and structure) and only text, link, image, separator, or footer blocks. Use list_system_templates and duplicate_template as the safest valid starting point.",
                 ),
             },
             outputSchema: templateSchema,
@@ -161,7 +163,7 @@ export function registerTemplateTools(server: McpServer): void {
             inputSchema: {
                 templateId: z.string().min(1),
                 title: z.string().min(1).optional(),
-                content: emailContentSchema.optional(),
+                content: emailContentInputSchema.optional(),
             },
             outputSchema: templateSchema,
             annotations: {

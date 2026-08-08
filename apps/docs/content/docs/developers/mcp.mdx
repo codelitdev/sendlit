@@ -69,6 +69,15 @@ the computed `requiredVariables`. System templates expose transactional
 variable descriptions and examples, but are starters rather than team-owned
 sendable templates. Use `duplicate_template` to copy or safely convert one.
 
+Template and sequence-email content is validated as a complete SendLit email
+document on every write. The `style` must include `colors`,
+`typography.header`, `typography.text`, `typography.link`, `interactives`, and
+`structure`; blocks must be one of text, link, image, separator, or footer.
+Metadata supports only optional `previewText` and an optional `utm` object with
+`source`, `medium`, and `campaign` strings.
+For AI-created content, start with `list_system_templates` and
+`duplicate_template` rather than constructing a document shape from scratch.
+
 ### Broadcasts and sequences
 
 Broadcasts use the sequence resource with one email and an audience filter. Sequence tools include:

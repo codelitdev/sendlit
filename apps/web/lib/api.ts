@@ -364,7 +364,9 @@ export function createTemplate(input: {
     purpose: import("@sendlit/api-contract").TemplatePurpose;
     content: Email;
 }) {
-    return unwrap<EmailTemplate>(client.templates.create({ body: input }));
+    return unwrap<EmailTemplate>(
+        client.templates.create({ body: input as any }),
+    );
 }
 
 export function duplicateTemplate(
@@ -392,7 +394,7 @@ export function updateTemplate(
     patch: { title?: string; content?: Email },
 ) {
     return unwrap<EmailTemplate>(
-        client.templates.update({ params: { templateId }, body: patch }),
+        client.templates.update({ params: { templateId }, body: patch as any }),
     );
 }
 

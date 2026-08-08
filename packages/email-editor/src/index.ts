@@ -21,3 +21,4 @@ export type {
 } from "./blocks/image/types";
 export { renderEmailToHtml } from "./lib/email-renderer";
 export { defaultEmail } from "./lib/default-email";
+export { normalizeEmail } from "./lib/normalize-email";

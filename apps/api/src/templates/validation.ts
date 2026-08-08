@@ -1,4 +1,7 @@
-import type { TemplatePurpose } from "@sendlit/api-contract";
+import {
+    emailContentInputSchema,
+    type TemplatePurpose,
+} from "@sendlit/api-contract";
 import type { Email, EmailBlock } from "@sendlit/email-editor";
 import { discoverRequiredTemplateVariables } from "../mail/render";
 
@@ -27,6 +30,20 @@ export class TemplateValidationError extends Error {
         this.name = "TemplateValidationError";
         this.variables = variables;
     }
+}
+
+/** Validates the full document before it is persisted, then applies the
+ * purpose-specific managed-footer and variable rules below. */
+export function validateTemplateInputContent(
+    content: unknown,
+    purpose: TemplatePurpose,
+): asserts content is Email {
+    const parsed = emailContentInputSchema.safeParse(content);
+    if (!parsed.success) {
+        const fields = parsed.error.issues.map((issue) => issue.path.join("."));
+        throw new TemplateValidationError("invalid_email_content", fields);
+    }
+    validateTemplateContent(parsed.data as Email, purpose);
 }
 
 function blocks(content: Email): EmailBlock[] {

@@ -5,6 +5,7 @@ import {
     TemplateValidationError,
     getRequiredTemplateVariables,
     validateTemplateContent,
+    validateTemplateInputContent,
 } from "./validation";
 
 function content(text: string, purpose: "marketing" | "transactional"): Email {
@@ -70,6 +71,24 @@ describe("template content validation", () => {
             expect.objectContaining({
                 message: "invalid_footer",
                 variables: ["alignment", "fontSize", "foregroundColor"],
+            } satisfies Partial<TemplateValidationError>),
+        );
+    });
+
+    it("rejects an incomplete editor style before persisting the template", () => {
+        const email = content("Join us", "marketing");
+        const { link: _link, ...typography } = email.style.typography;
+        email.style = {
+            ...email.style,
+            typography: typography as typeof email.style.typography,
+        };
+
+        expect(() =>
+            validateTemplateInputContent(email, "marketing"),
+        ).toThrowError(
+            expect.objectContaining({
+                message: "invalid_email_content",
+                variables: ["style.typography.link"],
             } satisfies Partial<TemplateValidationError>),
         );
     });

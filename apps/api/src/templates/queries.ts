@@ -10,7 +10,7 @@ import type { TemplatePurpose } from "@sendlit/api-contract";
 import {
     TemplateValidationError,
     getRequiredTemplateVariables,
-    validateTemplateContent,
+    validateTemplateInputContent,
 } from "./validation";
 
 export type StoredEmailTemplate = typeof emailTemplates.$inferSelect;
@@ -135,7 +135,7 @@ export async function createTemplate({
     content: EmailContent;
     purpose?: TemplatePurpose;
 }): Promise<EmailTemplate> {
-    validateTemplateContent(content, purpose);
+    validateTemplateInputContent(content, purpose);
     const uniqueTitle = await getUniqueTemplateTitle(teamId, title);
 
     const [template] = await db
@@ -224,7 +224,7 @@ export async function updateTemplate({
     if (!existing || existing.teamId !== teamId) {
         return null;
     }
-    if (content) validateTemplateContent(content, existing.purpose);
+    if (content) validateTemplateInputContent(content, existing.purpose);
 
     if (title) {
         const [clash] = await db
@@ -311,7 +311,7 @@ export async function duplicateTemplate({
     }
 
     const content = structuredClone(source.content);
-    validateTemplateContent(content, source.purpose);
+    validateTemplateInputContent(content, source.purpose);
     const duplicate = await createTemplate({
         teamId,
         title: title ?? `${source.title} (Copy)`,

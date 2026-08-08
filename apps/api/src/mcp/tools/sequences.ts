@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { emailContentInputSchema } from "@sendlit/api-contract";
 import { mailTypes, emailActionTypes } from "../../config/constants";
 import {
     addMailToSequence,
@@ -274,13 +275,7 @@ export function registerSequenceTools(server: McpServer): void {
                 sequenceId: z.string(),
                 emailId: z.string(),
                 subject: z.string().optional(),
-                content: z
-                    .object({
-                        style: z.record(z.any()),
-                        meta: z.record(z.any()),
-                        content: z.array(z.record(z.any())),
-                    })
-                    .optional(),
+                content: emailContentInputSchema.optional(),
                 delayInMillis: z
                     .number()
                     .optional()
