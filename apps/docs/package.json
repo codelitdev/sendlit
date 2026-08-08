@@ -10,6 +10,7 @@
         "postinstall": "fumadocs-mdx"
     },
     "dependencies": {
+        "@codelitdev/design-system": "0.1.0-alpha.6",
         "@sendlit/api-contract": "workspace:*",
         "@sendlit/email-blocks": "workspace:*",
         "@sendlit/email-editor": "workspace:*",
