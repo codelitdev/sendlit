@@ -19,6 +19,8 @@ vi.mock("../organization/queries", () => ({
 
 describe("Better Auth MCP authorization metadata", () => {
     let auth: (typeof import("./better-auth.js"))["auth"];
+    let defaultScopes: (typeof import("./better-auth.js"))["OAUTH_CLIENT_DEFAULT_SCOPES"];
+    let requestableScopes: (typeof import("./better-auth.js"))["OAUTH_CLIENT_REQUESTABLE_SCOPES"];
 
     beforeAll(async () => {
         vi.stubEnv(
@@ -26,8 +28,48 @@ describe("Better Auth MCP authorization metadata", () => {
             "test-only-secret-with-at-least-thirty-two-characters",
         );
         vi.stubEnv("API_PUBLIC_URL", "https://sendlit.test");
-        ({ auth } = await import("./better-auth.js"));
+        const betterAuthModule = await import("./better-auth.js");
+        auth = betterAuthModule.auth;
+        defaultScopes = betterAuthModule.OAUTH_CLIENT_DEFAULT_SCOPES;
+        requestableScopes = betterAuthModule.OAUTH_CLIENT_REQUESTABLE_SCOPES;
     });
+
+    it("keeps registration defaults identity-only while allowing MCP scopes", () => {
+        expect(defaultScopes).toEqual(["openid", "profile", "email"]);
+        expect(requestableScopes).toEqual(
+            expect.arrayContaining(["offline_access", ...MCP_SCOPES_SUPPORTED]),
+        );
+        expect(defaultScopes).not.toEqual(
+            expect.arrayContaining([...MCP_SCOPES_SUPPORTED]),
+        );
+    });
+
+    it.each(["", "   "])(
+        "rejects authorization without an explicit scope (%j)",
+        async (scope) => {
+            const query = new URLSearchParams({
+                response_type: "code",
+                client_id: "test-client",
+                redirect_uri: "https://client.example/callback",
+                code_challenge: "test-code-challenge",
+                code_challenge_method: "S256",
+            });
+            if (scope.length > 0) query.set("scope", scope);
+
+            const response = await auth.handler(
+                new Request(
+                    `https://sendlit.test/api/auth/oauth2/authorize?${query}`,
+                ),
+            );
+
+            expect(response.status).toBe(400);
+            await expect(response.json()).resolves.toMatchObject({
+                error: "invalid_scope",
+                error_description:
+                    "OAuth authorization requests must include an explicit scope.",
+            });
+        },
+    );
 
     it("advertises CIMD, DCR, issuer protection, and all enforced MCP scopes", async () => {
         const response = await auth.handler(

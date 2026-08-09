@@ -26,6 +26,8 @@ HTTPS metadata-document URL. Modern clients should prefer CIMD; DCR remains
 available for existing clients. Clients must use Authorization Code
 with S256 PKCE and request only the MCP scopes they need; the complete scope
 list and tool groups are documented on the [MCP server page](/developers/mcp).
+Authorization requests must include an explicit `scope`; SendLit rejects an
+omitted or empty value instead of granting the client's complete capability set.
 Unauthenticated DCR is rate-limited to 20 requests per IP per minute.
 For a multi-team account, SendLit asks the user to choose the team during the
 OAuth flow; the resulting token is restricted to that chosen team.

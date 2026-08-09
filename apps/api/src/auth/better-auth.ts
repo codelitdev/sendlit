@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
@@ -52,12 +53,18 @@ export const mcpResourceUrl = `${authBaseUrl}/mcp`;
  * single source of truth shared between `oauthProvider({ validAudiences })`
  * below and `resolve-auth.ts`'s bearer verification. */
 export const validOAuthAudiences = [authBaseUrl, mcpResourceUrl];
-const supportedOAuthScopes = [
+export const OAUTH_CLIENT_DEFAULT_SCOPES = [
     "openid",
     "profile",
     "email",
+] as const;
+export const OAUTH_CLIENT_REQUESTABLE_SCOPES = [
     "offline_access",
     ...MCP_SCOPES_SUPPORTED,
+] as const;
+const supportedOAuthScopes = [
+    ...OAUTH_CLIENT_DEFAULT_SCOPES,
+    ...OAUTH_CLIENT_REQUESTABLE_SCOPES,
 ] as const;
 
 /** Where an MCP client should discover `mcpResourceUrl`'s protected-resource
@@ -172,6 +179,25 @@ export const auth = betterAuth({
             },
         },
     },
+    hooks: {
+        before: createAuthMiddleware(async (context) => {
+            if (context.path !== "/oauth2/authorize") return;
+
+            const scope = context.query?.scope;
+            if (typeof scope === "string" && scope.trim().length > 0) return;
+
+            // Better Auth persists the union of registration defaults and
+            // allowed scopes as the client's capability set, then treats that
+            // complete set as requested when `scope` is omitted. Require an
+            // explicit choice so a scope-less request can never become a
+            // full-access MCP grant.
+            throw new APIError("BAD_REQUEST", {
+                error: "invalid_scope",
+                error_description:
+                    "OAuth authorization requests must include an explicit scope.",
+            });
+        }),
+    },
     plugins: [
         emailOTP({
             async sendVerificationOTP({ email, otp }) {
@@ -199,12 +225,12 @@ export const auth = betterAuth({
                 allowUnauthenticatedDynamicClientRegistration: true,
                 scopes: supportedOAuthScopes,
                 validAudiences: validOAuthAudiences,
-                // CIMD documents such as VS Code's describe redirect URIs and
-                // grant types but do not predeclare SendLit-specific scopes.
-                // Allow the client to request the scopes it presents to the
-                // user at authorization time; per-tool enforcement remains
-                // default-deny in the MCP policy registry.
-                clientRegistrationDefaultScopes: supportedOAuthScopes,
+                // Registration establishes capabilities, not grants. Keep the
+                // default set identity-only and allow clients to explicitly
+                // request the narrower MCP scope set they present at consent.
+                clientRegistrationDefaultScopes: OAUTH_CLIENT_DEFAULT_SCOPES,
+                clientRegistrationAllowedScopes:
+                    OAUTH_CLIENT_REQUESTABLE_SCOPES,
             }),
             // The authorization request's RFC 8707 `resource` value must
             // resolve to a persisted provider resource. Seed the sole current

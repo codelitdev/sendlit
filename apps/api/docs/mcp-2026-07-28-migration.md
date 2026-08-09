@@ -178,6 +178,11 @@ OAuth calls must contain the tool's required scope. Team API keys currently
 have full access to their fixed team because scoped team keys are not yet a
 SendLit API-key product feature.
 
+Dynamic registration and discovery use identity-only default scopes. All MCP
+scopes remain requestable capabilities, but `/oauth2/authorize` rejects a
+missing or empty `scope` rather than allowing Better Auth to substitute the
+client's complete capability set.
+
 The supported scope families are contacts, templates, media, sequences,
 emails, settings, ESP configuration, teams, API keys, feedback, delivery
 events, and suppressions, with read/write or read/send separation as

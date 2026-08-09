@@ -315,6 +315,8 @@ CIMD, while existing clients can use Dynamic Client Registration (DCR); static
 pre-registered clients are also supported. OAuth tool access is
 default-deny using the scope map in `src/mcp/policy.ts`. Team API keys have full
 tool access to their fixed team, while browser session cookies are rejected.
+OAuth authorization requests must include an explicit, non-empty `scope` so a
+missing value cannot expand to the client's complete capability set.
 
 MCP tools live in `src/mcp/tools/*` and cover contacts, templates, sequences,
 ESP settings (both the default-ESP singleton tools and the multi-ESP

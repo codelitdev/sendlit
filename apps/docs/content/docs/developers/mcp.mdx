@@ -42,7 +42,7 @@ GET /.well-known/openid-configuration
 
 OAuth authorization, consent, token, introspection, revocation, and userinfo endpoints are provided under `/api/auth/oauth2/*`. SendLit supports pre-registered clients, Client ID Metadata Documents (CIMD), and Dynamic Client Registration (DCR). For CIMD, the OAuth `client_id` is the HTTPS URL of the client's metadata document. Modern clients should prefer CIMD; DCR remains available for existing clients such as MCP Inspector.
 
-Use Authorization Code with S256 PKCE, request only the scopes your client needs, and keep any refresh token in the client's secure credential store. Every authorization requires a SendLit user to sign in, select a team when necessary, and approve consent.
+Use Authorization Code with S256 PKCE, request only the scopes your client needs, and keep any refresh token in the client's secure credential store. The authorization request must include an explicit, non-empty `scope`; SendLit does not turn a missing value into a full-access grant. Every authorization requires a SendLit user to sign in, select a team when necessary, and approve consent.
 
 API keys always select one fixed team and currently grant the complete MCP tool set for that team. Dashboard session cookies and `X-Sendlit-Team-Id` are not accepted as MCP authentication.
 
