@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import { customFieldsSchema } from "@sendlit/api-contract";
 import {
@@ -23,9 +23,8 @@ import {
 } from "./schemas";
 import { getTeamId } from "./auth";
 import { omitInternal } from "../../utils/public";
-import { serializeDates } from "../../utils/serialize";
 
-export function registerContactTools(server: McpServer): void {
+export function registerContactTools(server: McpToolRegistrar): void {
     server.registerTool(
         "list_contacts",
         {
@@ -147,7 +146,7 @@ export function registerContactTools(server: McpServer): void {
                     teamId,
                     contact.id,
                 );
-                return jsonResult({ items: serializeDates(deliveries) });
+                return jsonResult({ items: deliveries });
             } catch {
                 return INTERNAL_ERROR;
             }

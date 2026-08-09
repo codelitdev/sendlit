@@ -3,7 +3,7 @@ title: MCP server
 description: Connect MCP clients to SendLit email operations.
 ---
 
-SendLit exposes the same team-scoped email capabilities through a Model Context Protocol (MCP) server. MCP clients connect to the Streamable HTTP endpoint:
+SendLit exposes the same team-scoped email capabilities through a Model Context Protocol (MCP) server over stateless Streamable HTTP at:
 
 ```text
 https://api.sendlit.app/mcp
@@ -13,7 +13,11 @@ For a local installation, replace the origin with the API origin configured in y
 
 ## Connect and authenticate
 
-The endpoint accepts JSON-RPC over HTTP. A client creates a session with the MCP `initialize` request, then sends later requests with the returned `Mcp-Session-Id` header. The server also supports JSON responses for clients that do not use server-sent events.
+SendLit supports both the current `2026-07-28` protocol and the existing `2025-11-25` Streamable HTTP initialize handshake. Modern clients may call `server/discover`, then `tools/list` and `tools/call`; existing clients begin with `initialize`. Every request is self-contained: there is no MCP session ID or retained server-side transport state.
+
+The retired SSE transport is not supported. In particular, `GET /mcp` is not an MCP endpoint; clients must use HTTP `POST` to `/mcp`.
+
+Current clients construct the protocol envelope and the `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` headers. Do not set those headers manually unless you are implementing an MCP client.
 
 Authenticate with one of these headers:
 
@@ -36,17 +40,30 @@ GET /.well-known/oauth-authorization-server
 GET /.well-known/openid-configuration
 ```
 
-OAuth authorization, consent, token, introspection, revocation, and userinfo endpoints are provided under `/api/auth/oauth2/*`.
+OAuth authorization, consent, token, introspection, revocation, and userinfo endpoints are provided under `/api/auth/oauth2/*`. SendLit supports pre-registered clients, Client ID Metadata Documents (CIMD), and Dynamic Client Registration (DCR). For CIMD, the OAuth `client_id` is the HTTPS URL of the client's metadata document. Modern clients should prefer CIMD; DCR remains available for existing clients such as MCP Inspector.
 
-MCP clients may dynamically register a public OAuth client. Use Authorization
-Code with S256 PKCE, request only the scopes your client needs, and keep any
-refresh token in the client's secure credential store. Dynamic registration
-does not grant access by itself: every authorization still requires a SendLit
-user to sign in, select a team when necessary, and approve consent.
+Use Authorization Code with S256 PKCE, request only the scopes your client needs, and keep any refresh token in the client's secure credential store. Every authorization requires a SendLit user to sign in, select a team when necessary, and approve consent.
 
-API keys always select one fixed team. Dashboard-session clients that can access multiple teams must provide `X-Sendlit-Team-Id`; clients with exactly one team may omit it.
+API keys always select one fixed team and currently grant the complete MCP tool set for that team. Dashboard session cookies and `X-Sendlit-Team-Id` are not accepted as MCP authentication.
 
 OAuth clients (including MCP clients like Claude) have no way to send a custom header during authorization, so a multi-team account instead picks a team as part of the OAuth flow itself: after login, and before the consent screen, the account is shown a "select a team" step (mirroring how apps like Notion resolve their own multi-workspace ambiguity). The chosen team is baked into the issued access token and used for every subsequent request — no header needed. Accounts with exactly one team skip this step entirely.
+
+### OAuth scopes
+
+OAuth access is default-deny per tool. Read and write permissions are separate:
+
+- `contacts:read`, `contacts:write`
+- `templates:read`, `templates:write`
+- `media:read`, `media:write`
+- `sequences:read`, `sequences:write`
+- `emails:read`, `emails:send`
+- `settings:read`, `settings:write`
+- `esp:read`, `esp:write`
+- `teams:read`, `teams:write`
+- `api_keys:read`, `api_keys:write`
+- `feedback:read`, `feedback:write`
+- `delivery_events:read`
+- `suppressions:read`, `suppressions:write`
 
 ## Available tools
 
@@ -144,4 +161,4 @@ Prefer the client’s secure secret-store or environment-variable mechanism. Do 
 
 ## Operational limits
 
-The MCP endpoint is rate limited to 60 requests per minute. A missing or invalid credential returns an HTTP 401 response; an unknown `Mcp-Session-Id` returns an MCP session-not-found error. Start a new MCP session when a client’s session has expired or been closed.
+The MCP endpoint is rate limited to 60 requests per minute. High-impact tools such as sending email, activating sequences, testing ESPs, managing API keys, deleting teams, and releasing suppressions are limited to 20 requests per minute. A missing or invalid credential returns HTTP 401, a missing OAuth scope returns an `insufficient_scope` tool error, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.

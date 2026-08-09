@@ -4,6 +4,7 @@ import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
+import { cimd } from "@better-auth/cimd";
 import { createOAuthProviderOptions } from "@codelitdev/oauth-server-kit/better-auth";
 import type { HostedLoginMethod } from "@codelitdev/oauth-server-kit/express";
 import { createTransport } from "nodemailer";
@@ -15,6 +16,8 @@ import {
     createSendLitOAuthTeamSelectionHooks,
     oauthTeamSelectionAdapter,
 } from "./oauth-team-selection";
+import { MCP_SCOPES_SUPPORTED } from "../mcp/policy";
+import { fetchClientMetadataResource } from "./cimd-fetch";
 
 export const webClientUrl = process.env.WEB_CLIENT || "http://localhost:3000";
 const apiUrl = process.env.API_PUBLIC_URL || process.env.BETTER_AUTH_URL;
@@ -49,6 +52,13 @@ export const mcpResourceUrl = `${authBaseUrl}/mcp`;
  * single source of truth shared between `oauthProvider({ validAudiences })`
  * below and `resolve-auth.ts`'s bearer verification. */
 export const validOAuthAudiences = [authBaseUrl, mcpResourceUrl];
+const supportedOAuthScopes = [
+    "openid",
+    "profile",
+    "email",
+    "offline_access",
+    ...MCP_SCOPES_SUPPORTED,
+] as const;
 
 /** Where an MCP client should discover `mcpResourceUrl`'s protected-resource
  * metadata (RFC 9728: `<origin>/.well-known/oauth-protected-resource<path>`).
@@ -180,44 +190,52 @@ export const auth = betterAuth({
             ...createOAuthProviderOptions({
                 loginPage: `${authBaseUrl}/oauth/login`,
                 consentPage: `${authBaseUrl}/oauth/consent`,
-                // MCP clients may register their own public OAuth client.
-                // Registration is constrained to SendLit's supported scopes.
+                // Prefer CIMD for modern clients, while retaining public DCR
+                // for existing MCP clients such as Inspector. Registration
+                // creates only a public OAuth client; user authentication,
+                // consent, resource binding, PKCE, and scope enforcement still
+                // apply before any access token is issued.
                 allowDynamicClientRegistration: true,
                 allowUnauthenticatedDynamicClientRegistration: true,
-                scopes: [
-                    "openid",
-                    "profile",
-                    "email",
-                    "offline_access",
-                    "contacts:read",
-                    "contacts:write",
-                    "templates:read",
-                    "templates:write",
-                    "media:read",
-                    "media:write",
-                    "broadcasts:write",
-                    "sequences:read",
-                    "sequences:write",
-                ],
+                scopes: supportedOAuthScopes,
                 validAudiences: validOAuthAudiences,
-                clientRegistrationDefaultScopes: ["openid", "profile", "email"],
-                clientRegistrationAllowedScopes: [
-                    "offline_access",
-                    "contacts:read",
-                    "contacts:write",
-                    "templates:read",
-                    "templates:write",
-                    "media:read",
-                    "media:write",
-                    "broadcasts:write",
-                    "sequences:read",
-                    "sequences:write",
-                ],
+                // CIMD documents such as VS Code's describe redirect URIs and
+                // grant types but do not predeclare SendLit-specific scopes.
+                // Allow the client to request the scopes it presents to the
+                // user at authorization time; per-tool enforcement remains
+                // default-deny in the MCP policy registry.
+                clientRegistrationDefaultScopes: supportedOAuthScopes,
             }),
+            // The authorization request's RFC 8707 `resource` value must
+            // resolve to a persisted provider resource. Seed the sole current
+            // remote-MCP resource and link it to CIMD clients at registration.
+            resources: [
+                {
+                    identifier: mcpResourceUrl,
+                    name: "SendLit MCP",
+                    allowedScopes: [...MCP_SCOPES_SUPPORTED],
+                },
+            ],
+            clientRegistrationDefaultResources: [mcpResourceUrl],
             ...createSendLitOAuthTeamSelectionHooks({
                 page: `${authBaseUrl}/oauth/select-team`,
                 adapter: oauthTeamSelectionAdapter,
             }),
+        }),
+        cimd({
+            fetchClientMetadataResource,
+            metadataProfile: "mcp-2026-07-28",
+            metadataRevalidationInterval: "60m",
+            // VS Code serves its canonical CIMD document with `no-store`.
+            // OAuth must then fetch it once for authorization and again
+            // immediately for the authorization-code token exchange. Better
+            // Auth's one-second default rejects that required second fetch as
+            // temporarily_unavailable; retain its concurrency/rate budgets
+            // but allow the same flow to revalidate without a delay.
+            metadataFetchPolicy: {
+                minimumFetchInterval: 0,
+            },
+            originBoundFields: ["post_logout_redirect_uris", "client_uri"],
         }),
     ],
 });

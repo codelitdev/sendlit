@@ -167,7 +167,7 @@ describe("resolveAuth", () => {
         ).resolves.toMatchObject({
             status: "authenticated",
             kind: "team_key",
-            apiKey: "api-key",
+            apiKeyId: "tak_1",
             teamId: "team-1",
         });
 
@@ -176,7 +176,7 @@ describe("resolveAuth", () => {
         ).resolves.toMatchObject({
             status: "authenticated",
             kind: "team_key",
-            apiKey: "body-key",
+            apiKeyId: "tak_1",
             teamId: "team-1",
         });
     });

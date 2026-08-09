@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import {
     createSegment,
@@ -13,13 +13,12 @@ import { segmentListSchema, segmentSchema } from "./schemas";
 import { getTeamId } from "./auth";
 import { omitInternal } from "../../utils/public";
 
-export function registerSegmentTools(server: McpServer): void {
+export function registerSegmentTools(server: McpToolRegistrar): void {
     server.registerTool(
         "list_segments",
         {
             description:
                 "Returns all saved segments (named, reusable contact filters) for the team.",
-            inputSchema: {},
             outputSchema: segmentListSchema,
             annotations: {
                 readOnlyHint: true,
@@ -27,7 +26,7 @@ export function registerSegmentTools(server: McpServer): void {
                 openWorldHint: false,
             },
         },
-        async (_args: any, extra: any) => {
+        async (extra: any) => {
             const teamId = getTeamId(extra);
             if (!teamId) return AUTH_ERROR;
             try {

@@ -12,7 +12,7 @@ vi.mock("../db/client", async () => {
 const tdb = db as unknown as TestDb;
 
 const mocks = vi.hoisted(() => ({
-    verifyOAuthAccessToken: vi.fn(),
+    verifyBearerToken: vi.fn(),
 }));
 
 vi.mock("./better-auth", () => ({
@@ -26,11 +26,9 @@ vi.mock("./better-auth", () => ({
         "https://sendlit.test/.well-known/oauth-protected-resource/mcp",
     mcpResourceUrl: "https://sendlit.test/mcp",
     validOAuthAudiences: ["https://sendlit.test", "https://sendlit.test/mcp"],
-    oauthResourceClient: {},
-}));
-
-vi.mock("@codelitdev/oauth-server-kit", () => ({
-    verifyOAuthAccessToken: mocks.verifyOAuthAccessToken,
+    oauthResourceClient: {
+        getActions: () => ({ verifyBearerToken: mocks.verifyBearerToken }),
+    },
 }));
 
 vi.mock("better-auth/node", () => ({
@@ -110,7 +108,7 @@ async function request(
 describe("REST bearer token authentication", () => {
     beforeEach(async () => {
         await truncateAll(tdb);
-        mocks.verifyOAuthAccessToken.mockReset();
+        mocks.verifyBearerToken.mockReset();
     });
 
     afterAll(async () => {
@@ -122,16 +120,12 @@ describe("REST bearer token authentication", () => {
             account: { email: "owner@example.com" },
             contact: { email: "reader@example.com" },
         });
-        mocks.verifyOAuthAccessToken.mockResolvedValueOnce({
-            status: "authenticated",
-            identity: {
-                method: "oauth",
-                issuer: "https://sendlit.test/api/auth",
-                subject: account.id,
-                clientId: "sendlit-local-token",
-                scopes: ["contacts:read"],
-                audiences: ["https://sendlit.test"],
-            },
+        mocks.verifyBearerToken.mockResolvedValueOnce({
+            iss: "https://sendlit.test/api/auth",
+            sub: account.id,
+            azp: "sendlit-local-token",
+            scope: "contacts:read",
+            aud: "https://sendlit.test",
         });
 
         const response = await request(contactsRoutes, "/contacts", {
@@ -148,9 +142,13 @@ describe("REST bearer token authentication", () => {
                 },
             ],
         });
-        expect(mocks.verifyOAuthAccessToken).toHaveBeenCalledWith(
-            expect.any(Object),
+        expect(mocks.verifyBearerToken).toHaveBeenCalledWith(
             "valid-oauth-token",
+            expect.objectContaining({
+                verifyOptions: expect.objectContaining({
+                    issuer: "https://sendlit.test/api/auth",
+                }),
+            }),
         );
     });
 });

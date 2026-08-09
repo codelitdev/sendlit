@@ -1,5 +1,10 @@
 **PRD: Replace Custom OAuth2 With Better Auth**
 
+> Historical design note: its transport decisions are superseded by
+> [`mcp-2026-07-28-migration.md`](./mcp-2026-07-28-migration.md). The current
+> MCP implementation prefers CIMD and retains public Dynamic Client
+> Registration for existing clients.
+
 **Objective**
 Replace SendLit’s custom OAuth2/auth implementation with Better Auth to support secure first-party web login, MCP OAuth, REST API authentication, and social login with Google plus Email OTP.
 

@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import {
     createTemplate,
@@ -23,7 +23,7 @@ import { TemplateValidationError } from "../../templates/validation";
 import { getTeamId } from "./auth";
 import { omitInternal } from "../../utils/public";
 
-export function registerTemplateTools(server: McpServer): void {
+export function registerTemplateTools(server: McpToolRegistrar): void {
     server.registerTool(
         "list_system_templates",
         {
