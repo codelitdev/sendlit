@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import {
     emailHeadersSchema,
@@ -32,7 +32,7 @@ const transactionalEmailListSchema = z.object({
  * so every `createTransactionalEmail` failure just becomes an `isError`
  * result with the same message a REST caller would have gotten in the body.
  */
-export function registerTransactionalTools(server: McpServer): void {
+export function registerTransactionalTools(server: McpToolRegistrar): void {
     server.registerTool(
         "send_email",
         {

@@ -1,3 +1,5 @@
+import { serializeDates } from "../../utils/serialize";
+
 export const AUTH_ERROR = {
     content: [
         {
@@ -31,8 +33,9 @@ export function errorResult(message: string) {
 }
 
 export function jsonResult(data: unknown) {
+    const serialized = serializeDates(data ?? {}) as Record<string, unknown>;
     return {
-        content: [{ type: "text" as const, text: JSON.stringify(data) }],
-        structuredContent: (data ?? {}) as Record<string, unknown>,
+        content: [{ type: "text" as const, text: JSON.stringify(serialized) }],
+        structuredContent: serialized,
     };
 }

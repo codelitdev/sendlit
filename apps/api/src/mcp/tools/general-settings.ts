@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import {
     getGeneralSettings,
@@ -16,7 +16,7 @@ function toPublicShape(settings: GeneralSettings) {
     };
 }
 
-export function registerGeneralSettingsTools(server: McpServer): void {
+export function registerGeneralSettingsTools(server: McpToolRegistrar): void {
     server.registerTool(
         "get_general_settings",
         {

@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import {
     countMedia,
@@ -44,7 +44,7 @@ function toPublicReference(reference: {
     };
 }
 
-export function registerMediaTools(server: McpServer): void {
+export function registerMediaTools(server: McpToolRegistrar): void {
     server.registerTool(
         "list_media",
         {

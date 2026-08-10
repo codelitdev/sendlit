@@ -63,7 +63,20 @@ function makeToolRegistry() {
     return tools;
 }
 
-const auth = { authInfo: { clientId: "team-1", user: { id: "user-1" } } };
+const auth: any = {
+    http: {
+        authInfo: {
+            token: "test-token",
+            clientId: "test-client",
+            scopes: [],
+            extra: {
+                authKind: "oauth",
+                teamId: "team-1",
+                user: { id: "user-1" },
+            },
+        },
+    },
+};
 
 beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();

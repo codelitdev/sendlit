@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import {
     createTeam,
@@ -23,7 +23,7 @@ import {
 import { getAuthUser, getTeamId } from "./auth";
 import { getOrganizationMembership } from "../../organization/queries";
 
-export function registerTeamTools(server: McpServer): void {
+export function registerTeamTools(server: McpToolRegistrar): void {
     server.registerTool(
         "list_teams",
         {

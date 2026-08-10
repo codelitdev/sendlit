@@ -1,18 +1,17 @@
+import type { ServerContext } from "@modelcontextprotocol/server";
 import type { User } from "../../user/queries";
+import { getSendLitMcpAuthInfo } from "../auth-context";
 
-/** MCP tool handlers receive the resolved team id via `extra.authInfo.clientId`
- * (see `mcp/routes.ts`'s `getMcpAuth`, populated by `auth/middleware.ts` +
- * `auth/require-team.ts`). A key always resolves to exactly one team; an
- * user-authenticated session resolves to its sole team if the account only
- * has one, otherwise the connection is rejected (see `mcp/routes.ts`). */
-export function getTeamId(extra: any): string | null {
-    return extra?.authInfo?.clientId || null;
+/** The team id is explicit tenant context and is never overloaded into the
+ * OAuth `clientId`. It is attached after credential and team verification. */
+export function getTeamId(ctx: ServerContext): string | null {
+    return getSendLitMcpAuthInfo(ctx)?.extra.teamId ?? null;
 }
 
 /** The logged-in human, when authenticated as a user — `null` for API-key
  * sessions (a key has no single owning account; a team can have several
  * members). Only used for cosmetic fallbacks (e.g. "send the test email to
  * me"), never for authorization. */
-export function getAuthUser(extra: any): User | null {
-    return extra?.authInfo?.user || null;
+export function getAuthUser(ctx: ServerContext): User | null {
+    return getSendLitMcpAuthInfo(ctx)?.extra.user ?? null;
 }

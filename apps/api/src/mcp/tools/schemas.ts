@@ -21,8 +21,8 @@ export const contactSchema = z.object({
     customFields: customFieldsSchema,
     tags: z.array(z.string()),
     unsubscribeToken: z.string(),
-    createdAt: z.string().or(z.date()),
-    updatedAt: z.string().or(z.date()),
+    createdAt: z.string(),
+    updatedAt: z.string(),
 });
 
 export const contactListSchema = z.object({
@@ -35,7 +35,7 @@ export const contactDeliverySchema = z.object({
     sequenceTitle: z.string(),
     sequenceType: z.string(),
     emailId: z.string(),
-    createdAt: z.string().or(z.date()).nullable(),
+    createdAt: z.string().nullable(),
 });
 
 export const contactDeliveryListSchema = z.object({
@@ -46,8 +46,8 @@ export const segmentSchema = z.object({
     segmentId: z.string(),
     name: z.string(),
     filter: contactFilterSchema,
-    createdAt: z.string().or(z.date()),
-    updatedAt: z.string().or(z.date()),
+    createdAt: z.string(),
+    updatedAt: z.string(),
 });
 
 export const segmentListSchema = z.object({
@@ -60,8 +60,8 @@ export const templateSchema = z.object({
     purpose: z.enum(["marketing", "transactional"]),
     content: emailContentSchema,
     requiredVariables: z.array(z.string()),
-    createdAt: z.string().or(z.date()),
-    updatedAt: z.string().or(z.date()),
+    createdAt: z.string(),
+    updatedAt: z.string(),
 });
 
 export const mediaSchema = z.object({
@@ -76,8 +76,8 @@ export const mediaSchema = z.object({
     height: z.number().nullable().optional(),
     alt: z.string().nullable().optional(),
     caption: z.string().nullable().optional(),
-    createdAt: z.string().or(z.date()).nullable().optional(),
-    updatedAt: z.string().or(z.date()).nullable().optional(),
+    createdAt: z.string().nullable().optional(),
+    updatedAt: z.string().nullable().optional(),
 });
 
 export const mediaListSchema = z.object({
@@ -89,8 +89,8 @@ export const mediaReferenceSchema = z.object({
     resourceType: z.enum(["TEMPLATE", "SEQUENCE_EMAIL"]),
     resourcePublicId: z.string(),
     parentResourcePublicId: z.string().nullable().optional(),
-    createdAt: z.string().or(z.date()).nullable().optional(),
-    updatedAt: z.string().or(z.date()).nullable().optional(),
+    createdAt: z.string().nullable().optional(),
+    updatedAt: z.string().nullable().optional(),
 });
 
 export const mediaReferenceListSchema = z.object({
@@ -179,7 +179,7 @@ export const apiKeySchema = z.object({
     id: z.string(),
     keyPrefix: z.string(),
     name: z.string().nullable(),
-    createdAt: z.string().or(z.date()).nullable(),
+    createdAt: z.string().nullable(),
 });
 
 export const createdApiKeySchema = apiKeySchema.extend({
@@ -208,7 +208,7 @@ export const espConfigSchema = z.object({
     fromEmail: z.string().nullable().optional(),
     status: z.string(),
     secretVersion: z.number(),
-    lastTestedAt: z.string().or(z.date()).nullable().optional(),
+    lastTestedAt: z.string().nullable().optional(),
     lastTestStatus: z.string().nullable().optional(),
     lastTestError: z.string().nullable().optional(),
 });
@@ -220,7 +220,7 @@ export const espConfigListSchema = z.object({
 /** General (non-ESP) per-team settings singleton — see settings/general. */
 export const generalSettingsSchema = z.object({
     mailingAddress: z.string().nullable(),
-    updatedAt: z.string().or(z.date()).nullable().optional(),
+    updatedAt: z.string().nullable().optional(),
 });
 
 // ---- Bounce and complaint processing (docs/bounces-and-complaints.md) -----
@@ -243,8 +243,8 @@ export const feedbackConnectionSchema = z.object({
         "retiring",
         "disabled",
     ]),
-    lastReceivedAt: z.string().or(z.date()).nullable().optional(),
-    lastVerifiedAt: z.string().or(z.date()).nullable().optional(),
+    lastReceivedAt: z.string().nullable().optional(),
+    lastVerifiedAt: z.string().nullable().optional(),
     lastErrorCode: z.string().nullable().optional(),
 });
 
@@ -258,8 +258,8 @@ export const deliveryEventSchema = z.object({
     eventType: z.string(),
     bounceClass: z.string().nullable().optional(),
     reason: z.string().nullable().optional(),
-    occurredAt: z.string().or(z.date()),
-    receivedAt: z.string().or(z.date()),
+    occurredAt: z.string(),
+    receivedAt: z.string(),
 });
 
 export const deliveryEventListSchema = z.object({
@@ -278,9 +278,9 @@ export const suppressionSchema = z.object({
         "manual",
     ]),
     active: z.boolean(),
-    firstSuppressedAt: z.string().or(z.date()),
-    lastSuppressedAt: z.string().or(z.date()),
-    releasedAt: z.string().or(z.date()).nullable().optional(),
+    firstSuppressedAt: z.string(),
+    lastSuppressedAt: z.string(),
+    releasedAt: z.string().nullable().optional(),
     releaseReason: z.string().nullable().optional(),
 });
 

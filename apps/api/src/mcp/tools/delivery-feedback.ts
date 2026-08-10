@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import {
     getEspConfigByEspId,
@@ -122,7 +122,7 @@ async function toPublicEvents(teamId: string, events: DeliveryEvent[]) {
  * behavior. Only providers with a reviewed adapter
  * (`feedbackCapableProviders`) can be configured.
  */
-export function registerDeliveryFeedbackTools(server: McpServer): void {
+export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
     server.registerTool(
         "get_esp_feedback_connection",
         {

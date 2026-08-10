@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import { emailContentInputSchema } from "@sendlit/api-contract";
 import { mailTypes, emailActionTypes } from "../../config/constants";
@@ -52,7 +52,7 @@ function toPublicSequence(sequence: HydratedSequence) {
     };
 }
 
-export function registerSequenceTools(server: McpServer): void {
+export function registerSequenceTools(server: McpToolRegistrar): void {
     server.registerTool(
         "list_sequences",
         {

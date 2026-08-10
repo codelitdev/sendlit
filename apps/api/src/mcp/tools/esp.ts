@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import {
     createEspConfig,
@@ -67,7 +67,7 @@ const connectionFields = {
     fromEmail: z.string().email().optional(),
 };
 
-export function registerEspTools(server: McpServer): void {
+export function registerEspTools(server: McpToolRegistrar): void {
     server.registerTool(
         "get_esp_config",
         {

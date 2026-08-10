@@ -203,10 +203,37 @@ function makeToolRegistry(register: (server: any) => void) {
     return tools;
 }
 
-const auth = {
-    authInfo: {
-        clientId: "team-1",
-        user: { id: "user-1", email: "owner@example.com", name: "Owner" },
+const auth: any = {
+    http: {
+        authInfo: {
+            token: "test-token",
+            clientId: "test-client",
+            scopes: [],
+            extra: {
+                authKind: "oauth",
+                teamId: "team-1",
+                user: {
+                    id: "user-1",
+                    email: "owner@example.com",
+                    name: "Owner",
+                },
+            },
+        },
+    },
+};
+
+const teamKeyAuth: any = {
+    http: {
+        authInfo: {
+            token: "tak_test",
+            clientId: "team-key:tak_test",
+            scopes: [],
+            extra: {
+                authKind: "team_key",
+                teamId: "team-1",
+                user: null,
+            },
+        },
     },
 };
 
@@ -219,15 +246,33 @@ beforeEach(() => {
 describe("MCP tool auth helpers and response helpers", () => {
     it("extracts team/account auth context and emits structured JSON results", () => {
         expect(getTeamId(auth)).toBe("team-1");
-        expect(getTeamId({ authInfo: {} })).toBeNull();
+        expect(getTeamId({ http: { authInfo: {} } } as any)).toBeNull();
         expect(getAuthUser(auth)).toEqual(
             expect.objectContaining({ id: "user-1" }),
         );
-        expect(getAuthUser({ authInfo: {} })).toBeNull();
+        expect(getAuthUser({ http: { authInfo: {} } } as any)).toBeNull();
 
         expect(jsonResult({ ok: true })).toEqual({
             content: [{ type: "text", text: JSON.stringify({ ok: true }) }],
             structuredContent: { ok: true },
+        });
+    });
+
+    it("serializes dates consistently in text and structured results", () => {
+        const createdAt = new Date("2026-08-09T10:00:00.000Z");
+
+        expect(jsonResult({ data: { createdAt } })).toEqual({
+            content: [
+                {
+                    type: "text",
+                    text: JSON.stringify({
+                        data: { createdAt: "2026-08-09T10:00:00.000Z" },
+                    }),
+                },
+            ],
+            structuredContent: {
+                data: { createdAt: "2026-08-09T10:00:00.000Z" },
+            },
         });
     });
 });
@@ -259,8 +304,17 @@ describe("MCP contact tools", () => {
             offset: 2,
         });
 
-        mocks.createContact.mockResolvedValue({ contactId: secondContactId });
-        await tools
+        mocks.createContact.mockResolvedValue({
+            contactId: secondContactId,
+            email: "reader@example.com",
+            subscribed: true,
+            customFields: { plan: "pro" },
+            tags: [],
+            unsubscribeToken: "unsubscribe-token",
+            createdAt: new Date("2026-08-09T10:00:00.000Z"),
+            updatedAt: new Date("2026-08-09T10:00:00.000Z"),
+        });
+        const createResult = await tools
             .get("create_contact")!
             .handler(
                 { email: "reader@example.com", customFields: { plan: "pro" } },
@@ -271,6 +325,16 @@ describe("MCP contact tools", () => {
             email: "reader@example.com",
             customFields: { plan: "pro" },
         });
+        expect(createResult.structuredContent).toMatchObject({
+            createdAt: "2026-08-09T10:00:00.000Z",
+            updatedAt: "2026-08-09T10:00:00.000Z",
+        });
+        expect(
+            tools
+                .get("create_contact")!
+                .config.outputSchema.safeParse(createResult.structuredContent)
+                .success,
+        ).toBe(true);
     });
 
     it("does not leak contacts from another team", async () => {
@@ -431,9 +495,7 @@ describe("MCP ESP tools", () => {
         });
 
         await expect(
-            tools
-                .get("send_test_email")!
-                .handler({}, { authInfo: { clientId: "team-1" } }),
+            tools.get("send_test_email")!.handler({}, teamKeyAuth),
         ).resolves.toMatchObject({
             structuredContent: {
                 success: false,
@@ -650,13 +712,21 @@ describe("MCP team and template tools", () => {
             tools.get("create_team")!.handler(
                 { name: "Second Team" },
                 {
-                    authInfo: {
-                        clientId: "team-1",
-                        user: {
-                            id: "user-1",
-                            email: "owner@example.com",
-                            name: "Owner",
-                            defaultOrganizationId: "org-1",
+                    http: {
+                        authInfo: {
+                            token: "test-token",
+                            clientId: "test-client",
+                            scopes: [],
+                            extra: {
+                                authKind: "oauth",
+                                teamId: "team-1",
+                                user: {
+                                    id: "user-1",
+                                    email: "owner@example.com",
+                                    name: "Owner",
+                                    defaultOrganizationId: "org-1",
+                                },
+                            },
                         },
                     },
                 },

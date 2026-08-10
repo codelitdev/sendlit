@@ -8,6 +8,13 @@
             "when": 1785470058751,
             "tag": "0000_equal_blue_blade",
             "breakpoints": true
+        },
+        {
+            "idx": 1,
+            "version": "7",
+            "when": 1786279046698,
+            "tag": "0001_square_energizer",
+            "breakpoints": true
         }
     ]
 }

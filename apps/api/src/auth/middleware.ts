@@ -22,7 +22,7 @@ function applyAuthToRequest(
     req.user = auth.user;
 
     if (auth.kind === "team_key") {
-        req.apikey = auth.apiKey;
+        req.apiKeyId = auth.apiKeyId;
         // A key authenticates as exactly one, fixed team — no further
         // resolution needed (see `require-team.ts`).
         req.teamId = auth.teamId;
@@ -42,6 +42,7 @@ function applyAuthToRequest(
     }
 
     if (mode === "mcp" && auth.kind === "oauth") {
+        req.oauthToken = auth.token;
         req.clientId = auth.clientId;
         req.scopes = auth.scopes;
     }
@@ -67,6 +68,24 @@ export function createAuthMiddleware(
 
             if (sendAuthError(res, auth, resourceMetadataUrl)) return;
             if (auth.status !== "authenticated") return;
+
+            // Remote MCP authentication is intentionally limited to OAuth
+            // bearer tokens and fixed-team API keys. Dashboard cookies are a
+            // first-party web concern and must not silently authenticate MCP.
+            if (mode === "mcp" && auth.kind === "session") {
+                if (resourceMetadataUrl) {
+                    res.setHeader(
+                        "WWW-Authenticate",
+                        `Bearer resource_metadata="${resourceMetadataUrl}"`,
+                    );
+                }
+                res.status(401).json({
+                    error: "unauthorized",
+                    error_description:
+                        "MCP requires an OAuth bearer token or x-sendlit-apikey header.",
+                });
+                return;
+            }
 
             applyAuthToRequest(req, auth, mode);
             if (auth.kind === "oauth" || auth.kind === "session") {

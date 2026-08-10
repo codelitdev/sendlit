@@ -57,8 +57,8 @@ startDeliveryLifecycleJobs();
 app.set("trust proxy", process.env.ENABLE_TRUST_PROXY === "true" ? 1 : false);
 
 app.use(cors());
-// MCP clients use public dynamic client registration (DCR) during their first
-// OAuth connection. Keep that standards-based bootstrap available, while
+// MCP clients may use public dynamic client registration (DCR) during their
+// first OAuth connection. Keep that standards-based bootstrap available while
 // bounding anonymous client creation independently from authenticated API
 // traffic. Better Auth still validates the allowed scopes and PKCE below.
 app.use(
@@ -76,6 +76,9 @@ app.use(
 );
 app.all("/api/auth/*", toNodeHandler(auth));
 app.use(oauthPagesRoutes);
+// The MCP handler owns JSON parsing and protocol content-type errors, so it
+// must be mounted before the API's global Express body parser.
+app.use(mcpRoutes);
 // Mounted before global body parsing: this route needs the unmodified raw
 // request bytes for provider signature verification and has no
 // session/API-key concept at all — see delivery-feedback/webhook-route.ts.
@@ -111,8 +114,6 @@ app.use(
 // directly by email clients/recipients. Since the routers below gate all of
 // their traffic with `router.use(requireAuth)`, anything mounted after them
 // would otherwise be incorrectly blocked by that blanket check.
-// `mcpRoutes` also serves OAuth discovery metadata under `/.well-known`.
-app.use(mcpRoutes);
 app.use(trackingRoutes);
 app.use(provisioningRoutes);
 app.use(organizationRoutes);

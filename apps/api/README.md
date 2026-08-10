@@ -292,8 +292,11 @@ Summary of what's implemented:
 
 ## MCP Server
 
-The MCP server is exposed at `POST /mcp` over JSON-RPC HTTP. Use the
-`Mcp-Session-Id` header for session continuation.
+The MCP server is exposed at `POST /mcp` using the TypeScript SDK 2's stateless
+Streamable HTTP handler. Clients using the `2026-07-28` protocol use the modern
+request pattern, while 2025-era Streamable HTTP clients use the SDK's stateless
+`initialize` compatibility path. Neither path creates or retains session IDs,
+and the legacy HTTP+SSE transport is not supported.
 
 MCP clients authenticate the same way as REST clients:
 
@@ -306,8 +309,14 @@ OAuth-capable MCP clients can discover metadata from:
 - `GET /.well-known/oauth-authorization-server`
 - `GET /.well-known/openid-configuration`
 
-OAuth client registration, authorization, token, introspection, revocation, and
-userinfo endpoints are served by Better Auth under `/api/auth/oauth2/*`.
+OAuth authorization, token, introspection, revocation, and userinfo endpoints
+are served by Better Auth under `/api/auth/oauth2/*`. Modern clients can use
+CIMD, while existing clients can use Dynamic Client Registration (DCR); static
+pre-registered clients are also supported. OAuth tool access is
+default-deny using the scope map in `src/mcp/policy.ts`. Team API keys have full
+tool access to their fixed team, while browser session cookies are rejected.
+OAuth authorization requests must include an explicit, non-empty `scope` so a
+missing value cannot expand to the client's complete capability set.
 
 MCP tools live in `src/mcp/tools/*` and cover contacts, templates, sequences,
 ESP settings (both the default-ESP singleton tools and the multi-ESP
