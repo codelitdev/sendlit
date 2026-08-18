@@ -220,20 +220,15 @@ Phase 5 — **done**:
       team its owning account belongs to would defeat the point of scoping keys
       to one team.
     - `src/provisioning/routes.ts`: `POST /provisioning/teams`, a separate,
-      static-secret-guarded (`PROVISIONING_SECRET`, compared with
-      `crypto.timingSafeEqual`), server-to-server endpoint for multi-tenant
+      organization-key-authenticated server-to-server endpoint for multi-tenant
       consumers (the motivating case: CourseLit provisioning one SendLit team
       per one of its own tenants/"domains") to find-or-create a team at any
       point after both stacks have booted — not just at container start.
       Idempotent, keyed by a consumer-supplied `externalId` (e.g.
       `courselit:<domainId>`) rather than the owner's email, since two of a
       consumer's own tenants may share an owner email (which would otherwise
-      incorrectly merge them into one team). Ownership is still assigned: the
-      request body includes `ownerEmail`, which is resolved via
-      `findOrCreateBareAccount` (email lowercased; account created if missing);
-      that account becomes the team's `ownerAccountId` and its sole
-      `team_members` row with role `owner`. There is no fixed platform/system
-      owner account — whichever email the consumer sends is the owner.
+      incorrectly merge them into one team). Provisioning creates no account
+      or membership; the organization owns the resulting team.
     - `src/bootstrap.ts`: a _separate_, boot-time-only convenience directly
       ported from MediaLit's `createAdminUser()` — if `SUPER_ADMIN_EMAIL` is
       set and no account exists for it yet, creates one (with its default team

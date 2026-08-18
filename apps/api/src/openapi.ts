@@ -16,7 +16,7 @@ export const openApiDocument = generateOpenApi(
                 description: "API Server",
                 variables: {
                     protocol: { default: "https", enum: ["https", "http"] },
-                    host: { default: "api.sendlit.dev" },
+                    host: { default: "api.sendlit.app" },
                 },
             },
         ],

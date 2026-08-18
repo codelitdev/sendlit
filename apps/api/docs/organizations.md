@@ -49,11 +49,9 @@ team per school. FrontLit has one organization and one team per FrontLit team;
 those teams own their ESPs. When CourseLit later enables BYO ESPs, a school
 adds a team-owned ESP without changing teams or moving data.
 
-Organization API keys replace the deployment-wide provisioning secret. An
-organization key identifies exactly one organization and provisions teams only
-inside it. The existing `PROVISIONING_SECRET`,
-`X-Sendlit-Provisioning-Secret`, and `ownerEmail` provisioning behavior are
-removed, not deprecated.
+Organization API keys identify exactly one organization and provision teams
+only inside it. The former deployment-wide provisioning mechanism and
+`ownerEmail` provisioning behavior are removed, not deprecated.
 
 There are no production users. The database may be reset. Implementation must
 therefore rewrite the Drizzle schema and migrations as a clean baseline rather
@@ -280,7 +278,8 @@ provisioning:
 - `esp_configs.teamId` requires every ESP to be copied into one team.
 - A platform using one provider for many tenants must duplicate credentials and
   rotate each copy.
-- The global `PROVISIONING_SECRET` cannot identify or isolate an integration.
+- A deployment-wide shared credential cannot identify or isolate an
+  integration.
 - Provisioning accepts `ownerEmail`, creates a SendLit identity, and grants that
   email owner membership.
 - A school administrator can consequently gain SendLit access merely because
@@ -343,7 +342,7 @@ ESP grant      = which team may use organization infrastructure
 ## Non-goals
 
 - Preserving local development data.
-- Supporting a legacy `PROVISIONING_SECRET` compatibility window.
+- Supporting a legacy deployment-wide credential compatibility window.
 - Migrating production records; there are no production users.
 - Allowing cross-organization ESP grants.
 - Letting a team administer an organization ESP.
@@ -1657,8 +1656,7 @@ Authorization: Bearer sl_org_live_...
 
 Remove:
 
-- `PROVISIONING_SECRET`;
-- `X-Sendlit-Provisioning-Secret`;
+- the deployment-wide provisioning credential;
 - constant-time comparison against an environment secret;
 - `ownerEmail`;
 - `findOrCreateBareAccount` from provisioning;
@@ -2197,7 +2195,7 @@ content, or unredacted webhook credentials.
 - Generate all REST/OpenAPI routes from the ts-rest contract.
 - Add an `OrganizationApiKey` security scheme.
 - Map `/provisioning/*` to organization-key security.
-- Remove `X-Sendlit-Provisioning-Secret` documentation entirely.
+- Remove documentation for the deployment-wide provisioning credential.
 - Do not expose internal UUIDs or organization ESP identifiers on team
   surfaces.
 - Model provisioning create responses as the `created: true | false`
@@ -2340,8 +2338,7 @@ Delete from code, environment examples, Docker Compose, deployment config,
 tests, and docs:
 
 ```text
-PROVISIONING_SECRET
-X-Sendlit-Provisioning-Secret
+deployment-wide provisioning credential
 ```
 
 No replacement deployment-global provisioning secret is introduced.
@@ -2708,8 +2705,8 @@ The market-ready organization feature is complete when:
    default change.
 10. Organization keys are scoped, hashed, revocable, rotatable, auditable, and
     restricted to one organization.
-11. `PROVISIONING_SECRET`, `X-Sendlit-Provisioning-Secret`, and `ownerEmail`
-    provisioning are completely removed.
+11. The deployment-wide provisioning credential and `ownerEmail` provisioning
+    are completely removed.
 12. Provisioning is idempotent within organization scope and atomically creates
     policy/settings/grant/team key.
 13. Provisioning creates no human identity or membership.

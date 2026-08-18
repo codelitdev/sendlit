@@ -92,7 +92,7 @@ const sampleEmail: Email = {
             blockType: "link",
             settings: {
                 text: "Claim your spot",
-                url: "https://sendlit.dev",
+                url: "https://sendlit.app",
                 mode: "button",
                 alignment: "left",
                 buttonColor: "#db2777",

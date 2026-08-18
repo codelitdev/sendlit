@@ -186,8 +186,8 @@ exactly one team.
 
 `POST /provisioning/teams` is a separate server-to-server endpoint for
 multi-tenant consumers, such as CourseLit, to find or create one SendLit team
-per external tenant. It is guarded by `X-Sendlit-Provisioning-Secret`, not by
-OAuth or API key authentication.
+per external tenant. It requires a scoped organization API key as a Bearer
+token; it is not authenticated by an end-user OAuth session or team API key.
 
 `SUPER_ADMIN_EMAIL` is only a boot-time convenience for the first local or
 self-hosted account. It is not the provisioning mechanism for multi-tenant

@@ -225,9 +225,17 @@ export default function OrganizationsPage() {
         }
     }
 
-    async function loadDetails(organizationId: string) {
-        setLoadingDetails(true);
-        setHasManagementAccess(null);
+    async function loadDetails(
+        organizationId: string,
+        options?: { silent?: boolean },
+    ) {
+        // A silent refresh must keep this tree mounted. Resetting access
+        // unmounts every management section, including the one-time key
+        // secret dialog.
+        if (!options?.silent) {
+            setLoadingDetails(true);
+            setHasManagementAccess(null);
+        }
         setError(null);
         try {
             const [
@@ -311,7 +319,7 @@ export default function OrganizationsPage() {
     }, [selectedOrganization]);
 
     async function refresh() {
-        if (selectedId) await loadDetails(selectedId);
+        if (selectedId) await loadDetails(selectedId, { silent: true });
         await loadOrganizations(selectedId ?? undefined);
     }
 
@@ -2470,6 +2478,7 @@ function OrganizationKeysSection({
     const [newKeyOpen, setNewKeyOpen] = useState(false);
     const [revokingId, setRevokingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const activeKeys = keys.filter((key) => !key.revokedAt);
     async function revoke(keyId: string) {
         setRevokingId(keyId);
         setError(null);
@@ -2496,7 +2505,7 @@ function OrganizationKeysSection({
                         browser.
                     </p>
                 </div>
-                <Button onClick={() => setNewKeyOpen(true)}>
+                <Button type="button" onClick={() => setNewKeyOpen(true)}>
                     <Plus className="size-4" />
                     New key
                 </Button>
@@ -2505,7 +2514,7 @@ function OrganizationKeysSection({
                 {error && <Banner className="mb-4">{error}</Banner>}
                 {loading ? (
                     <Loading />
-                ) : keys.length === 0 ? (
+                ) : activeKeys.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                         No organization keys yet.
                     </p>
@@ -2521,7 +2530,7 @@ function OrganizationKeysSection({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {keys.map((key) => (
+                            {activeKeys.map((key) => (
                                 <TableRow key={key.keyId}>
                                     <TableCell className="font-medium">
                                         {key.name}
@@ -2541,6 +2550,7 @@ function OrganizationKeysSection({
                                     </TableCell>
                                     <TableCell>
                                         <Button
+                                            type="button"
                                             variant="ghost"
                                             className="text-destructive"
                                             disabled={revokingId === key.keyId}
@@ -2607,7 +2617,6 @@ function CreateOrganizationKeyDialog({
                 scopes,
             });
             setCreated(key);
-            await onCreated();
         } catch (err) {
             setError(errorMessage(err, "Failed to create organization key"));
         } finally {
@@ -2616,10 +2625,14 @@ function CreateOrganizationKeyDialog({
     }
     function close(openState: boolean) {
         if (!openState) {
+            const createdKey = created;
             setCreated(null);
             setName("");
             setError(null);
             setCopied(false);
+            onOpenChange(openState);
+            if (createdKey) void onCreated();
+            return;
         }
         onOpenChange(openState);
     }
@@ -2699,9 +2712,12 @@ function CreateOrganizationKeyDialog({
                 )}
                 <DialogFooter>
                     {created ? (
-                        <Button onClick={() => close(false)}>Done</Button>
+                        <Button type="button" onClick={() => close(false)}>
+                            Done
+                        </Button>
                     ) : (
                         <Button
+                            type="button"
                             onClick={() => void submit()}
                             disabled={
                                 saving || !name.trim() || scopes.length === 0

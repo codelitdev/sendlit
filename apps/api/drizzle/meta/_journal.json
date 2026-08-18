@@ -15,6 +15,13 @@
             "when": 1786279046698,
             "tag": "0001_square_energizer",
             "breakpoints": true
+        },
+        {
+            "idx": 2,
+            "version": "7",
+            "when": 1787066846079,
+            "tag": "0002_kind_masked_marvel",
+            "breakpoints": true
         }
     ]
 }

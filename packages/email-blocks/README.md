@@ -17,7 +17,7 @@ one prescribed page shape.
 npm install @sendlit/email-blocks
 ```
 
-See [Getting Started](https://sendlit.dev/email-blocks/getting-started)
+See [Getting Started](https://sendlit.app/email-blocks/getting-started)
 for the peer dependency and Tailwind setup this package needs (it ships
 utility classes and shadcn theme tokens, not a compiled stylesheet).
 
@@ -65,4 +65,4 @@ Popover, Avatar, etc.), following shadcn conventions throughout.
 ## Docs
 
 Full prop reference and a live, editable demo for every component:
-https://sendlit.dev/email-blocks/overview
+https://sendlit.app/email-blocks/overview

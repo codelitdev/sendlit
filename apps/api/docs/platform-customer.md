@@ -63,9 +63,9 @@ SendLit's current tenant model correctly uses one team per external workspace,
 but the current sending and provisioning assumptions cannot safely support
 managed embedding at scale:
 
-- `POST /provisioning/teams` is protected by one deployment-wide
-  `PROVISIONING_SECRET`. It cannot identify which platform customer made the
-  request or restrict that caller to its own teams.
+- `POST /provisioning/teams` used a deployment-wide shared credential. That
+  model cannot identify which platform customer made the request or restrict
+  that caller to its own teams.
 - `teams.externalId` is globally unique. Two platform customers may legitimately
   use the same external identifier.
 - User-managed ESP credentials live on each team. Copying one platform ESP
@@ -1389,7 +1389,7 @@ backfill. It requires a migration report and platform-by-platform confirmation.
 
 During a time-bounded compatibility window:
 
-- `X-Sendlit-Provisioning-Secret` maps to the legacy platform customer;
+- the legacy shared credential maps to the legacy platform customer;
 - `/provisioning/teams` retains its current response contract;
 - the compatibility schema may continue accepting `ownerEmail`, but the value
   is ignored/deprecated and never creates an account or membership;

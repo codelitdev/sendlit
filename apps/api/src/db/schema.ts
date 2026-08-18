@@ -301,6 +301,11 @@ export const jwks = pgTable("jwks", {
     privateKey: text("private_key").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    // Required by Better Auth's JWT plugin to select a signing key for a
+    // configured algorithm/curve. Existing keys inherit the default
+    // algorithm when these nullable fields are absent.
+    alg: text("alg"),
+    crv: text("crv"),
 });
 
 export const oauthClient = pgTable(
