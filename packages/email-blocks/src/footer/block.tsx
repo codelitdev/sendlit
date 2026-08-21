@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { BlockRenderProps } from "@sendlit/email-editor";
 import type { FooterSettings, SendLitEmailRenderContext } from "./types";
 
@@ -24,6 +25,10 @@ export function FooterBlock({
         paddingX = "24px",
     } = block.settings;
 
+    // HTML email renderers collapse raw newlines in text nodes. Emit <br>
+    // so multi-line physical addresses stay multi-line in the delivered mail.
+    const addressLines = footer.mailingAddress.split(/\r?\n/);
+
     return (
         <div
             style={{
@@ -37,7 +42,14 @@ export function FooterBlock({
                 padding: `${paddingTop} ${paddingX} ${paddingBottom}`,
             }}
         >
-            <div>{footer.mailingAddress}</div>
+            <div>
+                {addressLines.map((line, index) => (
+                    <Fragment key={index}>
+                        {index > 0 ? <br /> : null}
+                        {line}
+                    </Fragment>
+                ))}
+            </div>
             <div style={{ marginTop: "8px" }}>
                 <a
                     href={footer.unsubscribeUrl}

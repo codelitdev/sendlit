@@ -55,6 +55,24 @@ describe("SendLit footer block", () => {
         expect(JSON.stringify(email)).not.toContain("unsubscribe/token");
     });
 
+    it("preserves multi-line mailing addresses with line breaks", async () => {
+        const html = await renderEmailToHtml({
+            email: emailWithFooter(),
+            blocks: [footer],
+            renderContext: {
+                footer: {
+                    mailingAddress: "23 St Streets, Maine County\nNovark",
+                    unsubscribeUrl: "https://example.com/unsubscribe/token",
+                },
+            },
+        });
+
+        expect(html).toContain("23 St Streets, Maine County");
+        expect(html).toContain("Novark");
+        expect(html).toMatch(/Maine County\s*<br\s*\/?>\s*Novark/i);
+        expect(html).toContain("https://example.com/unsubscribe/token");
+    });
+
     it("fails rendering when the managed context is absent", async () => {
         const html = await renderEmailToHtml({
             email: emailWithFooter(),

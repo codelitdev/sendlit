@@ -13,6 +13,7 @@ import {
     appendTrackingPixel,
     appendTrackingPixelToHtml,
     findMissingTemplateVariables,
+    mailingAddressAppearsInText,
     MissingTemplateVariablesError,
     renderEmailContent,
     transformLinksForClickTracking,
@@ -62,6 +63,53 @@ describe("mail render helpers", () => {
         expect(html).toContain("Hello Ada");
         expect(html).toContain("123 Main Street, London");
         expect(html).toContain('href="https://sendlit.test/unsubscribe/token"');
+    });
+
+    it("renders multi-line mailing addresses without footer_render_failed", async () => {
+        const content = {
+            ...defaultEmail,
+            content: [
+                {
+                    blockType: "text" as const,
+                    settings: { content: "Hello" },
+                },
+                createFooterEmailBlock(),
+            ],
+        };
+
+        const html = await renderEmailContent({
+            content,
+            variables: {
+                address: "23 St Streets, Maine County\nNovark",
+                unsubscribe_link: "https://sendlit.test/unsubscribe/token",
+            },
+        });
+
+        expect(html).toContain("23 St Streets, Maine County");
+        expect(html).toContain("Novark");
+        expect(html).toMatch(/Maine County\s*<br\s*\/?>\s*Novark/i);
+        expect(html).toContain('href="https://sendlit.test/unsubscribe/token"');
+    });
+
+    it("treats each non-empty mailing-address line as present in rendered text", () => {
+        expect(
+            mailingAddressAppearsInText(
+                "23 St Streets, Maine CountyNovark Unsubscribe",
+                "23 St Streets, Maine County\nNovark",
+            ),
+        ).toBe(true);
+        expect(
+            mailingAddressAppearsInText(
+                "23 St Streets, Maine County Novark",
+                "23 St Streets, Maine County\nNovark",
+            ),
+        ).toBe(true);
+        expect(
+            mailingAddressAppearsInText(
+                "23 St Streets, Maine County",
+                "23 St Streets, Maine County\nNovark",
+            ),
+        ).toBe(false);
     });
 
     it("refuses to render a managed footer without server-owned context", async () => {

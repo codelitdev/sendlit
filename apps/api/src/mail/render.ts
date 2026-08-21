@@ -241,6 +241,21 @@ export function discoverRequiredTemplateVariables(source: string): string[] {
     return findMissingTemplateVariables(source, {});
 }
 
+/** True when every non-empty mailing-address line appears in rendered text.
+ * HTML email pipelines collapse raw newlines and the footer emits `<br>`, so
+ * a literal `\n`-preserving `includes` check is not reliable. */
+export function mailingAddressAppearsInText(
+    text: string,
+    mailingAddress: string,
+): boolean {
+    const lines = mailingAddress
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+    if (lines.length === 0) return false;
+    return lines.every((line) => text.includes(line));
+}
+
 /**
  * Shared by the campaign send loop (`automation/process-ongoing-sequence.ts`)
  * and the transactional send path: renders `@sendlit/email-editor` block
@@ -296,7 +311,13 @@ export async function renderEmailContent({
     if (renderContext?.footer) {
         const document = new JSDOM(html).window.document;
         const text = document.body.textContent ?? "";
-        const hasAddress = text.includes(renderContext.footer.mailingAddress);
+        // Multi-line addresses are rendered with <br> (or may have newlines
+        // collapsed by the HTML pipeline), so never require a literal "\n"
+        // match against textContent — require each non-empty line instead.
+        const hasAddress = mailingAddressAppearsInText(
+            text,
+            renderContext.footer.mailingAddress,
+        );
         const hasUnsubscribeUrl = Array.from(
             document.querySelectorAll("a"),
         ).some(
