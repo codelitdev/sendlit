@@ -1295,6 +1295,11 @@ Operational runbooks are required for:
   platform-owned team.
 - Platform-owned teams have no human memberships in v1 and are absent from
   account team lists, team pickers, dashboard routes, and OAuth consent.
+  Organization owners and administrators may **explicitly** enter a provisioned
+  team through `POST /organizations/:organizationId/teams/:teamId/enter`, which
+  inserts a personal `team_members` admin row and records `team.entered` in
+  organization audit activity. Provisioning still never adds implicit
+  membership.
 - Team-facing sending-option, settings, delivery, and MCP responses never
   return `managedOutboxId`, provider identity, secret state, connection health,
   or platform-outbox metadata. Effective From address and platform display name

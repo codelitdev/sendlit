@@ -16,6 +16,7 @@ import {
     SidebarMenuItem,
     useSidebar,
 } from "@/components/ui/sidebar";
+import { SendLitLogo } from "@/components/dashboard/sendlit-logo";
 import type { Organization, Team } from "@/lib/api";
 import { selectOrganizationContext } from "@/lib/tokens";
 
@@ -48,7 +49,6 @@ export function TeamSwitcher({
                 organization.organizationId === currentOrganizationId,
         )?.name ??
         "Organization workspace";
-    const initial = activeTeam?.name.slice(0, 1).toUpperCase() ?? "S";
 
     return (
         <SidebarMenu>
@@ -59,18 +59,18 @@ export function TeamSwitcher({
                             size="lg"
                             className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
-                            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sm font-medium text-sidebar-primary-foreground">
-                                {initial}
+                            <div className="flex aspect-square size-9 shrink-0 items-center justify-center rounded-md bg-[var(--primary-soft)]">
+                                <SendLitLogo className="size-8" />
                             </div>
-                            <div className="grid flex-1 text-left text-sm leading-tight">
+                            <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-medium">
                                     {title}
                                 </span>
-                                <span className="truncate text-xs">
+                                <span className="truncate text-xs text-muted-foreground">
                                     {subtitle}
                                 </span>
                             </div>
-                            <ChevronsUpDownIcon className="ml-auto" />
+                            <ChevronsUpDownIcon className="ml-auto size-4" />
                         </SidebarMenuButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent

@@ -12,6 +12,9 @@ export const teamSchema = z.object({
     externalId: z.string().nullable().optional(),
     createdAt: z.string().nullable().optional(),
     updatedAt: z.string().nullable().optional(),
+    /** True when the calling human is already a `team_members` row. Always
+     * false for organization API keys. Omitted on non-list team payloads. */
+    viewerIsMember: z.boolean().optional(),
 });
 
 /** The key's secret is stored hashed and never returned after creation —

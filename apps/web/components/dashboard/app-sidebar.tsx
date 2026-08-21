@@ -14,16 +14,17 @@ import {
     Users,
     Workflow,
 } from "lucide-react";
-import { Loader } from "@codelitdev/design-system";
 import {
     Sidebar,
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
     SidebarMenu,
+    SidebarMenuButton,
     SidebarMenuItem,
     SidebarRail,
 } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { NavMain, type NavMainItem } from "@/components/dashboard/nav-main";
 import { NavUser, type CurrentAccount } from "@/components/dashboard/nav-user";
 import { TeamSwitcher } from "@/components/dashboard/team-switcher";
@@ -199,11 +200,20 @@ export function AppSidebar() {
                     />
                 ) : loadingTeams ? (
                     <SidebarMenu>
-                        <SidebarMenuItem className="flex h-12 items-center gap-2 px-2">
-                            <Loader size={18} />
-                            <span className="truncate text-sm font-medium text-muted-foreground group-data-[collapsible=icon]:hidden">
-                                Loading…
-                            </span>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton
+                                size="lg"
+                                className="pointer-events-none"
+                                aria-hidden
+                                tabIndex={-1}
+                            >
+                                <Skeleton className="aspect-square size-9 shrink-0 rounded-md" />
+                                <div className="grid min-w-0 flex-1 gap-1.5">
+                                    <Skeleton className="h-4 w-20 max-w-full" />
+                                    <Skeleton className="h-3 w-28 max-w-full" />
+                                </div>
+                                <Skeleton className="ml-auto size-4 shrink-0" />
+                            </SidebarMenuButton>
                         </SidebarMenuItem>
                     </SidebarMenu>
                 ) : (

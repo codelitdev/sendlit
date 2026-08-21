@@ -17,6 +17,7 @@
     --color-popover-foreground: var(--popover-foreground);
     --color-primary: var(--primary);
     --color-primary-foreground: var(--primary-foreground);
+    --color-primary-soft: var(--primary-soft);
     --color-secondary: var(--secondary);
     --color-secondary-foreground: var(--secondary-foreground);
     --color-muted: var(--muted);
@@ -63,6 +64,7 @@
 [data-product="sendlit"] {
     --primary: oklch(0.47 0.14 150);
     --primary-hover: oklch(0.42 0.14 150);
+    --primary-soft: color-mix(in oklch, var(--primary) 12%, transparent);
     --ring: oklch(0.47 0.14 150);
 }
 

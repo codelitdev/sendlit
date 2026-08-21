@@ -53,10 +53,13 @@ import {
     upsertEspGrant,
 } from "../delivery/queries";
 import { getOrganizationQuotaUsage } from "../delivery/quota";
+import { getOrganizationMailActivity } from "./mail-activity";
 import {
     archiveTeam,
     createTeam,
+    ensureTeamMembership,
     getTeamByTeamId,
+    listMemberTeamIdsForUser,
     listTeamsForOrganization,
     renameTeam,
 } from "../team/queries";
@@ -291,14 +294,17 @@ function serializeGrant(
     };
 }
 
-function serializeTeam(team: {
-    teamId: string;
-    name: string;
-    status: string;
-    externalId: string | null;
-    createdAt: Date | null;
-    updatedAt: Date | null;
-}) {
+function serializeTeam(
+    team: {
+        teamId: string;
+        name: string;
+        status: string;
+        externalId: string | null;
+        createdAt: Date | null;
+        updatedAt: Date | null;
+    },
+    viewerIsMember?: boolean,
+) {
     return {
         teamId: team.teamId,
         name: team.name,
@@ -306,6 +312,7 @@ function serializeTeam(team: {
         externalId: team.externalId,
         createdAt: team.createdAt?.toISOString() ?? null,
         updatedAt: team.updatedAt?.toISOString() ?? null,
+        ...(viewerIsMember === undefined ? {} : { viewerIsMember }),
     };
 }
 
@@ -609,7 +616,26 @@ const impl = s.router(contract.organizations, {
         const teams = await listTeamsForOrganization(
             authorization.organization.id,
         );
-        return { status: 200, body: { items: teams.map(serializeTeam) } };
+        const memberTeamIds =
+            isHuman(req as any) && (req as any).userId
+                ? await listMemberTeamIdsForUser(
+                      (req as any).userId,
+                      teams.map((team) => team.id),
+                  )
+                : new Set<string>();
+        return {
+            status: 200,
+            body: {
+                items: teams.map((team) =>
+                    serializeTeam(
+                        team,
+                        isHuman(req as any)
+                            ? memberTeamIds.has(team.id)
+                            : false,
+                    ),
+                ),
+            },
+        };
     },
     createTeam: async ({ req, params, body }) => {
         const authorization = await resolveAuthorization(
@@ -1438,6 +1464,91 @@ const impl = s.router(contract.organizations, {
                     ...usage.month,
                     resetsAt: usage.month.resetsAt.toISOString(),
                 },
+            },
+        };
+    },
+    getMailActivity: async ({
+        req,
+        params,
+        query,
+    }: {
+        req: any;
+        params: { organizationId: string };
+        query: { rangeDays?: 1 | 3 | 7 | 30 };
+    }) => {
+        const authorization = await resolveAuthorization(
+            req,
+            params.organizationId,
+        );
+        if (!authorization) {
+            return { status: 404, body: { error: "organization_not_found" } };
+        }
+        const mayRead =
+            hasRole(authorization, ["owner", "admin"]) ||
+            Boolean(authorization.keyScopes?.includes("usage:read"));
+        if (!mayRead) {
+            return {
+                status: 403,
+                body: { error: "organization_permission_required" },
+            };
+        }
+        const rangeDays = query.rangeDays ?? 7;
+        const activity = await getOrganizationMailActivity(
+            authorization.organization.id,
+            rangeDays,
+        );
+        return { status: 200, body: activity };
+    },
+    enterTeam: async ({
+        req,
+        params,
+    }: {
+        req: any;
+        params: { organizationId: string; teamId: string };
+    }) => {
+        if (!isHuman(req) || !req.userId) {
+            return { status: 403, body: { error: "user_auth_required" } };
+        }
+        const authorization = await resolveAuthorization(
+            req,
+            params.organizationId,
+        );
+        if (!authorization) {
+            return { status: 404, body: { error: "organization_not_found" } };
+        }
+        if (!hasRole(authorization, ["owner", "admin"])) {
+            return {
+                status: 403,
+                body: { error: "organization_permission_required" },
+            };
+        }
+        const team = await getTeamByTeamId(params.teamId);
+        if (!team || team.organizationId !== authorization.organization.id) {
+            return { status: 404, body: { error: "team_not_found" } };
+        }
+        if (team.status === "archived") {
+            return { status: 422, body: { error: "team_archived" } };
+        }
+        const { membership, created } = await ensureTeamMembership({
+            teamId: team.id,
+            userId: req.userId,
+            role: "admin",
+        });
+        await auditOrganizationMutation(
+            req,
+            authorization.organization.id,
+            "team.entered",
+            {
+                teamId: team.id,
+                metadata: { role: "admin", created },
+            },
+        );
+        return {
+            status: 200,
+            body: {
+                teamId: team.teamId,
+                role: membership.role as "admin" | "member",
+                created,
             },
         };
     },

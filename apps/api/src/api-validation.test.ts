@@ -551,6 +551,16 @@ describe("OpenAPI authentication metadata", () => {
                 ?.post,
         ).toBeTruthy();
         expect(openApiDocument.paths["/delivery-events"]?.get).toBeTruthy();
+        expect(
+            openApiDocument.paths[
+                "/organizations/{organizationId}/mail-activity"
+            ]?.get,
+        ).toBeTruthy();
+        expect(
+            openApiDocument.paths[
+                "/organizations/{organizationId}/teams/{teamId}/enter"
+            ]?.post,
+        ).toBeTruthy();
         expect(openApiDocument.paths["/suppressions"]?.get).toBeTruthy();
         expect(
             openApiDocument.paths["/suppressions/{suppressionId}/release"]

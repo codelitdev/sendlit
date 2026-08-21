@@ -35,6 +35,12 @@ This separation supports two common models:
   its own ESP while still using the organization to manage teams and
   integrations.
 
+The Organizations page keeps the current organization in view, then splits
+administration into tabs: **General** (organization name), **Delivery**
+(shared mailboxes and default-delivery policy), **Teams** (grants and Enter
+team), **Members**, **Activity** (quota, transactional mail counts, and
+audit), and **Keys**.
+
 ## Organization membership and team access
 
 Organization membership and team membership are deliberately separate.
@@ -55,7 +61,25 @@ When an owner or administrator creates a team from **Organizations**, they are
 added to that new team as an administrator. A team created by an external
 provisioning integration has no human members by default, because it commonly
 represents a customer tenant rather than a workspace the platform operator
-should enter.
+should enter. Isolation remains the default: provisioning never adds
+organization owners or administrators to the tenant.
+
+To inspect a provisioned team, an organization owner or administrator can
+choose **Enter team** on the **Teams** tab. This creates a permanent
+team administrator membership for that person, records `team.entered` in
+organization audit activity, and makes the team appear in the sidebar switcher.
+Organization members and organization API keys cannot enter a team. Archived
+teams cannot be entered.
+
+## Transactional mail activity
+
+The **Transactional mail activity** card on **Organizations → Activity** shows
+organization totals and a per-team table of transactional mail counts (`sent`,
+`queued`, `failed`, `bounced`) for the last 1, 3, 7, or 30 days (default 7).
+Quiet teams still appear so provisioned tenants with no recent sends are
+visible. These counts are transactional only; they do not include campaigns,
+broadcasts, or sequences. Shared-delivery quota remains on **Shared-delivery
+usage**. Recipients, subjects, and email bodies are not shown.
 
 > A team that is archived is removed from normal team switching and cannot
 > send. Its operational history is retained.
@@ -63,7 +87,7 @@ should enter.
 ## Shared mailboxes
 
 A shared mailbox is an organization-owned ESP configuration. Configure it in
-**Organizations → Shared mailboxes**. The mailbox’s provider connection,
+**Organizations → Delivery**. The mailbox’s provider connection,
 secret, health details, and feedback credentials stay at organization scope.
 Team APIs and team members receive only a safe delivery option and sender
 metadata—never the provider credentials.
@@ -93,7 +117,7 @@ you need bounce and complaint webhooks.
 
 ## Grant a mailbox to a team
 
-In **Teams and mailbox sharing**, each active team is a compact row. Open its
+On **Organizations → Teams**, each active team is a compact row. Open its
 actions menu and choose **Mailbox grant settings** to:
 
 - select an active shared mailbox;

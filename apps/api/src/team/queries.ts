@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { db } from "../db/client";
 import {
     oauthPostLoginTeamSelections,
@@ -494,6 +494,52 @@ export async function getTeamMembership(
         )
         .limit(1);
     return row ?? null;
+}
+
+/** Internal team ids the user already belongs to, used to flag org team
+ * lists without a second round-trip per row. */
+export async function listMemberTeamIdsForUser(
+    userId: string,
+    teamIds: string[],
+): Promise<Set<string>> {
+    if (teamIds.length === 0) return new Set();
+    const rows = await db
+        .select({ teamId: teamMembers.teamId })
+        .from(teamMembers)
+        .where(
+            and(
+                eq(teamMembers.userId, userId),
+                inArray(teamMembers.teamId, teamIds),
+            ),
+        );
+    return new Set(rows.map((row) => row.teamId));
+}
+
+/** Inserts `team_members` if missing. Unique `(team_id, user_id)` makes a
+ * concurrent insert collapse to the existing row without a second grant. */
+export async function ensureTeamMembership({
+    teamId,
+    userId,
+    role,
+}: {
+    teamId: string;
+    userId: string;
+    role: "admin" | "member";
+}): Promise<{ membership: TeamMember; created: boolean }> {
+    const existing = await getTeamMembership(teamId, userId);
+    if (existing) return { membership: existing, created: false };
+    try {
+        const [row] = await db
+            .insert(teamMembers)
+            .values({ teamId, userId, role })
+            .returning();
+        return { membership: row, created: true };
+    } catch (error: any) {
+        if (error?.code !== "23505") throw error;
+        const raced = await getTeamMembership(teamId, userId);
+        if (!raced) throw error;
+        return { membership: raced, created: false };
+    }
 }
 
 /** Persists the team an OAuth end-user picked on the post-login "select a

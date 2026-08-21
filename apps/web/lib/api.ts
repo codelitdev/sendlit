@@ -750,6 +750,7 @@ export interface OrganizationTeam {
     externalId: string | null;
     createdAt: string | null;
     updatedAt: string | null;
+    viewerIsMember?: boolean;
 }
 
 export interface OrganizationMember {
@@ -773,6 +774,35 @@ export interface OrganizationUsageWindow {
 export interface OrganizationUsage {
     day: OrganizationUsageWindow;
     month: OrganizationUsageWindow;
+}
+
+export type OrganizationMailActivityRangeDays = 1 | 3 | 7 | 30;
+
+export interface OrganizationMailCounts {
+    sent: number;
+    queued: number;
+    failed: number;
+    bounced: number;
+}
+
+export interface OrganizationMailActivityTeam {
+    teamId: string;
+    name: string;
+    status: OrganizationTeam["status"];
+    externalId: string | null;
+    mail: OrganizationMailCounts;
+}
+
+export interface OrganizationMailActivity {
+    rangeDays: OrganizationMailActivityRangeDays;
+    totals: OrganizationMailCounts;
+    teams: OrganizationMailActivityTeam[];
+}
+
+export interface OrganizationEnterTeamResult {
+    teamId: string;
+    role: "admin" | "member";
+    created: boolean;
 }
 
 export interface OrganizationAuditEvent {
@@ -932,6 +962,22 @@ export function updateOrganizationDeliveryPolicy(
 export function getOrganizationUsage(organizationId: string) {
     return organizationRequest<OrganizationUsage>(
         `/organizations/${organizationId}/usage`,
+    );
+}
+
+export function getOrganizationMailActivity(
+    organizationId: string,
+    rangeDays: OrganizationMailActivityRangeDays = 7,
+) {
+    return organizationRequest<OrganizationMailActivity>(
+        `/organizations/${organizationId}/mail-activity?rangeDays=${rangeDays}`,
+    );
+}
+
+export function enterOrganizationTeam(organizationId: string, teamId: string) {
+    return organizationRequest<OrganizationEnterTeamResult>(
+        `/organizations/${organizationId}/teams/${teamId}/enter`,
+        { method: "POST", body: JSON.stringify({}) },
     );
 }
 

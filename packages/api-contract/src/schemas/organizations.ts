@@ -87,6 +87,51 @@ export const organizationUsageSchema = z.object({
     month: organizationUsageWindowSchema,
 });
 
+/** Transactional-mail window, in days. Defaults to the last 7 days. */
+export const organizationMailActivityQuerySchema = z.object({
+    rangeDays: z.coerce
+        .number()
+        .int()
+        .refine((value) => [1, 3, 7, 30].includes(value))
+        .optional(),
+});
+
+export const organizationMailCountsSchema = z.object({
+    sent: z.number().int().nonnegative(),
+    queued: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    bounced: z.number().int().nonnegative(),
+});
+
+export const organizationMailActivityTeamSchema = z.object({
+    teamId: z.string(),
+    name: z.string(),
+    status: z.enum(["active", "sending_suspended", "archived"]),
+    externalId: z.string().nullable(),
+    mail: organizationMailCountsSchema,
+});
+
+/** Per-team and org-total transactional mail counts. Does not include
+ * campaigns, broadcasts, sequences, recipients, subjects, or bodies. */
+export const organizationMailActivitySchema = z.object({
+    rangeDays: z.union([
+        z.literal(1),
+        z.literal(3),
+        z.literal(7),
+        z.literal(30),
+    ]),
+    totals: organizationMailCountsSchema,
+    teams: z.array(organizationMailActivityTeamSchema),
+});
+
+export const organizationEnterTeamBodySchema = z.object({});
+
+export const organizationEnterTeamResponseSchema = z.object({
+    teamId: z.string(),
+    role: z.enum(["admin", "member"]),
+    created: z.boolean(),
+});
+
 /** Secret-free, administrator-visible organization activity. Internal UUIDs
  * are intentionally not exposed; optional resource references use public IDs. */
 export const organizationAuditEventSchema = z.object({

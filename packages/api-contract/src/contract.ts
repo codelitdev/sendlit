@@ -101,6 +101,10 @@ import {
     updateOrganizationBodySchema,
     updateOrganizationMemberBodySchema,
     organizationUsageSchema,
+    organizationMailActivityQuerySchema,
+    organizationMailActivitySchema,
+    organizationEnterTeamBodySchema,
+    organizationEnterTeamResponseSchema,
 } from "./schemas/organizations";
 import {
     espGrantSchema,
@@ -1214,6 +1218,34 @@ const organizationsContract = c.router(
                 404: errorSchema,
             },
             summary: "Get aggregate organization delivery quota usage",
+        },
+        getMailActivity: {
+            method: "GET",
+            path: "/organizations/:organizationId/mail-activity",
+            query: organizationMailActivityQuerySchema,
+            responses: {
+                200: organizationMailActivitySchema,
+                400: errorSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Get organization transactional mail activity",
+            description:
+                "Returns per-team and organization-total transactional mail counts (`sent`, `queued`, `failed`, `bounced`) for a window of 1, 3, 7, or 30 days (default 7). Includes teams with zero activity. Does not include campaigns, broadcasts, sequences, recipients, subjects, or email bodies. Shared-delivery quota remains on `/usage`.",
+        },
+        enterTeam: {
+            method: "POST",
+            path: "/organizations/:organizationId/teams/:teamId/enter",
+            body: organizationEnterTeamBodySchema,
+            responses: {
+                200: organizationEnterTeamResponseSchema,
+                403: errorSchema,
+                404: errorSchema,
+                422: errorSchema,
+            },
+            summary: "Enter an organization team as a human admin",
+            description:
+                "Grants the calling human organization owner or administrator a permanent team `admin` membership, recorded as organization audit action `team.entered`. Organization API keys cannot enter. Archived teams cannot be entered. Idempotent if membership already exists.",
         },
         listAuditEvents: {
             method: "GET",

@@ -1576,13 +1576,28 @@ the allowed 5-minute to 7-day window.
 
 ```text
 GET /organizations/:organizationId/usage
+GET /organizations/:organizationId/mail-activity?rangeDays=7
 GET /organizations/:organizationId/audit-events
+POST /organizations/:organizationId/teams/:teamId/enter
 ```
 
 `usage` returns the current UTC-day and UTC-month aggregate organization
 delivery-pool counters: accepted sends, queued reservations, optional limit,
 remaining capacity, and reset time. It never includes team-owned ESP usage.
 Owners and administrators may read it; an organization key needs `usage:read`.
+
+`mail-activity` returns per-team and organization-total transactional mail
+counts (`sent`, `queued`, `failed`, `bounced`) for a window of 1, 3, 7, or 30
+days (default 7). Every organization team is included, including those with
+zero activity. It does not include campaigns, broadcasts, sequences,
+recipients, subjects, or bodies. Auth matches `usage`. Shared-delivery quota
+stays on `/usage`.
+
+`enter` is a human-only membership action for organization owners and
+administrators. It inserts a permanent team `admin` membership if missing,
+returns `{ teamId, role, created }`, and always records organization audit
+action `team.entered`. Organization API keys cannot enter. Archived teams
+return `422 team_archived`. Teams that are `sending_suspended` may be entered.
 
 `audit-events` returns the 50 newest append-only, secret-free organization
 events. Resource references use public team, ESP, and grant IDs only. Owners

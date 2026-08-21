@@ -8,12 +8,14 @@ import {
     useMemo,
     useState,
 } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
     Activity,
     Archive,
     CheckCircle2,
     Copy,
     KeyRound,
+    LogIn,
     Mail,
     MoreHorizontal,
     Pencil,
@@ -45,6 +47,12 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/codelit/select";
+import {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+} from "@/components/ui/codelit/tabs";
 import {
     Dialog,
     DialogContent,
@@ -91,6 +99,7 @@ import {
     getOrganizationIdFromCookie,
     notifyTeamsChanged,
     selectOrganizationContext,
+    setTeamIdCookie,
 } from "@/lib/tokens";
 import {
     addOrganizationMember,
@@ -102,8 +111,10 @@ import {
     createOrganizationTeam,
     deleteOrganizationEsp,
     feedbackCapableProviders,
+    enterOrganizationTeam,
     getOrganizationDeliveryPolicy,
     getOrganizationUsage,
+    getOrganizationMailActivity,
     getOrganizationEspGrant,
     listOrganizationAuditEvents,
     listOrganizationEsps,
@@ -134,6 +145,8 @@ import {
     type OrganizationApiKeyScope,
     type OrganizationEspGrant,
     type OrganizationDeliveryPolicy,
+    type OrganizationMailActivity,
+    type OrganizationMailActivityRangeDays,
     type OrganizationMember,
     type OrganizationTeam,
     type OrganizationUsage,
@@ -164,8 +177,28 @@ function errorMessage(error: unknown, fallback: string) {
     return error instanceof ApiError ? error.message : fallback;
 }
 
+const ORGANIZATION_TABS = [
+    "general",
+    "delivery",
+    "teams",
+    "members",
+    "activity",
+    "keys",
+] as const;
+type OrganizationTab = (typeof ORGANIZATION_TABS)[number];
+
+function isOrganizationTab(value: string | null): value is OrganizationTab {
+    return ORGANIZATION_TABS.includes(value as OrganizationTab);
+}
+
 export default function OrganizationsPage() {
     useSetBreadcrumb([{ label: "Organizations" }]);
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const tabFromUrl = searchParams.get("tab");
+    const [selectedTab, setSelectedTab] = useState<OrganizationTab>(() =>
+        isOrganizationTab(tabFromUrl) ? tabFromUrl : "general",
+    );
     const [organizations, setOrganizations] = useState<Organization[] | null>(
         null,
     );
@@ -177,6 +210,10 @@ export default function OrganizationsPage() {
     const [keys, setKeys] = useState<OrganizationApiKey[]>([]);
     const [members, setMembers] = useState<OrganizationMember[]>([]);
     const [usage, setUsage] = useState<OrganizationUsage | null>(null);
+    const [mailActivity, setMailActivity] =
+        useState<OrganizationMailActivity | null>(null);
+    const [mailRangeDays, setMailRangeDays] =
+        useState<OrganizationMailActivityRangeDays>(7);
     const [auditEvents, setAuditEvents] = useState<OrganizationAuditEvent[]>(
         [],
     );
@@ -191,7 +228,7 @@ export default function OrganizationsPage() {
         boolean | null
     >(null);
     const [error, setError] = useState<string | null>(null);
-    const [editingName, setEditingName] = useState(false);
+    const [savingName, setSavingName] = useState(false);
     const [organizationName, setOrganizationName] = useState("");
 
     const selectedOrganization = useMemo(
@@ -245,6 +282,7 @@ export default function OrganizationsPage() {
                 policyResult,
                 memberResult,
                 usageResult,
+                mailActivityResult,
                 auditResult,
             ] = await Promise.all([
                 listOrganizationTeams(organizationId),
@@ -253,6 +291,7 @@ export default function OrganizationsPage() {
                 getOrganizationDeliveryPolicy(organizationId),
                 listOrganizationMembers(organizationId),
                 getOrganizationUsage(organizationId),
+                getOrganizationMailActivity(organizationId, mailRangeDays),
                 listOrganizationAuditEvents(organizationId),
             ]);
             setTeams(teamResult.items);
@@ -261,6 +300,7 @@ export default function OrganizationsPage() {
             setPolicy(policyResult);
             setMembers(memberResult.items);
             setUsage(usageResult);
+            setMailActivity(mailActivityResult);
             setAuditEvents(auditResult.items);
             setHasManagementAccess(true);
             const pairs = await Promise.all(
@@ -304,6 +344,7 @@ export default function OrganizationsPage() {
             setKeys([]);
             setMembers([]);
             setUsage(null);
+            setMailActivity(null);
             setAuditEvents([]);
             setPolicy(null);
             setGrants({});
@@ -325,18 +366,40 @@ export default function OrganizationsPage() {
 
     async function saveName() {
         if (!selectedId || !organizationName.trim()) return;
+        setSavingName(true);
+        setError(null);
         try {
             await updateOrganization(selectedId, organizationName.trim());
-            setEditingName(false);
             await loadOrganizations(selectedId);
         } catch (err) {
             setError(errorMessage(err, "Failed to rename organization"));
+        } finally {
+            setSavingName(false);
         }
     }
 
     function selectOrganization(organizationId: string) {
         setSelectedId(organizationId);
         selectOrganizationContext(organizationId);
+    }
+
+    useEffect(() => {
+        if (isOrganizationTab(tabFromUrl)) setSelectedTab(tabFromUrl);
+    }, [tabFromUrl]);
+
+    function selectTab(tab: string) {
+        if (!isOrganizationTab(tab)) return;
+        setSelectedTab(tab);
+        const params = new URLSearchParams(searchParams.toString());
+        if (tab === "general") {
+            params.delete("tab");
+        } else {
+            params.set("tab", tab);
+        }
+        const query = params.toString();
+        router.replace(`/organizations${query ? `?${query}` : ""}`, {
+            scroll: false,
+        });
     }
 
     if (organizations === null) return <Loading />;
@@ -348,38 +411,15 @@ export default function OrganizationsPage() {
                     title="Organizations"
                     description="Manage the shared delivery infrastructure that sits above teams. Teams can use a granted mailbox without seeing its credentials."
                     action={
-                        <CreateOrganizationDialog
-                            onCreated={(organization) =>
-                                void loadOrganizations(
-                                    organization.organizationId,
-                                )
-                            }
-                        />
-                    }
-                />
-
-                {error && <Banner>{error}</Banner>}
-
-                {organizations.length === 0 ? (
-                    <Card>
-                        <CardContent className="p-6 text-sm text-muted-foreground">
-                            Create an organization to own shared mailboxes,
-                            teams, and integration keys.
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <>
-                        <Card>
-                            <CardContent className="flex flex-wrap items-center gap-3 p-4">
-                                <Label htmlFor="organization-picker">
-                                    Organization
-                                </Label>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                            {organizations.length > 0 ? (
                                 <Select
                                     value={selectedId ?? undefined}
                                     onValueChange={selectOrganization}
                                 >
                                     <SelectTrigger
                                         id="organization-picker"
+                                        aria-label="Organization"
                                         className="min-w-52"
                                     >
                                         <SelectValue placeholder="Select an organization" />
@@ -399,62 +439,29 @@ export default function OrganizationsPage() {
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {selectedOrganization && (
-                                    <Badge variant="success">
-                                        {selectedOrganization.status}
-                                    </Badge>
-                                )}
-                            </CardContent>
-                        </Card>
+                            ) : null}
+                            <CreateOrganizationDialog
+                                onCreated={(organization) =>
+                                    void loadOrganizations(
+                                        organization.organizationId,
+                                    )
+                                }
+                            />
+                        </div>
+                    }
+                />
 
-                        {selectedOrganization && (
-                            <Card>
-                                <CardHeader className="flex flex-row items-center justify-between gap-4">
-                                    <div>
-                                        <CardTitle>
-                                            {selectedOrganization.name}
-                                        </CardTitle>
-                                        <p className="mt-1 text-sm text-muted-foreground">
-                                            Shared ESPs are organization-owned.
-                                            A team receives only a delivery
-                                            option after an explicit grant.
-                                        </p>
-                                    </div>
-                                    {hasManagementAccess && (
-                                        <IconButton
-                                            title="Rename organization"
-                                            aria-label="Rename organization"
-                                            onClick={() =>
-                                                setEditingName(
-                                                    (value) => !value,
-                                                )
-                                            }
-                                        >
-                                            <Pencil className="size-4" />
-                                        </IconButton>
-                                    )}
-                                </CardHeader>
-                                {editingName && (
-                                    <CardFooter className="gap-2">
-                                        <Input
-                                            value={organizationName}
-                                            onChange={(event) =>
-                                                setOrganizationName(
-                                                    event.target.value,
-                                                )
-                                            }
-                                        />
-                                        <Button
-                                            onClick={() => void saveName()}
-                                            disabled={!organizationName.trim()}
-                                        >
-                                            Save name
-                                        </Button>
-                                    </CardFooter>
-                                )}
-                            </Card>
-                        )}
+                {error && <Banner>{error}</Banner>}
 
+                {organizations.length === 0 ? (
+                    <Card>
+                        <CardContent className="p-6 text-sm text-muted-foreground">
+                            Create an organization to own shared mailboxes,
+                            teams, and integration keys.
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <>
                         {selectedId && hasManagementAccess === false && (
                             <Card>
                                 <CardContent className="p-6 text-sm text-muted-foreground">
@@ -468,64 +475,200 @@ export default function OrganizationsPage() {
                         )}
 
                         {selectedId && hasManagementAccess === true && (
-                            <>
-                                <SharedEspsSection
-                                    organizationId={selectedId}
-                                    esps={esps}
-                                    loading={loadingDetails}
-                                    onChanged={refresh}
-                                    onEspUpdated={(updated) =>
-                                        setEsps((current) =>
-                                            current.map((esp) =>
-                                                esp.espId === updated.espId
-                                                    ? updated
-                                                    : esp,
-                                            ),
-                                        )
-                                    }
-                                    onEspDeleted={(espId) =>
-                                        setEsps((current) =>
-                                            current.filter(
-                                                (esp) => esp.espId !== espId,
-                                            ),
-                                        )
-                                    }
-                                />
-                                <DeliveryPolicySection
-                                    organizationId={selectedId}
-                                    esps={esps}
-                                    policy={policy}
-                                    loading={loadingDetails}
-                                    onChanged={async () => {
-                                        await loadDetails(selectedId);
-                                    }}
-                                />
-                                <TeamsAndGrantsSection
-                                    organizationId={selectedId}
-                                    teams={teams}
-                                    esps={esps}
-                                    grants={grants}
-                                    loading={loadingDetails}
-                                    onChanged={refresh}
-                                />
-                                <OrganizationMembersSection
-                                    organizationId={selectedId}
-                                    members={members}
-                                    loading={loadingDetails}
-                                    onChanged={refresh}
-                                />
-                                <OrganizationOperationsSection
-                                    usage={usage}
-                                    events={auditEvents}
-                                    loading={loadingDetails}
-                                />
-                                <OrganizationKeysSection
-                                    organizationId={selectedId}
-                                    keys={keys}
-                                    loading={loadingDetails}
-                                    onChanged={refresh}
-                                />
-                            </>
+                            <Tabs
+                                value={selectedTab}
+                                onValueChange={selectTab}
+                                className="gap-6"
+                            >
+                                <TabsList className="flex h-auto w-full flex-wrap sm:w-fit">
+                                    <TabsTrigger
+                                        value="general"
+                                        onClick={() => selectTab("general")}
+                                    >
+                                        General
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="delivery"
+                                        onClick={() => selectTab("delivery")}
+                                    >
+                                        Delivery
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="teams"
+                                        onClick={() => selectTab("teams")}
+                                    >
+                                        Teams
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="members"
+                                        onClick={() => selectTab("members")}
+                                    >
+                                        Members
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="activity"
+                                        onClick={() => selectTab("activity")}
+                                    >
+                                        Activity
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="keys"
+                                        onClick={() => selectTab("keys")}
+                                    >
+                                        Keys
+                                    </TabsTrigger>
+                                </TabsList>
+                                {selectedTab === "general" && (
+                                    <TabsContent value="general" forceMount>
+                                        <Card>
+                                            <CardHeader>
+                                                <CardTitle>
+                                                    Organization
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="space-y-1.5">
+                                                    <Label htmlFor="organization-display-name">
+                                                        Name
+                                                    </Label>
+                                                    <Input
+                                                        id="organization-display-name"
+                                                        value={organizationName}
+                                                        onChange={(event) =>
+                                                            setOrganizationName(
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                </div>
+                                            </CardContent>
+                                            <CardFooter>
+                                                <Button
+                                                    onClick={() =>
+                                                        void saveName()
+                                                    }
+                                                    disabled={
+                                                        savingName ||
+                                                        !organizationName.trim() ||
+                                                        organizationName.trim() ===
+                                                            selectedOrganization?.name
+                                                    }
+                                                >
+                                                    {savingName
+                                                        ? "Saving…"
+                                                        : "Save"}
+                                                </Button>
+                                            </CardFooter>
+                                        </Card>
+                                    </TabsContent>
+                                )}
+                                {selectedTab === "delivery" && (
+                                    <TabsContent
+                                        value="delivery"
+                                        className="space-y-6"
+                                        forceMount
+                                    >
+                                        <SharedEspsSection
+                                            organizationId={selectedId}
+                                            esps={esps}
+                                            loading={loadingDetails}
+                                            onChanged={refresh}
+                                            onEspUpdated={(updated) =>
+                                                setEsps((current) =>
+                                                    current.map((esp) =>
+                                                        esp.espId ===
+                                                        updated.espId
+                                                            ? updated
+                                                            : esp,
+                                                    ),
+                                                )
+                                            }
+                                            onEspDeleted={(espId) =>
+                                                setEsps((current) =>
+                                                    current.filter(
+                                                        (esp) =>
+                                                            esp.espId !== espId,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                        <DeliveryPolicySection
+                                            organizationId={selectedId}
+                                            esps={esps}
+                                            policy={policy}
+                                            loading={loadingDetails}
+                                            onChanged={async () => {
+                                                await loadDetails(selectedId);
+                                            }}
+                                        />
+                                    </TabsContent>
+                                )}
+                                {selectedTab === "teams" && (
+                                    <TabsContent value="teams" forceMount>
+                                        <TeamsAndGrantsSection
+                                            organizationId={selectedId}
+                                            teams={teams}
+                                            esps={esps}
+                                            grants={grants}
+                                            loading={loadingDetails}
+                                            onChanged={refresh}
+                                        />
+                                    </TabsContent>
+                                )}
+                                {selectedTab === "members" && (
+                                    <TabsContent value="members" forceMount>
+                                        <OrganizationMembersSection
+                                            organizationId={selectedId}
+                                            members={members}
+                                            loading={loadingDetails}
+                                            onChanged={refresh}
+                                        />
+                                    </TabsContent>
+                                )}
+                                {selectedTab === "activity" && (
+                                    <TabsContent value="activity" forceMount>
+                                        <OrganizationOperationsSection
+                                            usage={usage}
+                                            mailActivity={mailActivity}
+                                            mailRangeDays={mailRangeDays}
+                                            onMailRangeDaysChange={async (
+                                                days,
+                                            ) => {
+                                                setMailRangeDays(days);
+                                                if (!selectedId) return;
+                                                try {
+                                                    setMailActivity(
+                                                        await getOrganizationMailActivity(
+                                                            selectedId,
+                                                            days,
+                                                        ),
+                                                    );
+                                                } catch (err) {
+                                                    setError(
+                                                        errorMessage(
+                                                            err,
+                                                            "Failed to load mail activity",
+                                                        ),
+                                                    );
+                                                }
+                                            }}
+                                            events={auditEvents}
+                                            loading={loadingDetails}
+                                        />
+                                    </TabsContent>
+                                )}
+                                {selectedTab === "keys" && (
+                                    <TabsContent value="keys" forceMount>
+                                        <OrganizationKeysSection
+                                            organizationId={selectedId}
+                                            keys={keys}
+                                            loading={loadingDetails}
+                                            onChanged={refresh}
+                                        />
+                                    </TabsContent>
+                                )}
+                            </Tabs>
                         )}
                     </>
                 )}
@@ -720,8 +863,10 @@ function SharedEspsSection({
                         Shared mailboxes
                     </CardTitle>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        Configure credentials once, then grant the mailbox to
-                        selected teams. Credentials never enter team APIs.
+                        Shared ESPs are organization-owned. Configure
+                        credentials once, then grant the mailbox to selected
+                        teams. A team receives only a delivery option after an
+                        explicit grant; credentials never enter team APIs.
                     </p>
                 </div>
                 <Button onClick={() => setEditing(null)}>
@@ -1640,16 +1785,44 @@ function TeamMailboxGrantRow({
     grant: OrganizationEspGrant | null;
     onChanged: () => Promise<void>;
 }) {
+    const router = useRouter();
     const [grantEditorOpen, setGrantEditorOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
     const [archiveOpen, setArchiveOpen] = useState(false);
+    const [enterOpen, setEnterOpen] = useState(false);
     const [archiveError, setArchiveError] = useState<string | null>(null);
+    const [enterError, setEnterError] = useState<string | null>(null);
     const [archiving, setArchiving] = useState(false);
+    const [entering, setEntering] = useState(false);
 
     const mailbox = grant
         ? esps.find((esp) => esp.espId === grant.espId)
         : null;
     const archived = team.status === "archived";
+    const viewerIsMember = Boolean(team.viewerIsMember);
+
+    async function openTeam() {
+        setTeamIdCookie(team.teamId);
+        notifyTeamsChanged();
+        router.push("/");
+    }
+
+    async function enterTeam() {
+        setEntering(true);
+        setEnterError(null);
+        try {
+            await enterOrganizationTeam(organizationId, team.teamId);
+            notifyTeamsChanged();
+            setTeamIdCookie(team.teamId);
+            setEnterOpen(false);
+            toast.success(`You joined ${team.name}`);
+            router.push("/");
+        } catch (err) {
+            setEnterError(errorMessage(err, "Failed to enter team"));
+        } finally {
+            setEntering(false);
+        }
+    }
 
     async function archive() {
         setArchiving(true);
@@ -1692,6 +1865,16 @@ function TeamMailboxGrantRow({
                           : "Human-managed team"}
                 </p>
             </div>
+            {!archived && !viewerIsMember ? (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEnterOpen(true)}
+                >
+                    <LogIn className="size-4" />
+                    Enter team
+                </Button>
+            ) : null}
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <IconButton
@@ -1703,6 +1886,21 @@ function TeamMailboxGrantRow({
                     </IconButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                    {!archived && viewerIsMember ? (
+                        <DropdownMenuItem onSelect={() => void openTeam()}>
+                            <LogIn />
+                            Open team
+                        </DropdownMenuItem>
+                    ) : !archived ? (
+                        <DropdownMenuItem onSelect={() => setEnterOpen(true)}>
+                            <LogIn />
+                            Enter team
+                        </DropdownMenuItem>
+                    ) : viewerIsMember ? (
+                        <DropdownMenuItem disabled>
+                            Already a member
+                        </DropdownMenuItem>
+                    ) : null}
                     <DropdownMenuItem
                         disabled={archived}
                         onSelect={() => setGrantEditorOpen(true)}
@@ -1745,6 +1943,33 @@ function TeamMailboxGrantRow({
                 onOpenChange={setRenameOpen}
                 onChanged={onChanged}
             />
+            <AlertDialog open={enterOpen} onOpenChange={setEnterOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Enter {team.name}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            You will become a team admin and can see this team’s
+                            contacts, campaigns, and mail history. This is
+                            recorded in organization audit activity.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {enterError && <Banner>{enterError}</Banner>}
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={entering}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={entering}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                void enterTeam();
+                            }}
+                        >
+                            {entering ? "Entering…" : "Enter team"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
             <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -2344,10 +2569,18 @@ function OrganizationMembersSection({
 
 function OrganizationOperationsSection({
     usage,
+    mailActivity,
+    mailRangeDays,
+    onMailRangeDaysChange,
     events,
     loading,
 }: {
     usage: OrganizationUsage | null;
+    mailActivity: OrganizationMailActivity | null;
+    mailRangeDays: OrganizationMailActivityRangeDays;
+    onMailRangeDaysChange: (
+        days: OrganizationMailActivityRangeDays,
+    ) => void | Promise<void>;
     events: OrganizationAuditEvent[];
     loading: boolean;
 }) {
@@ -2356,84 +2589,236 @@ function OrganizationOperationsSection({
             ? `${window.accepted} accepted`
             : `${window.accepted} accepted · ${window.remaining ?? 0} remaining`;
     return (
-        <div className="grid gap-6 xl:grid-cols-2">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Activity className="size-5" />
-                        Shared-delivery usage
-                    </CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Only organization-delivery sends count toward this pool.
-                    </p>
-                </CardHeader>
-                <CardContent>
-                    {loading || !usage ? (
-                        <Loading />
-                    ) : (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <UsageWindow
-                                title="Today"
-                                usage={usage.day}
-                                label={windowLabel(usage.day)}
-                            />
-                            <UsageWindow
-                                title="This month"
-                                usage={usage.month}
-                                label={windowLabel(usage.month)}
-                            />
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <ShieldCheck className="size-5" />
-                        Recent audit activity
-                    </CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        The latest 50 secret-free organization administration
-                        events.
-                    </p>
-                </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <Loading />
-                    ) : events.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                            No organization activity recorded yet.
+        <div className="space-y-6">
+            <div className="grid gap-6 xl:grid-cols-2">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Activity className="size-5" />
+                            Shared-delivery usage
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Only organization-delivery sends count toward this
+                            pool.
                         </p>
-                    ) : (
-                        <div className="max-h-64 space-y-3 overflow-y-auto">
-                            {events.map((event, index) => (
-                                <div
-                                    key={`${event.createdAt}-${event.action}-${index}`}
-                                    className="border-b pb-3 last:border-0"
-                                >
-                                    <div className="flex items-center justify-between gap-3">
-                                        <span className="text-sm font-medium">
-                                            {event.action}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                            {new Date(
-                                                event.createdAt,
-                                            ).toLocaleString()}
-                                        </span>
+                    </CardHeader>
+                    <CardContent>
+                        {loading || !usage ? (
+                            <Loading />
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <UsageWindow
+                                    title="Today"
+                                    usage={usage.day}
+                                    label={windowLabel(usage.day)}
+                                />
+                                <UsageWindow
+                                    title="This month"
+                                    usage={usage.month}
+                                    label={windowLabel(usage.month)}
+                                />
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <ShieldCheck className="size-5" />
+                            Recent audit activity
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            The latest 50 secret-free organization
+                            administration events.
+                        </p>
+                    </CardHeader>
+                    <CardContent>
+                        {loading ? (
+                            <Loading />
+                        ) : events.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                No organization activity recorded yet.
+                            </p>
+                        ) : (
+                            <div className="max-h-64 space-y-3 overflow-y-auto">
+                                {events.map((event, index) => (
+                                    <div
+                                        key={`${event.createdAt}-${event.action}-${index}`}
+                                        className="border-b pb-3 last:border-0"
+                                    >
+                                        <div className="flex items-center justify-between gap-3">
+                                            <span className="text-sm font-medium">
+                                                {event.action}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {new Date(
+                                                    event.createdAt,
+                                                ).toLocaleString()}
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            {event.actorType.replace("_", " ")}
+                                            {event.teamId
+                                                ? ` · ${event.teamId}`
+                                                : ""}
+                                            {event.espId
+                                                ? ` · ${event.espId}`
+                                                : ""}
+                                        </p>
                                     </div>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        {event.actorType.replace("_", " ")}
-                                        {event.teamId
-                                            ? ` · ${event.teamId}`
-                                            : ""}
-                                        {event.espId ? ` · ${event.espId}` : ""}
-                                    </p>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+            <Card>
+                <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <Mail className="size-5" />
+                            Transactional mail activity
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Counts are transactional only. Shared-delivery quota
+                            remains separate. No email content is shown.
+                        </p>
+                    </div>
+                    <Select
+                        value={String(mailRangeDays)}
+                        onValueChange={(value) =>
+                            void onMailRangeDaysChange(
+                                Number(
+                                    value,
+                                ) as OrganizationMailActivityRangeDays,
+                            )
+                        }
+                    >
+                        <SelectTrigger
+                            aria-label="Transactional mail activity range"
+                            className="w-36"
+                        >
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1">Last 1 day</SelectItem>
+                            <SelectItem value="3">Last 3 days</SelectItem>
+                            <SelectItem value="7">Last 7 days</SelectItem>
+                            <SelectItem value="30">Last 30 days</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </CardHeader>
+                <CardContent>
+                    {loading || !mailActivity ? (
+                        <Loading />
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="grid gap-3 sm:grid-cols-4">
+                                <MailCountStat
+                                    label="Sent"
+                                    value={mailActivity.totals.sent}
+                                />
+                                <MailCountStat
+                                    label="Queued"
+                                    value={mailActivity.totals.queued}
+                                />
+                                <MailCountStat
+                                    label="Failed"
+                                    value={mailActivity.totals.failed}
+                                />
+                                <MailCountStat
+                                    label="Bounced"
+                                    value={mailActivity.totals.bounced}
+                                />
+                            </div>
+                            {mailActivity.teams.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    No teams in this organization.
+                                </p>
+                            ) : (
+                                <div className="overflow-x-auto rounded-lg border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Team</TableHead>
+                                                <TableHead className="text-right">
+                                                    Sent
+                                                </TableHead>
+                                                <TableHead className="text-right">
+                                                    Queued
+                                                </TableHead>
+                                                <TableHead className="text-right">
+                                                    Failed
+                                                </TableHead>
+                                                <TableHead className="text-right">
+                                                    Bounced
+                                                </TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {mailActivity.teams.map((team) => (
+                                                <TableRow
+                                                    key={team.teamId}
+                                                    className={
+                                                        team.status ===
+                                                        "archived"
+                                                            ? "text-muted-foreground"
+                                                            : undefined
+                                                    }
+                                                >
+                                                    <TableCell>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="font-medium text-foreground">
+                                                                {team.name}
+                                                            </span>
+                                                            {team.externalId ? (
+                                                                <Badge variant="secondary">
+                                                                    Provisioned
+                                                                    ·{" "}
+                                                                    {
+                                                                        team.externalId
+                                                                    }
+                                                                </Badge>
+                                                            ) : null}
+                                                            {team.status ===
+                                                            "archived" ? (
+                                                                <Badge variant="secondary">
+                                                                    Archived
+                                                                </Badge>
+                                                            ) : null}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {team.mail.sent}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {team.mail.queued}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {team.mail.failed}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {team.mail.bounced}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     )}
                 </CardContent>
             </Card>
+        </div>
+    );
+}
+
+function MailCountStat({ label, value }: { label: string; value: number }) {
+    return (
+        <div className="rounded-lg border p-4">
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
         </div>
     );
 }
