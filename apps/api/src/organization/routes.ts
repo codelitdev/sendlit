@@ -1474,7 +1474,7 @@ const impl = s.router(contract.organizations, {
     }: {
         req: any;
         params: { organizationId: string };
-        query: { rangeDays?: 1 | 3 | 7 | 30 };
+        query: { rangeDays?: number };
     }) => {
         const authorization = await resolveAuthorization(
             req,
@@ -1492,7 +1492,13 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_permission_required" },
             };
         }
-        const rangeDays = query.rangeDays ?? 7;
+        const allowedRanges = [1, 3, 7, 30] as const;
+        const requestedRange = query.rangeDays ?? 7;
+        const rangeDays = (allowedRanges as readonly number[]).includes(
+            requestedRange,
+        )
+            ? (requestedRange as (typeof allowedRanges)[number])
+            : 7;
         const activity = await getOrganizationMailActivity(
             authorization.organization.id,
             rangeDays,
