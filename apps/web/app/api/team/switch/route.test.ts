@@ -54,13 +54,13 @@ describe("team switch", () => {
         const { POST } = await import("./route");
         const response = await POST(
             request(
-                { teamId: "team_123", redirectTo: "/teams" },
+                { teamId: "team_123", redirectTo: "/team-selection" },
                 "http://0.0.0.0:3000/api/team/switch",
             ),
         );
 
         expect(response.headers.get("location")).toBe(
-            "https://app.sendlit.clqa.site/teams",
+            "https://app.sendlit.clqa.site/team-selection",
         );
     });
 

@@ -17,8 +17,8 @@ describe("safeAppRedirect", () => {
             "https://app.sendlit.clqa.site",
         );
 
-        expect(safeAppRedirect("/teams").toString()).toBe(
-            "https://app.sendlit.clqa.site/teams",
+        expect(safeAppRedirect("/team-selection").toString()).toBe(
+            "https://app.sendlit.clqa.site/team-selection",
         );
         expect(safeAppRedirect("/contacts?from=team").toString()).toBe(
             "https://app.sendlit.clqa.site/contacts?from=team",

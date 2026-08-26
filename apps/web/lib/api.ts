@@ -62,12 +62,12 @@ async function unwrap<T>(
     if (typeof window !== "undefined") {
         if (
             needsTeamSelection(result.status, errorBody?.error) &&
-            !window.location.pathname.startsWith("/teams")
+            !window.location.pathname.startsWith("/team-selection")
         ) {
             if (isStaleTeamSelectionError(errorBody?.error)) {
                 clearTeamIdCookie();
             }
-            window.location.href = "/teams";
+            window.location.href = "/team-selection";
             return new Promise<T>(() => {});
         }
     }
@@ -121,9 +121,12 @@ export interface Team {
 }
 
 export interface ApiKey {
-    id: string;
+    keyId: string;
     keyPrefix: string;
-    name?: string | null;
+    name: string;
+    expiresAt?: string | null;
+    lastUsedAt?: string | null;
+    revokedAt?: string | null;
     createdAt?: string | null;
 }
 

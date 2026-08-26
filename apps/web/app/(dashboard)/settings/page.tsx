@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     CheckCircle2,
+    Copy,
     Mail,
     Pencil,
     Plus,
@@ -65,11 +66,14 @@ import { ApiError } from "@/lib/api-client";
 import {
     activateEsp,
     createEsp,
+    createTeamKey,
     deleteEsp,
+    deleteTeamKey,
     feedbackCapableProviders,
     getGeneralSettings,
     getTeamDeliverySettings,
     listEsps,
+    listTeamKeys,
     testEsp,
     setTeamEspAsDefault,
     updateEsp,
@@ -77,8 +81,10 @@ import {
     type EspConfig,
     type EspProvider,
     type GeneralSettings,
+    type ApiKey,
 } from "@/lib/api";
 import { EspFeedbackDialog } from "@/components/dashboard/esp-feedback-dialog";
+import { getTeamIdFromCookie } from "@/lib/tokens";
 
 const PROVIDERS: { value: EspProvider; label: string }[] = [
     { value: "smtp", label: "Custom SMTP" },
@@ -93,7 +99,7 @@ const PROVIDER_LABEL: Record<EspProvider, string> = Object.fromEntries(
     PROVIDERS.map((p) => [p.value, p.label]),
 ) as Record<EspProvider, string>;
 
-const SETTINGS_TABS = ["general", "esp"] as const;
+const SETTINGS_TABS = ["general", "esp", "api-keys"] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 function isSettingsTab(value: string | null): value is SettingsTab {
@@ -107,6 +113,7 @@ export default function SettingsPage() {
     const selectedTab = isSettingsTab(searchParams.get("tab"))
         ? searchParams.get("tab")!
         : "general";
+    const currentTeamId = getTeamIdFromCookie();
     const [generalSettings, setGeneralSettings] = useState<
         GeneralSettings | undefined
     >(undefined);
@@ -131,6 +138,12 @@ export default function SettingsPage() {
         success: boolean;
         error?: string;
     } | null>(null);
+    const [apiKeys, setApiKeys] = useState<ApiKey[] | undefined>(undefined);
+    const [newApiKeyName, setNewApiKeyName] = useState("");
+    const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
+    const [creatingApiKey, setCreatingApiKey] = useState(false);
+    const [apiKeyPendingDelete, setApiKeyPendingDelete] =
+        useState<ApiKey | null>(null);
 
     async function load() {
         try {
@@ -157,6 +170,28 @@ export default function SettingsPage() {
     useEffect(() => {
         load();
     }, []);
+
+    async function loadApiKeys(teamId = currentTeamId) {
+        if (!teamId) {
+            setApiKeys([]);
+            return;
+        }
+        try {
+            const { items } = await listTeamKeys(teamId);
+            setApiKeys(items);
+        } catch (err) {
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to load API keys",
+            );
+            setApiKeys([]);
+        }
+    }
+
+    useEffect(() => {
+        void loadApiKeys();
+    }, [currentTeamId]);
 
     function selectTab(tab: string) {
         const params = new URLSearchParams(searchParams.toString());
@@ -256,6 +291,44 @@ export default function SettingsPage() {
         }
     }
 
+    async function handleCreateApiKey() {
+        if (!currentTeamId || !newApiKeyName.trim()) return;
+        setCreatingApiKey(true);
+        setError(null);
+        try {
+            const created = await createTeamKey(
+                currentTeamId,
+                newApiKeyName.trim(),
+            );
+            setCreatedApiKey(created.key);
+            setNewApiKeyName("");
+            await loadApiKeys(currentTeamId);
+        } catch (err) {
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to create API key",
+            );
+        } finally {
+            setCreatingApiKey(false);
+        }
+    }
+
+    async function handleDeleteApiKey(key: ApiKey) {
+        if (!currentTeamId) return;
+        setError(null);
+        try {
+            await deleteTeamKey(currentTeamId, key.keyId);
+            await loadApiKeys(currentTeamId);
+        } catch (err) {
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to delete API key",
+            );
+        }
+    }
+
     if (generalSettings === undefined || esps === null) {
         return <Loading />;
     }
@@ -283,6 +356,19 @@ export default function SettingsPage() {
                         await handleDelete(espPendingDelete);
                     }}
                 />
+                <DeleteConfirmationDialog
+                    open={apiKeyPendingDelete !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setApiKeyPendingDelete(null);
+                    }}
+                    title="Revoke API key?"
+                    description={`This will permanently revoke ${apiKeyPendingDelete?.name || "this API key"}. Any integration using it will stop working.`}
+                    confirmLabel="Revoke key"
+                    onConfirm={async () => {
+                        if (!apiKeyPendingDelete) return;
+                        await handleDeleteApiKey(apiKeyPendingDelete);
+                    }}
+                />
 
                 <Tabs
                     value={selectedTab}
@@ -294,6 +380,7 @@ export default function SettingsPage() {
                         <TabsTrigger value="esp">
                             Email service providers (ESP)
                         </TabsTrigger>
+                        <TabsTrigger value="api-keys">API keys</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="general">
@@ -355,6 +442,168 @@ export default function SettingsPage() {
                                     </Button>
                                 </CardFooter>
                             </Card>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="api-keys">
+                        <div className="mb-5 max-w-xl space-y-1">
+                            <h2 className="font-medium">Team API keys</h2>
+                            <p className="text-sm text-muted-foreground">
+                                Use API keys for server-side integrations. Keep
+                                them out of browser code and revoke them when an
+                                integration no longer needs access.
+                            </p>
+                        </div>
+
+                        {createdApiKey && (
+                            <Banner variant="success" className="mb-4">
+                                <div className="space-y-2">
+                                    <p className="font-medium">
+                                        Copy this API key now. It will not be
+                                        shown again.
+                                    </p>
+                                    <div className="flex items-center gap-2 rounded-md bg-background p-2 font-mono text-xs">
+                                        <span className="min-w-0 flex-1 truncate">
+                                            {createdApiKey}
+                                        </span>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                                navigator.clipboard.writeText(
+                                                    createdApiKey,
+                                                )
+                                            }
+                                        >
+                                            <Copy className="size-3" />
+                                            Copy
+                                        </Button>
+                                    </div>
+                                </div>
+                            </Banner>
+                        )}
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">
+                                    Create an API key
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <div className="min-w-0 flex-1 space-y-1.5">
+                                        <Label htmlFor="api-key-name">
+                                            Key name
+                                        </Label>
+                                        <Input
+                                            id="api-key-name"
+                                            value={newApiKeyName}
+                                            onChange={(event) =>
+                                                setNewApiKeyName(
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="e.g. Production website"
+                                        />
+                                    </div>
+                                    <Button
+                                        className="mt-auto"
+                                        onClick={handleCreateApiKey}
+                                        disabled={
+                                            !currentTeamId ||
+                                            !newApiKeyName.trim() ||
+                                            creatingApiKey
+                                        }
+                                    >
+                                        <Plus className="size-4" />
+                                        {creatingApiKey
+                                            ? "Creating…"
+                                            : "Create key"}
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <div className="mt-5">
+                            {apiKeys === undefined ? (
+                                <Loading />
+                            ) : apiKeys.length === 0 ? (
+                                <Card>
+                                    <CardContent className="p-6 text-sm text-muted-foreground">
+                                        No API keys yet. Create one when a
+                                        server-side integration needs access to
+                                        this team.
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                <Card>
+                                    <CardContent className="p-0">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Name</TableHead>
+                                                    <TableHead>
+                                                        Prefix
+                                                    </TableHead>
+                                                    <TableHead>
+                                                        Last used
+                                                    </TableHead>
+                                                    <TableHead />
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {apiKeys.map((key) => (
+                                                    <TableRow key={key.keyId}>
+                                                        <TableCell className="font-medium">
+                                                            {key.name}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <span className="inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                                                                {key.keyPrefix}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        navigator.clipboard.writeText(
+                                                                            key.keyPrefix,
+                                                                        )
+                                                                    }
+                                                                    className="rounded p-0.5 text-foreground hover:bg-muted"
+                                                                    aria-label={`Copy ${key.name} key prefix`}
+                                                                >
+                                                                    <Copy className="size-3" />
+                                                                </button>
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground">
+                                                            {key.lastUsedAt
+                                                                ? new Date(
+                                                                      key.lastUsedAt,
+                                                                  ).toLocaleDateString()
+                                                                : "Never"}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="text-destructive"
+                                                                onClick={() =>
+                                                                    setApiKeyPendingDelete(
+                                                                        key,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <Trash2 className="size-4" />
+                                                                Revoke
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </CardContent>
+                                </Card>
+                            )}
                         </div>
                     </TabsContent>
 

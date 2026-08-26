@@ -1,3 +1,5 @@
+# This docker-compose file is used to run the Sendlit API and related services
+# for self hosting, not local development
 name: sendlit
 
 services:
