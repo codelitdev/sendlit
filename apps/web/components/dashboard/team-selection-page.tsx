@@ -24,6 +24,10 @@ import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
 import { createTeam, listTeams, type Team } from "@/lib/api";
 import { resolveCurrentTeamId } from "@/lib/tokens";
+import {
+    submitTeamSwitch,
+    SwitchTeamForm,
+} from "@/components/dashboard/switch-team-form";
 
 export function TeamSelectionPage() {
     useSetBreadcrumb([{ label: "Choose a team" }]);
@@ -130,12 +134,10 @@ function CreateTeamDialog({
             setOpen(false);
             setName("");
             onCreated();
-            const form = document.createElement("form");
-            form.method = "POST";
-            form.action = "/api/team/switch";
-            form.innerHTML = `<input type="hidden" name="teamId" value="${team.teamId}"><input type="hidden" name="redirectTo" value="/">`;
-            document.body.appendChild(form);
-            form.submit();
+            submitTeamSwitch({
+                teamId: team.teamId,
+                organizationId: team.organizationId,
+            });
         } catch (err) {
             setError(
                 err instanceof ApiError ? err.message : "Failed to create team",
@@ -194,17 +196,14 @@ function TeamCard({ team, isCurrent }: { team: Team; isCurrent: boolean }) {
                     {isCurrent && <Badge variant="success">Current</Badge>}
                 </CardTitle>
                 {!isCurrent && (
-                    <form action="/api/team/switch" method="POST">
-                        <input
-                            type="hidden"
-                            name="teamId"
-                            value={team.teamId}
-                        />
-                        <input type="hidden" name="redirectTo" value="/" />
+                    <SwitchTeamForm
+                        teamId={team.teamId}
+                        organizationId={team.organizationId}
+                    >
                         <Button type="submit" variant="outline" size="sm">
                             Switch to this team
                         </Button>
-                    </form>
+                    </SwitchTeamForm>
                 )}
             </CardHeader>
         </Card>

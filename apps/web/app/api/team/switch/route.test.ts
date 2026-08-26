@@ -23,9 +23,7 @@ describe("team switch", () => {
         );
 
         expect(response.status).toBe(303);
-        expect(response.headers.get("location")).toBe(
-            "http://localhost:3000/contacts?from=team",
-        );
+        expect(response.headers.get("location")).toBe("/contacts?from=team");
         expect(response.headers.get("set-cookie")).toContain(
             "sendlit_team_id=team_123",
         );
@@ -48,7 +46,7 @@ describe("team switch", () => {
         );
     });
 
-    it("redirects using WEB_CLIENT even when req.url is the container bind address", async () => {
+    it("uses a relative Location even when req.url is the container bind address", async () => {
         vi.stubEnv("WEB_CLIENT", "https://app.sendlit.clqa.site");
         vi.resetModules();
         const { POST } = await import("./route");
@@ -59,9 +57,7 @@ describe("team switch", () => {
             ),
         );
 
-        expect(response.headers.get("location")).toBe(
-            "https://app.sendlit.clqa.site/team-selection",
-        );
+        expect(response.headers.get("location")).toBe("/team-selection");
     });
 
     it.each(["https://attacker.example/steal", "//attacker.example/steal"])(
@@ -72,9 +68,7 @@ describe("team switch", () => {
                 request({ teamId: "team_123", redirectTo }),
             );
 
-            expect(response.headers.get("location")).toBe(
-                "http://localhost:3000/",
-            );
+            expect(response.headers.get("location")).toBe("/");
         },
     );
 

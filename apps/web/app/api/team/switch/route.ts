@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { safeAppRedirect } from "@/lib/safe-app-redirect";
+import { NextRequest } from "next/server";
+import { appRedirect } from "@/lib/safe-app-redirect";
 import { ORGANIZATION_ID_COOKIE, TEAM_ID_COOKIE } from "@/lib/tokens";
 
 /**
@@ -9,9 +9,10 @@ import { ORGANIZATION_ID_COOKIE, TEAM_ID_COOKIE } from "@/lib/tokens";
  * (same pattern as `/api/auth/logout`) so switching works with a plain
  * `<form>`, no client JS required.
  *
- * Redirects use `WEB_CLIENT` (via `safeAppRedirect`) rather than `req.url`,
- * so reverse-proxied deploys don't send the browser to the container bind
- * address (`0.0.0.0:3000`).
+ * Redirects use a same-app relative `Location` (via `appRedirect`) rather
+ * than `req.url` or `WEB_CLIENT`, so reverse-proxied deploys don't send the
+ * browser to the container bind address (`0.0.0.0:3000`) and local aliases
+ * don't get bounced to `http://localhost:3000`.
  */
 export async function POST(req: NextRequest) {
     const form = await req.formData();
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
     const redirectTo = String(form.get("redirectTo") || "/");
 
     // 303: after a form POST, follow the redirect with GET (not re-POST).
-    const res = NextResponse.redirect(safeAppRedirect(redirectTo), 303);
+    const res = appRedirect(redirectTo);
     if (teamId) {
         const isProd = process.env.NODE_ENV === "production";
         // Not httpOnly, deliberately: this is just a "which team am I looking

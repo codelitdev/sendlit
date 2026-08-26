@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { API_URL } from "@/lib/config";
-import { safeAppRedirect } from "@/lib/safe-app-redirect";
+import { appRedirect } from "@/lib/safe-app-redirect";
 
 async function proxyAuth(req: NextRequest, path: string[]) {
     const upstreamUrl = new URL(
@@ -43,11 +43,10 @@ async function proxyAuth(req: NextRequest, path: string[]) {
         path[0] === "sign-out" &&
         upstream.ok
     ) {
-        // Use WEB_CLIENT, not req.url — behind a reverse proxy req.url can be
-        // the container bind host (0.0.0.0:3000).
-        const response = NextResponse.redirect(safeAppRedirect("/login"), {
-            status: 303,
-        });
+        // Relative Location — behind a reverse proxy req.url can be the
+        // container bind host (0.0.0.0:3000), and WEB_CLIENT can disagree
+        // with the origin the user is actually browsing.
+        const response = appRedirect("/login");
         for (const cookie of upstream.headers.getSetCookie()) {
             response.headers.append("set-cookie", cookie);
         }

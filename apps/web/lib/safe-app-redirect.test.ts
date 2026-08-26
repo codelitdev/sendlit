@@ -12,27 +12,25 @@ describe("safeAppRedirect", () => {
         return import("./safe-app-redirect");
     }
 
-    it("resolves relative paths against WEB_CLIENT", async () => {
+    it("keeps relative paths relative so the browser stays on its origin", async () => {
         const { safeAppRedirect } = await loadWithWebClient(
             "https://app.sendlit.clqa.site",
         );
 
-        expect(safeAppRedirect("/team-selection").toString()).toBe(
-            "https://app.sendlit.clqa.site/team-selection",
-        );
-        expect(safeAppRedirect("/contacts?from=team").toString()).toBe(
-            "https://app.sendlit.clqa.site/contacts?from=team",
+        expect(safeAppRedirect("/team-selection")).toBe("/team-selection");
+        expect(safeAppRedirect("/contacts?from=team")).toBe(
+            "/contacts?from=team",
         );
     });
 
-    it("allows absolute URLs on the same public origin", async () => {
+    it("collapses same-origin absolute URLs to a path", async () => {
         const { safeAppRedirect } = await loadWithWebClient(
             "https://app.sendlit.example",
         );
 
-        expect(
-            safeAppRedirect("https://app.sendlit.example/settings").toString(),
-        ).toBe("https://app.sendlit.example/settings");
+        expect(safeAppRedirect("https://app.sendlit.example/settings")).toBe(
+            "/settings",
+        );
     });
 
     it.each([
@@ -44,9 +42,7 @@ describe("safeAppRedirect", () => {
             "https://app.sendlit.example",
         );
 
-        expect(safeAppRedirect(redirectTo).toString()).toBe(
-            "https://app.sendlit.example/",
-        );
+        expect(safeAppRedirect(redirectTo)).toBe("/");
     });
 
     it("falls back to home for empty or invalid targets", async () => {
@@ -54,9 +50,7 @@ describe("safeAppRedirect", () => {
             "http://localhost:3000",
         );
 
-        expect(safeAppRedirect("").toString()).toBe("http://localhost:3000/");
-        expect(safeAppRedirect("not a url").toString()).toBe(
-            "http://localhost:3000/",
-        );
+        expect(safeAppRedirect("")).toBe("/");
+        expect(safeAppRedirect("not a url")).toBe("/");
     });
 });

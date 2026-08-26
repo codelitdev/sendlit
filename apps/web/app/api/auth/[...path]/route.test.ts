@@ -37,9 +37,7 @@ describe("auth proxy sign-out", () => {
         );
 
         expect(response.status).toBe(303);
-        expect(response.headers.get("location")).toBe(
-            "http://localhost:3000/login",
-        );
+        expect(response.headers.get("location")).toBe("/login");
         expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
     });
 });

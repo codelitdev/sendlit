@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/sidebar";
 import { SendLitLogo } from "@/components/dashboard/sendlit-logo";
 import type { Organization, Team } from "@/lib/api";
-import { selectOrganizationContext } from "@/lib/tokens";
+import { SwitchTeamForm } from "@/components/dashboard/switch-team-form";
 
 export function TeamSwitcher({
     teams,
@@ -89,36 +89,12 @@ export function TeamSwitcher({
                                 </DropdownMenuLabel>
                                 {group.teams.map((team) => {
                                     return (
-                                        <form
+                                        <SwitchTeamForm
                                             key={team.teamId}
-                                            action="/api/team/switch"
-                                            method="POST"
+                                            teamId={team.teamId}
+                                            organizationId={team.organizationId}
                                             className="contents"
-                                            onSubmit={() => {
-                                                if (team.organizationId) {
-                                                    selectOrganizationContext(
-                                                        team.organizationId,
-                                                    );
-                                                }
-                                            }}
                                         >
-                                            <input
-                                                type="hidden"
-                                                name="teamId"
-                                                value={team.teamId}
-                                            />
-                                            <input
-                                                type="hidden"
-                                                name="redirectTo"
-                                                value="/"
-                                            />
-                                            {team.organizationId && (
-                                                <input
-                                                    type="hidden"
-                                                    name="organizationId"
-                                                    value={team.organizationId}
-                                                />
-                                            )}
                                             <DropdownMenuItem asChild>
                                                 <button
                                                     type="submit"
@@ -134,7 +110,7 @@ export function TeamSwitcher({
                                                     </span>
                                                 </button>
                                             </DropdownMenuItem>
-                                        </form>
+                                        </SwitchTeamForm>
                                     );
                                 })}
                                 {group.teams.length === 0 && (
