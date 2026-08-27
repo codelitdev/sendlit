@@ -1603,6 +1603,11 @@ export const outboundMessages = pgTable(
                 ${table.deliverySourceType} = 'organization'
                 AND ${table.espConfigId} IS NOT NULL
                 AND ${table.espGrantId} IS NOT NULL
+            ) OR (
+                ${table.deliverySourceType} IN ('team', 'organization')
+                AND ${table.espConfigId} IS NULL
+                AND ${table.espGrantId} IS NULL
+                AND ${table.deliveryStatus} <> 'queued'
             )`,
         ),
     }),

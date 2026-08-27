@@ -18,6 +18,7 @@ import { getEmailFrom } from "../utils/mail";
 import { normalizeEmail } from "../utils/email";
 import {
     itemsPerPage,
+    maxItemsPerPage,
     type TransactionalEmailStatus,
 } from "../config/constants";
 import { captureEvent } from "../observability/posthog";
@@ -148,6 +149,7 @@ export async function listTransactionalEmails({
     offset?: number;
     rowsPerPage?: number;
 }): Promise<TransactionalEmail[]> {
+    const pageSize = Math.min(Math.max(rowsPerPage, 1), maxItemsPerPage);
     return db
         .select()
         .from(transactionalEmails)
@@ -160,8 +162,8 @@ export async function listTransactionalEmails({
             }),
         )
         .orderBy(desc(transactionalEmails.createdAt))
-        .limit(rowsPerPage)
-        .offset((Math.max(offset, 1) - 1) * rowsPerPage);
+        .limit(pageSize)
+        .offset((Math.max(offset, 1) - 1) * pageSize);
 }
 
 export async function countTransactionalEmails(

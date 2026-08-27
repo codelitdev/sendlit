@@ -42,16 +42,17 @@ async function forward(
 
     const responseText = await upstream.text();
     const nullBodyStatuses = new Set([101, 103, 204, 205, 304]);
-    const res = new NextResponse(
-        nullBodyStatuses.has(upstream.status) ? null : responseText,
-        {
-            status: upstream.status,
-            headers: {
-                "Content-Type":
-                    upstream.headers.get("Content-Type") || "application/json",
-            },
-        },
-    );
+    const isNullBody = nullBodyStatuses.has(upstream.status);
+    const res = new NextResponse(isNullBody ? null : responseText, {
+        status: upstream.status,
+        headers: isNullBody
+            ? undefined
+            : {
+                  "Content-Type":
+                      upstream.headers.get("Content-Type") ||
+                      "application/json",
+              },
+    });
 
     if (upstream.status === 401) {
         res.headers.set("X-Auth-Error", "session_expired");

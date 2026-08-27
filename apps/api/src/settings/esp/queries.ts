@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
     espConfigs,
@@ -352,7 +352,14 @@ export async function upsertEspConfig(
 }
 
 async function deleteOwnedEspConfig(config: EspConfig): Promise<boolean> {
-    if (config.status !== "draft" || config.activatedAt) {
+    // Organization ESPs retain their stricter, never-activated delete rule.
+    // A team can remove an otherwise-unused active ESP from Settings; its
+    // delivery default is cleared (or moved to another active team ESP)
+    // atomically before the foreign-key-protected row is removed.
+    if (
+        config.ownerScope === "organization" &&
+        (config.status !== "draft" || config.activatedAt)
+    ) {
         throw new Error("delivery_source_in_use");
     }
     return db.transaction(async (tx) => {
@@ -366,18 +373,114 @@ async function deleteOwnedEspConfig(config: EspConfig): Promise<boolean> {
             .from(espFeedbackConnections)
             .where(eq(espFeedbackConnections.espConfigId, config.id))
             .limit(1);
-        const [sequence] = await tx
+        const [activeSequence] = await tx
             .select({ id: sequences.id })
             .from(sequences)
-            .where(eq(sequences.outboxId, config.id))
+            .where(
+                and(
+                    eq(sequences.outboxId, config.id),
+                    notInArray(sequences.status, [
+                        "draft",
+                        "paused",
+                        "completed",
+                    ]),
+                ),
+            )
             .limit(1);
         const [transactional] = await tx
             .select({ id: transactionalEmails.id })
             .from(transactionalEmails)
             .where(eq(transactionalEmails.outboxId, config.id))
             .limit(1);
-        if (grant || feedback || sequence || transactional) {
+        const [queuedOutbound] = await tx
+            .select({ id: outboundMessages.id })
+            .from(outboundMessages)
+            .where(
+                and(
+                    eq(outboundMessages.espConfigId, config.id),
+                    eq(outboundMessages.deliveryStatus, "queued"),
+                ),
+            )
+            .limit(1);
+        if (
+            grant ||
+            feedback ||
+            activeSequence ||
+            transactional ||
+            queuedOutbound
+        ) {
             throw new Error("delivery_source_in_use");
+        }
+
+        // Draft and paused sequences resolve a fresh source when started or
+        // resumed, and completed sequences no longer send. Remove their old
+        // pin so the ESP can be deleted without a dangling foreign-key
+        // reference.
+        await tx
+            .update(sequences)
+            .set({
+                deliverySourceIntent: null,
+                deliverySourceType: null,
+                outboxId: null,
+                espGrantId: null,
+                report: sql`coalesce(${sequences.report}, '{}'::jsonb) || '{"deliverySourceDeleted": true}'::jsonb`,
+                updatedAt: new Date(),
+            })
+            .where(
+                and(
+                    eq(sequences.outboxId, config.id),
+                    inArray(sequences.status, ["draft", "paused", "completed"]),
+                ),
+            );
+
+        // Keep terminal delivery history (including its provider snapshot),
+        // but release its obsolete foreign-key pin. Queued rows were rejected
+        // above and can never be detached.
+        await tx
+            .update(outboundMessages)
+            .set({
+                espConfigId: null,
+                espGrantId: null,
+                updatedAt: new Date(),
+            })
+            .where(
+                and(
+                    eq(outboundMessages.espConfigId, config.id),
+                    ne(outboundMessages.deliveryStatus, "queued"),
+                ),
+            );
+
+        if (config.ownerScope === "team" && config.teamId) {
+            const [replacement] = await tx
+                .select({ id: espConfigs.id })
+                .from(espConfigs)
+                .where(
+                    and(
+                        eq(espConfigs.ownerScope, "team"),
+                        eq(espConfigs.teamId, config.teamId),
+                        eq(espConfigs.status, "active"),
+                        ne(espConfigs.id, config.id),
+                    ),
+                )
+                .orderBy(asc(espConfigs.createdAt))
+                .limit(1);
+
+            await tx
+                .update(teamDeliverySettings)
+                .set({
+                    defaultSource: replacement ? "team" : null,
+                    defaultTeamEspConfigId: replacement?.id ?? null,
+                    updatedAt: new Date(),
+                })
+                .where(
+                    and(
+                        eq(teamDeliverySettings.teamId, config.teamId),
+                        eq(
+                            teamDeliverySettings.defaultTeamEspConfigId,
+                            config.id,
+                        ),
+                    ),
+                );
         }
         const deleted = await tx
             .delete(espConfigs)

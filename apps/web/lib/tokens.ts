@@ -136,7 +136,8 @@ export function notifyTeamsChanged(): void {
  * recovery behaves identically everywhere. */
 export function needsTeamSelection(status: number, error?: string): boolean {
     return (
-        status === 409 ||
+        (status === 409 &&
+            (error === "no_team" || error === "team_required")) ||
         (status === 400 && error === "invalid_team_id") ||
         (status === 403 && error === "not_a_team_member")
     );

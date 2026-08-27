@@ -6,6 +6,7 @@ import {
     emailDeliveries,
     emailEvents,
     contacts,
+    espConfigs,
 } from "../db/schema";
 import { resolveStartingTemplate } from "../templates/queries";
 import {
@@ -20,6 +21,7 @@ import {
     EventType,
     MailType,
     itemsPerPage,
+    maxItemsPerPage,
     sequenceDelayBetweenMailsInMillis,
 } from "../config/constants";
 import { responses } from "../config/strings";
@@ -42,17 +44,46 @@ export type HydratedSequence = Sequence & {
     deliverySource: DeliverySourceSelection | null;
 };
 
+function clearDeletedDeliverySourceMarker(
+    report: unknown,
+): Record<string, unknown> {
+    if (!report || typeof report !== "object" || Array.isArray(report)) {
+        return {};
+    }
+    const { deliverySourceDeleted: _deleted, ...rest } = report as Record<
+        string,
+        unknown
+    >;
+    return rest;
+}
+
 async function hydrate(sequence: Sequence): Promise<HydratedSequence> {
     const emails = await db
         .select()
         .from(sequenceEmails)
         .where(eq(sequenceEmails.sequenceId, sequence.id))
         .orderBy(asc(sequenceEmails.createdAt));
-    const deliverySource =
+    let deliverySource =
         (sequence.deliverySourceIntent as DeliverySourceSelection | null) ??
         (sequence.deliverySourceType
             ? { type: sequence.deliverySourceType as "organization" | "team" }
             : null);
+
+    // A started team-delivery sequence is pinned to an exact ESP. Return its
+    // public ID so read-only campaign views name the sender that actually
+    // delivered the mail rather than the draft-only "team default" alias.
+    if (
+        !sequence.deliverySourceIntent &&
+        sequence.deliverySourceType === "team" &&
+        sequence.outboxId
+    ) {
+        const [esp] = await db
+            .select({ espId: espConfigs.espId })
+            .from(espConfigs)
+            .where(eq(espConfigs.id, sequence.outboxId))
+            .limit(1);
+        if (esp) deliverySource = { type: "team", espId: esp.espId };
+    }
     return { ...sequence, emails, deliverySource };
 }
 
@@ -198,12 +229,13 @@ export async function listSequences({
     offset?: number;
     itemsPerPage?: number;
 }): Promise<HydratedSequence[]> {
+    const pageSize = Math.min(Math.max(perPage, 1), maxItemsPerPage);
     const rows = await db
         .select()
         .from(sequences)
         .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)))
-        .limit(perPage)
-        .offset((Math.max(offset, 1) - 1) * perPage);
+        .limit(pageSize)
+        .offset((Math.max(offset, 1) - 1) * pageSize);
     return Promise.all(rows.map(hydrate));
 }
 
@@ -625,6 +657,29 @@ export async function startSequence({
         }
     }
 
+    const pinChanged =
+        sequence.deliverySourceType !== pin.type ||
+        sequence.outboxId !== pin.espConfigId ||
+        sequence.espGrantId !== pin.espGrantId;
+    if (
+        sequence.status === "paused" &&
+        sequence.deliverySourceType &&
+        pinChanged
+    ) {
+        // PostgreSQL correctly keeps pins immutable. A paused sequence is the
+        // one safe exception: clear the old pin first, then assign the newly
+        // resolved source below.
+        await db
+            .update(sequences)
+            .set({
+                deliverySourceType: null,
+                outboxId: null,
+                espGrantId: null,
+                updatedAt: new Date(),
+            })
+            .where(eq(sequences.id, sequence.id));
+    }
+
     await addRule({
         teamId,
         sequenceId: sequence.id,
@@ -643,6 +698,7 @@ export async function startSequence({
             deliverySourceType: pin.type,
             outboxId: pin.espConfigId,
             espGrantId: pin.espGrantId,
+            report: clearDeletedDeliverySourceMarker(sequence.report),
             updatedAt: new Date(),
         })
         .where(eq(sequences.id, sequence.id))

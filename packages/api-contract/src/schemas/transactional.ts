@@ -113,5 +113,5 @@ export const listTransactionalEmailsQuerySchema = z.object({
         .optional()
         .describe("Millisecond timestamp upper bound (exclusive)"),
     offset: z.coerce.number().int().min(1).optional(),
-    itemsPerPage: z.coerce.number().int().min(1).optional(),
+    itemsPerPage: z.coerce.number().int().min(1).max(50).optional(),
 });

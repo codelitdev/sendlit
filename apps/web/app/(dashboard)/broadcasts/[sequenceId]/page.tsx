@@ -17,12 +17,16 @@ import {
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import { Banner } from "@/components/dashboard/banner";
+import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import { ApiError } from "@/lib/api-client";
 import { broadcastScheduledFor, presentBroadcastStatus } from "@/lib/broadcast";
-import { presentDeliverySourceError } from "@/lib/delivery-source";
+import {
+    isDeletedDeliverySource,
+    presentDeliverySourceError,
+} from "@/lib/delivery-source";
 import {
     getSequence,
     getSequenceStats,
@@ -273,7 +277,12 @@ export default function BroadcastEditorPage({
         startAt(at);
     }
 
-    if (error && !sequence) return <Banner>{error}</Banner>;
+    if (error && !sequence)
+        return (
+            <Banner>
+                <SendErrorMessage error={error} />
+            </Banner>
+        );
     if (!sequence || !meta || !email) {
         return <Loading />;
     }
@@ -331,7 +340,11 @@ export default function BroadcastEditorPage({
                     </div>
                 </div>
 
-                {error && <Banner className="mb-4">{error}</Banner>}
+                {error && (
+                    <Banner className="mb-4">
+                        <SendErrorMessage error={error} />
+                    </Banner>
+                )}
 
                 {scheduledForLabel && (
                     <Banner
@@ -395,6 +408,11 @@ export default function BroadcastEditorPage({
                                         })
                                     }
                                     disabled={!editable}
+                                    deleted={isDeletedDeliverySource({
+                                        report: sequence?.report,
+                                        status: sequence?.status ?? "",
+                                        deliverySource: meta.deliverySource,
+                                    })}
                                 />
                             </div>
                             <div className="space-y-1.5">

@@ -35,11 +35,11 @@ vi.mock("./test", () => ({
 vi.mock("../../observability/posthog", () => ({ captureEvent: vi.fn() }));
 
 import { db } from "../../db/client";
-import { espConfigs } from "../../db/schema";
+import { espConfigs, outboundMessages } from "../../db/schema";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../../test/db";
 import { seedSequence } from "../../test/fixtures";
 import { requestApp } from "../../test/http";
-import { createEspConfig } from "./queries";
+import { createEspConfig, getEspConfigByEspId } from "./queries";
 import espRoutes from "./routes";
 
 const tdb = db as unknown as TestDb;
@@ -164,5 +164,48 @@ describe("ESP settings routes", () => {
             .from(espConfigs)
             .where(eq(espConfigs.id, config.id));
         expect(stillPresent).toBeTruthy();
+    });
+
+    it("deletes an ESP used only by a completed broadcast", async () => {
+        const owner = await seedTeamAndContact(tdb);
+        const config = await createEspConfig(owner.team.id, {
+            name: "Completed broadcast ESP",
+            provider: "smtp",
+            host: "smtp.completed.example.com",
+            port: 587,
+            secure: false,
+        });
+        await seedSequence(tdb, {
+            teamId: owner.team.id,
+            type: "broadcast",
+            status: "completed",
+            outboxId: config.id,
+            emails: [{ emailId: "email_completed_broadcast" }],
+        });
+        await tdb.insert(outboundMessages).values({
+            teamId: owner.team.id,
+            deliverySourceType: "team",
+            espConfigId: config.id,
+            espGrantId: null,
+            sourceType: "campaign",
+            recipientEmail: "recipient@example.com",
+            normalizedRecipient: "recipient@example.com",
+            provider: "smtp",
+            rfcMessageId: "<completed-broadcast@example.com>",
+            deliveryStatus: "accepted",
+        });
+        requestContext.teamId = owner.team.id;
+        requestContext.userId = owner.account.id;
+
+        const response = await requestApp(
+            app(),
+            `/settings/esps/${config.espId}`,
+            { method: "DELETE" },
+        );
+
+        expect(response.status).toBe(204);
+        await expect(
+            getEspConfigByEspId(owner.team.id, config.espId),
+        ).resolves.toBeNull();
     });
 });

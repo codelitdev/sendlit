@@ -65,7 +65,8 @@ export const UserFilter = {
 
 export const userFilterAggregationOperators = ["and", "or"] as const;
 
-export const itemsPerPage = 20;
+export const itemsPerPage = 10;
+export const maxItemsPerPage = 50;
 
 // ---- Bounce and complaint processing (docs/bounces-and-complaints.md) -----
 

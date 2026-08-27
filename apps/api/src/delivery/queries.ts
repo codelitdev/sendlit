@@ -7,6 +7,7 @@ import {
     outboundMessages,
     organizationDeliveryPolicies,
     organizations,
+    sequences,
     teamDeliverySettings,
     teams,
     transactionalEmails,
@@ -658,6 +659,30 @@ export async function transitionEspGrant(
                 grant.id,
                 "delivery_source_cancelled",
             );
+
+            // A revoked shared source cannot remain pinned to work that can
+            // later resume. Draft, paused, and completed campaigns are safe
+            // to detach; active campaigns retain their immutable pin.
+            await tx
+                .update(sequences)
+                .set({
+                    deliverySourceIntent: null,
+                    deliverySourceType: null,
+                    outboxId: null,
+                    espGrantId: null,
+                    report: sql`coalesce(${sequences.report}, '{}'::jsonb) || '{"deliverySourceDeleted": true}'::jsonb`,
+                    updatedAt: new Date(),
+                })
+                .where(
+                    and(
+                        eq(sequences.espGrantId, grant.id),
+                        inArray(sequences.status, [
+                            "draft",
+                            "paused",
+                            "completed",
+                        ]),
+                    ),
+                );
         }
         await recordOrganizationAuditEvent(tx, {
             organizationId,

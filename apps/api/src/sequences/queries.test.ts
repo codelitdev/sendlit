@@ -21,6 +21,7 @@ import {
     contacts,
     emailDeliveries,
     emailEvents,
+    espConfigs,
     media,
     mediaReferences,
     rules,
@@ -220,9 +221,21 @@ describe("sequence queries", () => {
             sequenceId: sequence.sequenceId,
             title: "Welcome sequence",
         });
+        const [defaultEsp] = await tdb
+            .select({ espId: espConfigs.espId })
+            .from(espConfigs)
+            .where(eq(espConfigs.teamId, team.id));
+        await tdb
+            .update(sequences)
+            .set({ report: { deliverySourceDeleted: true } })
+            .where(eq(sequences.id, sequence.id));
         await expect(
             startSequence({ teamId: team.id, sequenceId: sequence.sequenceId }),
-        ).resolves.toMatchObject({ status: "active" });
+        ).resolves.toMatchObject({
+            status: "active",
+            deliverySource: { type: "team", espId: defaultEsp.espId },
+            report: {},
+        });
         await expect(
             startSequence({ teamId: team.id, sequenceId: sequence.sequenceId }),
         ).rejects.toThrow(responses.sequence_already_started);
@@ -242,6 +255,57 @@ describe("sequence queries", () => {
                 sequenceId: broadcast.sequenceId,
             }),
         ).resolves.toMatchObject({ status: "active" });
+    });
+
+    it("re-pins a paused sequence before resuming it", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const template = await makeTemplate(team.id);
+        const sequence = await createSequence({
+            teamId: team.id,
+            type: "sequence",
+            templateId: template.templateId,
+        });
+        await tdb
+            .update(sequenceEmails)
+            .set({ published: true })
+            .where(eq(sequenceEmails.id, sequence.emails[0].id));
+        await updateSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            title: "Welcome sequence",
+        });
+        await startSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+        });
+        await pauseSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+        });
+
+        const [replacement] = await tdb
+            .insert(espConfigs)
+            .values({
+                ownerScope: "team",
+                teamId: team.id,
+                name: "Replacement ESP",
+                host: "smtp.replacement.example.com",
+                fromEmail: "replacement@example.com",
+                status: "active",
+            })
+            .returning();
+        await updateSequence({
+            teamId: team.id,
+            sequenceId: sequence.sequenceId,
+            deliverySource: { type: "team", espId: replacement.espId },
+        });
+
+        await expect(
+            startSequence({ teamId: team.id, sequenceId: sequence.sequenceId }),
+        ).resolves.toMatchObject({
+            status: "active",
+            deliverySource: { type: "team", espId: replacement.espId },
+        });
     });
 
     it("rejects starting a broadcast with no matching recipients", async () => {

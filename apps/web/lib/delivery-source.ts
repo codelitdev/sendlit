@@ -9,7 +9,28 @@ export function presentDeliverySourceError(error: string): string {
             return "The shared delivery source is no longer active for this team. Ask an organization admin to reactivate or reassign it.";
         case "team_esp_disabled":
             return "Team-owned ESP delivery is disabled for this team. Choose the shared delivery source or ask an organization admin to change the policy.";
+        case "delivery_source_in_use":
+            return "This ESP can't be removed while it is used by an active sequence, queued email, or delivery integration.";
         default:
             return error;
     }
+}
+
+export function isDeletedDeliverySource({
+    report,
+    status,
+    deliverySource,
+}: {
+    report: unknown;
+    status: string;
+    deliverySource: unknown;
+}): boolean {
+    return (
+        (typeof report === "object" &&
+            report !== null &&
+            !Array.isArray(report) &&
+            (report as Record<string, unknown>).deliverySourceDeleted ===
+                true) ||
+        (status === "completed" && deliverySource === null)
+    );
 }

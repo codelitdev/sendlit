@@ -13,6 +13,7 @@ import {
     organizationEspQuotaReservations,
     organizationEspUsageBuckets,
     outboundMessages,
+    sequences,
     user,
 } from "../db/schema";
 import {
@@ -177,6 +178,18 @@ describe("organizations", () => {
             outboundMessageId: outbound.id,
             grantId: grantBeforeCancel.id,
         });
+        const [pausedSequence] = await tdb
+            .insert(sequences)
+            .values({
+                teamId: team.id,
+                type: "sequence",
+                title: "Paused sequence",
+                status: "paused",
+                deliverySourceType: "organization",
+                outboxId: esp.id,
+                espGrantId: grantBeforeCancel.id,
+            })
+            .returning();
         await expect(
             getOrganizationQuotaUsage(organization.id),
         ).resolves.toMatchObject({
@@ -196,6 +209,17 @@ describe("organizations", () => {
             .from(espConfigTeamGrants)
             .where(eq(espConfigTeamGrants.teamId, team.id));
         expect(grant.status).toBe("revoked");
+        const [detachedSequence] = await tdb
+            .select()
+            .from(sequences)
+            .where(eq(sequences.id, pausedSequence.id));
+        expect(detachedSequence).toMatchObject({
+            deliverySourceIntent: null,
+            deliverySourceType: null,
+            outboxId: null,
+            espGrantId: null,
+            report: { deliverySourceDeleted: true },
+        });
         const [reservation] = await tdb
             .select()
             .from(organizationEspQuotaReservations)

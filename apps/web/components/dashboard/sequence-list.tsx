@@ -8,12 +8,15 @@ import { Badge } from "@/components/ui/codelit/badge";
 import { Card, CardContent } from "@/components/ui/codelit/card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { NewSequenceDialog } from "@/components/dashboard/new-sequence-dialog";
+import { ListPagination } from "@/components/dashboard/list-pagination";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ApiError } from "@/lib/api-client";
 import { presentBroadcastStatus } from "@/lib/broadcast";
+import { ITEMS_PER_PAGE } from "@/lib/pagination";
 import { listSequences, pauseSequence, startSequence } from "@/lib/api";
 import type { MailType, Sequence } from "@sendlit/email-blocks";
 
@@ -42,16 +45,27 @@ export function SequenceListPage({
 }) {
     const router = useRouter();
     const [sequences, setSequences] = useState<Sequence[] | null>(null);
+    const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
     const [error, setError] = useState<string | null>(null);
+    const [loadingPage, setLoadingPage] = useState(false);
 
     useSetBreadcrumb([{ label: title }]);
 
-    async function load() {
+    async function load(pageToLoad = 1) {
+        setLoadingPage(true);
         try {
-            const { items } = await listSequences(type);
-            setSequences(items);
+            const result = await listSequences(type, {
+                offset: pageToLoad,
+                itemsPerPage: ITEMS_PER_PAGE,
+            });
+            setSequences(result.items);
+            setTotal(result.total);
+            setPage(pageToLoad);
         } catch (err) {
             setError(err instanceof ApiError ? err.message : "Failed to load");
+        } finally {
+            setLoadingPage(false);
         }
     }
 
@@ -89,7 +103,11 @@ export function SequenceListPage({
                 }
             />
 
-            {error && <Banner className="mb-4">{error}</Banner>}
+            {error && (
+                <Banner className="mb-4">
+                    <SendErrorMessage error={error} />
+                </Banner>
+            )}
 
             {sequences === null ? (
                 <Loading />
@@ -199,6 +217,16 @@ export function SequenceListPage({
                         </table>
                     </CardContent>
                 </Card>
+            )}
+
+            {sequences !== null && (
+                <ListPagination
+                    page={page}
+                    total={total}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                    disabled={loadingPage}
+                    onPageChange={(nextPage) => void load(nextPage)}
+                />
             )}
         </ScrollablePage>
     );

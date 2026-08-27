@@ -57,12 +57,14 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Banner } from "@/components/dashboard/banner";
+import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { Loading } from "@/components/dashboard/loading";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { EspConfigurationDialog } from "@/components/dashboard/esp-configuration-dialog";
 import { ApiError } from "@/lib/api-client";
+import { presentDeliverySourceError } from "@/lib/delivery-source";
 import {
     activateEsp,
     createEsp,
@@ -249,7 +251,9 @@ export default function SettingsPage() {
             await load();
         } catch (err) {
             setError(
-                err instanceof ApiError ? err.message : "Failed to remove ESP",
+                err instanceof ApiError
+                    ? presentDeliverySourceError(err.message)
+                    : "Failed to remove ESP",
             );
         }
     }
@@ -646,10 +650,15 @@ export default function SettingsPage() {
                                     ) : (
                                         <XCircle className="size-4" />
                                     )}
-                                    {testResult.success
-                                        ? `Test email sent via "${esps.find((e) => e.espId === testResult.espId)?.name ?? "ESP"}".`
-                                        : testResult.error ||
-                                          "Test send failed."}
+                                    {testResult.success ? (
+                                        `Test email sent via "${esps.find((e) => e.espId === testResult.espId)?.name ?? "ESP"}".`
+                                    ) : testResult.error ? (
+                                        <SendErrorMessage
+                                            error={testResult.error}
+                                        />
+                                    ) : (
+                                        "Test send failed."
+                                    )}
                                 </span>
                             </Banner>
                         )}

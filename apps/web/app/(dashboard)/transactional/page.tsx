@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/codelit/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
     Select,
@@ -17,10 +16,10 @@ import { Banner } from "@/components/dashboard/banner";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { ListPagination } from "@/components/dashboard/list-pagination";
 import { ApiError } from "@/lib/api-client";
+import { ITEMS_PER_PAGE } from "@/lib/pagination";
 import { listTransactionalEmails, type TransactionalEmail } from "@/lib/api";
-
-const PAGE_SIZE = 20;
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
     { value: "all", label: "All statuses" },
@@ -51,63 +50,42 @@ export default function TransactionalPage() {
     const [page, setPage] = useState(1);
     const [status, setStatus] = useState("all");
     const [error, setError] = useState<string | null>(null);
-    const [loadingMore, setLoadingMore] = useState(false);
+    const [loadingPage, setLoadingPage] = useState(false);
 
     useSetBreadcrumb([{ label: "Transactional" }]);
 
-    // Fetches the first `pageCount` pages worth of items in one request
-    // (rather than appending page-by-page), matching the media page's
-    // pagination pattern.
-    async function loadRange(statusFilter: string, pageCount: number) {
+    function queryFor(statusFilter: string, offset: number) {
         return listTransactionalEmails({
             status:
                 statusFilter === "all"
                     ? undefined
                     : (statusFilter as TransactionalEmail["status"]),
-            offset: 1,
-            itemsPerPage: PAGE_SIZE * pageCount,
+            offset,
+            itemsPerPage: ITEMS_PER_PAGE,
         });
     }
 
-    async function load(statusFilter = status) {
+    async function load(pageToLoad = 1, statusFilter = status) {
         setError(null);
+        setLoadingPage(true);
         try {
-            const result = await loadRange(statusFilter, 1);
+            const result = await queryFor(statusFilter, pageToLoad);
             setItems(result.items);
             setTotal(result.total);
-            setPage(1);
+            setPage(pageToLoad);
         } catch (err) {
             setError(
                 err instanceof ApiError
                     ? err.message
                     : "Failed to load transactional emails",
             );
-        }
-    }
-
-    async function loadMore() {
-        if (loadingMore) return;
-        setLoadingMore(true);
-        setError(null);
-        try {
-            const nextPage = page + 1;
-            const result = await loadRange(status, nextPage);
-            setItems(result.items);
-            setTotal(result.total);
-            setPage(nextPage);
-        } catch (err) {
-            setError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Failed to load more transactional emails",
-            );
         } finally {
-            setLoadingMore(false);
+            setLoadingPage(false);
         }
     }
 
     useEffect(() => {
-        void load(status);
+        void load(1, status);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status]);
 
@@ -207,20 +185,14 @@ export default function TransactionalPage() {
                 </CardContent>
             </Card>
 
-            {items !== null && items.length < total && (
-                <div className="mt-4 flex flex-col items-center gap-2">
-                    <p className="text-xs text-muted-foreground">
-                        Showing {items.length} of {total}
-                    </p>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        disabled={loadingMore}
-                        onClick={() => void loadMore()}
-                    >
-                        {loadingMore ? "Loading..." : "Load more"}
-                    </Button>
-                </div>
+            {items !== null && (
+                <ListPagination
+                    page={page}
+                    total={total}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                    disabled={loadingPage}
+                    onPageChange={(nextPage) => void load(nextPage)}
+                />
             )}
         </ScrollablePage>
     );

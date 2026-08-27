@@ -407,9 +407,12 @@ export function deleteTemplate(templateId: string) {
 
 // ---- Sequences / broadcasts ----------------------------------------------
 
-export function listSequences(type: MailType) {
+export function listSequences(
+    type: MailType,
+    params: { offset?: number; itemsPerPage?: number } = {},
+) {
     return unwrap<Paginated<Sequence>>(
-        client.sequences.list({ query: { type } }),
+        client.sequences.list({ query: { type, ...params } }),
     );
 }
 

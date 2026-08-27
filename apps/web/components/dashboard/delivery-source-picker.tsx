@@ -7,6 +7,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/codelit/select";
+import { Input } from "@/components/ui/codelit/input";
 import type { DeliverySourceSelection, SendingOption } from "@/lib/api";
 
 /** `Select` cannot represent a null value. Null intentionally leaves source
@@ -45,20 +46,52 @@ export function DeliverySourcePicker({
     value,
     onChange,
     disabled,
+    deleted,
 }: {
     options: SendingOption[];
     value: DeliverySourceSelection | null | undefined;
     onChange: (source: DeliverySourceSelection | null) => void;
     disabled?: boolean;
+    /** An immutable sent campaign whose original ESP has been removed. */
+    deleted?: boolean;
 }) {
     const availableOptions = options.filter((option) => option.available);
+    const selectedTeamEspId = value?.type === "team" ? value.espId : undefined;
+    const hasUnavailableExplicitSelection =
+        value?.type === "organization"
+            ? !availableOptions.some((option) => option.type === "organization")
+            : Boolean(selectedTeamEspId) &&
+              !availableOptions.some(
+                  (option) =>
+                      option.type === "team" &&
+                      option.espId === selectedTeamEspId,
+              );
+
+    const deletedSource = deleted || hasUnavailableExplicitSelection;
+    if ((disabled && deletedSource) || availableOptions.length === 0) {
+        return (
+            <Input
+                aria-label="Delivery source"
+                value={
+                    deletedSource
+                        ? "Deleted"
+                        : "No active delivery source available"
+                }
+                disabled
+                readOnly
+            />
+        );
+    }
     const hasDefault = availableOptions.some((option) => option.isDefault);
     const soleOption =
         availableOptions.length === 1 ? availableOptions[0] : null;
     // A lone available source resolves automatically, so a separate "team
     // default" alias adds no choice and merely duplicates the same sender.
-    const selectedValue =
-        !value && soleOption ? valueForOption(soleOption) : toValue(value);
+    const selectedValue = hasUnavailableExplicitSelection
+        ? undefined
+        : !value && soleOption
+          ? valueForOption(soleOption)
+          : toValue(value);
 
     return (
         <Select

@@ -296,7 +296,8 @@ export function registerEspTools(server: McpToolRegistrar): void {
     server.registerTool(
         "delete_esp",
         {
-            description: "Removes an eligible never-activated draft team ESP.",
+            description:
+                "Removes an ESP that has no active or queued delivery work. Draft, paused, and completed sequences are detached first.",
             inputSchema: { espId: z.string().min(1) },
             outputSchema: successMessageSchema,
             annotations: {

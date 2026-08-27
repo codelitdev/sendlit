@@ -211,7 +211,7 @@ export function registerTransactionalTools(server: McpToolRegistrar): void {
                     .min(1)
                     .optional()
                     .describe("Page number (default: 1)"),
-                itemsPerPage: z.number().int().min(1).optional(),
+                itemsPerPage: z.number().int().min(1).max(50).optional(),
             },
             outputSchema: transactionalEmailListSchema,
             annotations: {

@@ -142,7 +142,7 @@ export const sequenceSchema = z.object({
 export const listSequencesQuerySchema = z.object({
     type: z.enum(mailTypes),
     offset: z.coerce.number().int().min(1).optional(),
-    itemsPerPage: z.coerce.number().int().min(1).optional(),
+    itemsPerPage: z.coerce.number().int().min(1).max(50).optional(),
 });
 
 export const createSequenceBodySchema = z.object({

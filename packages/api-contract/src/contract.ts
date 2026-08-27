@@ -596,6 +596,8 @@ const espCollectionContract = c.router(
                 409: errorSchema,
             },
             summary: "Remove a user-managed ESP configuration",
+            description:
+                "Removes an ESP with no active or queued dependencies. Draft, paused, and completed sequences are detached first.",
         },
         test: {
             method: "POST",
@@ -1290,7 +1292,8 @@ const organizationsContract = c.router(
                 404: errorSchema,
                 409: errorSchema,
             },
-            summary: "Transition a team's organization ESP grant",
+            summary:
+                "Transition a team's organization ESP grant; revoking detaches safe campaigns",
         },
     },
     { metadata: { tag: "Organizations" } },

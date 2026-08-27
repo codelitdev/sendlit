@@ -196,6 +196,7 @@ describe("BFF proxy auth failures", () => {
         );
 
         expect(response.status).toBe(204);
+        expect(response.headers.get("content-type")).toBeNull();
         expect(await response.text()).toBe("");
     });
 });

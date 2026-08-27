@@ -17,11 +17,15 @@ import {
 } from "@/components/ui/codelit/select";
 import { Switch } from "@/components/ui/codelit/switch";
 import { Banner } from "@/components/dashboard/banner";
+import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import { ApiError } from "@/lib/api-client";
-import { presentDeliverySourceError } from "@/lib/delivery-source";
+import {
+    isDeletedDeliverySource,
+    presentDeliverySourceError,
+} from "@/lib/delivery-source";
 import {
     addSequenceEmail,
     deleteSequenceEmail,
@@ -290,7 +294,12 @@ export default function SequenceEditorPage({
         }
     }
 
-    if (error && !sequence) return <Banner>{error}</Banner>;
+    if (error && !sequence)
+        return (
+            <Banner>
+                <SendErrorMessage error={error} />
+            </Banner>
+        );
     if (!sequence || !meta) return <Loading />;
 
     return (
@@ -319,7 +328,11 @@ export default function SequenceEditorPage({
                     )}
                 </div>
 
-                {error && <Banner className="mb-4">{error}</Banner>}
+                {error && (
+                    <Banner className="mb-4">
+                        <SendErrorMessage error={error} />
+                    </Banner>
+                )}
 
                 {stats && (
                     <SequenceAnalytics
@@ -370,6 +383,11 @@ export default function SequenceEditorPage({
                                         })
                                     }
                                     disabled={!espEditable}
+                                    deleted={isDeletedDeliverySource({
+                                        report: sequence?.report,
+                                        status: sequence?.status ?? "",
+                                        deliverySource: meta.deliverySource,
+                                    })}
                                 />
                             </div>
                             <TriggerPicker
