@@ -21,7 +21,7 @@
     "dependencies": {
         "@better-auth/cimd": "1.7.0-rc.4",
         "@better-auth/oauth-provider": "1.7.0-rc.4",
-        "@codelitdev/oauth-server-kit": "0.1.0-alpha.0",
+        "@codelitdev/oauth-server-kit": "0.1.0-alpha.1",
         "@modelcontextprotocol/node": "^2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
         "@sendlit/api-contract": "workspace:*",

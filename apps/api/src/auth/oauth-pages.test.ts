@@ -87,6 +87,10 @@ describe("SendLit OAuth pages", () => {
         expect(response.body).toContain("Sign in to SendLit");
         expect(response.body).toContain('var authBasePath="/api/auth"');
         expect(response.body).toContain("http://localhost:3000/overview");
+        expect(response.body).toContain('src="http://localhost:3000/icon.svg"');
+        expect(response.body).toContain(
+            "html{--brand-primary:oklch(0.47 0.14 150)}",
+        );
         expect(response.headers.get("x-frame-options")).toBe("DENY");
     });
 

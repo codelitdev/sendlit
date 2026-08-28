@@ -17,6 +17,9 @@ router.use(
         authBasePath,
         allowedRedirectOrigins: [webClientUrl],
         defaultRedirectUrl: new URL("/", webClientUrl).toString(),
+        logoUrl: new URL("/icon.svg", webClientUrl).toString(),
+        faviconUrl: new URL("/icon.svg", webClientUrl).toString(),
+        primaryColor: "oklch(0.47 0.14 150)",
         loginMethods: hostedLoginMethods,
         legacyHostOnlySessionCookieNames: process.env.AUTH_COOKIE_DOMAIN
             ? [
