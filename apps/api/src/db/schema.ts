@@ -77,7 +77,7 @@ export const organizations = pgTable(
         ),
         statusCheck: check(
             "organizations_status_check",
-            sql`${table.status} IN ('active', 'suspended', 'closed')`,
+            sql`${table.status} IN ('pending_payment', 'active', 'suspended', 'abandoned', 'closed')`,
         ),
     }),
 );
@@ -96,6 +96,705 @@ export const user = pgTable("user", {
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
+
+/**
+ * Provider-neutral prices loaded from deployment configuration and verified
+ * against the provider catalog. Price entries are immutable; a price change
+ * creates a new provider product and entry so existing subscriptions remain
+ * grandfathered.
+ */
+export const billingPriceEntries = pgTable(
+    "billing_price_entries",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        catalogKey: text("catalog_key").notNull(),
+        plan: text("plan").notNull(),
+        billingInterval: text("billing_interval").notNull(),
+        currency: text("currency").notNull(),
+        amountMinor: integer("amount_minor").notNull(),
+        provider: text("provider").notNull(),
+        providerProductId: text("provider_product_id").notNull(),
+        verifiedAt: timestamp("verified_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        providerProductUnique: uniqueIndex(
+            "billing_price_entries_provider_product_uidx",
+        ).on(table.provider, table.providerProductId),
+        catalogKeyIdx: index("billing_price_entries_catalog_key_idx").on(
+            table.catalogKey,
+        ),
+        amountCheck: check(
+            "billing_price_entries_amount_check",
+            sql`${table.amountMinor} > 0`,
+        ),
+        currencyCheck: check(
+            "billing_price_entries_currency_check",
+            sql`${table.currency} ~ '^[A-Z]{3}$'`,
+        ),
+        planCheck: check(
+            "billing_price_entries_plan_check",
+            sql`${table.plan} IN ('pro', 'business')`,
+        ),
+        intervalCheck: check(
+            "billing_price_entries_interval_check",
+            sql`${table.billingInterval} IN ('month', 'year')`,
+        ),
+    }),
+);
+
+export const billingCatalogRevisions = pgTable(
+    "billing_catalog_revisions",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        revision: integer("revision").notNull().unique(),
+        checkoutProvider: text("checkout_provider").notNull(),
+        status: text("status").notNull().default("pending_verification"),
+        verifiedAt: timestamp("verified_at", { withTimezone: true }),
+        activatedAt: timestamp("activated_at", { withTimezone: true }),
+        retiredAt: timestamp("retired_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        statusCheck: check(
+            "billing_catalog_revisions_status_check",
+            sql`${table.status} IN ('pending_verification', 'active', 'retired', 'invalid', 'abandoned')`,
+        ),
+        revisionCheck: check(
+            "billing_catalog_revisions_revision_check",
+            sql`${table.revision} > 0`,
+        ),
+        activeProviderUnique: uniqueIndex(
+            "billing_catalog_revisions_active_provider_uidx",
+        )
+            .on(table.checkoutProvider)
+            .where(sql`${table.status} = 'active'`),
+    }),
+);
+
+export const billingCatalogRevisionItems = pgTable(
+    "billing_catalog_revision_items",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        catalogRevisionId: uuid("catalog_revision_id")
+            .notNull()
+            .references(() => billingCatalogRevisions.id, {
+                onDelete: "cascade",
+            }),
+        catalogKey: text("catalog_key").notNull(),
+        billingPriceEntryId: uuid("billing_price_entry_id")
+            .notNull()
+            .references(() => billingPriceEntries.id, {
+                onDelete: "restrict",
+            }),
+    },
+    (table) => ({
+        revisionKeyUnique: uniqueIndex(
+            "billing_catalog_revision_items_revision_key_uidx",
+        ).on(table.catalogRevisionId, table.catalogKey),
+        revisionPriceUnique: uniqueIndex(
+            "billing_catalog_revision_items_revision_price_uidx",
+        ).on(table.catalogRevisionId, table.billingPriceEntryId),
+    }),
+);
+
+/** One provider customer per authenticated payer and provider. */
+export const billingProviderCustomers = pgTable(
+    "billing_provider_customers",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        provider: text("provider").notNull(),
+        userId: text("user_id")
+            .notNull()
+            .references(() => user.id, { onDelete: "restrict" }),
+        providerCustomerId: text("provider_customer_id"),
+        idempotencyKey: text("idempotency_key").notNull(),
+        status: text("status").notNull().default("creating"),
+        lastError: text("last_error"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        providerUserUnique: uniqueIndex(
+            "billing_provider_customers_provider_user_uidx",
+        ).on(table.provider, table.userId),
+        providerCustomerUnique: uniqueIndex(
+            "billing_provider_customers_provider_customer_uidx",
+        )
+            .on(table.provider, table.providerCustomerId)
+            .where(sql`${table.providerCustomerId} IS NOT NULL`),
+        idempotencyUnique: uniqueIndex(
+            "billing_provider_customers_idempotency_uidx",
+        ).on(table.idempotencyKey),
+        statusCheck: check(
+            "billing_provider_customers_status_check",
+            sql`${table.status} IN ('creating', 'active', 'conflicted')`,
+        ),
+    }),
+);
+
+/** A durable checkout/subscription correlation state machine. */
+export const billingCheckoutAttempts = pgTable(
+    "billing_checkout_attempts",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        attemptId: text("attempt_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("bca")),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        payerUserId: text("payer_user_id")
+            .notNull()
+            .references(() => user.id, { onDelete: "restrict" }),
+        provider: text("provider").notNull(),
+        catalogRevision: integer("catalog_revision").notNull(),
+        catalogKey: text("catalog_key").notNull(),
+        requestedPlan: text("requested_plan").notNull(),
+        requestedInterval: text("requested_interval").notNull(),
+        pendingTeamName: text("pending_team_name"),
+        billingPriceEntryId: uuid("billing_price_entry_id")
+            .notNull()
+            .references(() => billingPriceEntries.id, { onDelete: "restrict" }),
+        quotedAmountMinor: integer("quoted_amount_minor").notNull(),
+        quotedCurrency: text("quoted_currency").notNull(),
+        billingCustomerId: uuid("billing_customer_id").references(
+            () => billingProviderCustomers.id,
+            { onDelete: "restrict" },
+        ),
+        providerCheckoutSessionId: text("provider_checkout_session_id"),
+        checkoutUrlEncrypted: text("checkout_url_encrypted"),
+        idempotencyKey: text("idempotency_key").notNull(),
+        status: text("status").notNull().default("creating"),
+        expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+        lastError: text("last_error"),
+        completedAt: timestamp("completed_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        providerSessionUnique: uniqueIndex(
+            "billing_checkout_attempts_provider_session_uidx",
+        )
+            .on(table.provider, table.providerCheckoutSessionId)
+            .where(sql`${table.providerCheckoutSessionId} IS NOT NULL`),
+        idempotencyUnique: uniqueIndex(
+            "billing_checkout_attempts_idempotency_uidx",
+        ).on(table.idempotencyKey),
+        organizationNonterminalUnique: uniqueIndex(
+            "billing_checkout_attempts_organization_nonterminal_uidx",
+        )
+            .on(table.organizationId)
+            .where(sql`${table.status} IN ('creating', 'open')`),
+        statusCheck: check(
+            "billing_checkout_attempts_status_check",
+            sql`${table.status} IN ('creating', 'open', 'completed', 'expired', 'abandoned', 'conflicted')`,
+        ),
+        amountCheck: check(
+            "billing_checkout_attempts_amount_check",
+            sql`${table.quotedAmountMinor} > 0`,
+        ),
+    }),
+);
+
+/** Durable, idempotent mutation record for changing an existing subscription.
+ * Entitlements are not projected from this row; the verified provider
+ * subscription snapshot remains authoritative. */
+export const billingPlanChangeAttempts = pgTable(
+    "billing_plan_change_attempts",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        changeId: text("change_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("bpc")),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        subscriptionId: uuid("subscription_id")
+            .notNull()
+            .references(() => organizationSubscriptions.id, {
+                onDelete: "restrict",
+            }),
+        actorUserId: text("actor_user_id")
+            .notNull()
+            .references(() => user.id, { onDelete: "restrict" }),
+        provider: text("provider").notNull(),
+        idempotencyKey: text("idempotency_key").notNull(),
+        currentCatalogRevision: integer("current_catalog_revision").notNull(),
+        currentBillingPriceEntryId: uuid("current_billing_price_entry_id")
+            .notNull()
+            .references(() => billingPriceEntries.id, { onDelete: "restrict" }),
+        currentPlan: text("current_plan").notNull(),
+        currentInterval: text("current_interval").notNull(),
+        targetCatalogRevision: integer("target_catalog_revision").notNull(),
+        targetBillingPriceEntryId: uuid("target_billing_price_entry_id")
+            .notNull()
+            .references(() => billingPriceEntries.id, { onDelete: "restrict" }),
+        targetPlan: text("target_plan").notNull(),
+        targetInterval: text("target_interval").notNull(),
+        effectiveAt: text("effective_at").notNull(),
+        prorationMode: text("proration_mode").notNull(),
+        providerPaymentId: text("provider_payment_id"),
+        paymentUrlEncrypted: text("payment_url_encrypted"),
+        status: text("status").notNull().default("creating"),
+        lastError: text("last_error"),
+        requestedAt: timestamp("requested_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        completedAt: timestamp("completed_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        idempotencyUnique: uniqueIndex(
+            "billing_plan_change_attempts_idempotency_uidx",
+        ).on(table.idempotencyKey),
+        organizationNonterminalUnique: uniqueIndex(
+            "billing_plan_change_attempts_organization_nonterminal_uidx",
+        )
+            .on(table.organizationId)
+            .where(sql`${table.status} IN ('creating', 'pending')`),
+        statusCheck: check(
+            "billing_plan_change_attempts_status_check",
+            sql`${table.status} IN ('creating', 'pending', 'succeeded', 'failed', 'conflicted')`,
+        ),
+        effectiveAtCheck: check(
+            "billing_plan_change_attempts_effective_at_check",
+            sql`${table.effectiveAt} IN ('immediately', 'next_billing_date')`,
+        ),
+        prorationModeCheck: check(
+            "billing_plan_change_attempts_proration_mode_check",
+            sql`${table.prorationMode} IN ('prorated_immediately', 'do_not_bill')`,
+        ),
+        currentPlanCheck: check(
+            "billing_plan_change_attempts_current_plan_check",
+            sql`${table.currentPlan} IN ('pro', 'business')`,
+        ),
+        targetPlanCheck: check(
+            "billing_plan_change_attempts_target_plan_check",
+            sql`${table.targetPlan} IN ('pro', 'business')`,
+        ),
+        currentIntervalCheck: check(
+            "billing_plan_change_attempts_current_interval_check",
+            sql`${table.currentInterval} IN ('month', 'year')`,
+        ),
+        targetIntervalCheck: check(
+            "billing_plan_change_attempts_target_interval_check",
+            sql`${table.targetInterval} IN ('month', 'year')`,
+        ),
+        revisionCheck: check(
+            "billing_plan_change_attempts_revision_check",
+            sql`${table.currentCatalogRevision} > 0 AND ${table.targetCatalogRevision} > 0`,
+        ),
+    }),
+);
+
+export const billingTrialClaims = pgTable(
+    "billing_trial_claims",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        userId: text("user_id")
+            .notNull()
+            .references(() => user.id, { onDelete: "restrict" }),
+        verifiedEmailFingerprint: text("verified_email_fingerprint").notNull(),
+        fingerprintKeyVersion: text("fingerprint_key_version").notNull(),
+        trialKey: text("trial_key").notNull(),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        checkoutAttemptId: uuid("checkout_attempt_id").references(
+            () => billingCheckoutAttempts.id,
+            { onDelete: "restrict" },
+        ),
+        status: text("status").notNull().default("reserved"),
+        expiresAt: timestamp("expires_at", { withTimezone: true }),
+        redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        userTrialUnique: uniqueIndex("billing_trial_claims_user_trial_uidx")
+            .on(table.userId, table.trialKey)
+            .where(sql`${table.status} <> 'released'`),
+        emailTrialUnique: uniqueIndex("billing_trial_claims_email_trial_uidx")
+            .on(table.verifiedEmailFingerprint, table.trialKey)
+            .where(sql`${table.status} <> 'released'`),
+        statusCheck: check(
+            "billing_trial_claims_status_check",
+            sql`${table.status} IN ('reserved', 'redeemed', 'released')`,
+        ),
+    }),
+);
+
+/** Historical subscription identity; organization_plan_states is only its projection. */
+export const organizationSubscriptions = pgTable(
+    "organization_subscriptions",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        billingCustomerId: uuid("billing_customer_id")
+            .notNull()
+            .references(() => billingProviderCustomers.id, {
+                onDelete: "restrict",
+            }),
+        billingManagerUserId: text("billing_manager_user_id")
+            .notNull()
+            .references(() => user.id, { onDelete: "restrict" }),
+        provider: text("provider").notNull(),
+        providerSubscriptionId: text("provider_subscription_id").notNull(),
+        providerProductId: text("provider_product_id").notNull(),
+        billingPriceEntryId: uuid("billing_price_entry_id")
+            .notNull()
+            .references(() => billingPriceEntries.id, { onDelete: "restrict" }),
+        catalogKey: text("catalog_key").notNull(),
+        plan: text("plan").notNull(),
+        billingInterval: text("billing_interval").notNull(),
+        status: text("status").notNull().default("pending"),
+        currentPeriodStartsAt: timestamp("current_period_starts_at", {
+            withTimezone: true,
+        }),
+        currentPeriodEndsAt: timestamp("current_period_ends_at", {
+            withTimezone: true,
+        }),
+        paidThroughAt: timestamp("paid_through_at", { withTimezone: true }),
+        trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+        pastDueAt: timestamp("past_due_at", { withTimezone: true }),
+        graceEndsAt: timestamp("grace_ends_at", { withTimezone: true }),
+        cancelAtPeriodEnd: boolean("cancel_at_period_end")
+            .notNull()
+            .default(false),
+        isEntitlementSource: boolean("is_entitlement_source")
+            .notNull()
+            .default(false),
+        lastProviderEventAt: timestamp("last_provider_event_at", {
+            withTimezone: true,
+        }),
+        lastReconciledAt: timestamp("last_reconciled_at", {
+            withTimezone: true,
+        }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        providerSubscriptionUnique: uniqueIndex(
+            "organization_subscriptions_provider_subscription_uidx",
+        ).on(table.provider, table.providerSubscriptionId),
+        organizationSourceUnique: uniqueIndex(
+            "organization_subscriptions_organization_source_uidx",
+        )
+            .on(table.organizationId)
+            .where(sql`${table.isEntitlementSource} = true`),
+        statusCheck: check(
+            "organization_subscriptions_status_check",
+            sql`${table.status} IN ('pending', 'trialing', 'active', 'past_due', 'cancelled', 'expired')`,
+        ),
+        planCheck: check(
+            "organization_subscriptions_plan_check",
+            sql`${table.plan} IN ('pro', 'business')`,
+        ),
+        intervalCheck: check(
+            "organization_subscriptions_interval_check",
+            sql`${table.billingInterval} IN ('month', 'year')`,
+        ),
+    }),
+);
+
+export const organizationPlanStates = pgTable(
+    "organization_plan_states",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .unique()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        plan: text("plan").notNull().default("free"),
+        activeSubscriptionId: uuid("active_subscription_id").references(
+            () => organizationSubscriptions.id,
+            { onDelete: "restrict" },
+        ),
+        teamsLimitOverride: integer("teams_limit_override"),
+        contactsLimitOverride: integer("contacts_limit_override"),
+        projectionVersion: integer("projection_version").notNull().default(0),
+        firstPaidActivatedAt: timestamp("first_paid_activated_at", {
+            withTimezone: true,
+        }),
+        rampStage: integer("ramp_stage").notNull().default(0),
+        rampCleanStageDays: integer("ramp_clean_stage_days")
+            .notNull()
+            .default(0),
+        rampEvaluatedAt: timestamp("ramp_evaluated_at", {
+            withTimezone: true,
+        }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        planCheck: check(
+            "organization_plan_states_plan_check",
+            sql`${table.plan} IN ('free', 'pro', 'business')`,
+        ),
+        teamsOverrideCheck: check(
+            "organization_plan_states_teams_override_check",
+            sql`${table.teamsLimitOverride} IS NULL OR ${table.teamsLimitOverride} > 0`,
+        ),
+        contactsOverrideCheck: check(
+            "organization_plan_states_contacts_override_check",
+            sql`${table.contactsLimitOverride} IS NULL OR ${table.contactsLimitOverride} > 0`,
+        ),
+        rampStageCheck: check(
+            "organization_plan_states_ramp_stage_check",
+            sql`${table.rampStage} BETWEEN 0 AND 3`,
+        ),
+        rampCleanDaysCheck: check(
+            "organization_plan_states_ramp_clean_days_check",
+            sql`${table.rampCleanStageDays} >= 0`,
+        ),
+    }),
+);
+
+export const billingWebhookEvents = pgTable(
+    "billing_webhook_events",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        provider: text("provider").notNull(),
+        providerEventId: text("provider_event_id").notNull(),
+        eventType: text("event_type").notNull(),
+        occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+        payloadEncrypted: text("payload_encrypted"),
+        payloadKeyVersion: text("payload_key_version"),
+        status: text("status").notNull().default("pending"),
+        processingAttempts: integer("processing_attempts").notNull().default(0),
+        lastError: text("last_error"),
+        availableAt: timestamp("available_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        lockedAt: timestamp("locked_at", { withTimezone: true }),
+        leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+        workerId: text("worker_id"),
+        receivedAt: timestamp("received_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        processedAt: timestamp("processed_at", { withTimezone: true }),
+    },
+    (table) => ({
+        providerEventUnique: uniqueIndex(
+            "billing_webhook_events_provider_event_uidx",
+        ).on(table.provider, table.providerEventId),
+        queueIdx: index("billing_webhook_events_queue_idx").on(
+            table.status,
+            table.availableAt,
+        ),
+        statusCheck: check(
+            "billing_webhook_events_status_check",
+            sql`${table.status} IN ('pending', 'processing', 'processed', 'ignored', 'quarantined', 'failed')`,
+        ),
+    }),
+);
+
+export const planSendUsageBuckets = pgTable(
+    "plan_send_usage_buckets",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        bucketMonth: timestamp("bucket_month", {
+            withTimezone: true,
+        }).notNull(),
+        committed: integer("committed").notNull().default(0),
+        reserved: integer("reserved").notNull().default(0),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        organizationMonthUnique: uniqueIndex(
+            "plan_send_usage_buckets_organization_month_uidx",
+        ).on(table.organizationId, table.bucketMonth),
+        countCheck: check(
+            "plan_send_usage_buckets_count_check",
+            sql`${table.committed} >= 0 AND ${table.reserved} >= 0`,
+        ),
+    }),
+);
+
+export const planSendReservations = pgTable(
+    "plan_send_reservations",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        outboundMessageId: uuid("outbound_message_id").notNull(),
+        bucketId: uuid("bucket_id")
+            .notNull()
+            .references(() => planSendUsageBuckets.id, {
+                onDelete: "restrict",
+            }),
+        amount: integer("amount").notNull().default(1),
+        state: text("state").notNull().default("reserved"),
+        expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+        committedAt: timestamp("committed_at", { withTimezone: true }),
+        releasedAt: timestamp("released_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        outboundUnique: uniqueIndex("plan_send_reservations_outbound_uidx").on(
+            table.outboundMessageId,
+        ),
+        expiryIdx: index("plan_send_reservations_expiry_idx").on(
+            table.state,
+            table.expiresAt,
+        ),
+        amountCheck: check(
+            "plan_send_reservations_amount_check",
+            sql`${table.amount} > 0`,
+        ),
+        stateCheck: check(
+            "plan_send_reservations_state_check",
+            sql`${table.state} IN ('reserved', 'committed', 'released')`,
+        ),
+    }),
+);
+
+export const teamSendingControls = pgTable(
+    "team_sending_controls",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        teamId: uuid("team_id")
+            .notNull()
+            .unique()
+            .references(() => teams.id, { onDelete: "restrict" }),
+        status: text("status").notNull().default("normal"),
+        reasonCode: text("reason_code"),
+        source: text("source").notNull().default("automatic"),
+        enteredAt: timestamp("entered_at", { withTimezone: true }),
+        evaluatedAt: timestamp("evaluated_at", { withTimezone: true }),
+        minimumHoldUntil: timestamp("minimum_hold_until", {
+            withTimezone: true,
+        }),
+        operatorUserId: text("operator_user_id").references(() => user.id, {
+            onDelete: "restrict",
+        }),
+        operatorReason: text("operator_reason"),
+        overriddenAt: timestamp("overridden_at", { withTimezone: true }),
+        cleanEvaluationDays: integer("clean_evaluation_days")
+            .notNull()
+            .default(0),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        statusCheck: check(
+            "team_sending_controls_status_check",
+            sql`${table.status} IN ('normal', 'warned', 'marketing_paused', 'all_paused')`,
+        ),
+        sourceCheck: check(
+            "team_sending_controls_source_check",
+            sql`${table.source} IN ('automatic', 'operator')`,
+        ),
+        cleanDaysCheck: check(
+            "team_sending_controls_clean_days_check",
+            sql`${table.cleanEvaluationDays} >= 0`,
+        ),
+    }),
+);
+
+export const sendingDomains = pgTable(
+    "sending_domains",
+    {
+        id: uuid("id").$defaultFn(genId).primaryKey(),
+        domainId: text("domain_id")
+            .notNull()
+            .unique()
+            .$defaultFn(() => genPublicId("domain")),
+        organizationId: uuid("organization_id")
+            .notNull()
+            .references(() => organizations.id, { onDelete: "restrict" }),
+        domain: text("domain").notNull(),
+        challengeTokenHash: text("challenge_token_hash").notNull(),
+        status: text("status").notNull().default("pending"),
+        verifiedAt: timestamp("verified_at", { withTimezone: true }),
+        lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+        nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
+        failedCheckCount: integer("failed_check_count").notNull().default(0),
+        firstFailedAt: timestamp("first_failed_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        domainIdCheck: publicIdCheck(
+            "sending_domains_domain_id_check",
+            table.domainId,
+            "domain",
+        ),
+        organizationDomainUnique: uniqueIndex(
+            "sending_domains_organization_domain_uidx",
+        ).on(table.organizationId, table.domain),
+        statusCheck: check(
+            "sending_domains_status_check",
+            sql`${table.status} IN ('pending', 'verified', 'revoked', 'failed')`,
+        ),
+        failedCheckCountCheck: check(
+            "sending_domains_failed_check_count_check",
+            sql`${table.failedCheckCount} >= 0`,
+        ),
+    }),
+);
 
 /** Explicit organization authorization; authentication alone grants nothing. */
 export const organizationMembers = pgTable(

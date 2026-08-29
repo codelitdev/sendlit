@@ -1,6 +1,13 @@
 import { and, count, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { contacts, ongoingSequences, rules, sequences } from "../db/schema";
+import {
+    contacts,
+    ongoingSequences,
+    rules,
+    sequences,
+    teams,
+} from "../db/schema";
+import { assertMarketingAllowedForContactUsage } from "../billing/entitlements";
 import { EventType, sequenceBounceLimit } from "../config/constants";
 import {
     buildContactFilterCondition,
@@ -105,6 +112,19 @@ export async function enrollContactsInOngoingSequence({
     contactIds: string[];
 }) {
     if (contactIds.length === 0) return;
+    const [team] = await db
+        .select({ organizationId: teams.organizationId })
+        .from(teams)
+        .where(eq(teams.id, teamId))
+        .limit(1);
+    if (team) {
+        await db.transaction(async (tx) => {
+            await assertMarketingAllowedForContactUsage(
+                tx,
+                team.organizationId,
+            );
+        });
+    }
     const now = Date.now();
     await db
         .insert(ongoingSequences)

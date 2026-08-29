@@ -5,6 +5,11 @@ import {
     type OutboundMessage,
 } from "./outbound-queries";
 import type { OutboundSourceType } from "../config/constants";
+import { db } from "../db/client";
+import { teams } from "../db/schema";
+import { reserveSend } from "../billing/entitlements";
+import { reserveOrganizationQuota } from "../delivery/quota";
+import { eq } from "drizzle-orm";
 
 /**
  * Creates the outbound-ledger row for an already-authorized pinned source,
@@ -26,6 +31,7 @@ export async function createPinnedOutboundMessage({
     transactionalEmailId,
     recipientEmail,
     normalizedRecipient,
+    organizationQuotaGrantId,
 }: {
     teamId: string;
     deliverySourceType: "organization" | "team";
@@ -38,24 +44,50 @@ export async function createPinnedOutboundMessage({
     transactionalEmailId?: string | null;
     recipientEmail: string;
     normalizedRecipient: string;
+    organizationQuotaGrantId?: string | null;
 }): Promise<{ outbound: OutboundMessage; rfcMessageId: string }> {
     const rfcMessageId = generateRfcMessageId();
     const connection =
         await getActiveFeedbackConnectionForEspConfig(espConfigId);
-    const outbound = await createOutboundMessage({
-        teamId,
-        deliverySourceType,
-        espConfigId,
-        espGrantId,
-        feedbackConnectionId: connection?.id ?? null,
-        sourceType,
-        submissionKey,
-        campaignDeliveryId,
-        transactionalEmailId,
-        recipientEmail,
-        normalizedRecipient,
-        provider,
-        rfcMessageId,
+    const [team] = await db
+        .select({ organizationId: teams.organizationId })
+        .from(teams)
+        .where(eq(teams.id, teamId))
+        .limit(1);
+    if (!team) throw new Error("team_not_found");
+    const outbound = await db.transaction(async (tx) => {
+        const created = await createOutboundMessage({
+            teamId,
+            deliverySourceType,
+            espConfigId,
+            espGrantId,
+            feedbackConnectionId: connection?.id ?? null,
+            sourceType,
+            submissionKey,
+            campaignDeliveryId,
+            transactionalEmailId,
+            recipientEmail,
+            normalizedRecipient,
+            provider,
+            rfcMessageId,
+            tx,
+        });
+        // A prior attempt may already have reached the provider. Do not run a
+        // fresh plan gate for that terminal ledger row; callers can complete
+        // their local workflow action idempotently without resubmitting mail.
+        if (created.deliveryStatus === "accepted") return created;
+        await reserveSend(tx, {
+            organizationId: team.organizationId,
+            outboundMessageId: created.id,
+            purpose: sourceType === "campaign" ? "marketing" : "transactional",
+        });
+        if (organizationQuotaGrantId) {
+            await reserveOrganizationQuota(tx, {
+                outboundMessageId: created.id,
+                grantId: organizationQuotaGrantId,
+            });
+        }
+        return created;
     });
     return { outbound, rfcMessageId: outbound.rfcMessageId || rfcMessageId };
 }

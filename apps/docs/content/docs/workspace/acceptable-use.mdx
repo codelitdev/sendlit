@@ -1,0 +1,48 @@
+---
+title: Acceptable use and deliverability
+description: Fair-use, reputation, and domain verification rules for SendLit cloud sending.
+---
+
+SendLit does not charge per email on Pro or Business. Cloud sending is still
+subject to deliverability controls so one organization cannot damage shared
+reputation.
+
+These rules apply to SendLit cloud. Self-hosted OSS installations run their own
+infrastructure and are not frozen by SendLit cloud controls.
+
+## Reputation windows
+
+After a team has at least 500 accepted messages in a rolling seven-day window,
+SendLit evaluates bounce and complaint rates from the outbound ledger. Retries
+and duplicate provider events count once.
+
+| Signal                           | Action                                                                                 |
+| -------------------------------- | -------------------------------------------------------------------------------------- |
+| Bounce ≥ 2% or complaint ≥ 0.05% | Warn owners and admins                                                                 |
+| Bounce ≥ 5% or complaint ≥ 0.1%  | Pause broadcasts and sequences; transactional mail continues at a degraded daily limit |
+| Complaint ≥ 0.3%                 | Stop all new sends for that team                                                       |
+| 10 complaints in seven days      | Stop all new sends for that team, regardless of list size                              |
+
+`all_paused` does not auto-recover. A SendLit operator must review the list and
+release the team, which starts at `warned`.
+
+## Paid marketing ramp
+
+From first paid activation, marketing volume ramps:
+
+- days 0–2: 200/day
+- days 3–6: 1,000/day
+- days 7–13: 10,000/day
+- day 14 onward: no plan send cap, subject to fair use
+
+Transactional mail does not consume the marketing ramp.
+
+## Domain verification
+
+Cloud sending requires a verified organization owner email. After about 100
+accepted lifetime messages, the From domain must be verified with a DNS TXT
+record at `_sendlit-verification.<domain>`. Plain SMTP can be used for tests
+but cannot unlock paid volume without a healthy bounce/complaint feedback
+connection.
+
+See [Pricing and billing](/workspace/pricing) for plan limits and checkout.

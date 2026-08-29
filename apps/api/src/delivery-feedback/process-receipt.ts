@@ -26,6 +26,7 @@ import { applyEventToProjection } from "./projection";
 import { addOrStrengthenSuppression } from "./suppression-queries";
 import { computeFinalSoftBounceStreak } from "./soft-bounce-streak";
 import { recordFeedbackConnectionVerified } from "./feedback-connection-queries";
+import { evaluateTeamReputation } from "../billing/reputation";
 
 /**
  * Claims and normalizes one durable receipt into canonical events, applying
@@ -160,6 +161,16 @@ async function processOneEvent(
             event.eventType,
             event.occurredAt,
         );
+        if (
+            event.eventType === "hard_bounce" ||
+            event.eventType === "soft_bounce" ||
+            event.eventType === "rejected" ||
+            event.eventType === "complaint"
+        ) {
+            // A reputation calculation must never make an authenticated
+            // provider receipt retry; the hourly sweep is the durable backup.
+            await evaluateTeamReputation(teamId).catch(() => undefined);
+        }
     }
 
     await applySuppressionSideEffect({

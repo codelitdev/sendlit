@@ -36,6 +36,14 @@ import {
     resolveDeliverySource,
     type DeliverySourceSelection,
 } from "../delivery/queries";
+import { getTeam } from "../team/queries";
+import {
+    assertMarketingAllowedForContactUsage,
+    assertSendAllowedForTeam,
+    getOrganizationEntitlements,
+    PlanGateError,
+} from "../billing/entitlements";
+import { usageForOrganization } from "../billing/usage";
 
 export type Sequence = typeof sequences.$inferSelect;
 export type SequenceEmail = typeof sequenceEmails.$inferSelect;
@@ -618,10 +626,18 @@ export async function startSequence({
         throw new Error(responses.no_published_emails);
     }
 
+    await assertSendAllowedForTeam(teamId, "marketing");
+    const team = await getTeam(teamId);
+    if (!team) throw new Error("team_not_found");
+    await db.transaction(async (tx) => {
+        await assertMarketingAllowedForContactUsage(tx, team.organizationId);
+    });
+
     const pin = await resolveDeliverySource(
         teamId,
         (sequence.deliverySourceIntent as DeliverySourceSelection | null) ??
             undefined,
+        "marketing",
     );
 
     if (sequence.type === "sequence") {
@@ -654,6 +670,26 @@ export async function startSequence({
         );
         if (recipientIds.length === 0) {
             throw new Error(responses.broadcast_no_recipients);
+        }
+        const entitlements = await getOrganizationEntitlements(
+            team.organizationId,
+        );
+        if (entitlements.monthlySendsLimit !== null) {
+            const usage = await usageForOrganization(team.organizationId);
+            const projected =
+                usage.monthlySends +
+                usage.monthlySendsReserved +
+                recipientIds.length;
+            if (projected > entitlements.monthlySendsLimit) {
+                throw new PlanGateError("plan_limit_reached", {
+                    organizationId: team.organizationId,
+                    capability: "monthly_sends",
+                    limit: entitlements.monthlySendsLimit,
+                    usage: usage.monthlySends + usage.monthlySendsReserved,
+                    plan: entitlements.plan,
+                    requiredPlan: "pro",
+                });
+            }
         }
     }
 

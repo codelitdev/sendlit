@@ -1526,6 +1526,11 @@ DELETE /organizations/:organizationId
 ```
 
 - Signup automatically creates the first organization and owner membership.
+- Any automatically-created initial/default team is named from its
+  organization (`<organization name> Team`) unless a flow supplies an explicit
+  team name.
+- An owner cannot create another active, suspended, or pending organization
+  whose name differs only by casing; closed and abandoned names may be reused.
 - Additional organization creation requires an authenticated user.
 - Responses contain public organization data only.
 - `DELETE` is owner-only, audited, and changes status to `closed`.

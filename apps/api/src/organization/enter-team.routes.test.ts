@@ -289,3 +289,27 @@ describe("POST /organizations/:organizationId/teams/:teamId/enter", () => {
         ).toHaveLength(0);
     });
 });
+
+describe("POST /organizations", () => {
+    it("rejects case-only duplicate organization names for the owner", async () => {
+        const owner = await insertUser("Owner");
+        authState.userId = owner.id;
+
+        const first = await requestApp(app(), "/organizations", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name: "Acme" }),
+        });
+        expect(first.status).toBe(201);
+
+        const duplicate = await requestApp(app(), "/organizations", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name: " acME " }),
+        });
+        expect(duplicate.status).toBe(409);
+        expect(duplicate.json()).toEqual({
+            error: "organization_name_already_exists",
+        });
+    });
+});

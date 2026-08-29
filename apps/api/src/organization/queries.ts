@@ -1,21 +1,124 @@
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
     organizationMembers,
+    billingCheckoutAttempts,
     organizationApiKeys,
     organizationDeliveryPolicies,
     espConfigTeamGrants,
     organizations,
+    organizationPlanStates,
+    organizationSubscriptions,
+    settings,
     teams,
+    teamDeliverySettings,
+    teamMembers,
     user,
 } from "../db/schema";
 import { recordOrganizationAuditEvent } from "./audit";
 import { transitionEspGrant } from "../delivery/queries";
 import { findUserByEmail } from "../user/queries";
+import { ensureOrganizationPlanState } from "../billing/entitlements";
+import { resolveEntitlements } from "../billing/policies";
+import { defaultTeamName } from "./default-team-name";
 
 export type Organization = typeof organizations.$inferSelect;
 export type OrganizationMember = typeof organizationMembers.$inferSelect;
 export type OrganizationRole = "owner" | "admin" | "member";
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Billing mutations lock live subscription rows before the organization so
+ * they cannot deadlock with checkout, plan-change, or webhook projection. */
+async function lockOrganizationSubscriptions(
+    tx: Transaction,
+    organizationId: string,
+) {
+    return tx
+        .select({ id: organizationSubscriptions.id })
+        .from(organizationSubscriptions)
+        .where(eq(organizationSubscriptions.organizationId, organizationId))
+        .orderBy(asc(organizationSubscriptions.id))
+        .for("update");
+}
+
+export async function userOwnsFreeOrganization(
+    userId: string,
+): Promise<boolean> {
+    return db.transaction((tx) => ownsEffectiveFreeOrganization(tx, userId));
+}
+
+async function ownsEffectiveFreeOrganization(
+    tx: Transaction,
+    userId: string,
+    now = new Date(),
+): Promise<boolean> {
+    const owned = await tx
+        .select({
+            planState: organizationPlanStates,
+            subscription: organizationSubscriptions,
+        })
+        .from(organizationMembers)
+        .innerJoin(
+            organizations,
+            eq(organizations.id, organizationMembers.organizationId),
+        )
+        .innerJoin(
+            organizationPlanStates,
+            eq(organizationPlanStates.organizationId, organizations.id),
+        )
+        .leftJoin(
+            organizationSubscriptions,
+            and(
+                eq(organizationSubscriptions.organizationId, organizations.id),
+                eq(
+                    organizationSubscriptions.id,
+                    organizationPlanStates.activeSubscriptionId,
+                ),
+            ),
+        )
+        .where(
+            and(
+                eq(organizationMembers.userId, userId),
+                eq(organizationMembers.role, "owner"),
+                eq(organizations.status, "active"),
+            ),
+        );
+    return owned.some(({ planState, subscription }) => {
+        const entitlements = resolveEntitlements({
+            organizationId: planState.organizationId,
+            deploymentMode:
+                process.env.SENDLIT_DEPLOYMENT_MODE === "cloud"
+                    ? "cloud"
+                    : "oss",
+            planState: {
+                plan: planState.plan as "free" | "pro" | "business",
+                teamsLimitOverride: planState.teamsLimitOverride,
+                contactsLimitOverride: planState.contactsLimitOverride,
+            },
+            subscription: subscription
+                ? {
+                      plan: subscription.plan as "pro" | "business",
+                      billingInterval: subscription.billingInterval as
+                          "month" | "year",
+                      status: subscription.status as
+                          | "pending"
+                          | "trialing"
+                          | "active"
+                          | "past_due"
+                          | "cancelled"
+                          | "expired",
+                      currentPeriodEndsAt: subscription.currentPeriodEndsAt,
+                      paidThroughAt: subscription.paidThroughAt,
+                      trialEndsAt: subscription.trialEndsAt,
+                      graceEndsAt: subscription.graceEndsAt,
+                      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+                  }
+                : null,
+            now,
+        });
+        return entitlements.plan === "free";
+    });
+}
 
 export async function getOrganization(
     id: string,
@@ -66,18 +169,96 @@ export async function listOrganizationsForUser(
             organizations,
             eq(organizations.id, organizationMembers.organizationId),
         )
-        .where(eq(organizationMembers.userId, userId));
+        .where(
+            and(
+                eq(organizationMembers.userId, userId),
+                inArray(organizations.status, [
+                    "pending_payment",
+                    "active",
+                    "suspended",
+                ]),
+            ),
+        );
     return rows.map((row) => row.organization);
 }
 
 export async function createOrganization(
     userId: string,
     name: string,
+    options: {
+        createInitialTeam?: boolean;
+        /** Used only by the paid-organization checkout. Pending rows do not
+         * consume the user's one owned Free organization and cannot create a
+         * team until a verified payment event activates them. */
+        pendingPayment?: boolean;
+    } = {},
 ): Promise<Organization> {
     return db.transaction(async (tx) => {
+        const [identity] = await tx
+            .select({ id: user.id })
+            .from(user)
+            .where(eq(user.id, userId))
+            .limit(1)
+            .for("update");
+        if (!identity) throw new Error("user_not_found");
+        const normalizedName = name.trim();
+        if (!normalizedName) throw new Error("organization_name_required");
+        if (options.pendingPayment && options.createInitialTeam) {
+            throw new Error("pending_organization_cannot_create_team");
+        }
+        if (options.pendingPayment) {
+            const [pending] = await tx
+                .select({ id: organizations.id })
+                .from(organizationMembers)
+                .innerJoin(
+                    organizations,
+                    eq(organizations.id, organizationMembers.organizationId),
+                )
+                .where(
+                    and(
+                        eq(organizationMembers.userId, userId),
+                        eq(organizationMembers.role, "owner"),
+                        eq(organizations.status, "pending_payment"),
+                    ),
+                )
+                .limit(1);
+            if (pending) throw new Error("pending_organization_exists");
+        }
+        const [existingName] = await tx
+            .select({ id: organizations.id })
+            .from(organizationMembers)
+            .innerJoin(
+                organizations,
+                eq(organizations.id, organizationMembers.organizationId),
+            )
+            .where(
+                and(
+                    eq(organizationMembers.userId, userId),
+                    eq(organizationMembers.role, "owner"),
+                    inArray(organizations.status, [
+                        "pending_payment",
+                        "active",
+                        "suspended",
+                    ]),
+                    sql`lower(trim(${organizations.name})) = lower(trim(${normalizedName}))`,
+                ),
+            )
+            .limit(1);
+        if (existingName) throw new Error("organization_name_already_exists");
+        if (
+            process.env.SENDLIT_DEPLOYMENT_MODE === "cloud" &&
+            !options.pendingPayment
+        ) {
+            if (await ownsEffectiveFreeOrganization(tx, userId)) {
+                throw new Error("free_organization_already_owned");
+            }
+        }
         const [organization] = await tx
             .insert(organizations)
-            .values({ name })
+            .values({
+                name: normalizedName,
+                status: options.pendingPayment ? "pending_payment" : "active",
+            })
             .returning();
         await tx.insert(organizationMembers).values({
             organizationId: organization.id,
@@ -87,6 +268,23 @@ export async function createOrganization(
         await tx.insert(organizationDeliveryPolicies).values({
             organizationId: organization.id,
         });
+        await ensureOrganizationPlanState(tx, organization.id);
+        if (options.createInitialTeam) {
+            const [team] = await tx
+                .insert(teams)
+                .values({
+                    organizationId: organization.id,
+                    name: defaultTeamName(organization.name),
+                })
+                .returning();
+            await tx.insert(settings).values({ teamId: team.id });
+            await tx.insert(teamDeliverySettings).values({ teamId: team.id });
+            await tx.insert(teamMembers).values({
+                teamId: team.id,
+                userId,
+                role: "admin",
+            });
+        }
         await recordOrganizationAuditEvent(tx, {
             organizationId: organization.id,
             actor: { type: "user", id: userId },
@@ -99,18 +297,120 @@ export async function createOrganization(
 export async function updateOrganizationName(
     organizationId: string,
     name: string,
+    actorUserId?: string,
 ): Promise<Organization | null> {
-    const [row] = await db
-        .update(organizations)
-        .set({ name, updatedAt: new Date() })
-        .where(
-            and(
-                eq(organizations.id, organizationId),
-                eq(organizations.status, "active"),
-            ),
-        )
-        .returning();
-    return row ?? null;
+    const normalizedName = name.trim();
+    if (!normalizedName) throw new Error("organization_name_required");
+    return db.transaction(async (tx) => {
+        if (actorUserId) {
+            await tx
+                .select({ id: user.id })
+                .from(user)
+                .where(eq(user.id, actorUserId))
+                .limit(1)
+                .for("update");
+        }
+        const [current] = await tx
+            .select()
+            .from(organizations)
+            .where(
+                and(
+                    eq(organizations.id, organizationId),
+                    eq(organizations.status, "active"),
+                ),
+            )
+            .limit(1)
+            .for("update");
+        if (!current) return null;
+        if (actorUserId) {
+            const [duplicate] = await tx
+                .select({ id: organizations.id })
+                .from(organizationMembers)
+                .innerJoin(
+                    organizations,
+                    eq(organizations.id, organizationMembers.organizationId),
+                )
+                .where(
+                    and(
+                        eq(organizationMembers.userId, actorUserId),
+                        eq(organizationMembers.role, "owner"),
+                        ne(organizations.id, organizationId),
+                        inArray(organizations.status, [
+                            "pending_payment",
+                            "active",
+                            "suspended",
+                        ]),
+                        sql`lower(trim(${organizations.name})) = lower(trim(${normalizedName}))`,
+                    ),
+                )
+                .limit(1);
+            if (duplicate) throw new Error("organization_name_already_exists");
+        }
+        const [row] = await tx
+            .update(organizations)
+            .set({ name: normalizedName, updatedAt: new Date() })
+            .where(eq(organizations.id, organizationId))
+            .returning();
+        return row ?? null;
+    });
+}
+
+export async function abandonPendingOrganization(
+    organizationId: string,
+    actorUserId: string,
+): Promise<void> {
+    await db.transaction(async (tx) => {
+        const [organization] = await tx
+            .select()
+            .from(organizations)
+            .where(eq(organizations.id, organizationId))
+            .limit(1)
+            .for("update");
+        if (!organization) throw new Error("organization_not_found");
+        if (organization.status !== "pending_payment") {
+            throw new Error("organization_not_pending_payment");
+        }
+        const [membership] = await tx
+            .select({ role: organizationMembers.role })
+            .from(organizationMembers)
+            .where(
+                and(
+                    eq(organizationMembers.organizationId, organizationId),
+                    eq(organizationMembers.userId, actorUserId),
+                ),
+            )
+            .limit(1);
+        if (membership?.role !== "owner") {
+            throw new Error("organization_owner_required");
+        }
+        await tx
+            .update(billingCheckoutAttempts)
+            .set({
+                status: "abandoned",
+                checkoutUrlEncrypted: null,
+                completedAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .where(
+                and(
+                    eq(billingCheckoutAttempts.organizationId, organizationId),
+                    inArray(billingCheckoutAttempts.status, [
+                        "creating",
+                        "open",
+                    ]),
+                ),
+            );
+        await tx
+            .update(organizations)
+            .set({ status: "abandoned", updatedAt: new Date() })
+            .where(eq(organizations.id, organizationId));
+        await recordOrganizationAuditEvent(tx, {
+            organizationId,
+            actor: { type: "user", id: actorUserId },
+            action: "organization.pending_abandoned",
+            metadata: {},
+        });
+    });
 }
 
 export async function closeOrganization(
@@ -123,6 +423,66 @@ export async function closeOrganization(
     },
 ): Promise<void> {
     await db.transaction(async (tx) => {
+        const liveSubscriptions = await tx
+            .select({ id: organizationSubscriptions.id })
+            .from(organizationSubscriptions)
+            .where(
+                and(
+                    eq(
+                        organizationSubscriptions.organizationId,
+                        organizationId,
+                    ),
+                    or(
+                        inArray(organizationSubscriptions.status, [
+                            "pending",
+                            "trialing",
+                            "active",
+                            "past_due",
+                        ]),
+                        and(
+                            eq(organizationSubscriptions.status, "cancelled"),
+                            eq(
+                                organizationSubscriptions.cancelAtPeriodEnd,
+                                true,
+                            ),
+                            gt(
+                                organizationSubscriptions.paidThroughAt,
+                                new Date(),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            .orderBy(asc(organizationSubscriptions.id))
+            .for("update");
+        if (liveSubscriptions.length > 0) {
+            throw new Error("active_subscription_exists");
+        }
+        const openCheckouts = await tx
+            .select({ id: billingCheckoutAttempts.id })
+            .from(billingCheckoutAttempts)
+            .where(
+                and(
+                    eq(billingCheckoutAttempts.organizationId, organizationId),
+                    inArray(billingCheckoutAttempts.status, [
+                        "creating",
+                        "open",
+                    ]),
+                    gt(billingCheckoutAttempts.expiresAt, new Date()),
+                ),
+            )
+            .orderBy(asc(billingCheckoutAttempts.id))
+            .for("update");
+        if (openCheckouts.length > 0) {
+            throw new Error("billing_checkout_pending");
+        }
+        const [organization] = await tx
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(eq(organizations.id, organizationId))
+            .limit(1)
+            .for("update");
+        if (!organization) throw new Error("organization_not_found");
         await tx
             .update(organizations)
             .set({ status: "closed", updatedAt: new Date() })
@@ -217,10 +577,24 @@ export async function addOrganizationMemberByEmail(
 ) {
     const identity = await findUserByEmail(email);
     if (!identity) return null;
-    await db.insert(organizationMembers).values({
-        organizationId,
-        userId: identity.id,
-        role,
+    await db.transaction(async (tx) => {
+        await tx
+            .select({ id: user.id })
+            .from(user)
+            .where(eq(user.id, identity.id))
+            .limit(1)
+            .for("update");
+        if (
+            role === "owner" &&
+            process.env.SENDLIT_DEPLOYMENT_MODE === "cloud"
+        ) {
+            if (await ownsEffectiveFreeOrganization(tx, identity.id)) {
+                throw new Error("free_organization_already_owned");
+            }
+        }
+        await tx
+            .insert(organizationMembers)
+            .values({ organizationId, userId: identity.id, role });
     });
     return getOrganizationMemberView(organizationId, identity.id);
 }
@@ -245,12 +619,51 @@ async function assertNotLastOwner(
     }
 }
 
+async function assertBillingManagerRetained(
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    organizationId: string,
+    userId: string,
+): Promise<void> {
+    const [subscription] = await tx
+        .select({ id: organizationSubscriptions.id })
+        .from(organizationSubscriptions)
+        .where(
+            and(
+                eq(organizationSubscriptions.organizationId, organizationId),
+                eq(organizationSubscriptions.billingManagerUserId, userId),
+                or(
+                    inArray(organizationSubscriptions.status, [
+                        "pending",
+                        "trialing",
+                        "active",
+                        "past_due",
+                    ]),
+                    and(
+                        eq(organizationSubscriptions.status, "cancelled"),
+                        eq(organizationSubscriptions.cancelAtPeriodEnd, true),
+                        gt(organizationSubscriptions.paidThroughAt, new Date()),
+                    ),
+                ),
+            ),
+        )
+        .limit(1)
+        .for("update");
+    if (subscription) throw new Error("billing_manager_required");
+}
+
 export async function updateOrganizationMemberRole(
     organizationId: string,
     userId: string,
     role: OrganizationRole,
 ) {
     await db.transaction(async (tx) => {
+        await lockOrganizationSubscriptions(tx, organizationId);
+        await tx
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(eq(organizations.id, organizationId))
+            .limit(1)
+            .for("update");
         const [membership] = await tx
             .select()
             .from(organizationMembers)
@@ -263,9 +676,26 @@ export async function updateOrganizationMemberRole(
             .limit(1)
             .for("update");
         if (!membership) throw new Error("member_not_found");
+        if (
+            membership.role !== "owner" &&
+            role === "owner" &&
+            process.env.SENDLIT_DEPLOYMENT_MODE === "cloud"
+        ) {
+            await tx
+                .select({ id: user.id })
+                .from(user)
+                .where(eq(user.id, userId))
+                .limit(1)
+                .for("update");
+            if (await ownsEffectiveFreeOrganization(tx, userId)) {
+                throw new Error("free_organization_already_owned");
+            }
+        }
         if (membership.role === "owner" && role !== "owner") {
             await assertNotLastOwner(tx, organizationId, userId);
         }
+        if (role !== "owner")
+            await assertBillingManagerRetained(tx, organizationId, userId);
         await tx
             .update(organizationMembers)
             .set({ role, updatedAt: new Date() })
@@ -279,6 +709,13 @@ export async function removeOrganizationMember(
     userId: string,
 ): Promise<boolean> {
     return db.transaction(async (tx) => {
+        await lockOrganizationSubscriptions(tx, organizationId);
+        await tx
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(eq(organizations.id, organizationId))
+            .limit(1)
+            .for("update");
         const [membership] = await tx
             .select()
             .from(organizationMembers)
@@ -294,6 +731,7 @@ export async function removeOrganizationMember(
         if (membership.role === "owner") {
             await assertNotLastOwner(tx, organizationId, userId);
         }
+        await assertBillingManagerRetained(tx, organizationId, userId);
         await tx
             .delete(organizationMembers)
             .where(eq(organizationMembers.id, membership.id));
@@ -324,7 +762,92 @@ export async function ensureDefaultOrganization(
                 .from(organizations)
                 .where(eq(organizations.id, identity.defaultOrganizationId))
                 .limit(1);
-            if (existing) return existing;
+            if (existing && ["active", "suspended"].includes(existing.status)) {
+                const [team] = await tx
+                    .select({ id: teams.id })
+                    .from(teams)
+                    .where(eq(teams.organizationId, existing.id))
+                    .limit(1);
+                if (!team) {
+                    const [createdTeam] = await tx
+                        .insert(teams)
+                        .values({
+                            organizationId: existing.id,
+                            name: defaultTeamName(existing.name),
+                        })
+                        .returning();
+                    await tx
+                        .insert(settings)
+                        .values({ teamId: createdTeam.id });
+                    await tx
+                        .insert(teamDeliverySettings)
+                        .values({ teamId: createdTeam.id });
+                    await tx.insert(teamMembers).values({
+                        teamId: createdTeam.id,
+                        userId: identity.id,
+                        role: "admin",
+                    });
+                }
+                return existing;
+            }
+        }
+
+        // Auth bootstrap can run for users imported from an existing
+        // organization graph. Reuse that membership instead of creating a
+        // second organization (and, consequently, a second default team).
+        const [existingMembership] = await tx
+            .select({ organization: organizations })
+            .from(organizationMembers)
+            .innerJoin(
+                organizations,
+                eq(organizations.id, organizationMembers.organizationId),
+            )
+            .where(
+                and(
+                    eq(organizationMembers.userId, identity.id),
+                    inArray(organizations.status, ["active", "suspended"]),
+                ),
+            )
+            .limit(1);
+        if (existingMembership) {
+            await tx
+                .update(user)
+                .set({
+                    defaultOrganizationId: existingMembership.organization.id,
+                    updatedAt: new Date(),
+                })
+                .where(eq(user.id, identity.id));
+            const [team] = await tx
+                .select({ id: teams.id })
+                .from(teams)
+                .where(
+                    eq(
+                        teams.organizationId,
+                        existingMembership.organization.id,
+                    ),
+                )
+                .limit(1);
+            if (!team) {
+                const [createdTeam] = await tx
+                    .insert(teams)
+                    .values({
+                        organizationId: existingMembership.organization.id,
+                        name: defaultTeamName(
+                            existingMembership.organization.name,
+                        ),
+                    })
+                    .returning();
+                await tx.insert(settings).values({ teamId: createdTeam.id });
+                await tx
+                    .insert(teamDeliverySettings)
+                    .values({ teamId: createdTeam.id });
+                await tx.insert(teamMembers).values({
+                    teamId: createdTeam.id,
+                    userId: identity.id,
+                    role: "admin",
+                });
+            }
+            return existingMembership.organization;
         }
 
         const organizationName = identity.name.trim()
@@ -342,6 +865,19 @@ export async function ensureDefaultOrganization(
         await tx.insert(organizationDeliveryPolicies).values({
             organizationId: organization.id,
         });
+        await ensureOrganizationPlanState(tx, organization.id);
+        const [team] = await tx
+            .insert(teams)
+            .values({
+                organizationId: organization.id,
+                name: defaultTeamName(organization.name),
+            })
+            .returning();
+        await tx.insert(settings).values({ teamId: team.id });
+        await tx.insert(teamDeliverySettings).values({ teamId: team.id });
+        await tx
+            .insert(teamMembers)
+            .values({ teamId: team.id, userId: identity.id, role: "admin" });
         await tx
             .update(user)
             .set({

@@ -49,6 +49,15 @@ import { startFeedbackReceiptPoller } from "./delivery-feedback/poller";
 import { startRetentionLoop } from "./delivery-feedback/retention-loop";
 import { startMailDispatchOutbox } from "./mail/dispatch-outbox";
 import { startDeliveryLifecycleJobs } from "./delivery/lifecycle-jobs";
+import {
+    assertBillingProviderConfig,
+    readBillingConfig,
+} from "./billing/catalog";
+import { recordRequestedCatalogRevision } from "./billing/catalog-store";
+import billingRoutes from "./billing/routes";
+import billingWebhookRoutes from "./billing/webhooks/routes";
+import { assertBillingEncryptionKeyConfigured } from "./billing/crypto";
+import { startBillingReconciliation } from "./billing/reconciliation";
 
 const app = express();
 startMailDispatchOutbox();
@@ -83,6 +92,7 @@ app.use(mcpRoutes);
 // request bytes for provider signature verification and has no
 // session/API-key concept at all — see delivery-feedback/webhook-route.ts.
 app.use(espWebhookRoutes);
+app.use(billingWebhookRoutes);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -115,6 +125,7 @@ app.use(
 // their traffic with `router.use(requireAuth)`, anything mounted after them
 // would otherwise be incorrectly blocked by that blanket check.
 app.use(trackingRoutes);
+app.use(billingRoutes);
 app.use(provisioningRoutes);
 app.use(organizationRoutes);
 
@@ -175,12 +186,19 @@ const port = process.env.PORT || 80;
 
 checkConfig()
     .then(checkDatabaseConnection)
+    .then(async () => {
+        const billingConfig = readBillingConfig();
+        if (billingConfig.deploymentMode === "cloud") {
+            await recordRequestedCatalogRevision(billingConfig);
+        }
+    })
     .then(createSuperAdminIfMissing)
     .then(() => {
         app.listen(port, () => {
             logger.info(`SendLit API running at ${port}`);
         });
         startAutomation();
+        startBillingReconciliation();
         startFeedbackReceiptPoller();
         startRetentionLoop();
     })
@@ -210,4 +228,12 @@ async function checkConfig() {
     }
     assertEspEncryptionKeyConfigured();
     assertSuppressionHashKeyConfigured();
+    // Billing mode is explicit and fail-closed. Local/self-hosted development
+    // must opt into OSS; cloud deployments must provide a complete, validated
+    // catalog instead of silently inheriting an environment default.
+    const billingConfig = readBillingConfig();
+    if (billingConfig.deploymentMode === "cloud") {
+        assertBillingProviderConfig(billingConfig);
+        assertBillingEncryptionKeyConfigured();
+    }
 }

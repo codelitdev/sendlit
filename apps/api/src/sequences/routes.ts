@@ -25,6 +25,7 @@ import {
 import { serializeDates } from "../utils/serialize";
 import { omitInternal } from "../utils/public";
 import { MAILING_ADDRESS_REQUIRED } from "../settings/general/constants";
+import { planGateHttp } from "../billing/errors";
 
 const router = Router();
 router.use("/sequences", requireAuth, requireTeam);
@@ -177,6 +178,8 @@ const impl = s.router(contract.sequences, {
             });
             return { status: 200, body: toBody(sequence) };
         } catch (err: any) {
+            const gated = planGateHttp(err);
+            if (gated) return gated as any;
             return err.message === MAILING_ADDRESS_REQUIRED
                 ? {
                       status: 422,

@@ -12,6 +12,13 @@ Provisioning is a backend-to-backend workflow. If you only need another team
 for people already using the SendLit dashboard, create it from the dashboard
 instead.
 
+Provisioning and organization API keys are available on **Business** cloud
+plans and on **OSS**. After a downgrade to Pro or Free, existing organization
+keys remain stored for audit and revocation, but mutating provisioning
+operations (`provision`, update, rotate keys, suspend, resume, archive) return
+`plan_feature_unavailable`. Idempotent replay of an already-provisioned
+`(externalId)` still succeeds.
+
 ## How provisioning is scoped
 
 Every SendLit team belongs to exactly one organization. The organization API

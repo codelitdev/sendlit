@@ -16,6 +16,7 @@ import {
     MISSING_TEMPLATE_VARIABLES,
     MissingTemplateVariablesError,
 } from "../mail/render";
+import { isPlanGateError } from "../billing/errors";
 
 const router = Router();
 router.use("/emails", requireAuth, requireTeam);
@@ -86,6 +87,12 @@ const impl = s.router(contract.transactional, {
                 body: { txeId: row.txeId, status: row.status as any },
             };
         } catch (err: any) {
+            if (isPlanGateError(err)) {
+                return {
+                    status: err.status,
+                    body: { error: err.code, ...err.details },
+                } as any;
+            }
             if (err instanceof MissingTemplateVariablesError) {
                 return {
                     status: 422,

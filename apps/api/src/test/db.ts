@@ -41,6 +41,9 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
     // email_deliveries, team_members, api_keys; sequences cascades to
     // sequence_emails.
     await db.delete(schema.mailDispatchOutbox);
+    await db.delete(schema.verification);
+    await db.delete(schema.planSendReservations);
+    await db.delete(schema.planSendUsageBuckets);
     await db.delete(schema.organizationEspQuotaReservations);
     await db.delete(schema.outboundMessages);
     await db.delete(schema.transactionalEmails);
@@ -55,8 +58,20 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
     await db.delete(schema.organizationEspUsageBuckets);
     await db.delete(schema.espConfigTeamGrants);
     await db.delete(schema.teamDeliverySettings);
+    await db.delete(schema.teamSendingControls);
     await db.delete(schema.espConfigs);
     await db.delete(schema.teams);
+    await db.delete(schema.sendingDomains);
+    await db.delete(schema.billingTrialClaims);
+    await db.delete(schema.billingPlanChangeAttempts);
+    await db.delete(schema.billingCheckoutAttempts);
+    await db.delete(schema.organizationPlanStates);
+    await db.delete(schema.organizationSubscriptions);
+    await db.delete(schema.billingWebhookEvents);
+    await db.delete(schema.billingCatalogRevisionItems);
+    await db.delete(schema.billingCatalogRevisions);
+    await db.delete(schema.billingPriceEntries);
+    await db.delete(schema.billingProviderCustomers);
     await db.delete(schema.organizationApiKeys);
     await db.delete(schema.organizationAuditEvents);
     await db.delete(schema.organizationMembers);
@@ -106,6 +121,10 @@ export async function seedTeamAndContact(
     });
     await db.insert(schema.organizationDeliveryPolicies).values({
         organizationId: organization.id,
+    });
+    await db.insert(schema.organizationPlanStates).values({
+        organizationId: organization.id,
+        plan: "free",
     });
 
     const [team] = await db

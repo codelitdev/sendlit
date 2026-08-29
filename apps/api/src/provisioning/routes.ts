@@ -20,6 +20,11 @@ import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
 import { requireAuth } from "../auth/middleware";
 import { recordOrganizationAuditEvent } from "../organization/audit";
+import {
+    assertCapability,
+    getOrganizationEntitlements,
+} from "../billing/entitlements";
+import { planGateHttp } from "../billing/errors";
 
 const router = Router();
 
@@ -40,6 +45,13 @@ router.use("/provisioning", provisioningLimiter);
 router.use("/provisioning", requireAuth);
 
 const s = initServer();
+
+async function requireProvisioningCapability(req: any) {
+    assertCapability(
+        await getOrganizationEntitlements(req.organizationId),
+        "provisioning",
+    );
+}
 
 function hasScope(req: any, scope: string): boolean {
     return (
@@ -166,6 +178,8 @@ const impl = s.router(contract.provisioning, {
                       },
                   };
         } catch (err: any) {
+            const gated = planGateHttp(err);
+            if (gated) return gated as any;
             if (err.message === "provisioning_conflict") {
                 return {
                     status: 409,
@@ -205,6 +219,7 @@ const impl = s.router(contract.provisioning, {
         const team = await resolveProvisionedTeam(authReq, params.teamId);
         if (!team) return { status: 404, body: { error: "team_not_found" } };
         try {
+            await requireProvisioningCapability(authReq);
             const updated = await updateProvisionedTeam(team.id, body);
             if (!updated)
                 return { status: 404, body: { error: "team_not_found" } };
@@ -216,6 +231,8 @@ const impl = s.router(contract.provisioning, {
                 ),
             };
         } catch (error: any) {
+            const gated = planGateHttp(error);
+            if (gated) return gated as any;
             return { status: 409, body: { error: error.message } };
         }
     },
@@ -228,6 +245,13 @@ const impl = s.router(contract.provisioning, {
             };
         const team = await resolveProvisionedTeam(authReq, params.teamId);
         if (!team) return { status: 404, body: { error: "team_not_found" } };
+        try {
+            await requireProvisioningCapability(authReq);
+        } catch (error) {
+            const gated = planGateHttp(error);
+            if (gated) return gated as any;
+            throw error;
+        }
         const result = await db.transaction(async (tx) => {
             await tx
                 .update(teamApiKeys)
@@ -275,6 +299,13 @@ const impl = s.router(contract.provisioning, {
             };
         const team = await resolveProvisionedTeam(authReq, params.teamId);
         if (!team) return { status: 404, body: { error: "team_not_found" } };
+        try {
+            await requireProvisioningCapability(authReq);
+        } catch (error) {
+            const gated = planGateHttp(error);
+            if (gated) return gated as any;
+            throw error;
+        }
         if (team.status !== "active")
             return {
                 status: 409,
@@ -301,6 +332,13 @@ const impl = s.router(contract.provisioning, {
             };
         const team = await resolveProvisionedTeam(authReq, params.teamId);
         if (!team) return { status: 404, body: { error: "team_not_found" } };
+        try {
+            await requireProvisioningCapability(authReq);
+        } catch (error) {
+            const gated = planGateHttp(error);
+            if (gated) return gated as any;
+            throw error;
+        }
         if (team.status !== "sending_suspended")
             return {
                 status: 409,
@@ -324,6 +362,13 @@ const impl = s.router(contract.provisioning, {
             };
         const team = await resolveProvisionedTeam(authReq, params.teamId);
         if (!team) return { status: 404, body: { error: "team_not_found" } };
+        try {
+            await requireProvisioningCapability(authReq);
+        } catch (error) {
+            const gated = planGateHttp(error);
+            if (gated) return gated as any;
+            throw error;
+        }
         await archiveTeam(team.id);
         await auditProvisioningAction(authReq, team, "team.archived");
         return { status: 204, body: undefined };

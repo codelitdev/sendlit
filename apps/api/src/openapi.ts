@@ -61,6 +61,11 @@ export const openApiDocument = generateOpenApi(
                 description:
                     "Normalized bounce/complaint delivery events and the per-workspace suppression (do-not-send) list. See docs/bounces-and-complaints.md.",
             },
+            {
+                name: "Billing",
+                description:
+                    "Organization-scoped plan, configured catalog, entitlement, and usage information.",
+            },
         ],
         components: {
             securitySchemes: {

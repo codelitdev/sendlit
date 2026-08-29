@@ -7,8 +7,10 @@
     "main": "dist/index.js",
     "scripts": {
         "build": "tsc",
+        "predev": "pnpm --filter @sendlit/api-contract build",
         "dev": "nodemon --exec 'node --env-file=.env --import tsx' src/index.ts",
         "access-token": "tsx --env-file=.env scripts/token.ts",
+        "billing": "tsx --env-file=.env scripts/billing.ts",
         "start": "node dist/index.js",
         "db:migrate": "node --import dotenv/config dist/db/migrate.js",
         "db:generate": "drizzle-kit generate",
@@ -32,6 +34,7 @@
         "better-auth": "1.7.0-rc.4",
         "bullmq": "^5.34.0",
         "cors": "^2.8.5",
+        "dodopayments": "^2.48.0",
         "dotenv": "^17.2.3",
         "drizzle-orm": "^0.45.2",
         "express": "^4.21.2",

@@ -128,7 +128,10 @@ The ESP tools manage the team’s sending providers and default provider. Secret
 ### Teams and API keys
 
 - `list_teams`, `create_team`, `rename_team`, `delete_team`
+- `get_plan_usage` returns the current team's parent-organization plan, usage, and limits. It never returns provider IDs or portal links.
 - `list_api_keys`, `create_api_key`, `delete_api_key`
+
+Mutating tools such as `create_team`, `create_contact`, `update_contact`, `send_email`, and `start_sequence` return the same plan-gate error object as REST (`plan_limit_reached`, `plan_feature_unavailable`, `sending_paused`) in `structuredContent`. Checkout, portal, and invoice tools are not exposed through MCP.
 
 The full API key secret is returned only by `create_api_key`. Store it immediately; it cannot be recovered from a later listing.
 
