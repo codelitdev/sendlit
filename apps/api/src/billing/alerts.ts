@@ -6,7 +6,7 @@ import {
     billingCheckoutAttempts,
     billingProviderCustomers,
     billingWebhookEvents,
-    organizationSubscriptions,
+    billingSubscriptions,
 } from "../db/schema";
 import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
@@ -226,10 +226,10 @@ export async function collectBillingSloAlerts(
     const unreconciledSince = new Date(now.getTime() - UNRECONCILED_MS);
     const [unreconciled] = await db
         .select({ value: sql<number>`count(*)` })
-        .from(organizationSubscriptions)
+        .from(billingSubscriptions)
         .where(
             and(
-                inArray(organizationSubscriptions.status, [
+                inArray(billingSubscriptions.status, [
                     "pending",
                     "trialing",
                     "active",
@@ -237,9 +237,9 @@ export async function collectBillingSloAlerts(
                     "cancelled",
                 ]),
                 or(
-                    isNull(organizationSubscriptions.lastReconciledAt),
+                    isNull(billingSubscriptions.lastReconciledAt),
                     lt(
-                        organizationSubscriptions.lastReconciledAt,
+                        billingSubscriptions.lastReconciledAt,
                         unreconciledSince,
                     ),
                 ),

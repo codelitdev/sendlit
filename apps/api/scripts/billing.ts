@@ -5,8 +5,8 @@ import { db, pool } from "../src/db/client";
 import {
     billingCatalogRevisions,
     billingWebhookEvents,
-    organizationPlanStates,
-    organizationSubscriptions,
+    billingPlanStates,
+    billingSubscriptions,
     organizations,
     teams,
 } from "../src/db/schema";
@@ -16,13 +16,10 @@ import {
     recordRequestedCatalogRevision,
     verifyCatalogAgainstProvider,
 } from "../src/billing/catalog-store";
-import { getBillingProvider } from "../src/billing/provider-registry";
-import { applyCanonicalBillingEvent } from "../src/billing/webhooks/processor";
 import {
     applyTeamSendingControl,
     releaseTeamSendingControl,
 } from "../src/billing/reputation";
-import { decryptBillingValue } from "../src/billing/crypto";
 import { recordBillingMetric } from "../src/billing/metrics";
 
 function usage(): never {
@@ -73,8 +70,7 @@ async function catalogVerify() {
         console.log("oss mode: nothing to verify");
         return;
     }
-    const provider = getBillingProvider(config.checkoutProvider ?? undefined);
-    await verifyCatalogAgainstProvider(config, provider);
+    await verifyCatalogAgainstProvider(config);
     console.log("catalog verified");
 }
 
@@ -106,11 +102,11 @@ async function reconcileOrg(publicId: string | undefined) {
     }
     const [subscription] = await db
         .select()
-        .from(organizationSubscriptions)
+        .from(billingSubscriptions)
         .where(
             and(
-                eq(organizationSubscriptions.organizationId, organization.id),
-                eq(organizationSubscriptions.isEntitlementSource, true),
+                eq(billingSubscriptions.billableEntityId, organization.id),
+                eq(billingSubscriptions.isEntitlementSource, true),
             ),
         )
         .limit(1);
@@ -118,45 +114,26 @@ async function reconcileOrg(publicId: string | undefined) {
         console.log("no entitlement-bearing subscription");
         return;
     }
-    const provider = getBillingProvider(subscription.provider);
-    const snapshot = await provider.retrieveSubscription(
-        subscription.providerSubscriptionId,
+    const { getBillingOperations } = await import("../src/billing/engine.js");
+    await getBillingOperations().reconcileSubscription(
+        { actorId: "operator", reason: "cli reconcile-org" },
+        subscription.id,
     );
-    await applyCanonicalBillingEvent({
-        provider: subscription.provider,
-        providerEventId: `operator-reconcile:${subscription.id}:${new Date().toISOString()}`,
-        eventType: "subscription.reconciled",
-        occurredAt: snapshot.occurredAt,
-        subscriptionId: snapshot.providerSubscriptionId,
-        snapshot,
-        rawPayload: null,
-    });
     console.log("reconciled", publicId);
 }
 
 async function webhookRetry(eventId: string | undefined) {
     if (!eventId) usage();
-    const [event] = await db
-        .select()
-        .from(billingWebhookEvents)
-        .where(eq(billingWebhookEvents.providerEventId, eventId))
-        .limit(1);
-    if (!event) {
-        console.error("event not found");
-        process.exit(1);
-    }
-    await db
-        .update(billingWebhookEvents)
-        .set({
-            status: "pending",
-            availableAt: new Date(),
-            lockedAt: null,
-            leaseExpiresAt: null,
-        })
-        .where(eq(billingWebhookEvents.id, event.id));
-    const { processBillingWebhookInboxEvent } =
-        await import("../src/billing/webhooks/processor.js");
-    await processBillingWebhookInboxEvent(event.id);
+    const { getBillingEngine, getBillingOperations } =
+        await import("../src/billing/engine.js");
+    await getBillingOperations().retryWebhook(
+        { actorId: "operator", reason: "cli webhook-retry" },
+        eventId,
+        "preserve_attempts",
+    );
+    await getBillingEngine().runWebhookInboxBatch({
+        workerId: "cli-webhook-retry",
+    });
     console.log("retried", eventId);
 }
 
@@ -173,7 +150,13 @@ async function webhookInspect(eventId: string | undefined) {
     }
     let payload: unknown = null;
     if (event.payloadEncrypted) {
-        payload = JSON.parse(decryptBillingValue(event.payloadEncrypted));
+        const { getBillingOperations } =
+            await import("../src/billing/engine.js");
+        const plaintext = await getBillingOperations().decryptReplay(
+            { actorId: "operator", reason: "cli webhook-inspect" },
+            event.payloadEncrypted,
+        );
+        payload = JSON.parse(plaintext);
     }
     console.log(
         JSON.stringify(
@@ -216,13 +199,13 @@ async function setOverride(
         return value;
     };
     await db
-        .update(organizationPlanStates)
+        .update(billingPlanStates)
         .set({
             teamsLimitOverride: parse(teamsRaw),
             contactsLimitOverride: parse(contactsRaw),
             updatedAt: new Date(),
         })
-        .where(eq(organizationPlanStates.organizationId, organization.id));
+        .where(eq(billingPlanStates.billableEntityId, organization.id));
     recordBillingMetric("billing.operator.override", {
         organization_public_id: publicId,
         reason,
@@ -292,11 +275,11 @@ async function cancelSubscription(
     }
     const [subscription] = await db
         .select()
-        .from(organizationSubscriptions)
+        .from(billingSubscriptions)
         .where(
             and(
-                eq(organizationSubscriptions.organizationId, organization.id),
-                eq(organizationSubscriptions.isEntitlementSource, true),
+                eq(billingSubscriptions.billableEntityId, organization.id),
+                eq(billingSubscriptions.isEntitlementSource, true),
             ),
         )
         .limit(1);
@@ -304,10 +287,10 @@ async function cancelSubscription(
         console.error("no live subscription");
         process.exit(1);
     }
-    const provider = getBillingProvider(subscription.provider);
-    await provider.cancelSubscription(
-        subscription.providerSubscriptionId,
-        `operator-cancel:${subscription.id}`,
+    const { getBillingOperations } = await import("../src/billing/engine.js");
+    await getBillingOperations().requestCancellation(
+        { actorId: "operator", reason },
+        subscription.id,
     );
     recordBillingMetric("billing.operator.cancel_subscription", {
         organization_public_id: publicId,

@@ -8,7 +8,7 @@ import { and, eq, gt, like, lte } from "drizzle-orm";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../auth/better-auth";
 import { db } from "../db/client";
-import { verification } from "../db/schema";
+import { organizations, verification } from "../db/schema";
 
 export type BillingAction =
     | "organization_checkout"
@@ -121,6 +121,22 @@ async function sessionContext(req: any) {
     return current;
 }
 
+/** Resume checkout continues a pending organization the user already created.
+ * A long-lived session is enough to finish that attempt; new paid checkouts
+ * still require authentication within BILLING_RECENT_AUTH_MAX_AGE_SECONDS. */
+async function isPendingPaymentCheckout(
+    action: BillingAction,
+    target: string,
+): Promise<boolean> {
+    if (action !== "checkout") return false;
+    const [organization] = await db
+        .select({ status: organizations.status })
+        .from(organizations)
+        .where(eq(organizations.organizationId, target))
+        .limit(1);
+    return organization?.status === "pending_payment";
+}
+
 function commonBoundary(req: any, res: any): BillingSecurityFailure | null {
     if (!req.userId || req.authKind !== "session") {
         return {
@@ -170,10 +186,12 @@ export async function issueBillingActionToken(
             !Number.isFinite(authenticatedAt) ||
             Date.now() - authenticatedAt > maxAgeSeconds * 1000
         ) {
-            return {
-                status: 401,
-                body: { error: "recent_authentication_required" },
-            };
+            if (!(await isPendingPaymentCheckout(action, target))) {
+                return {
+                    status: 401,
+                    body: { error: "recent_authentication_required" },
+                };
+            }
         }
         const token = randomBytes(32).toString("base64url");
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -205,6 +223,33 @@ export async function issueBillingActionToken(
     } catch {
         return { status: 503, body: { error: "billing_security_unavailable" } };
     }
+}
+
+export async function readBillingActionToken(
+    req: any,
+    res: any,
+    target: string,
+): Promise<BillingSecurityFailure | { token: string }> {
+    const boundary = commonBoundary(req, res);
+    if (boundary) return boundary;
+    const token =
+        typeof req.headers?.["x-sendlit-billing-action-token"] === "string"
+            ? req.headers["x-sendlit-billing-action-token"]
+            : "";
+    if (!token || !validTarget(target)) {
+        return {
+            status: 401,
+            body: { error: "billing_action_token_required" },
+        };
+    }
+    const current = await sessionContext(req);
+    if (!current) {
+        return {
+            status: 401,
+            body: { error: "recent_authentication_required" },
+        };
+    }
+    return { token };
 }
 
 export async function requireBillingAction(

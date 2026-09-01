@@ -8,38 +8,29 @@ import {
     lt,
     or,
     inArray,
-    sql,
 } from "drizzle-orm";
 import { db } from "../db/client";
 import {
     billingCheckoutAttempts,
     billingPlanChangeAttempts,
     billingPriceEntries,
-    billingWebhookEvents,
-    organizationSubscriptions,
+    billingSubscriptions,
     organizations,
     planSendReservations,
     sendingDomains,
 } from "../db/schema";
 import { readBillingConfig } from "./catalog";
-import { getBillingProvider } from "./provider-registry";
 import {
     recordRequestedCatalogRevision,
     verifyCatalogAgainstProvider,
 } from "./catalog-store";
 import { recordBillingMetric } from "./metrics";
 import { providerErrorSummary } from "./provider";
-import {
-    applyCanonicalBillingEvent,
-    claimBillingWebhookEvent,
-    expireCancelledSubscriptionEntitlements,
-    processBillingWebhookInboxEvent,
-} from "./webhooks/processor";
+import { expireCancelledSubscriptionEntitlements } from "./webhooks/processor";
 import { resumeOrganizationCheckoutAttempt } from "./checkout";
 import { settleExpiredSendReservation } from "./entitlements";
 import { evaluateAllTeamReputations } from "./reputation";
 import { verifySendingDomain } from "./domains";
-import { encryptBillingValue } from "./crypto";
 import { evaluateBillingSloAlerts, recordBillingHourlySuccess } from "./alerts";
 import logger from "../services/log";
 
@@ -49,36 +40,12 @@ let hourlyRunning = false;
 let inboxRunning = false;
 
 export async function processBillingInboxOnce(now = new Date()): Promise<void> {
-    const inbox = await db
-        .select({ id: billingWebhookEvents.id })
-        .from(billingWebhookEvents)
-        .where(
-            or(
-                eq(billingWebhookEvents.status, "pending"),
-                and(
-                    eq(billingWebhookEvents.status, "failed"),
-                    lte(billingWebhookEvents.availableAt, now),
-                ),
-                and(
-                    eq(billingWebhookEvents.status, "processing"),
-                    lt(billingWebhookEvents.leaseExpiresAt, now),
-                ),
-            ),
-        )
-        .limit(100);
-    for (const event of inbox) {
-        if (await claimBillingWebhookEvent(event.id, now)) {
-            await processBillingWebhookInboxEvent(event.id).catch((error) => {
-                logger.error(
-                    {
-                        billing_webhook_event_id: event.id,
-                        error: providerErrorSummary(error),
-                    },
-                    "billing webhook inbox event failed",
-                );
-            });
-        }
-    }
+    void now;
+    const { getBillingEngine } = await import("./engine.js");
+    await getBillingEngine().runWebhookInboxBatch({
+        workerId: `inbox-${process.pid}`,
+        limit: 100,
+    });
 }
 
 export async function settleExpiredSendReservationsOnce(
@@ -118,12 +85,11 @@ export async function reconcileBillingOnce(now = new Date()): Promise<void> {
         return;
     }
     if (config.deploymentMode !== "cloud") return;
+    const { getBillingEngine } = await import("./engine.js");
+    const billing = getBillingEngine();
     try {
         await recordRequestedCatalogRevision(config);
-        const provider = getBillingProvider(
-            config.checkoutProvider ?? undefined,
-        );
-        await verifyCatalogAgainstProvider(config, provider);
+        await verifyCatalogAgainstProvider(config);
     } catch (error) {
         logger.error(
             { error: providerErrorSummary(error) },
@@ -132,25 +98,11 @@ export async function reconcileBillingOnce(now = new Date()): Promise<void> {
         recordBillingMetric("billing.catalog.verify_failed", {});
     }
     const cutoff = new Date(now.getTime() - 60 * 60 * 1000);
-    const attempts = await db
-        .update(billingCheckoutAttempts)
-        .set({
-            status: "expired",
-            completedAt: now,
-            checkoutUrlEncrypted: null,
-            updatedAt: now,
-        })
-        .where(
-            and(
-                inArray(billingCheckoutAttempts.status, ["creating", "open"]),
-                lt(billingCheckoutAttempts.expiresAt, now),
-            ),
-        )
-        .returning({ id: billingCheckoutAttempts.id });
-    if (attempts.length)
+    const expired = await billing.runDeadlineBatch({ limit: 100 });
+    if (expired)
         logger.info(
-            { billing_checkout_expired: attempts.length },
-            "billing checkout attempts expired",
+            { billing_deadline_processed: expired },
+            "billing deadline batch applied",
         );
     const creatingAttempts = await db
         .select({ id: billingCheckoutAttempts.id })
@@ -223,7 +175,10 @@ export async function reconcileBillingOnce(now = new Date()): Promise<void> {
             .from(billingCheckoutAttempts)
             .where(
                 and(
-                    eq(billingCheckoutAttempts.organizationId, organization.id),
+                    eq(
+                        billingCheckoutAttempts.billableEntityId,
+                        organization.id,
+                    ),
                     inArray(billingCheckoutAttempts.status, [
                         "creating",
                         "open",
@@ -295,10 +250,10 @@ export async function reconcileBillingOnce(now = new Date()): Promise<void> {
     await processBillingInboxOnce(now);
     const subscriptions = await db
         .select()
-        .from(organizationSubscriptions)
+        .from(billingSubscriptions)
         .where(
             and(
-                inArray(organizationSubscriptions.status, [
+                inArray(billingSubscriptions.status, [
                     "pending",
                     "trialing",
                     "active",
@@ -306,49 +261,17 @@ export async function reconcileBillingOnce(now = new Date()): Promise<void> {
                     "cancelled",
                 ]),
                 or(
-                    isNull(organizationSubscriptions.lastReconciledAt),
-                    lt(organizationSubscriptions.lastReconciledAt, cutoff),
+                    isNull(billingSubscriptions.lastReconciledAt),
+                    lt(billingSubscriptions.lastReconciledAt, cutoff),
                 ),
             ),
         )
         .limit(100);
-    for (const candidate of subscriptions) {
-        const [subscription] = await db
-            .select()
-            .from(organizationSubscriptions)
-            .where(eq(organizationSubscriptions.id, candidate.id))
-            .limit(1)
-            .for("update", { skipLocked: true });
-        if (!subscription) continue;
-        try {
-            const provider = getBillingProvider(subscription.provider);
-            const snapshot = await provider.retrieveSubscription(
-                subscription.providerSubscriptionId,
-            );
-            await applyCanonicalBillingEvent({
-                provider: subscription.provider,
-                providerEventId: `reconcile:${subscription.id}:${snapshot.occurredAt.toISOString()}`,
-                eventType: "subscription.reconciled",
-                occurredAt: snapshot.occurredAt,
-                subscriptionId: snapshot.providerSubscriptionId,
-                snapshot,
-                rawPayload: null,
-            });
-            await db
-                .update(organizationSubscriptions)
-                .set({ lastReconciledAt: now, updatedAt: now })
-                .where(eq(organizationSubscriptions.id, subscription.id));
-        } catch (error) {
-            // Provider outages and quarantined records are isolated; the next
-            // hourly pass retries them without affecting other organizations.
-            logger.warn(
-                {
-                    billing_reconciliation_subscription: subscription.id,
-                    error: providerErrorSummary(error),
-                },
-                "billing subscription reconciliation failed",
-            );
-        }
+    for (const subscription of subscriptions) {
+        await billing.enqueueJob({
+            provider: subscription.provider,
+            subscriptionId: subscription.id,
+        });
     }
     // Retry ambiguous plan-change mutations with the same provider
     // idempotency key. A provider that already applied the request returns the
@@ -357,14 +280,14 @@ export async function reconcileBillingOnce(now = new Date()): Promise<void> {
     const planChanges = await db
         .select({
             attempt: billingPlanChangeAttempts,
-            subscription: organizationSubscriptions,
+            subscription: billingSubscriptions,
             price: billingPriceEntries,
         })
         .from(billingPlanChangeAttempts)
         .innerJoin(
-            organizationSubscriptions,
+            billingSubscriptions,
             eq(
-                organizationSubscriptions.id,
+                billingSubscriptions.id,
                 billingPlanChangeAttempts.subscriptionId,
             ),
         )
@@ -391,80 +314,20 @@ export async function reconcileBillingOnce(now = new Date()): Promise<void> {
             ),
         )
         .limit(100);
-    for (const { attempt, subscription, price } of planChanges) {
-        const [claimed] = await db
-            .update(billingPlanChangeAttempts)
-            .set({ updatedAt: now })
-            .where(
-                and(
-                    eq(billingPlanChangeAttempts.id, attempt.id),
-                    or(
-                        eq(billingPlanChangeAttempts.status, "creating"),
-                        and(
-                            eq(billingPlanChangeAttempts.status, "pending"),
-                            isNotNull(billingPlanChangeAttempts.lastError),
-                        ),
-                    ),
-                    or(
-                        isNull(billingPlanChangeAttempts.updatedAt),
-                        lt(billingPlanChangeAttempts.updatedAt, cutoff),
-                    ),
-                ),
-            )
-            .returning({ id: billingPlanChangeAttempts.id });
-        if (!claimed) continue;
-        try {
-            const provider = getBillingProvider(attempt.provider);
-            const result = await provider.changeSubscriptionPlan({
-                providerSubscriptionId: subscription.providerSubscriptionId,
-                targetProviderProductId: price.providerProductId,
-                effectiveAt: attempt.effectiveAt as
-                    "immediately" | "next_billing_date",
-                prorationMode: attempt.prorationMode as
-                    "prorated_immediately" | "do_not_bill",
-                idempotencyKey: attempt.idempotencyKey,
-            });
-            await db
-                .update(billingPlanChangeAttempts)
-                .set({
-                    providerPaymentId: result.providerPaymentId,
-                    paymentUrlEncrypted: result.paymentUrl
-                        ? encryptBillingValue(result.paymentUrl)
-                        : attempt.paymentUrlEncrypted,
-                    lastError: null,
-                    updatedAt: now,
-                })
-                .where(eq(billingPlanChangeAttempts.id, attempt.id));
-        } catch (error) {
-            await db
-                .update(billingPlanChangeAttempts)
-                .set({
-                    lastError: providerErrorSummary(error),
-                    updatedAt: now,
-                })
-                .where(eq(billingPlanChangeAttempts.id, attempt.id));
-        }
+    for (const { attempt } of planChanges) {
+        await billing.enqueueJob({
+            provider: attempt.provider,
+            planChangeAttemptId: attempt.id,
+        });
     }
-    // Webhook bodies contain provider metadata and are retained only for the
-    // documented replay window. The durable event status and subscription
-    // projection remain available for audit after the encrypted payload is
-    // purged.
-    await db
-        .update(billingWebhookEvents)
-        .set({ payloadEncrypted: null })
-        .where(
-            and(
-                inArray(billingWebhookEvents.status, [
-                    "processed",
-                    "ignored",
-                    "quarantined",
-                ]),
-                lt(
-                    sql`coalesce(${billingWebhookEvents.processedAt}, ${billingWebhookEvents.receivedAt})`,
-                    new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-                ),
-            ),
-        );
+    await billing.runReconciliationBatch({
+        workerId: `reconcile-${process.pid}`,
+        limit: 200,
+    });
+    await billing.purgeExpiredSensitiveValues({
+        before: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+        limit: 500,
+    });
     await evaluateAllTeamReputations(now);
     recordBillingHourlySuccess(now);
     await evaluateBillingSloAlerts(now).catch((error) => {

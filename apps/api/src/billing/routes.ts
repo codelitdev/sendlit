@@ -7,8 +7,8 @@ import { requireAuth } from "../auth/middleware";
 import { db } from "../db/client";
 import {
     billingPlanChangeAttempts,
-    organizationPlanStates,
-    organizationSubscriptions,
+    billingPlanStates,
+    billingSubscriptions,
 } from "../db/schema";
 import { readBillingConfig, type BillingOffer } from "./catalog";
 import { checkoutIsAvailable, getActiveCatalog } from "./catalog-store";
@@ -34,9 +34,11 @@ import {
     billingMutationOrigin,
     ensureCsrfCookie,
     issueBillingActionToken,
+    readBillingActionToken,
     requireBillingAction,
     type BillingAction,
 } from "./security";
+import type { BillingActionGrant } from "@codelitdev/billing/workflows";
 
 const router = Router();
 const s = initServer();
@@ -108,7 +110,7 @@ const impl = s.router(contract.billing, {
         if (boundary) return boundary as any;
         try {
             const result = await createPaidOrganizationCheckout({
-                payerUserId: req.userId,
+                payerId: req.userId,
                 organizationName: body.organizationName,
                 teamName: body.teamName,
                 plan: body.plan,
@@ -138,8 +140,8 @@ const impl = s.router(contract.billing, {
                     activeRevision = cached.revision;
                 } else {
                     const active = await getActiveCatalog(config);
-                    offers = active.items.map(({ catalogKey, price }) => ({
-                        catalogKey: catalogKey as BillingOffer["catalogKey"],
+                    offers = active.items.map(({ offerKey, price }) => ({
+                        catalogKey: offerKey as BillingOffer["catalogKey"],
                         catalogRevision: active.revision.revision,
                         plan: price.plan as "pro" | "business",
                         interval: price.billingInterval as "month" | "year",
@@ -149,7 +151,7 @@ const impl = s.router(contract.billing, {
                         providerProductId: price.providerProductId,
                         trialDays:
                             config.offers.find(
-                                (offer) => offer.catalogKey === catalogKey,
+                                (offer) => offer.catalogKey === offerKey,
                             )?.trialDays ?? 0,
                     }));
                     activeRevision = active.revision.revision;
@@ -210,10 +212,10 @@ const impl = s.router(contract.billing, {
         }
         const [planState] = await db
             .select()
-            .from(organizationPlanStates)
+            .from(billingPlanStates)
             .where(
                 eq(
-                    organizationPlanStates.organizationId,
+                    billingPlanStates.billableEntityId,
                     authorization.organization.id,
                 ),
             )
@@ -221,10 +223,10 @@ const impl = s.router(contract.billing, {
         const [state] = planState?.activeSubscriptionId
             ? await db
                   .select()
-                  .from(organizationSubscriptions)
+                  .from(billingSubscriptions)
                   .where(
                       eq(
-                          organizationSubscriptions.id,
+                          billingSubscriptions.id,
                           planState.activeSubscriptionId,
                       ),
                   )
@@ -241,7 +243,7 @@ const impl = s.router(contract.billing, {
             .where(
                 and(
                     eq(
-                        billingPlanChangeAttempts.organizationId,
+                        billingPlanChangeAttempts.billableEntityId,
                         authorization.organization.id,
                     ),
                     eq(billingPlanChangeAttempts.status, "pending"),
@@ -252,7 +254,7 @@ const impl = s.router(contract.billing, {
             authorization.organization.id,
         );
         const usage = await usageForOrganization(authorization.organization.id);
-        const billingManager = state?.billingManagerUserId ?? null;
+        const billingManager = state?.payerId ?? null;
         return {
             status: 200,
             body: {
@@ -333,20 +335,31 @@ const impl = s.router(contract.billing, {
             return { status: 404, body: { error: "organization_not_found" } };
         if (authorization.membership.role !== "owner")
             return { status: 403, body: { error: "billing_owner_required" } };
-        const boundary = await requireBillingAction(
+        const ready = await readBillingActionToken(
             req,
             req.res,
-            "checkout",
             params.organizationId,
         );
-        if (boundary) return boundary as any;
+        if ("status" in ready) return ready as any;
+        const grant: BillingActionGrant = {
+            grantId: ready.token,
+            actorId: (req as any).userId,
+            action: "checkout",
+            target: {
+                kind: "organization",
+                id: authorization.organization.id,
+            },
+            issuedAt: new Date(),
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        };
         try {
             const result = await createOrganizationCheckout({
                 organizationId: authorization.organization.id,
-                payerUserId: (req as any).userId,
+                payerId: (req as any).userId,
                 plan: body.plan,
                 interval: body.interval,
                 catalogRevision: body.catalogRevision,
+                grant,
             });
             return { status: 201, body: result };
         } catch (error) {
@@ -364,17 +377,28 @@ const impl = s.router(contract.billing, {
             return { status: 404, body: { error: "organization_not_found" } };
         if (authorization.membership.role !== "owner")
             return { status: 403, body: { error: "billing_owner_required" } };
-        const boundary = await requireBillingAction(
+        const ready = await readBillingActionToken(
             req,
             req.res,
-            "portal",
             params.organizationId,
         );
-        if (boundary) return boundary as any;
+        if ("status" in ready) return ready as any;
+        const grant: BillingActionGrant = {
+            grantId: ready.token,
+            actorId: (req as any).userId,
+            action: "portal",
+            target: {
+                kind: "organization",
+                id: authorization.organization.id,
+            },
+            issuedAt: new Date(),
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        };
         try {
             const result = await createOrganizationPortal({
                 organizationId: authorization.organization.id,
                 userId: (req as any).userId,
+                grant,
             });
             return { status: 201, body: result };
         } catch (error) {
@@ -398,21 +422,32 @@ const impl = s.router(contract.billing, {
         );
         if (!authorization)
             return { status: 404, body: { error: "organization_not_found" } };
-        const boundary = await requireBillingAction(
+        const ready = await readBillingActionToken(
             req,
             req.res,
-            "plan_change",
             params.organizationId,
         );
-        if (boundary) return boundary as any;
+        if ("status" in ready) return ready as any;
+        const grant: BillingActionGrant = {
+            grantId: ready.token,
+            actorId: (req as any).userId,
+            action: "plan_change",
+            target: {
+                kind: "organization",
+                id: authorization.organization.id,
+            },
+            issuedAt: new Date(),
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        };
         try {
             const result = await createOrganizationPlanChange({
                 organizationId: authorization.organization.id,
-                actorUserId: (req as any).userId,
+                actorId: (req as any).userId,
                 plan: body.plan,
                 interval: body.interval,
                 catalogRevision: body.catalogRevision,
                 idempotencyKey: body.idempotencyKey,
+                grant,
             });
             return {
                 status: result.status === "pending" ? 202 : 200,

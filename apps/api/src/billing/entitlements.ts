@@ -3,8 +3,8 @@ import { db } from "../db/client";
 import {
     billingCheckoutAttempts,
     contacts,
-    organizationPlanStates,
-    organizationSubscriptions,
+    billingPlanStates,
+    billingSubscriptions,
     organizations,
     outboundMessages,
     planSendReservations,
@@ -39,21 +39,26 @@ export async function ensureOrganizationPlanState(
 ) {
     const [existing] = await tx
         .select()
-        .from(organizationPlanStates)
-        .where(eq(organizationPlanStates.organizationId, organizationId))
+        .from(billingPlanStates)
+        .where(eq(billingPlanStates.billableEntityId, organizationId))
         .limit(1)
         .for("update");
     if (existing) return existing;
     const [created] = await tx
-        .insert(organizationPlanStates)
-        .values({ organizationId, plan: "free" })
-        .onConflictDoNothing({ target: organizationPlanStates.organizationId })
+        .insert(billingPlanStates)
+        .values({
+            billableEntityId: organizationId,
+            plan: "free",
+            rampStage: 0,
+            rampCleanStageDays: 0,
+        })
+        .onConflictDoNothing({ target: billingPlanStates.billableEntityId })
         .returning();
     if (created) return created;
     const [raced] = await tx
         .select()
-        .from(organizationPlanStates)
-        .where(eq(organizationPlanStates.organizationId, organizationId))
+        .from(billingPlanStates)
+        .where(eq(billingPlanStates.billableEntityId, organizationId))
         .limit(1)
         .for("update");
     if (!raced) throw new Error("organization_plan_state_unavailable");
@@ -66,16 +71,16 @@ export async function getOrganizationEntitlements(
 ): Promise<OrganizationEntitlements> {
     const [state] = await db
         .select()
-        .from(organizationPlanStates)
-        .where(eq(organizationPlanStates.organizationId, organizationId))
+        .from(billingPlanStates)
+        .where(eq(billingPlanStates.billableEntityId, organizationId))
         .limit(1);
 
     let subscription: SubscriptionLike | null = null;
     if (state?.activeSubscriptionId) {
         const [row] = await db
             .select()
-            .from(organizationSubscriptions)
-            .where(eq(organizationSubscriptions.id, state.activeSubscriptionId))
+            .from(billingSubscriptions)
+            .where(eq(billingSubscriptions.id, state.activeSubscriptionId))
             .limit(1);
         subscription = row
             ? {
@@ -96,7 +101,7 @@ export async function getOrganizationEntitlements(
         .from(billingCheckoutAttempts)
         .where(
             and(
-                eq(billingCheckoutAttempts.organizationId, organizationId),
+                eq(billingCheckoutAttempts.billableEntityId, organizationId),
                 inArray(billingCheckoutAttempts.status, ["creating", "open"]),
             ),
         )
@@ -121,10 +126,8 @@ export async function getOrganizationEntitlementsInTransaction(
     const [row] = state.activeSubscriptionId
         ? await tx
               .select()
-              .from(organizationSubscriptions)
-              .where(
-                  eq(organizationSubscriptions.id, state.activeSubscriptionId),
-              )
+              .from(billingSubscriptions)
+              .where(eq(billingSubscriptions.id, state.activeSubscriptionId))
               .limit(1)
         : [];
     const [pending] = await tx
@@ -132,7 +135,7 @@ export async function getOrganizationEntitlementsInTransaction(
         .from(billingCheckoutAttempts)
         .where(
             and(
-                eq(billingCheckoutAttempts.organizationId, organizationId),
+                eq(billingCheckoutAttempts.billableEntityId, organizationId),
                 inArray(billingCheckoutAttempts.status, ["creating", "open"]),
             ),
         )
@@ -336,14 +339,14 @@ async function advanceMarketingRamp(
         cleanDays = 0;
     }
     await tx
-        .update(organizationPlanStates)
+        .update(billingPlanStates)
         .set({
             rampStage: stage,
             rampCleanStageDays: cleanDays,
             rampEvaluatedAt: now,
             updatedAt: now,
         })
-        .where(eq(organizationPlanStates.id, state.id));
+        .where(eq(billingPlanStates.id, state.id));
     return stage;
 }
 
@@ -490,15 +493,13 @@ export async function reserveSend(
     if (entitlements.fairUse && input.purpose === "marketing") {
         const [rampState] = await tx
             .select({
-                id: organizationPlanStates.id,
-                rampStage: organizationPlanStates.rampStage,
-                rampCleanStageDays: organizationPlanStates.rampCleanStageDays,
-                rampEvaluatedAt: organizationPlanStates.rampEvaluatedAt,
+                id: billingPlanStates.id,
+                rampStage: billingPlanStates.rampStage,
+                rampCleanStageDays: billingPlanStates.rampCleanStageDays,
+                rampEvaluatedAt: billingPlanStates.rampEvaluatedAt,
             })
-            .from(organizationPlanStates)
-            .where(
-                eq(organizationPlanStates.organizationId, input.organizationId),
-            )
+            .from(billingPlanStates)
+            .where(eq(billingPlanStates.billableEntityId, input.organizationId))
             .limit(1)
             .for("update");
         const stage = rampState

@@ -1,43 +1,40 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { dodoOptionsFromEnv } from "./index";
 
-vi.mock("dodopayments", () => ({
-    default: class FakeDodoClient {
-        webhooks = {
-            unwrap(body: string) {
-                return JSON.parse(body);
-            },
-        };
-    },
-}));
-
-import { DodoBillingProvider } from "./index";
-
-describe("Dodo webhook parsing", () => {
-    it("accepts a valid delivery whose provider event timestamp is delayed", async () => {
-        const provider = new DodoBillingProvider({
+describe("SendLit Dodo env mapping", () => {
+    it("maps current and unexpired previous webhook keys", () => {
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+        const options = dodoOptionsFromEnv({
             DODO_PAYMENTS_API_KEY: "test-token",
-            DODO_PAYMENTS_WEBHOOK_KEY_CURRENT: "whsec_test",
             DODO_PAYMENTS_ENVIRONMENT: "test_mode",
+            DODO_PAYMENTS_WEBHOOK_KEY_CURRENT: "whsec_current",
+            DODO_PAYMENTS_WEBHOOK_KEY_PREVIOUS: "whsec_previous",
+            DODO_PAYMENTS_WEBHOOK_KEY_PREVIOUS_EXPIRES_AT:
+                expiresAt.toISOString(),
         });
-        const event = await provider.parseWebhook({
-            body: JSON.stringify({
-                type: "subscription.updated",
-                // Provider event timestamps can be delayed on retry. The
-                // Standard Webhooks delivery timestamp is verified by unwrap.
-                timestamp: "2026-08-28T00:00:00.000Z",
-                data: {
-                    subscription_id: "sub_test",
-                    status: "active",
-                    product_id: "pdt_test",
-                },
-            }),
-            headers: {
-                "webhook-id": "msg_test",
-                "webhook-timestamp": String(Math.floor(Date.now() / 1000)),
-                "webhook-signature": "v1,verified",
-            },
+        expect(options.apiKey).toBe("test-token");
+        expect(options.environment).toBe("test_mode");
+        expect(options.webhookSecrets.map((row) => row.version)).toEqual([
+            "current",
+            "previous",
+        ]);
+        expect(options.webhookSecrets[1]?.expiresAt?.toISOString()).toBe(
+            expiresAt.toISOString(),
+        );
+    });
+
+    it("does not include an expired previous key", () => {
+        const options = dodoOptionsFromEnv({
+            DODO_PAYMENTS_API_KEY: "test-token",
+            DODO_PAYMENTS_ENVIRONMENT: "live_mode",
+            DODO_PAYMENTS_WEBHOOK_KEY_CURRENT: "whsec_current",
+            DODO_PAYMENTS_WEBHOOK_KEY_PREVIOUS: "whsec_previous",
+            DODO_PAYMENTS_WEBHOOK_KEY_PREVIOUS_EXPIRES_AT: new Date(
+                Date.now() - 1000,
+            ).toISOString(),
         });
-        expect(event.subscriptionId).toBe("sub_test");
-        expect(event.occurredAt.toISOString()).toBe("2026-08-28T00:00:00.000Z");
+        expect(options.environment).toBe("live_mode");
+        expect(options.webhookSecrets).toHaveLength(1);
+        expect(options.webhookSecrets[0]?.secret).toBe("whsec_current");
     });
 });

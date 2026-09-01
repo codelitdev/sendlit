@@ -45,4 +45,48 @@ describe("dashboard API client auth handling", () => {
 
         expect(location.href).toBe("/login");
     });
+
+    it("does not sign out on billing recent-authentication 401", async () => {
+        const location = installWindow("/organizations");
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.includes("/api/auth/sign-out")) {
+                return new Response(null, { status: 204 });
+            }
+            return new Response(
+                JSON.stringify({ error: "recent_authentication_required" }),
+                {
+                    status: 401,
+                    headers: { "content-type": "application/json" },
+                },
+            );
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        vi.stubGlobal("document", { cookie: "" });
+
+        const { createOrganizationBillingCheckout } = await import("./api");
+        await expect(
+            createOrganizationBillingCheckout("org_cB2kKmowUP3UeOHPYpzcp8S6", {
+                plan: "pro",
+                interval: "month",
+                catalogRevision: 1,
+            }),
+        ).rejects.toMatchObject({
+            status: 401,
+            message: "recent_authentication_required",
+        });
+        expect(location.href).toBe("/organizations");
+        expect(
+            fetchMock.mock.calls.some(([url]) =>
+                String(url).includes("/api/proxy/billing/action-token"),
+            ),
+        ).toBe(true);
+        expect(
+            fetchMock.mock.calls.some(
+                ([url, init]) =>
+                    String(url).includes("/api/auth/sign-out") &&
+                    (init as RequestInit | undefined)?.method === "POST",
+            ),
+        ).toBe(false);
+    });
 });

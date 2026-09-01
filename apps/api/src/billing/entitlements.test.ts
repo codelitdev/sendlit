@@ -10,8 +10,8 @@ import { db } from "../db/client";
 import {
     billingProviderCustomers,
     billingPriceEntries,
-    organizationPlanStates,
-    organizationSubscriptions,
+    billingPlanStates,
+    billingSubscriptions,
     outboundMessages,
     planSendReservations,
     planSendUsageBuckets,
@@ -154,7 +154,7 @@ describe("scheduled cancellation expiry", () => {
         const [price] = await tdb
             .insert(billingPriceEntries)
             .values({
-                catalogKey: "pro_month",
+                offerKey: "pro_month",
                 plan: "pro",
                 billingInterval: "month",
                 currency: "USD",
@@ -167,23 +167,24 @@ describe("scheduled cancellation expiry", () => {
             .insert(billingProviderCustomers)
             .values({
                 provider: "dodo",
-                userId: account.id,
+                payerId: account.id,
                 providerCustomerId: `cus_${crypto.randomUUID()}`,
                 idempotencyKey: `customer:dodo:${account.id}`,
                 status: "active",
             })
             .returning();
         const [subscription] = await tdb
-            .insert(organizationSubscriptions)
+            .insert(billingSubscriptions)
             .values({
-                organizationId: organization.id,
+                billableEntityId: organization.id,
                 billingCustomerId: customer.id,
-                billingManagerUserId: account.id,
+                payerId: account.id,
                 provider: "dodo",
                 providerSubscriptionId: `sub_${crypto.randomUUID()}`,
                 providerProductId: price.providerProductId,
                 billingPriceEntryId: price.id,
-                catalogKey: "pro_month",
+                catalogRevision: 1,
+                offerKey: "pro_month",
                 plan: "pro",
                 billingInterval: "month",
                 status: "cancelled",
@@ -193,12 +194,12 @@ describe("scheduled cancellation expiry", () => {
             })
             .returning();
         await tdb
-            .update(organizationPlanStates)
+            .update(billingPlanStates)
             .set({
                 plan: "pro",
                 activeSubscriptionId: subscription.id,
             })
-            .where(eq(organizationPlanStates.organizationId, organization.id));
+            .where(eq(billingPlanStates.billableEntityId, organization.id));
         return { organization, subscription };
     }
 
@@ -210,8 +211,8 @@ describe("scheduled cancellation expiry", () => {
         expect(await expireCancelledSubscriptionEntitlements()).toBe(0);
         const [state] = await tdb
             .select()
-            .from(organizationPlanStates)
-            .where(eq(organizationPlanStates.organizationId, organization.id));
+            .from(billingPlanStates)
+            .where(eq(billingPlanStates.billableEntityId, organization.id));
         expect(state).toMatchObject({
             plan: "pro",
             activeSubscriptionId: expect.any(String),
@@ -226,12 +227,12 @@ describe("scheduled cancellation expiry", () => {
         expect(await expireCancelledSubscriptionEntitlements()).toBe(1);
         const [state] = await tdb
             .select()
-            .from(organizationPlanStates)
-            .where(eq(organizationPlanStates.organizationId, organization.id));
+            .from(billingPlanStates)
+            .where(eq(billingPlanStates.billableEntityId, organization.id));
         const [row] = await tdb
             .select()
-            .from(organizationSubscriptions)
-            .where(eq(organizationSubscriptions.id, subscription.id));
+            .from(billingSubscriptions)
+            .where(eq(billingSubscriptions.id, subscription.id));
         expect(state).toMatchObject({
             plan: "free",
             activeSubscriptionId: null,

@@ -13,6 +13,10 @@ import {
     verifyCatalogAgainstProvider,
 } from "./catalog-store";
 import { FakeBillingProvider } from "./providers/fake";
+import {
+    getBillingProvider,
+    resetBillingProviderInstances,
+} from "./provider-registry";
 
 const tdb = db as unknown as TestDb;
 
@@ -35,22 +39,21 @@ function cloudFakeEnv() {
 
 beforeEach(async () => {
     cloudFakeEnv();
+    resetBillingProviderInstances();
     await truncateAll(tdb);
 });
 
 describe("catalog verification against the fake adapter", () => {
     it("activates a four-offer revision when products match", async () => {
-        const provider = new FakeBillingProvider();
-        provider.seedDefaultCatalog();
-        await verifyCatalogAgainstProvider(readBillingConfig(), provider);
+        getBillingProvider("fake");
+        await verifyCatalogAgainstProvider(readBillingConfig());
         const active = await getActiveCatalog(readBillingConfig());
         expect(active.revision.revision).toBe(1);
         expect(active.items).toHaveLength(4);
     });
 
     it("rejects a provider amount mismatch without activating", async () => {
-        const provider = new FakeBillingProvider();
-        provider.seedDefaultCatalog();
+        const provider = getBillingProvider("fake") as FakeBillingProvider;
         provider.seedProduct({
             provider: "fake",
             providerProductId: "pdt_pro_month",
@@ -59,7 +62,7 @@ describe("catalog verification against the fake adapter", () => {
             interval: "month",
         });
         await expect(
-            verifyCatalogAgainstProvider(readBillingConfig(), provider),
+            verifyCatalogAgainstProvider(readBillingConfig()),
         ).rejects.toThrow(/billing_catalog_unavailable/);
     });
 });

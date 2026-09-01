@@ -15,8 +15,8 @@ import {
     espConfigs,
     organizationEspQuotaReservations,
     organizationEspUsageBuckets,
-    organizationPlanStates,
-    organizationSubscriptions,
+    billingPlanStates,
+    billingSubscriptions,
     organizations,
     outboundMessages,
     sequences,
@@ -384,7 +384,7 @@ describe("organizations", () => {
         const [price] = await tdb
             .insert(billingPriceEntries)
             .values({
-                catalogKey: "pro_month",
+                offerKey: "pro_month",
                 plan: "pro",
                 billingInterval: "month",
                 currency: "USD",
@@ -394,11 +394,12 @@ describe("organizations", () => {
             })
             .returning();
         await tdb.insert(billingCheckoutAttempts).values({
-            organizationId: organization.id,
-            payerUserId: owner.id,
+            attemptId: `bca_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
+            billableEntityId: organization.id,
+            payerId: owner.id,
             provider: "dodo",
             catalogRevision: 1,
-            catalogKey: "pro_month",
+            offerKey: "pro_month",
             requestedPlan: "pro",
             requestedInterval: "month",
             billingPriceEntryId: price.id,
@@ -455,7 +456,7 @@ describe("one owned Free organization", () => {
         const [price] = await tdb
             .insert(billingPriceEntries)
             .values({
-                catalogKey: "pro_month",
+                offerKey: "pro_month",
                 plan: "pro",
                 billingInterval: "month",
                 currency: "USD",
@@ -468,23 +469,24 @@ describe("one owned Free organization", () => {
             .insert(billingProviderCustomers)
             .values({
                 provider: "dodo",
-                userId: ownerId,
+                payerId: ownerId,
                 providerCustomerId: `cus_${crypto.randomUUID()}`,
                 idempotencyKey: `customer:dodo:${ownerId}`,
                 status: "active",
             })
             .returning();
         const [subscription] = await tdb
-            .insert(organizationSubscriptions)
+            .insert(billingSubscriptions)
             .values({
-                organizationId,
+                billableEntityId: organizationId,
                 billingCustomerId: customer.id,
-                billingManagerUserId: ownerId,
+                payerId: ownerId,
                 provider: "dodo",
                 providerSubscriptionId: `sub_${crypto.randomUUID()}`,
                 providerProductId: price.providerProductId,
                 billingPriceEntryId: price.id,
-                catalogKey: "pro_month",
+                catalogRevision: 1,
+                offerKey: "pro_month",
                 plan: "pro",
                 billingInterval: "month",
                 status: input.status,
@@ -494,12 +496,12 @@ describe("one owned Free organization", () => {
             })
             .returning();
         await tdb
-            .update(organizationPlanStates)
+            .update(billingPlanStates)
             .set({
                 plan: "pro",
                 activeSubscriptionId: subscription.id,
             })
-            .where(eq(organizationPlanStates.organizationId, organizationId));
+            .where(eq(billingPlanStates.billableEntityId, organizationId));
         return subscription;
     }
 

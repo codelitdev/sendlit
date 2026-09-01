@@ -1,7 +1,8 @@
+import { FakeBillingProvider } from "@codelitdev/billing/providers";
+import type { BillingProviderAdapter } from "@codelitdev/billing/providers";
 import { readBillingConfig } from "./catalog";
-import type { BillingProviderAdapter, BillingProviderId } from "./provider";
-import { DodoBillingProvider } from "./providers/dodo";
-import { FakeBillingProvider } from "./providers/fake";
+import type { BillingProviderId } from "./provider";
+import { createSendLitDodoProvider } from "./providers/dodo";
 
 /** Lazily-created adapters keep provider credentials out of module import time. */
 const instances = new Map<string, BillingProviderAdapter>();
@@ -20,7 +21,7 @@ export function getBillingProvider(
     let adapter: BillingProviderAdapter;
     switch (selected) {
         case "dodo":
-            adapter = new DodoBillingProvider();
+            adapter = createSendLitDodoProvider();
             break;
         case "fake": {
             if (process.env.NODE_ENV === "production") {
@@ -38,4 +39,8 @@ export function getBillingProvider(
     }
     instances.set(selected, adapter);
     return adapter;
+}
+
+export function resetBillingProviderInstances(): void {
+    instances.clear();
 }

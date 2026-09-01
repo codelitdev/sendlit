@@ -7,8 +7,8 @@ import {
     organizationDeliveryPolicies,
     espConfigTeamGrants,
     organizations,
-    organizationPlanStates,
-    organizationSubscriptions,
+    billingPlanStates,
+    billingSubscriptions,
     settings,
     teams,
     teamDeliverySettings,
@@ -34,10 +34,10 @@ async function lockOrganizationSubscriptions(
     organizationId: string,
 ) {
     return tx
-        .select({ id: organizationSubscriptions.id })
-        .from(organizationSubscriptions)
-        .where(eq(organizationSubscriptions.organizationId, organizationId))
-        .orderBy(asc(organizationSubscriptions.id))
+        .select({ id: billingSubscriptions.id })
+        .from(billingSubscriptions)
+        .where(eq(billingSubscriptions.billableEntityId, organizationId))
+        .orderBy(asc(billingSubscriptions.id))
         .for("update");
 }
 
@@ -54,8 +54,8 @@ async function ownsEffectiveFreeOrganization(
 ): Promise<boolean> {
     const owned = await tx
         .select({
-            planState: organizationPlanStates,
-            subscription: organizationSubscriptions,
+            planState: billingPlanStates,
+            subscription: billingSubscriptions,
         })
         .from(organizationMembers)
         .innerJoin(
@@ -63,16 +63,16 @@ async function ownsEffectiveFreeOrganization(
             eq(organizations.id, organizationMembers.organizationId),
         )
         .innerJoin(
-            organizationPlanStates,
-            eq(organizationPlanStates.organizationId, organizations.id),
+            billingPlanStates,
+            eq(billingPlanStates.billableEntityId, organizations.id),
         )
         .leftJoin(
-            organizationSubscriptions,
+            billingSubscriptions,
             and(
-                eq(organizationSubscriptions.organizationId, organizations.id),
+                eq(billingSubscriptions.billableEntityId, organizations.id),
                 eq(
-                    organizationSubscriptions.id,
-                    organizationPlanStates.activeSubscriptionId,
+                    billingSubscriptions.id,
+                    billingPlanStates.activeSubscriptionId,
                 ),
             ),
         )
@@ -85,7 +85,7 @@ async function ownsEffectiveFreeOrganization(
         );
     return owned.some(({ planState, subscription }) => {
         const entitlements = resolveEntitlements({
-            organizationId: planState.organizationId,
+            organizationId: planState.billableEntityId,
             deploymentMode:
                 process.env.SENDLIT_DEPLOYMENT_MODE === "cloud"
                     ? "cloud"
@@ -357,7 +357,7 @@ export async function updateOrganizationName(
 
 export async function abandonPendingOrganization(
     organizationId: string,
-    actorUserId: string,
+    actorId: string,
 ): Promise<void> {
     await db.transaction(async (tx) => {
         const [organization] = await tx
@@ -376,7 +376,7 @@ export async function abandonPendingOrganization(
             .where(
                 and(
                     eq(organizationMembers.organizationId, organizationId),
-                    eq(organizationMembers.userId, actorUserId),
+                    eq(organizationMembers.userId, actorId),
                 ),
             )
             .limit(1);
@@ -393,7 +393,10 @@ export async function abandonPendingOrganization(
             })
             .where(
                 and(
-                    eq(billingCheckoutAttempts.organizationId, organizationId),
+                    eq(
+                        billingCheckoutAttempts.billableEntityId,
+                        organizationId,
+                    ),
                     inArray(billingCheckoutAttempts.status, [
                         "creating",
                         "open",
@@ -406,7 +409,7 @@ export async function abandonPendingOrganization(
             .where(eq(organizations.id, organizationId));
         await recordOrganizationAuditEvent(tx, {
             organizationId,
-            actor: { type: "user", id: actorUserId },
+            actor: { type: "user", id: actorId },
             action: "organization.pending_abandoned",
             metadata: {},
         });
@@ -422,38 +425,43 @@ export async function closeOrganization(
         type: "system",
     },
 ): Promise<void> {
+    const { getBillingEngine } = await import("../billing/engine.js");
+    const blockers = await getBillingEngine().getBillableEntityBillingBlockers(
+        { kind: "organization", id: organizationId },
+        new Date(),
+    );
+    if (
+        blockers.includes("nonterminal_subscription") ||
+        blockers.includes("future_paid_entitlement")
+    ) {
+        throw new Error("active_subscription_exists");
+    }
+    if (blockers.includes("live_checkout")) {
+        throw new Error("billing_checkout_pending");
+    }
     await db.transaction(async (tx) => {
         const liveSubscriptions = await tx
-            .select({ id: organizationSubscriptions.id })
-            .from(organizationSubscriptions)
+            .select({ id: billingSubscriptions.id })
+            .from(billingSubscriptions)
             .where(
                 and(
-                    eq(
-                        organizationSubscriptions.organizationId,
-                        organizationId,
-                    ),
+                    eq(billingSubscriptions.billableEntityId, organizationId),
                     or(
-                        inArray(organizationSubscriptions.status, [
+                        inArray(billingSubscriptions.status, [
                             "pending",
                             "trialing",
                             "active",
                             "past_due",
                         ]),
                         and(
-                            eq(organizationSubscriptions.status, "cancelled"),
-                            eq(
-                                organizationSubscriptions.cancelAtPeriodEnd,
-                                true,
-                            ),
-                            gt(
-                                organizationSubscriptions.paidThroughAt,
-                                new Date(),
-                            ),
+                            eq(billingSubscriptions.status, "cancelled"),
+                            eq(billingSubscriptions.cancelAtPeriodEnd, true),
+                            gt(billingSubscriptions.paidThroughAt, new Date()),
                         ),
                     ),
                 ),
             )
-            .orderBy(asc(organizationSubscriptions.id))
+            .orderBy(asc(billingSubscriptions.id))
             .for("update");
         if (liveSubscriptions.length > 0) {
             throw new Error("active_subscription_exists");
@@ -463,7 +471,10 @@ export async function closeOrganization(
             .from(billingCheckoutAttempts)
             .where(
                 and(
-                    eq(billingCheckoutAttempts.organizationId, organizationId),
+                    eq(
+                        billingCheckoutAttempts.billableEntityId,
+                        organizationId,
+                    ),
                     inArray(billingCheckoutAttempts.status, [
                         "creating",
                         "open",
@@ -625,23 +636,23 @@ async function assertBillingManagerRetained(
     userId: string,
 ): Promise<void> {
     const [subscription] = await tx
-        .select({ id: organizationSubscriptions.id })
-        .from(organizationSubscriptions)
+        .select({ id: billingSubscriptions.id })
+        .from(billingSubscriptions)
         .where(
             and(
-                eq(organizationSubscriptions.organizationId, organizationId),
-                eq(organizationSubscriptions.billingManagerUserId, userId),
+                eq(billingSubscriptions.billableEntityId, organizationId),
+                eq(billingSubscriptions.payerId, userId),
                 or(
-                    inArray(organizationSubscriptions.status, [
+                    inArray(billingSubscriptions.status, [
                         "pending",
                         "trialing",
                         "active",
                         "past_due",
                     ]),
                     and(
-                        eq(organizationSubscriptions.status, "cancelled"),
-                        eq(organizationSubscriptions.cancelAtPeriodEnd, true),
-                        gt(organizationSubscriptions.paidThroughAt, new Date()),
+                        eq(billingSubscriptions.status, "cancelled"),
+                        eq(billingSubscriptions.cancelAtPeriodEnd, true),
+                        gt(billingSubscriptions.paidThroughAt, new Date()),
                     ),
                 ),
             ),

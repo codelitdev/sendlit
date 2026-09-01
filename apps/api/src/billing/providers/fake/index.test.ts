@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { BillingProviderError } from "../../provider";
 import {
     createContractFake,
     runBillingProviderContract,
@@ -19,7 +18,7 @@ describe("fake billing provider", () => {
             email: "payer@example.com",
             idempotencyKey: "customer:outage",
         });
-        adapter.nextFailure = new BillingProviderError("unavailable", "down");
+        adapter.controls.outage = true;
         await expect(
             adapter.createCheckout({
                 productId: "pdt_pro_month",
@@ -33,6 +32,7 @@ describe("fake billing provider", () => {
                 idempotencyKey: "checkout:outage",
             }),
         ).rejects.toMatchObject({ code: "unavailable" });
+        adapter.controls.outage = false;
         const checkout = await adapter.createCheckout({
             productId: "pdt_pro_month",
             currency: "USD",

@@ -1,4 +1,11 @@
 import { createHmac } from "node:crypto";
+import { BillingConfigurationError } from "@codelitdev/billing/core";
+import {
+    validateCatalog,
+    type BillingOffer as PackageBillingOffer,
+} from "@codelitdev/billing/catalog";
+
+export { BillingConfigurationError };
 
 export const billingCatalogKeys = [
     "pro_month",
@@ -34,11 +41,18 @@ export type BillingConfig = {
     offers: BillingOffer[];
 };
 
-export class BillingConfigurationError extends Error {
-    constructor(message: string) {
-        super(`billing_configuration_invalid:${message}`);
-        this.name = "BillingConfigurationError";
-    }
+export function toPackageOffer(offer: BillingOffer): PackageBillingOffer {
+    return {
+        key: offer.catalogKey,
+        revision: offer.catalogRevision,
+        plan: offer.plan,
+        interval: offer.interval,
+        currency: offer.currency,
+        amountMinor: offer.amountMinor,
+        provider: offer.provider,
+        providerProductId: offer.providerProductId,
+        providerTrialDays: offer.trialDays,
+    };
 }
 
 const offerEnv: Record<
@@ -214,6 +228,13 @@ export function readBillingConfig(
     if (productIds.size !== offers.length) {
         throw new BillingConfigurationError("provider_products_must_be_unique");
     }
+
+    validateCatalog({
+        offers: offers.map(toPackageOffer),
+        requiredOfferKeys: billingCatalogKeys,
+        revision,
+        checkoutProvider,
+    });
 
     return {
         deploymentMode: "cloud",

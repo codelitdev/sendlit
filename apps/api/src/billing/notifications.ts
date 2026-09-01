@@ -3,7 +3,7 @@ import { createTransport } from "nodemailer";
 import { db } from "../db/client";
 import {
     organizationMembers,
-    organizationSubscriptions,
+    billingSubscriptions,
     organizations,
     teams,
     user,
@@ -30,14 +30,13 @@ async function recipientsForOrganization(
 ): Promise<string[]> {
     const [subscription] = await db
         .select({
-            billingManagerUserId:
-                organizationSubscriptions.billingManagerUserId,
+            payerId: billingSubscriptions.payerId,
         })
-        .from(organizationSubscriptions)
+        .from(billingSubscriptions)
         .where(
             and(
-                eq(organizationSubscriptions.organizationId, organizationId),
-                eq(organizationSubscriptions.isEntitlementSource, true),
+                eq(billingSubscriptions.billableEntityId, organizationId),
+                eq(billingSubscriptions.isEntitlementSource, true),
             ),
         )
         .limit(1);
@@ -56,11 +55,11 @@ async function recipientsForOrganization(
             .map((row) => row.email)
             .filter((email): email is string => Boolean(email)),
     );
-    if (subscription?.billingManagerUserId) {
+    if (subscription?.payerId) {
         const [manager] = await db
             .select({ email: user.email })
             .from(user)
-            .where(eq(user.id, subscription.billingManagerUserId))
+            .where(eq(user.id, subscription.payerId))
             .limit(1);
         if (manager?.email) emails.add(manager.email);
     }

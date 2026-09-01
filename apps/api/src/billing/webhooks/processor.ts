@@ -8,14 +8,19 @@ import {
     billingTrialClaims,
     billingWebhookEvents,
     organizationAuditEvents,
-    organizationPlanStates,
-    organizationSubscriptions,
+    billingPlanStates,
+    billingSubscriptions,
     organizations,
     settings,
     teamDeliverySettings,
     teamMembers,
     teams,
 } from "../../db/schema";
+import {
+    decideSubscriptionTransition,
+    retainsPaidEntitlement as packageRetainsPaidEntitlement,
+    type CanonicalSubscriptionStatus,
+} from "@codelitdev/billing/core";
 import { providerErrorSummary, type CanonicalBillingEvent } from "../provider";
 import { decryptBillingValue } from "../crypto";
 import { getBillingProvider } from "../provider-registry";
@@ -25,34 +30,13 @@ import logger from "../../services/log";
 import { notifyPaymentPastDue } from "../notifications";
 import { pageBillingAlert } from "../alerts";
 
-const paidStatuses = new Set(["active", "trialing", "past_due"]);
-
-const allowedTransitions: Record<string, Set<string>> = {
-    pending: new Set(["pending", "trialing", "active", "cancelled", "expired"]),
-    trialing: new Set([
-        "trialing",
-        "active",
-        "past_due",
-        "cancelled",
-        "expired",
-    ]),
-    active: new Set(["active", "past_due", "cancelled", "expired"]),
-    past_due: new Set(["past_due", "active", "cancelled", "expired"]),
-    // A cancellation can be reversed before the paid-through deadline. Dodo
-    // reports that as active (or trialing/past_due), so recovery must be a
-    // valid transition rather than being quarantined as stale state.
-    cancelled: new Set([
-        "cancelled",
-        "trialing",
-        "active",
-        "past_due",
-        "expired",
-    ]),
-    expired: new Set(["expired"]),
-};
-
-function transitionAllowed(previous: string, next: string): boolean {
-    return allowedTransitions[previous]?.has(next) ?? false;
+function checkoutAttemptIdFromSnapshot(snapshot: {
+    metadata: Record<string, string | undefined>;
+}): string | undefined {
+    return (
+        snapshot.metadata.checkoutAttemptId ??
+        snapshot.metadata.sendlitCheckoutAttemptId
+    );
 }
 
 /** Apply a provider snapshot atomically. Events are merely wake-up signals;
@@ -84,12 +68,12 @@ export async function applyCanonicalBillingEvent(
 
         const [existing] = await tx
             .select()
-            .from(organizationSubscriptions)
+            .from(billingSubscriptions)
             .where(
                 and(
-                    eq(organizationSubscriptions.provider, event.provider),
+                    eq(billingSubscriptions.provider, event.provider),
                     eq(
-                        organizationSubscriptions.providerSubscriptionId,
+                        billingSubscriptions.providerSubscriptionId,
                         snapshot.providerSubscriptionId,
                     ),
                 ),
@@ -98,26 +82,21 @@ export async function applyCanonicalBillingEvent(
             .for("update");
         let attempt = null as
             typeof billingCheckoutAttempts.$inferSelect | null;
-        if (!existing && snapshot.metadata.sendlitCheckoutAttemptId) {
+        const checkoutAttemptId = checkoutAttemptIdFromSnapshot(snapshot);
+        if (!existing && checkoutAttemptId) {
             const [row] = await tx
                 .select()
                 .from(billingCheckoutAttempts)
-                .where(
-                    eq(
-                        billingCheckoutAttempts.attemptId,
-                        snapshot.metadata.sendlitCheckoutAttemptId,
-                    ),
-                )
+                .where(eq(billingCheckoutAttempts.attemptId, checkoutAttemptId))
                 .limit(1)
                 .for("update");
             attempt = row ?? null;
         }
         const organizationId =
-            existing?.organizationId ?? attempt?.organizationId;
+            existing?.billableEntityId ?? attempt?.billableEntityId;
         const billingCustomerId =
             existing?.billingCustomerId ?? attempt?.billingCustomerId;
-        const billingManagerUserId =
-            existing?.billingManagerUserId ?? attempt?.payerUserId;
+        const billingManagerUserId = existing?.payerId ?? attempt?.payerId;
         if (!organizationId || !billingCustomerId || !billingManagerUserId) {
             throw new Error("billing_subscription_unmatched");
         }
@@ -164,33 +143,37 @@ export async function applyCanonicalBillingEvent(
         }
         const [state] = await tx
             .select()
-            .from(organizationPlanStates)
-            .where(eq(organizationPlanStates.organizationId, organizationId))
+            .from(billingPlanStates)
+            .where(eq(billingPlanStates.billableEntityId, organizationId))
             .limit(1)
             .for("update");
         if (!state) throw new Error("organization_plan_state_missing");
         // Ordering follows the authoritative subscription snapshot. Dodo
         // webhook timestamps can be delayed, while retrieveSubscription gives
         // the current state and timestamp used for this projection.
-        const providerOccurredAt = snapshot.occurredAt;
+        const providerOccurredAt =
+            snapshot.providerOccurredAt ?? snapshot.observedAt;
         if (
-            existing?.lastProviderEventAt &&
-            existing.lastProviderEventAt > providerOccurredAt
+            existing?.providerOccurredAt &&
+            snapshot.providerOccurredAt &&
+            existing.providerOccurredAt > snapshot.providerOccurredAt
         )
             return;
-        if (existing && !transitionAllowed(existing.status, snapshot.status)) {
-            throw new Error("billing_invalid_subscription_transition");
+        if (existing) {
+            const decision = decideSubscriptionTransition(
+                existing.status as CanonicalSubscriptionStatus,
+                snapshot.status,
+            );
+            if (!decision.allowed) {
+                throw new Error("billing_invalid_subscription_transition");
+            }
         }
-        const catalogKey = price.catalogKey;
+        const catalogKey = price.offerKey;
         const now = new Date();
-        const retainsPaidEntitlement =
-            paidStatuses.has(snapshot.status) ||
-            (snapshot.status === "cancelled" &&
-                snapshot.cancelAtPeriodEnd &&
-                Boolean(
-                    snapshot.paidThroughAt &&
-                    snapshot.paidThroughAt.getTime() > now.getTime(),
-                ));
+        const retainsPaidEntitlement = packageRetainsPaidEntitlement(
+            snapshot,
+            now,
+        );
         const graceEndsAt =
             snapshot.status === "past_due"
                 ? existing?.status === "past_due" && existing.graceEndsAt
@@ -223,14 +206,16 @@ export async function applyCanonicalBillingEvent(
             (retainsPaidEntitlement ||
                 state.activeSubscriptionId === existing?.id);
         const values = {
-            organizationId,
+            billableEntityId: organizationId,
             billingCustomerId,
-            billingManagerUserId,
+            payerId: billingManagerUserId,
             provider: event.provider,
             providerSubscriptionId: snapshot.providerSubscriptionId,
             providerProductId: snapshot.providerProductId,
             billingPriceEntryId: price.id,
-            catalogKey,
+            catalogRevision:
+                existing?.catalogRevision ?? attempt?.catalogRevision ?? 0,
+            offerKey: catalogKey,
             plan: price.plan,
             billingInterval: price.billingInterval,
             status: snapshot.status,
@@ -242,20 +227,17 @@ export async function applyCanonicalBillingEvent(
             graceEndsAt,
             cancelAtPeriodEnd: snapshot.cancelAtPeriodEnd,
             isEntitlementSource: shouldProject && retainsPaidEntitlement,
-            lastProviderEventAt: providerOccurredAt,
+            providerOccurredAt: providerOccurredAt,
             lastReconciledAt: new Date(),
             updatedAt: new Date(),
         } as const;
         const [subscription] = existing
             ? await tx
-                  .update(organizationSubscriptions)
+                  .update(billingSubscriptions)
                   .set(values)
-                  .where(eq(organizationSubscriptions.id, existing.id))
+                  .where(eq(billingSubscriptions.id, existing.id))
                   .returning()
-            : await tx
-                  .insert(organizationSubscriptions)
-                  .values(values)
-                  .returning();
+            : await tx.insert(billingSubscriptions).values(values).returning();
         if (!subscription)
             throw new Error("billing_subscription_projection_failed");
         // Only one subscription can grant entitlements.  A newly active one
@@ -263,22 +245,22 @@ export async function applyCanonicalBillingEvent(
         // are rejected by the database partial unique index.
         if (shouldProject) {
             await tx
-                .update(organizationSubscriptions)
+                .update(billingSubscriptions)
                 .set({ isEntitlementSource: false, updatedAt: new Date() })
                 .where(
                     and(
                         eq(
-                            organizationSubscriptions.organizationId,
+                            billingSubscriptions.billableEntityId,
                             organizationId,
                         ),
-                        eq(organizationSubscriptions.isEntitlementSource, true),
+                        eq(billingSubscriptions.isEntitlementSource, true),
                     ),
                 );
             if (retainsPaidEntitlement) {
                 await tx
-                    .update(organizationSubscriptions)
+                    .update(billingSubscriptions)
                     .set({ isEntitlementSource: true, updatedAt: new Date() })
-                    .where(eq(organizationSubscriptions.id, subscription.id));
+                    .where(eq(billingSubscriptions.id, subscription.id));
             }
         }
         const active = shouldProject && retainsPaidEntitlement;
@@ -286,7 +268,7 @@ export async function applyCanonicalBillingEvent(
         const nextSubscriptionId = active ? subscription.id : null;
         if (shouldProject) {
             await tx
-                .update(organizationPlanStates)
+                .update(billingPlanStates)
                 .set({
                     plan: nextPlan,
                     activeSubscriptionId: nextSubscriptionId,
@@ -297,7 +279,7 @@ export async function applyCanonicalBillingEvent(
                     projectionVersion: state.projectionVersion + 1,
                     updatedAt: new Date(),
                 })
-                .where(eq(organizationPlanStates.id, state.id));
+                .where(eq(billingPlanStates.id, state.id));
             if (
                 state.plan !== nextPlan ||
                 state.activeSubscriptionId !== nextSubscriptionId
@@ -386,7 +368,7 @@ export async function applyCanonicalBillingEvent(
                     .values({ teamId: team.id });
                 await tx.insert(teamMembers).values({
                     teamId: team.id,
-                    userId: attempt.payerUserId,
+                    userId: attempt.payerId,
                     role: "admin",
                 });
             }
@@ -424,15 +406,15 @@ export async function expireCancelledSubscriptionEntitlements(
 ): Promise<number> {
     const due = await db
         .select({
-            id: organizationSubscriptions.id,
-            organizationId: organizationSubscriptions.organizationId,
+            id: billingSubscriptions.id,
+            organizationId: billingSubscriptions.billableEntityId,
         })
-        .from(organizationSubscriptions)
+        .from(billingSubscriptions)
         .where(
             and(
-                eq(organizationSubscriptions.status, "cancelled"),
-                eq(organizationSubscriptions.isEntitlementSource, true),
-                lte(organizationSubscriptions.paidThroughAt, now),
+                eq(billingSubscriptions.status, "cancelled"),
+                eq(billingSubscriptions.isEntitlementSource, true),
+                lte(billingSubscriptions.paidThroughAt, now),
             ),
         )
         .limit(500);
@@ -441,8 +423,8 @@ export async function expireCancelledSubscriptionEntitlements(
         const applied = await db.transaction(async (tx) => {
             const [subscription] = await tx
                 .select()
-                .from(organizationSubscriptions)
-                .where(eq(organizationSubscriptions.id, row.id))
+                .from(billingSubscriptions)
+                .where(eq(billingSubscriptions.id, row.id))
                 .limit(1)
                 .for("update");
             if (
@@ -461,30 +443,27 @@ export async function expireCancelledSubscriptionEntitlements(
                 .for("update");
             const [state] = await tx
                 .select()
-                .from(organizationPlanStates)
+                .from(billingPlanStates)
                 .where(
-                    eq(
-                        organizationPlanStates.organizationId,
-                        row.organizationId,
-                    ),
+                    eq(billingPlanStates.billableEntityId, row.organizationId),
                 )
                 .limit(1)
                 .for("update");
             if (!state || state.activeSubscriptionId !== subscription.id)
                 return false;
             await tx
-                .update(organizationSubscriptions)
+                .update(billingSubscriptions)
                 .set({ isEntitlementSource: false, updatedAt: now })
-                .where(eq(organizationSubscriptions.id, subscription.id));
+                .where(eq(billingSubscriptions.id, subscription.id));
             await tx
-                .update(organizationPlanStates)
+                .update(billingPlanStates)
                 .set({
                     plan: "free",
                     activeSubscriptionId: null,
                     projectionVersion: state.projectionVersion + 1,
                     updatedAt: now,
                 })
-                .where(eq(organizationPlanStates.id, state.id));
+                .where(eq(billingPlanStates.id, state.id));
             await tx.insert(organizationAuditEvents).values({
                 organizationId: row.organizationId,
                 actorType: "system",
@@ -565,54 +544,26 @@ export async function processBillingWebhookInboxEvent(
                         providerEventId: string;
                         eventType: string;
                         occurredAt: string;
-                        subscriptionId?: string;
-                        snapshot?: Record<string, unknown>;
+                        subscriptionId?: string | null;
+                        verifiedKeyVersion?: string | null;
+                        correlationMetadata?: {
+                            checkoutAttemptId?: string;
+                            catalogKey?: string;
+                        };
                     };
                 };
                 if (envelope.canonical) {
                     const canonical = envelope.canonical;
-                    const rawSnapshot = canonical.snapshot;
                     event = {
                         provider: canonical.provider,
                         providerEventId: canonical.providerEventId,
                         eventType: canonical.eventType,
                         occurredAt: new Date(canonical.occurredAt),
-                        subscriptionId: canonical.subscriptionId,
-                        rawPayload: null,
-                        snapshot: rawSnapshot
-                            ? ({
-                                  ...(rawSnapshot as any),
-                                  currentPeriodStartsAt:
-                                      rawSnapshot.currentPeriodStartsAt
-                                          ? new Date(
-                                                String(
-                                                    rawSnapshot.currentPeriodStartsAt,
-                                                ),
-                                            )
-                                          : null,
-                                  currentPeriodEndsAt:
-                                      rawSnapshot.currentPeriodEndsAt
-                                          ? new Date(
-                                                String(
-                                                    rawSnapshot.currentPeriodEndsAt,
-                                                ),
-                                            )
-                                          : null,
-                                  paidThroughAt: rawSnapshot.paidThroughAt
-                                      ? new Date(
-                                            String(rawSnapshot.paidThroughAt),
-                                        )
-                                      : null,
-                                  trialEndsAt: rawSnapshot.trialEndsAt
-                                      ? new Date(
-                                            String(rawSnapshot.trialEndsAt),
-                                        )
-                                      : null,
-                                  occurredAt: rawSnapshot.occurredAt
-                                      ? new Date(String(rawSnapshot.occurredAt))
-                                      : new Date(canonical.occurredAt),
-                              } as CanonicalBillingEvent["snapshot"])
-                            : undefined,
+                        subscriptionId: canonical.subscriptionId ?? null,
+                        verifiedKeyVersion:
+                            canonical.verifiedKeyVersion ?? null,
+                        correlationMetadata:
+                            canonical.correlationMetadata ?? {},
                     };
                 }
                 if (typeof envelope.body === "string") {

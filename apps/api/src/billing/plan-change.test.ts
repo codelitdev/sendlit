@@ -23,10 +23,12 @@ vi.mock("./provider-registry", () => ({
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import {
+    billingCatalogRevisionItems,
+    billingCatalogRevisions,
     billingPriceEntries,
     billingProviderCustomers,
-    organizationPlanStates,
-    organizationSubscriptions,
+    billingPlanStates,
+    billingSubscriptions,
 } from "../db/schema";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
 import { createOrganizationPlanChange } from "./plan-change";
@@ -54,6 +56,7 @@ beforeEach(async () => {
     catalogMocks.requireActiveCatalog.mockReset();
     catalogMocks.verifyCheckoutOffer.mockReset();
     catalogMocks.getBillingProvider.mockReset();
+    process.env.WEB_CLIENT = "http://localhost:3000";
     catalogMocks.getBillingProvider.mockReturnValue({
         provider: "dodo",
         capabilities: {
@@ -62,12 +65,20 @@ beforeEach(async () => {
             portalPlanChanges: false,
             portalIntervalChanges: false,
             proratedPlanChanges: true,
+            mutationRecovery: {
+                createCustomer: "idempotency_key",
+                createCheckout: "idempotency_key",
+                planChange: "idempotency_key",
+                cancellation: "idempotency_key",
+            },
         },
         changeSubscriptionPlan: vi.fn().mockResolvedValue({
             provider: "dodo",
             providerPaymentId: null,
             paymentUrl: null,
         }),
+        retrieveProduct: vi.fn(),
+        createPortalSession: vi.fn(),
     });
     await truncateAll(tdb);
 });
@@ -77,7 +88,7 @@ async function seedActiveSubscription() {
     const [currentPrice] = await tdb
         .insert(billingPriceEntries)
         .values({
-            catalogKey: "pro_month",
+            offerKey: "pro_month",
             plan: "pro",
             billingInterval: "month",
             currency: "USD",
@@ -89,7 +100,7 @@ async function seedActiveSubscription() {
     const [targetPrice] = await tdb
         .insert(billingPriceEntries)
         .values({
-            catalogKey: "business_month",
+            offerKey: "business_month",
             plan: "business",
             billingInterval: "month",
             currency: "USD",
@@ -98,27 +109,82 @@ async function seedActiveSubscription() {
             providerProductId: "pdt_business_month",
         })
         .returning();
+    const extras = await tdb
+        .insert(billingPriceEntries)
+        .values([
+            {
+                offerKey: "pro_year",
+                plan: "pro",
+                billingInterval: "year",
+                currency: "USD",
+                amountMinor: 49000,
+                provider: "dodo",
+                providerProductId: "pdt_pro_year",
+            },
+            {
+                offerKey: "business_year",
+                plan: "business",
+                billingInterval: "year",
+                currency: "USD",
+                amountMinor: 199000,
+                provider: "dodo",
+                providerProductId: "pdt_business_year",
+            },
+        ])
+        .returning();
+    const [revision] = await tdb
+        .insert(billingCatalogRevisions)
+        .values({
+            revision: 1,
+            checkoutProvider: "dodo",
+            status: "active",
+            activatedAt: new Date(),
+        })
+        .returning();
+    await tdb.insert(billingCatalogRevisionItems).values([
+        {
+            catalogRevisionId: revision!.id,
+            offerKey: "pro_month",
+            billingPriceEntryId: currentPrice.id,
+        },
+        {
+            catalogRevisionId: revision!.id,
+            offerKey: "business_month",
+            billingPriceEntryId: targetPrice.id,
+        },
+        {
+            catalogRevisionId: revision!.id,
+            offerKey: "pro_year",
+            billingPriceEntryId: extras[0]!.id,
+        },
+        {
+            catalogRevisionId: revision!.id,
+            offerKey: "business_year",
+            billingPriceEntryId: extras[1]!.id,
+        },
+    ]);
     const [customer] = await tdb
         .insert(billingProviderCustomers)
         .values({
             provider: "dodo",
-            userId: account.id,
+            payerId: account.id,
             providerCustomerId: `cus_${crypto.randomUUID()}`,
             idempotencyKey: `customer:dodo:${account.id}`,
             status: "active",
         })
         .returning();
     const [subscription] = await tdb
-        .insert(organizationSubscriptions)
+        .insert(billingSubscriptions)
         .values({
-            organizationId: organization.id,
+            billableEntityId: organization.id,
             billingCustomerId: customer.id,
-            billingManagerUserId: account.id,
+            payerId: account.id,
             provider: "dodo",
             providerSubscriptionId: `sub_${crypto.randomUUID()}`,
             providerProductId: currentPrice.providerProductId,
             billingPriceEntryId: currentPrice.id,
-            catalogKey: "pro_month",
+            catalogRevision: 1,
+            offerKey: "pro_month",
             plan: "pro",
             billingInterval: "month",
             status: "active",
@@ -126,17 +192,17 @@ async function seedActiveSubscription() {
         })
         .returning();
     await tdb
-        .update(organizationPlanStates)
+        .update(billingPlanStates)
         .set({
             plan: "pro",
             activeSubscriptionId: subscription.id,
         })
-        .where(eq(organizationPlanStates.organizationId, organization.id));
+        .where(eq(billingPlanStates.billableEntityId, organization.id));
     catalogMocks.requireActiveCatalog.mockResolvedValue({
         revision: { revision: 1, status: "active" },
         items: [
-            { catalogKey: "pro_month", price: currentPrice },
-            { catalogKey: "business_month", price: targetPrice },
+            { offerKey: "pro_month", price: currentPrice },
+            { offerKey: "business_month", price: targetPrice },
         ],
     });
     catalogMocks.verifyCheckoutOffer.mockResolvedValue(undefined);
@@ -147,14 +213,14 @@ describe("plan-change pointer revalidation", () => {
     it("rejects a plan change when the active subscription pointer has been cleared", async () => {
         const { account, organization } = await seedActiveSubscription();
         await tdb
-            .update(organizationPlanStates)
+            .update(billingPlanStates)
             .set({ plan: "free", activeSubscriptionId: null })
-            .where(eq(organizationPlanStates.organizationId, organization.id));
+            .where(eq(billingPlanStates.billableEntityId, organization.id));
 
         await expect(
             createOrganizationPlanChange({
                 organizationId: organization.id,
-                actorUserId: account.id,
+                actorId: account.id,
                 plan: "business",
                 interval: "month",
                 catalogRevision: 1,
@@ -169,14 +235,14 @@ describe("plan-change pointer revalidation", () => {
         const { account, organization, subscription } =
             await seedActiveSubscription();
         await tdb
-            .update(organizationSubscriptions)
+            .update(billingSubscriptions)
             .set({ status: "cancelled", cancelAtPeriodEnd: true })
-            .where(eq(organizationSubscriptions.id, subscription.id));
+            .where(eq(billingSubscriptions.id, subscription.id));
 
         await expect(
             createOrganizationPlanChange({
                 organizationId: organization.id,
-                actorUserId: account.id,
+                actorId: account.id,
                 plan: "business",
                 interval: "month",
                 catalogRevision: 1,

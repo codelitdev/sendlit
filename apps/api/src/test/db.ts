@@ -63,10 +63,11 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
     await db.delete(schema.teams);
     await db.delete(schema.sendingDomains);
     await db.delete(schema.billingTrialClaims);
+    await db.delete(schema.billingReconciliationJobs);
     await db.delete(schema.billingPlanChangeAttempts);
     await db.delete(schema.billingCheckoutAttempts);
-    await db.delete(schema.organizationPlanStates);
-    await db.delete(schema.organizationSubscriptions);
+    await db.delete(schema.billingPlanStates);
+    await db.delete(schema.billingSubscriptions);
     await db.delete(schema.billingWebhookEvents);
     await db.delete(schema.billingCatalogRevisionItems);
     await db.delete(schema.billingCatalogRevisions);
@@ -122,9 +123,11 @@ export async function seedTeamAndContact(
     await db.insert(schema.organizationDeliveryPolicies).values({
         organizationId: organization.id,
     });
-    await db.insert(schema.organizationPlanStates).values({
-        organizationId: organization.id,
+    await db.insert(schema.billingPlanStates).values({
+        billableEntityId: organization.id,
         plan: "free",
+        rampStage: 0,
+        rampCleanStageDays: 0,
     });
 
     const [team] = await db

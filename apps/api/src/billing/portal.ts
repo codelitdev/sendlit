@@ -1,18 +1,15 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import {
-    billingProviderCustomers,
-    organizationPlanStates,
-    organizationSubscriptions,
-    organizations,
-} from "../db/schema";
+import { organizations, user } from "../db/schema";
 import { readBillingConfig } from "./catalog";
-import { getBillingProvider } from "./provider-registry";
 import { BillingCheckoutError } from "./checkout";
+import { getBillingEngine, preconsumedGrant } from "./engine";
+import type { BillingActionGrant } from "@codelitdev/billing/workflows";
 
 export async function createOrganizationPortal(input: {
     organizationId: string;
     userId: string;
+    grant?: BillingActionGrant;
 }) {
     let config: ReturnType<typeof readBillingConfig>;
     try {
@@ -29,53 +26,46 @@ export async function createOrganizationPortal(input: {
         .limit(1);
     if (!organization)
         throw new BillingCheckoutError("billing_provider_unavailable", 503);
-    const [state] = await db
-        .select()
-        .from(organizationPlanStates)
-        .where(eq(organizationPlanStates.organizationId, input.organizationId))
+    const [payer] = await db
+        .select({ id: user.id, email: user.email, name: user.name })
+        .from(user)
+        .where(eq(user.id, input.userId))
         .limit(1);
-    if (!state?.activeSubscriptionId)
-        throw new BillingCheckoutError("payment_required", 402);
-    const [subscription] = await db
-        .select({
-            customerId: organizationSubscriptions.billingCustomerId,
-            manager: organizationSubscriptions.billingManagerUserId,
-            provider: organizationSubscriptions.provider,
-        })
-        .from(organizationSubscriptions)
-        .where(
-            and(
-                eq(organizationSubscriptions.id, state.activeSubscriptionId),
-                eq(
-                    organizationSubscriptions.organizationId,
-                    input.organizationId,
-                ),
-            ),
-        )
-        .limit(1);
-    if (!subscription || subscription.manager !== input.userId)
-        throw new BillingCheckoutError("billing_owner_required", 403);
-    const [customer] = await db
-        .select({
-            providerCustomerId: billingProviderCustomers.providerCustomerId,
-        })
-        .from(billingProviderCustomers)
-        .where(eq(billingProviderCustomers.id, subscription.customerId))
-        .limit(1);
-    if (!customer?.providerCustomerId)
+    if (!payer) throw new BillingCheckoutError("billing_owner_required", 403);
+    const webClient = process.env.WEB_CLIENT;
+    if (!webClient)
         throw new BillingCheckoutError("billing_provider_unavailable", 503);
+    const billing = getBillingEngine();
+    const sub = await billing.store.findEntitlementSubscription(
+        input.organizationId,
+    );
+    if (!sub) throw new BillingCheckoutError("payment_required", 402);
     try {
-        const provider = getBillingProvider(subscription.provider);
-        const webClient = process.env.WEB_CLIENT;
-        if (!webClient)
-            throw new BillingCheckoutError("billing_provider_unavailable", 503);
-        const portal = await provider.createPortalSession({
-            customerId: customer.providerCustomerId,
+        const session = await billing.startPortal({
+            grant:
+                input.grant ??
+                preconsumedGrant("portal", input.organizationId, input.userId),
+            entity: { kind: "organization", id: input.organizationId },
+            payer: {
+                id: payer.id,
+                email: payer.email,
+                name: payer.name || payer.email,
+            },
             returnUrl: `${new URL(webClient).origin}/organizations?tab=plan&organization=${encodeURIComponent(organization.publicId)}`,
         });
-        return { portalUrl: portal.portalUrl };
+        return { portalUrl: session.portalUrl };
     } catch (error) {
         if (error instanceof BillingCheckoutError) throw error;
+        const code =
+            error && typeof error === "object" && "code" in error
+                ? String((error as { code: string }).code)
+                : "";
+        if (code === "payer_mismatch" || code === "grant_invalid") {
+            throw new BillingCheckoutError("billing_owner_required", 403);
+        }
+        if (code === "subscription_required") {
+            throw new BillingCheckoutError("payment_required", 402);
+        }
         throw new BillingCheckoutError("billing_provider_unavailable", 503);
     }
 }

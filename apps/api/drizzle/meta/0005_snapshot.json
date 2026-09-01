@@ -1,5 +1,5 @@
 {
-    "id": "a594d9b3-210f-4f32-8659-fc030231be4f",
+    "id": "a438fbda-6466-4ce2-9b07-01d733f4c192",
     "prevId": "8853889e-feb0-41bf-a7ab-bc9b4d0c5fcc",
     "version": "7",
     "dialect": "postgresql",
@@ -146,1357 +146,6 @@
             "uniqueConstraints": {},
             "policies": {},
             "checkConstraints": {},
-            "isRLSEnabled": false
-        },
-        "public.billing_catalog_revision_items": {
-            "name": "billing_catalog_revision_items",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "catalog_revision_id": {
-                    "name": "catalog_revision_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "catalog_key": {
-                    "name": "catalog_key",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "billing_price_entry_id": {
-                    "name": "billing_price_entry_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                }
-            },
-            "indexes": {
-                "billing_catalog_revision_items_revision_key_uidx": {
-                    "name": "billing_catalog_revision_items_revision_key_uidx",
-                    "columns": [
-                        {
-                            "expression": "catalog_revision_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "catalog_key",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "billing_catalog_revision_items_revision_price_uidx": {
-                    "name": "billing_catalog_revision_items_revision_price_uidx",
-                    "columns": [
-                        {
-                            "expression": "catalog_revision_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "billing_price_entry_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                }
-            },
-            "foreignKeys": {
-                "billing_catalog_revision_items_catalog_revision_id_billing_catalog_revisions_id_fk": {
-                    "name": "billing_catalog_revision_items_catalog_revision_id_billing_catalog_revisions_id_fk",
-                    "tableFrom": "billing_catalog_revision_items",
-                    "tableTo": "billing_catalog_revisions",
-                    "columnsFrom": ["catalog_revision_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "cascade",
-                    "onUpdate": "no action"
-                },
-                "billing_catalog_revision_items_billing_price_entry_id_billing_price_entries_id_fk": {
-                    "name": "billing_catalog_revision_items_billing_price_entry_id_billing_price_entries_id_fk",
-                    "tableFrom": "billing_catalog_revision_items",
-                    "tableTo": "billing_price_entries",
-                    "columnsFrom": ["billing_price_entry_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                }
-            },
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "policies": {},
-            "checkConstraints": {},
-            "isRLSEnabled": false
-        },
-        "public.billing_catalog_revisions": {
-            "name": "billing_catalog_revisions",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "revision": {
-                    "name": "revision",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "checkout_provider": {
-                    "name": "checkout_provider",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "status": {
-                    "name": "status",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "'pending_verification'"
-                },
-                "verified_at": {
-                    "name": "verified_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "activated_at": {
-                    "name": "activated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "retired_at": {
-                    "name": "retired_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "created_at": {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "updated_at": {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                }
-            },
-            "indexes": {
-                "billing_catalog_revisions_active_provider_uidx": {
-                    "name": "billing_catalog_revisions_active_provider_uidx",
-                    "columns": [
-                        {
-                            "expression": "checkout_provider",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "where": "\"billing_catalog_revisions\".\"status\" = 'active'",
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                }
-            },
-            "foreignKeys": {},
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {
-                "billing_catalog_revisions_revision_unique": {
-                    "name": "billing_catalog_revisions_revision_unique",
-                    "nullsNotDistinct": false,
-                    "columns": ["revision"]
-                }
-            },
-            "policies": {},
-            "checkConstraints": {
-                "billing_catalog_revisions_status_check": {
-                    "name": "billing_catalog_revisions_status_check",
-                    "value": "\"billing_catalog_revisions\".\"status\" IN ('pending_verification', 'active', 'retired', 'invalid', 'abandoned')"
-                },
-                "billing_catalog_revisions_revision_check": {
-                    "name": "billing_catalog_revisions_revision_check",
-                    "value": "\"billing_catalog_revisions\".\"revision\" > 0"
-                }
-            },
-            "isRLSEnabled": false
-        },
-        "public.billing_checkout_attempts": {
-            "name": "billing_checkout_attempts",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "attempt_id": {
-                    "name": "attempt_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "organization_id": {
-                    "name": "organization_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "payer_user_id": {
-                    "name": "payer_user_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider": {
-                    "name": "provider",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "catalog_revision": {
-                    "name": "catalog_revision",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "catalog_key": {
-                    "name": "catalog_key",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "requested_plan": {
-                    "name": "requested_plan",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "requested_interval": {
-                    "name": "requested_interval",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "pending_team_name": {
-                    "name": "pending_team_name",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "billing_price_entry_id": {
-                    "name": "billing_price_entry_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "quoted_amount_minor": {
-                    "name": "quoted_amount_minor",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "quoted_currency": {
-                    "name": "quoted_currency",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "billing_customer_id": {
-                    "name": "billing_customer_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "provider_checkout_session_id": {
-                    "name": "provider_checkout_session_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "checkout_url_encrypted": {
-                    "name": "checkout_url_encrypted",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "idempotency_key": {
-                    "name": "idempotency_key",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "status": {
-                    "name": "status",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "'creating'"
-                },
-                "expires_at": {
-                    "name": "expires_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "last_error": {
-                    "name": "last_error",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "completed_at": {
-                    "name": "completed_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "created_at": {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "updated_at": {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                }
-            },
-            "indexes": {
-                "billing_checkout_attempts_provider_session_uidx": {
-                    "name": "billing_checkout_attempts_provider_session_uidx",
-                    "columns": [
-                        {
-                            "expression": "provider",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "provider_checkout_session_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "where": "\"billing_checkout_attempts\".\"provider_checkout_session_id\" IS NOT NULL",
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "billing_checkout_attempts_idempotency_uidx": {
-                    "name": "billing_checkout_attempts_idempotency_uidx",
-                    "columns": [
-                        {
-                            "expression": "idempotency_key",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "billing_checkout_attempts_organization_nonterminal_uidx": {
-                    "name": "billing_checkout_attempts_organization_nonterminal_uidx",
-                    "columns": [
-                        {
-                            "expression": "organization_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "where": "\"billing_checkout_attempts\".\"status\" IN ('creating', 'open')",
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                }
-            },
-            "foreignKeys": {
-                "billing_checkout_attempts_organization_id_organizations_id_fk": {
-                    "name": "billing_checkout_attempts_organization_id_organizations_id_fk",
-                    "tableFrom": "billing_checkout_attempts",
-                    "tableTo": "organizations",
-                    "columnsFrom": ["organization_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "billing_checkout_attempts_payer_user_id_user_id_fk": {
-                    "name": "billing_checkout_attempts_payer_user_id_user_id_fk",
-                    "tableFrom": "billing_checkout_attempts",
-                    "tableTo": "user",
-                    "columnsFrom": ["payer_user_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "billing_checkout_attempts_billing_price_entry_id_billing_price_entries_id_fk": {
-                    "name": "billing_checkout_attempts_billing_price_entry_id_billing_price_entries_id_fk",
-                    "tableFrom": "billing_checkout_attempts",
-                    "tableTo": "billing_price_entries",
-                    "columnsFrom": ["billing_price_entry_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "billing_checkout_attempts_billing_customer_id_billing_provider_customers_id_fk": {
-                    "name": "billing_checkout_attempts_billing_customer_id_billing_provider_customers_id_fk",
-                    "tableFrom": "billing_checkout_attempts",
-                    "tableTo": "billing_provider_customers",
-                    "columnsFrom": ["billing_customer_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                }
-            },
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {
-                "billing_checkout_attempts_attempt_id_unique": {
-                    "name": "billing_checkout_attempts_attempt_id_unique",
-                    "nullsNotDistinct": false,
-                    "columns": ["attempt_id"]
-                }
-            },
-            "policies": {},
-            "checkConstraints": {
-                "billing_checkout_attempts_status_check": {
-                    "name": "billing_checkout_attempts_status_check",
-                    "value": "\"billing_checkout_attempts\".\"status\" IN ('creating', 'open', 'completed', 'expired', 'abandoned', 'conflicted')"
-                },
-                "billing_checkout_attempts_amount_check": {
-                    "name": "billing_checkout_attempts_amount_check",
-                    "value": "\"billing_checkout_attempts\".\"quoted_amount_minor\" > 0"
-                }
-            },
-            "isRLSEnabled": false
-        },
-        "public.billing_plan_change_attempts": {
-            "name": "billing_plan_change_attempts",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "change_id": {
-                    "name": "change_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "organization_id": {
-                    "name": "organization_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "subscription_id": {
-                    "name": "subscription_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "actor_user_id": {
-                    "name": "actor_user_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider": {
-                    "name": "provider",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "idempotency_key": {
-                    "name": "idempotency_key",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "current_catalog_revision": {
-                    "name": "current_catalog_revision",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "current_billing_price_entry_id": {
-                    "name": "current_billing_price_entry_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "current_plan": {
-                    "name": "current_plan",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "current_interval": {
-                    "name": "current_interval",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "target_catalog_revision": {
-                    "name": "target_catalog_revision",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "target_billing_price_entry_id": {
-                    "name": "target_billing_price_entry_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "target_plan": {
-                    "name": "target_plan",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "target_interval": {
-                    "name": "target_interval",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "effective_at": {
-                    "name": "effective_at",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "proration_mode": {
-                    "name": "proration_mode",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider_payment_id": {
-                    "name": "provider_payment_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "payment_url_encrypted": {
-                    "name": "payment_url_encrypted",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "status": {
-                    "name": "status",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "'creating'"
-                },
-                "last_error": {
-                    "name": "last_error",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "requested_at": {
-                    "name": "requested_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "completed_at": {
-                    "name": "completed_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "created_at": {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "updated_at": {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                }
-            },
-            "indexes": {
-                "billing_plan_change_attempts_idempotency_uidx": {
-                    "name": "billing_plan_change_attempts_idempotency_uidx",
-                    "columns": [
-                        {
-                            "expression": "idempotency_key",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "billing_plan_change_attempts_organization_nonterminal_uidx": {
-                    "name": "billing_plan_change_attempts_organization_nonterminal_uidx",
-                    "columns": [
-                        {
-                            "expression": "organization_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "where": "\"billing_plan_change_attempts\".\"status\" IN ('creating', 'pending')",
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                }
-            },
-            "foreignKeys": {
-                "billing_plan_change_attempts_organization_id_organizations_id_fk": {
-                    "name": "billing_plan_change_attempts_organization_id_organizations_id_fk",
-                    "tableFrom": "billing_plan_change_attempts",
-                    "tableTo": "organizations",
-                    "columnsFrom": ["organization_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "billing_plan_change_attempts_subscription_id_organization_subscriptions_id_fk": {
-                    "name": "billing_plan_change_attempts_subscription_id_organization_subscriptions_id_fk",
-                    "tableFrom": "billing_plan_change_attempts",
-                    "tableTo": "organization_subscriptions",
-                    "columnsFrom": ["subscription_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "billing_plan_change_attempts_actor_user_id_user_id_fk": {
-                    "name": "billing_plan_change_attempts_actor_user_id_user_id_fk",
-                    "tableFrom": "billing_plan_change_attempts",
-                    "tableTo": "user",
-                    "columnsFrom": ["actor_user_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "billing_plan_change_attempts_current_billing_price_entry_id_billing_price_entries_id_fk": {
-                    "name": "billing_plan_change_attempts_current_billing_price_entry_id_billing_price_entries_id_fk",
-                    "tableFrom": "billing_plan_change_attempts",
-                    "tableTo": "billing_price_entries",
-                    "columnsFrom": ["current_billing_price_entry_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "billing_plan_change_attempts_target_billing_price_entry_id_billing_price_entries_id_fk": {
-                    "name": "billing_plan_change_attempts_target_billing_price_entry_id_billing_price_entries_id_fk",
-                    "tableFrom": "billing_plan_change_attempts",
-                    "tableTo": "billing_price_entries",
-                    "columnsFrom": ["target_billing_price_entry_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                }
-            },
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {
-                "billing_plan_change_attempts_change_id_unique": {
-                    "name": "billing_plan_change_attempts_change_id_unique",
-                    "nullsNotDistinct": false,
-                    "columns": ["change_id"]
-                }
-            },
-            "policies": {},
-            "checkConstraints": {
-                "billing_plan_change_attempts_status_check": {
-                    "name": "billing_plan_change_attempts_status_check",
-                    "value": "\"billing_plan_change_attempts\".\"status\" IN ('creating', 'pending', 'succeeded', 'failed', 'conflicted')"
-                },
-                "billing_plan_change_attempts_effective_at_check": {
-                    "name": "billing_plan_change_attempts_effective_at_check",
-                    "value": "\"billing_plan_change_attempts\".\"effective_at\" IN ('immediately', 'next_billing_date')"
-                },
-                "billing_plan_change_attempts_proration_mode_check": {
-                    "name": "billing_plan_change_attempts_proration_mode_check",
-                    "value": "\"billing_plan_change_attempts\".\"proration_mode\" IN ('prorated_immediately', 'do_not_bill')"
-                },
-                "billing_plan_change_attempts_current_plan_check": {
-                    "name": "billing_plan_change_attempts_current_plan_check",
-                    "value": "\"billing_plan_change_attempts\".\"current_plan\" IN ('pro', 'business')"
-                },
-                "billing_plan_change_attempts_target_plan_check": {
-                    "name": "billing_plan_change_attempts_target_plan_check",
-                    "value": "\"billing_plan_change_attempts\".\"target_plan\" IN ('pro', 'business')"
-                },
-                "billing_plan_change_attempts_current_interval_check": {
-                    "name": "billing_plan_change_attempts_current_interval_check",
-                    "value": "\"billing_plan_change_attempts\".\"current_interval\" IN ('month', 'year')"
-                },
-                "billing_plan_change_attempts_target_interval_check": {
-                    "name": "billing_plan_change_attempts_target_interval_check",
-                    "value": "\"billing_plan_change_attempts\".\"target_interval\" IN ('month', 'year')"
-                },
-                "billing_plan_change_attempts_revision_check": {
-                    "name": "billing_plan_change_attempts_revision_check",
-                    "value": "\"billing_plan_change_attempts\".\"current_catalog_revision\" > 0 AND \"billing_plan_change_attempts\".\"target_catalog_revision\" > 0"
-                }
-            },
-            "isRLSEnabled": false
-        },
-        "public.billing_price_entries": {
-            "name": "billing_price_entries",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "catalog_key": {
-                    "name": "catalog_key",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "plan": {
-                    "name": "plan",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "billing_interval": {
-                    "name": "billing_interval",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "currency": {
-                    "name": "currency",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "amount_minor": {
-                    "name": "amount_minor",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider": {
-                    "name": "provider",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider_product_id": {
-                    "name": "provider_product_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "verified_at": {
-                    "name": "verified_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "created_at": {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "updated_at": {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                }
-            },
-            "indexes": {
-                "billing_price_entries_provider_product_uidx": {
-                    "name": "billing_price_entries_provider_product_uidx",
-                    "columns": [
-                        {
-                            "expression": "provider",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "provider_product_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "billing_price_entries_catalog_key_idx": {
-                    "name": "billing_price_entries_catalog_key_idx",
-                    "columns": [
-                        {
-                            "expression": "catalog_key",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": false,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                }
-            },
-            "foreignKeys": {},
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "policies": {},
-            "checkConstraints": {
-                "billing_price_entries_amount_check": {
-                    "name": "billing_price_entries_amount_check",
-                    "value": "\"billing_price_entries\".\"amount_minor\" > 0"
-                },
-                "billing_price_entries_currency_check": {
-                    "name": "billing_price_entries_currency_check",
-                    "value": "\"billing_price_entries\".\"currency\" ~ '^[A-Z]{3}$'"
-                },
-                "billing_price_entries_plan_check": {
-                    "name": "billing_price_entries_plan_check",
-                    "value": "\"billing_price_entries\".\"plan\" IN ('pro', 'business')"
-                },
-                "billing_price_entries_interval_check": {
-                    "name": "billing_price_entries_interval_check",
-                    "value": "\"billing_price_entries\".\"billing_interval\" IN ('month', 'year')"
-                }
-            },
-            "isRLSEnabled": false
-        },
-        "public.billing_provider_customers": {
-            "name": "billing_provider_customers",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "provider": {
-                    "name": "provider",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "user_id": {
-                    "name": "user_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider_customer_id": {
-                    "name": "provider_customer_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "idempotency_key": {
-                    "name": "idempotency_key",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "status": {
-                    "name": "status",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "'creating'"
-                },
-                "last_error": {
-                    "name": "last_error",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "created_at": {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "updated_at": {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                }
-            },
-            "indexes": {
-                "billing_provider_customers_provider_user_uidx": {
-                    "name": "billing_provider_customers_provider_user_uidx",
-                    "columns": [
-                        {
-                            "expression": "provider",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "user_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "billing_provider_customers_provider_customer_uidx": {
-                    "name": "billing_provider_customers_provider_customer_uidx",
-                    "columns": [
-                        {
-                            "expression": "provider",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "provider_customer_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "where": "\"billing_provider_customers\".\"provider_customer_id\" IS NOT NULL",
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "billing_provider_customers_idempotency_uidx": {
-                    "name": "billing_provider_customers_idempotency_uidx",
-                    "columns": [
-                        {
-                            "expression": "idempotency_key",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                }
-            },
-            "foreignKeys": {
-                "billing_provider_customers_user_id_user_id_fk": {
-                    "name": "billing_provider_customers_user_id_user_id_fk",
-                    "tableFrom": "billing_provider_customers",
-                    "tableTo": "user",
-                    "columnsFrom": ["user_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                }
-            },
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "policies": {},
-            "checkConstraints": {
-                "billing_provider_customers_status_check": {
-                    "name": "billing_provider_customers_status_check",
-                    "value": "\"billing_provider_customers\".\"status\" IN ('creating', 'active', 'conflicted')"
-                }
-            },
-            "isRLSEnabled": false
-        },
-        "public.billing_trial_claims": {
-            "name": "billing_trial_claims",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "user_id": {
-                    "name": "user_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "verified_email_fingerprint": {
-                    "name": "verified_email_fingerprint",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "fingerprint_key_version": {
-                    "name": "fingerprint_key_version",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "trial_key": {
-                    "name": "trial_key",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "organization_id": {
-                    "name": "organization_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "checkout_attempt_id": {
-                    "name": "checkout_attempt_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "status": {
-                    "name": "status",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "'reserved'"
-                },
-                "expires_at": {
-                    "name": "expires_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "redeemed_at": {
-                    "name": "redeemed_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "created_at": {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "updated_at": {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                }
-            },
-            "indexes": {
-                "billing_trial_claims_user_trial_uidx": {
-                    "name": "billing_trial_claims_user_trial_uidx",
-                    "columns": [
-                        {
-                            "expression": "user_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "trial_key",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "where": "\"billing_trial_claims\".\"status\" <> 'released'",
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "billing_trial_claims_email_trial_uidx": {
-                    "name": "billing_trial_claims_email_trial_uidx",
-                    "columns": [
-                        {
-                            "expression": "verified_email_fingerprint",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "trial_key",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "where": "\"billing_trial_claims\".\"status\" <> 'released'",
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                }
-            },
-            "foreignKeys": {
-                "billing_trial_claims_user_id_user_id_fk": {
-                    "name": "billing_trial_claims_user_id_user_id_fk",
-                    "tableFrom": "billing_trial_claims",
-                    "tableTo": "user",
-                    "columnsFrom": ["user_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "billing_trial_claims_organization_id_organizations_id_fk": {
-                    "name": "billing_trial_claims_organization_id_organizations_id_fk",
-                    "tableFrom": "billing_trial_claims",
-                    "tableTo": "organizations",
-                    "columnsFrom": ["organization_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "billing_trial_claims_checkout_attempt_id_billing_checkout_attempts_id_fk": {
-                    "name": "billing_trial_claims_checkout_attempt_id_billing_checkout_attempts_id_fk",
-                    "tableFrom": "billing_trial_claims",
-                    "tableTo": "billing_checkout_attempts",
-                    "columnsFrom": ["checkout_attempt_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                }
-            },
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "policies": {},
-            "checkConstraints": {
-                "billing_trial_claims_status_check": {
-                    "name": "billing_trial_claims_status_check",
-                    "value": "\"billing_trial_claims\".\"status\" IN ('reserved', 'redeemed', 'released')"
-                }
-            },
-            "isRLSEnabled": false
-        },
-        "public.billing_webhook_events": {
-            "name": "billing_webhook_events",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "provider": {
-                    "name": "provider",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider_event_id": {
-                    "name": "provider_event_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "event_type": {
-                    "name": "event_type",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "occurred_at": {
-                    "name": "occurred_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "payload_encrypted": {
-                    "name": "payload_encrypted",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "payload_key_version": {
-                    "name": "payload_key_version",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "status": {
-                    "name": "status",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "'pending'"
-                },
-                "processing_attempts": {
-                    "name": "processing_attempts",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": 0
-                },
-                "last_error": {
-                    "name": "last_error",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "available_at": {
-                    "name": "available_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "locked_at": {
-                    "name": "locked_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "lease_expires_at": {
-                    "name": "lease_expires_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "worker_id": {
-                    "name": "worker_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "received_at": {
-                    "name": "received_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "processed_at": {
-                    "name": "processed_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                }
-            },
-            "indexes": {
-                "billing_webhook_events_provider_event_uidx": {
-                    "name": "billing_webhook_events_provider_event_uidx",
-                    "columns": [
-                        {
-                            "expression": "provider",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "provider_event_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "billing_webhook_events_queue_idx": {
-                    "name": "billing_webhook_events_queue_idx",
-                    "columns": [
-                        {
-                            "expression": "status",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "available_at",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": false,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                }
-            },
-            "foreignKeys": {},
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "policies": {},
-            "checkConstraints": {
-                "billing_webhook_events_status_check": {
-                    "name": "billing_webhook_events_status_check",
-                    "value": "\"billing_webhook_events\".\"status\" IN ('pending', 'processing', 'processed', 'ignored', 'quarantined', 'failed')"
-                }
-            },
             "isRLSEnabled": false
         },
         "public.contact_custom_field_values": {
@@ -6154,399 +4803,6 @@
             },
             "isRLSEnabled": false
         },
-        "public.organization_plan_states": {
-            "name": "organization_plan_states",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "organization_id": {
-                    "name": "organization_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "plan": {
-                    "name": "plan",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "'free'"
-                },
-                "active_subscription_id": {
-                    "name": "active_subscription_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "teams_limit_override": {
-                    "name": "teams_limit_override",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "contacts_limit_override": {
-                    "name": "contacts_limit_override",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "projection_version": {
-                    "name": "projection_version",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": 0
-                },
-                "first_paid_activated_at": {
-                    "name": "first_paid_activated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "ramp_stage": {
-                    "name": "ramp_stage",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": 0
-                },
-                "ramp_clean_stage_days": {
-                    "name": "ramp_clean_stage_days",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": 0
-                },
-                "ramp_evaluated_at": {
-                    "name": "ramp_evaluated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "created_at": {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "updated_at": {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                }
-            },
-            "indexes": {},
-            "foreignKeys": {
-                "organization_plan_states_organization_id_organizations_id_fk": {
-                    "name": "organization_plan_states_organization_id_organizations_id_fk",
-                    "tableFrom": "organization_plan_states",
-                    "tableTo": "organizations",
-                    "columnsFrom": ["organization_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "organization_plan_states_active_subscription_id_organization_subscriptions_id_fk": {
-                    "name": "organization_plan_states_active_subscription_id_organization_subscriptions_id_fk",
-                    "tableFrom": "organization_plan_states",
-                    "tableTo": "organization_subscriptions",
-                    "columnsFrom": ["active_subscription_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                }
-            },
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {
-                "organization_plan_states_organization_id_unique": {
-                    "name": "organization_plan_states_organization_id_unique",
-                    "nullsNotDistinct": false,
-                    "columns": ["organization_id"]
-                }
-            },
-            "policies": {},
-            "checkConstraints": {
-                "organization_plan_states_plan_check": {
-                    "name": "organization_plan_states_plan_check",
-                    "value": "\"organization_plan_states\".\"plan\" IN ('free', 'pro', 'business')"
-                },
-                "organization_plan_states_teams_override_check": {
-                    "name": "organization_plan_states_teams_override_check",
-                    "value": "\"organization_plan_states\".\"teams_limit_override\" IS NULL OR \"organization_plan_states\".\"teams_limit_override\" > 0"
-                },
-                "organization_plan_states_contacts_override_check": {
-                    "name": "organization_plan_states_contacts_override_check",
-                    "value": "\"organization_plan_states\".\"contacts_limit_override\" IS NULL OR \"organization_plan_states\".\"contacts_limit_override\" > 0"
-                },
-                "organization_plan_states_ramp_stage_check": {
-                    "name": "organization_plan_states_ramp_stage_check",
-                    "value": "\"organization_plan_states\".\"ramp_stage\" BETWEEN 0 AND 3"
-                },
-                "organization_plan_states_ramp_clean_days_check": {
-                    "name": "organization_plan_states_ramp_clean_days_check",
-                    "value": "\"organization_plan_states\".\"ramp_clean_stage_days\" >= 0"
-                }
-            },
-            "isRLSEnabled": false
-        },
-        "public.organization_subscriptions": {
-            "name": "organization_subscriptions",
-            "schema": "",
-            "columns": {
-                "id": {
-                    "name": "id",
-                    "type": "uuid",
-                    "primaryKey": true,
-                    "notNull": true
-                },
-                "organization_id": {
-                    "name": "organization_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "billing_customer_id": {
-                    "name": "billing_customer_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "billing_manager_user_id": {
-                    "name": "billing_manager_user_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider": {
-                    "name": "provider",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider_subscription_id": {
-                    "name": "provider_subscription_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "provider_product_id": {
-                    "name": "provider_product_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "billing_price_entry_id": {
-                    "name": "billing_price_entry_id",
-                    "type": "uuid",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "catalog_key": {
-                    "name": "catalog_key",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "plan": {
-                    "name": "plan",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "billing_interval": {
-                    "name": "billing_interval",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true
-                },
-                "status": {
-                    "name": "status",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "'pending'"
-                },
-                "current_period_starts_at": {
-                    "name": "current_period_starts_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "current_period_ends_at": {
-                    "name": "current_period_ends_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "paid_through_at": {
-                    "name": "paid_through_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "trial_ends_at": {
-                    "name": "trial_ends_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "past_due_at": {
-                    "name": "past_due_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "grace_ends_at": {
-                    "name": "grace_ends_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "cancel_at_period_end": {
-                    "name": "cancel_at_period_end",
-                    "type": "boolean",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": false
-                },
-                "is_entitlement_source": {
-                    "name": "is_entitlement_source",
-                    "type": "boolean",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": false
-                },
-                "last_provider_event_at": {
-                    "name": "last_provider_event_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "last_reconciled_at": {
-                    "name": "last_reconciled_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": false
-                },
-                "created_at": {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                },
-                "updated_at": {
-                    "name": "updated_at",
-                    "type": "timestamp with time zone",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "default": "now()"
-                }
-            },
-            "indexes": {
-                "organization_subscriptions_provider_subscription_uidx": {
-                    "name": "organization_subscriptions_provider_subscription_uidx",
-                    "columns": [
-                        {
-                            "expression": "provider",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        },
-                        {
-                            "expression": "provider_subscription_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                },
-                "organization_subscriptions_organization_source_uidx": {
-                    "name": "organization_subscriptions_organization_source_uidx",
-                    "columns": [
-                        {
-                            "expression": "organization_id",
-                            "isExpression": false,
-                            "asc": true,
-                            "nulls": "last"
-                        }
-                    ],
-                    "isUnique": true,
-                    "where": "\"organization_subscriptions\".\"is_entitlement_source\" = true",
-                    "concurrently": false,
-                    "method": "btree",
-                    "with": {}
-                }
-            },
-            "foreignKeys": {
-                "organization_subscriptions_organization_id_organizations_id_fk": {
-                    "name": "organization_subscriptions_organization_id_organizations_id_fk",
-                    "tableFrom": "organization_subscriptions",
-                    "tableTo": "organizations",
-                    "columnsFrom": ["organization_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "organization_subscriptions_billing_customer_id_billing_provider_customers_id_fk": {
-                    "name": "organization_subscriptions_billing_customer_id_billing_provider_customers_id_fk",
-                    "tableFrom": "organization_subscriptions",
-                    "tableTo": "billing_provider_customers",
-                    "columnsFrom": ["billing_customer_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "organization_subscriptions_billing_manager_user_id_user_id_fk": {
-                    "name": "organization_subscriptions_billing_manager_user_id_user_id_fk",
-                    "tableFrom": "organization_subscriptions",
-                    "tableTo": "user",
-                    "columnsFrom": ["billing_manager_user_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                },
-                "organization_subscriptions_billing_price_entry_id_billing_price_entries_id_fk": {
-                    "name": "organization_subscriptions_billing_price_entry_id_billing_price_entries_id_fk",
-                    "tableFrom": "organization_subscriptions",
-                    "tableTo": "billing_price_entries",
-                    "columnsFrom": ["billing_price_entry_id"],
-                    "columnsTo": ["id"],
-                    "onDelete": "restrict",
-                    "onUpdate": "no action"
-                }
-            },
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "policies": {},
-            "checkConstraints": {
-                "organization_subscriptions_status_check": {
-                    "name": "organization_subscriptions_status_check",
-                    "value": "\"organization_subscriptions\".\"status\" IN ('pending', 'trialing', 'active', 'past_due', 'cancelled', 'expired')"
-                },
-                "organization_subscriptions_plan_check": {
-                    "name": "organization_subscriptions_plan_check",
-                    "value": "\"organization_subscriptions\".\"plan\" IN ('pro', 'business')"
-                },
-                "organization_subscriptions_interval_check": {
-                    "name": "organization_subscriptions_interval_check",
-                    "value": "\"organization_subscriptions\".\"billing_interval\" IN ('month', 'year')"
-                }
-            },
-            "isRLSEnabled": false
-        },
         "public.organizations": {
             "name": "organizations",
             "schema": "",
@@ -8996,6 +7252,2050 @@
             "uniqueConstraints": {},
             "policies": {},
             "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.billing_catalog_revision_items": {
+            "name": "billing_catalog_revision_items",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "catalog_revision_id": {
+                    "name": "catalog_revision_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "offer_key": {
+                    "name": "offer_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "billing_price_entry_id": {
+                    "name": "billing_price_entry_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                }
+            },
+            "indexes": {
+                "billing_catalog_revision_items_revision_key_uidx": {
+                    "name": "billing_catalog_revision_items_revision_key_uidx",
+                    "columns": [
+                        {
+                            "expression": "catalog_revision_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "offer_key",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_catalog_revision_items_revision_price_uidx": {
+                    "name": "billing_catalog_revision_items_revision_price_uidx",
+                    "columns": [
+                        {
+                            "expression": "catalog_revision_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "billing_price_entry_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "billing_catalog_revision_items_catalog_revision_id_billing_catalog_revisions_id_fk": {
+                    "name": "billing_catalog_revision_items_catalog_revision_id_billing_catalog_revisions_id_fk",
+                    "tableFrom": "billing_catalog_revision_items",
+                    "tableTo": "billing_catalog_revisions",
+                    "columnsFrom": ["catalog_revision_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                },
+                "billing_catalog_revision_items_billing_price_entry_id_billing_price_entries_id_fk": {
+                    "name": "billing_catalog_revision_items_billing_price_entry_id_billing_price_entries_id_fk",
+                    "tableFrom": "billing_catalog_revision_items",
+                    "tableTo": "billing_price_entries",
+                    "columnsFrom": ["billing_price_entry_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.billing_catalog_revisions": {
+            "name": "billing_catalog_revisions",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "revision": {
+                    "name": "revision",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "checkout_provider": {
+                    "name": "checkout_provider",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "status": {
+                    "name": "status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'pending_verification'"
+                },
+                "verified_at": {
+                    "name": "verified_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "activated_at": {
+                    "name": "activated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "retired_at": {
+                    "name": "retired_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "billing_catalog_revisions_active_provider_uidx": {
+                    "name": "billing_catalog_revisions_active_provider_uidx",
+                    "columns": [
+                        {
+                            "expression": "checkout_provider",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_catalog_revisions\".\"status\" = 'active'",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "billing_catalog_revisions_revision_unique": {
+                    "name": "billing_catalog_revisions_revision_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["revision"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {
+                "billing_catalog_revisions_status_check": {
+                    "name": "billing_catalog_revisions_status_check",
+                    "value": "\"billing_catalog_revisions\".\"status\" IN ('pending_verification', 'active', 'retired', 'invalid', 'abandoned')"
+                },
+                "billing_catalog_revisions_revision_check": {
+                    "name": "billing_catalog_revisions_revision_check",
+                    "value": "\"billing_catalog_revisions\".\"revision\" > 0"
+                }
+            },
+            "isRLSEnabled": false
+        },
+        "public.billing_checkout_attempts": {
+            "name": "billing_checkout_attempts",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "attempt_id": {
+                    "name": "attempt_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "billable_entity_id": {
+                    "name": "billable_entity_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "payer_id": {
+                    "name": "payer_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "payer_email": {
+                    "name": "payer_email",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "''"
+                },
+                "return_url": {
+                    "name": "return_url",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "''"
+                },
+                "provider": {
+                    "name": "provider",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "catalog_revision": {
+                    "name": "catalog_revision",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "offer_key": {
+                    "name": "offer_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "requested_plan": {
+                    "name": "requested_plan",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "requested_interval": {
+                    "name": "requested_interval",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "billing_price_entry_id": {
+                    "name": "billing_price_entry_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "quoted_amount_minor": {
+                    "name": "quoted_amount_minor",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "quoted_currency": {
+                    "name": "quoted_currency",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "billing_customer_id": {
+                    "name": "billing_customer_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "provider_checkout_session_id": {
+                    "name": "provider_checkout_session_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "checkout_url_encrypted": {
+                    "name": "checkout_url_encrypted",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "idempotency_key": {
+                    "name": "idempotency_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "status": {
+                    "name": "status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'creating'"
+                },
+                "expires_at": {
+                    "name": "expires_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "last_error": {
+                    "name": "last_error",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "completed_at": {
+                    "name": "completed_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "pending_team_name": {
+                    "name": "pending_team_name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                }
+            },
+            "indexes": {
+                "billing_checkout_attempts_provider_session_uidx": {
+                    "name": "billing_checkout_attempts_provider_session_uidx",
+                    "columns": [
+                        {
+                            "expression": "provider",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "provider_checkout_session_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_checkout_attempts\".\"provider_checkout_session_id\" IS NOT NULL",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_checkout_attempts_idempotency_uidx": {
+                    "name": "billing_checkout_attempts_idempotency_uidx",
+                    "columns": [
+                        {
+                            "expression": "idempotency_key",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_checkout_attempts_entity_nonterminal_uidx": {
+                    "name": "billing_checkout_attempts_entity_nonterminal_uidx",
+                    "columns": [
+                        {
+                            "expression": "billable_entity_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_checkout_attempts\".\"status\" IN ('creating', 'open')",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "billing_checkout_attempts_billable_entity_id_organizations_id_fk": {
+                    "name": "billing_checkout_attempts_billable_entity_id_organizations_id_fk",
+                    "tableFrom": "billing_checkout_attempts",
+                    "tableTo": "organizations",
+                    "columnsFrom": ["billable_entity_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_checkout_attempts_payer_id_user_id_fk": {
+                    "name": "billing_checkout_attempts_payer_id_user_id_fk",
+                    "tableFrom": "billing_checkout_attempts",
+                    "tableTo": "user",
+                    "columnsFrom": ["payer_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_checkout_attempts_billing_price_entry_id_billing_price_entries_id_fk": {
+                    "name": "billing_checkout_attempts_billing_price_entry_id_billing_price_entries_id_fk",
+                    "tableFrom": "billing_checkout_attempts",
+                    "tableTo": "billing_price_entries",
+                    "columnsFrom": ["billing_price_entry_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_checkout_attempts_billing_customer_id_billing_provider_customers_id_fk": {
+                    "name": "billing_checkout_attempts_billing_customer_id_billing_provider_customers_id_fk",
+                    "tableFrom": "billing_checkout_attempts",
+                    "tableTo": "billing_provider_customers",
+                    "columnsFrom": ["billing_customer_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "billing_checkout_attempts_attempt_id_unique": {
+                    "name": "billing_checkout_attempts_attempt_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["attempt_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {
+                "billing_checkout_attempts_status_check": {
+                    "name": "billing_checkout_attempts_status_check",
+                    "value": "\"billing_checkout_attempts\".\"status\" IN ('creating', 'open', 'completed', 'expired', 'abandoned', 'conflicted')"
+                },
+                "billing_checkout_attempts_amount_check": {
+                    "name": "billing_checkout_attempts_amount_check",
+                    "value": "\"billing_checkout_attempts\".\"quoted_amount_minor\" > 0"
+                },
+                "billing_checkout_attempts_plan_check": {
+                    "name": "billing_checkout_attempts_plan_check",
+                    "value": "\"billing_checkout_attempts\".\"requested_plan\" IN ('pro', 'business')"
+                },
+                "billing_checkout_attempts_interval_check": {
+                    "name": "billing_checkout_attempts_interval_check",
+                    "value": "\"billing_checkout_attempts\".\"requested_interval\" IN ('month', 'year')"
+                }
+            },
+            "isRLSEnabled": false
+        },
+        "public.billing_plan_change_attempts": {
+            "name": "billing_plan_change_attempts",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "change_id": {
+                    "name": "change_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "billable_entity_id": {
+                    "name": "billable_entity_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "subscription_id": {
+                    "name": "subscription_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "actor_id": {
+                    "name": "actor_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "payer_id": {
+                    "name": "payer_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "provider": {
+                    "name": "provider",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "idempotency_key": {
+                    "name": "idempotency_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "current_catalog_revision": {
+                    "name": "current_catalog_revision",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "current_billing_price_entry_id": {
+                    "name": "current_billing_price_entry_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "current_plan": {
+                    "name": "current_plan",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "current_interval": {
+                    "name": "current_interval",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "target_catalog_revision": {
+                    "name": "target_catalog_revision",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "target_billing_price_entry_id": {
+                    "name": "target_billing_price_entry_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "target_plan": {
+                    "name": "target_plan",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "target_interval": {
+                    "name": "target_interval",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "target_offer_key": {
+                    "name": "target_offer_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "effective_at": {
+                    "name": "effective_at",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "proration_mode": {
+                    "name": "proration_mode",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "provider_payment_id": {
+                    "name": "provider_payment_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "payment_url_encrypted": {
+                    "name": "payment_url_encrypted",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "status": {
+                    "name": "status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'creating'"
+                },
+                "last_error": {
+                    "name": "last_error",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "completed_at": {
+                    "name": "completed_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "billing_plan_change_attempts_idempotency_uidx": {
+                    "name": "billing_plan_change_attempts_idempotency_uidx",
+                    "columns": [
+                        {
+                            "expression": "idempotency_key",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_plan_change_attempts_entity_nonterminal_uidx": {
+                    "name": "billing_plan_change_attempts_entity_nonterminal_uidx",
+                    "columns": [
+                        {
+                            "expression": "billable_entity_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_plan_change_attempts\".\"status\" IN ('creating', 'pending')",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "billing_plan_change_attempts_billable_entity_id_organizations_id_fk": {
+                    "name": "billing_plan_change_attempts_billable_entity_id_organizations_id_fk",
+                    "tableFrom": "billing_plan_change_attempts",
+                    "tableTo": "organizations",
+                    "columnsFrom": ["billable_entity_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_plan_change_attempts_subscription_id_billing_subscriptions_id_fk": {
+                    "name": "billing_plan_change_attempts_subscription_id_billing_subscriptions_id_fk",
+                    "tableFrom": "billing_plan_change_attempts",
+                    "tableTo": "billing_subscriptions",
+                    "columnsFrom": ["subscription_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_plan_change_attempts_payer_id_user_id_fk": {
+                    "name": "billing_plan_change_attempts_payer_id_user_id_fk",
+                    "tableFrom": "billing_plan_change_attempts",
+                    "tableTo": "user",
+                    "columnsFrom": ["payer_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_plan_change_attempts_current_billing_price_entry_id_billing_price_entries_id_fk": {
+                    "name": "billing_plan_change_attempts_current_billing_price_entry_id_billing_price_entries_id_fk",
+                    "tableFrom": "billing_plan_change_attempts",
+                    "tableTo": "billing_price_entries",
+                    "columnsFrom": ["current_billing_price_entry_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_plan_change_attempts_target_billing_price_entry_id_billing_price_entries_id_fk": {
+                    "name": "billing_plan_change_attempts_target_billing_price_entry_id_billing_price_entries_id_fk",
+                    "tableFrom": "billing_plan_change_attempts",
+                    "tableTo": "billing_price_entries",
+                    "columnsFrom": ["target_billing_price_entry_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "billing_plan_change_attempts_change_id_unique": {
+                    "name": "billing_plan_change_attempts_change_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["change_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {
+                "billing_plan_change_attempts_status_check": {
+                    "name": "billing_plan_change_attempts_status_check",
+                    "value": "\"billing_plan_change_attempts\".\"status\" IN ('creating', 'pending', 'succeeded', 'failed', 'conflicted')"
+                },
+                "billing_plan_change_attempts_effective_at_check": {
+                    "name": "billing_plan_change_attempts_effective_at_check",
+                    "value": "\"billing_plan_change_attempts\".\"effective_at\" IN ('immediately', 'next_billing_date')"
+                },
+                "billing_plan_change_attempts_proration_mode_check": {
+                    "name": "billing_plan_change_attempts_proration_mode_check",
+                    "value": "\"billing_plan_change_attempts\".\"proration_mode\" IN ('prorated_immediately', 'do_not_bill')"
+                },
+                "billing_plan_change_attempts_current_plan_check": {
+                    "name": "billing_plan_change_attempts_current_plan_check",
+                    "value": "\"billing_plan_change_attempts\".\"current_plan\" IN ('pro', 'business')"
+                },
+                "billing_plan_change_attempts_target_plan_check": {
+                    "name": "billing_plan_change_attempts_target_plan_check",
+                    "value": "\"billing_plan_change_attempts\".\"target_plan\" IN ('pro', 'business')"
+                }
+            },
+            "isRLSEnabled": false
+        },
+        "public.billing_plan_states": {
+            "name": "billing_plan_states",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "billable_entity_id": {
+                    "name": "billable_entity_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "active_subscription_id": {
+                    "name": "active_subscription_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "projection_version": {
+                    "name": "projection_version",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "plan": {
+                    "name": "plan",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "teams_limit_override": {
+                    "name": "teams_limit_override",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "contacts_limit_override": {
+                    "name": "contacts_limit_override",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "first_paid_activated_at": {
+                    "name": "first_paid_activated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "ramp_stage": {
+                    "name": "ramp_stage",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "ramp_clean_stage_days": {
+                    "name": "ramp_clean_stage_days",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "ramp_evaluated_at": {
+                    "name": "ramp_evaluated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {
+                "billing_plan_states_billable_entity_id_organizations_id_fk": {
+                    "name": "billing_plan_states_billable_entity_id_organizations_id_fk",
+                    "tableFrom": "billing_plan_states",
+                    "tableTo": "organizations",
+                    "columnsFrom": ["billable_entity_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_plan_states_active_subscription_id_billing_subscriptions_id_fk": {
+                    "name": "billing_plan_states_active_subscription_id_billing_subscriptions_id_fk",
+                    "tableFrom": "billing_plan_states",
+                    "tableTo": "billing_subscriptions",
+                    "columnsFrom": ["active_subscription_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "billing_plan_states_billable_entity_id_unique": {
+                    "name": "billing_plan_states_billable_entity_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["billable_entity_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.billing_price_entries": {
+            "name": "billing_price_entries",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "offer_key": {
+                    "name": "offer_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "plan": {
+                    "name": "plan",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "billing_interval": {
+                    "name": "billing_interval",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "currency": {
+                    "name": "currency",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "amount_minor": {
+                    "name": "amount_minor",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "provider_trial_days": {
+                    "name": "provider_trial_days",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "provider": {
+                    "name": "provider",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "provider_product_id": {
+                    "name": "provider_product_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "verified_at": {
+                    "name": "verified_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "billing_price_entries_provider_product_uidx": {
+                    "name": "billing_price_entries_provider_product_uidx",
+                    "columns": [
+                        {
+                            "expression": "provider",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "provider_product_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_price_entries_offer_key_idx": {
+                    "name": "billing_price_entries_offer_key_idx",
+                    "columns": [
+                        {
+                            "expression": "offer_key",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {
+                "billing_price_entries_amount_check": {
+                    "name": "billing_price_entries_amount_check",
+                    "value": "\"billing_price_entries\".\"amount_minor\" > 0"
+                },
+                "billing_price_entries_trial_days_check": {
+                    "name": "billing_price_entries_trial_days_check",
+                    "value": "\"billing_price_entries\".\"provider_trial_days\" >= 0"
+                },
+                "billing_price_entries_currency_check": {
+                    "name": "billing_price_entries_currency_check",
+                    "value": "\"billing_price_entries\".\"currency\" ~ '^[A-Z]{3}$'"
+                },
+                "billing_price_entries_plan_check": {
+                    "name": "billing_price_entries_plan_check",
+                    "value": "\"billing_price_entries\".\"plan\" IN ('pro', 'business')"
+                },
+                "billing_price_entries_interval_check": {
+                    "name": "billing_price_entries_interval_check",
+                    "value": "\"billing_price_entries\".\"billing_interval\" IN ('month', 'year')"
+                }
+            },
+            "isRLSEnabled": false
+        },
+        "public.billing_provider_customers": {
+            "name": "billing_provider_customers",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "provider": {
+                    "name": "provider",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "payer_id": {
+                    "name": "payer_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "payer_email": {
+                    "name": "payer_email",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "''"
+                },
+                "provider_customer_id": {
+                    "name": "provider_customer_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "idempotency_key": {
+                    "name": "idempotency_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "status": {
+                    "name": "status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'creating'"
+                },
+                "last_error": {
+                    "name": "last_error",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "billing_provider_customers_provider_payer_uidx": {
+                    "name": "billing_provider_customers_provider_payer_uidx",
+                    "columns": [
+                        {
+                            "expression": "provider",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "payer_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_provider_customers_provider_customer_uidx": {
+                    "name": "billing_provider_customers_provider_customer_uidx",
+                    "columns": [
+                        {
+                            "expression": "provider",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "provider_customer_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_provider_customers\".\"provider_customer_id\" IS NOT NULL",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_provider_customers_idempotency_uidx": {
+                    "name": "billing_provider_customers_idempotency_uidx",
+                    "columns": [
+                        {
+                            "expression": "idempotency_key",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "billing_provider_customers_payer_id_user_id_fk": {
+                    "name": "billing_provider_customers_payer_id_user_id_fk",
+                    "tableFrom": "billing_provider_customers",
+                    "tableTo": "user",
+                    "columnsFrom": ["payer_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {
+                "billing_provider_customers_status_check": {
+                    "name": "billing_provider_customers_status_check",
+                    "value": "\"billing_provider_customers\".\"status\" IN ('creating', 'active', 'conflicted')"
+                }
+            },
+            "isRLSEnabled": false
+        },
+        "public.billing_reconciliation_jobs": {
+            "name": "billing_reconciliation_jobs",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "provider": {
+                    "name": "provider",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "checkout_attempt_id": {
+                    "name": "checkout_attempt_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "plan_change_attempt_id": {
+                    "name": "plan_change_attempt_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "subscription_id": {
+                    "name": "subscription_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "provider_customer_id": {
+                    "name": "provider_customer_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "operation": {
+                    "name": "operation",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'reconcile'"
+                },
+                "status": {
+                    "name": "status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'pending'"
+                },
+                "attempt_count": {
+                    "name": "attempt_count",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "available_at": {
+                    "name": "available_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "locked_at": {
+                    "name": "locked_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "lease_expires_at": {
+                    "name": "lease_expires_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "worker_id": {
+                    "name": "worker_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "last_error": {
+                    "name": "last_error",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "billing_reconciliation_jobs_live_checkout_uidx": {
+                    "name": "billing_reconciliation_jobs_live_checkout_uidx",
+                    "columns": [
+                        {
+                            "expression": "checkout_attempt_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_reconciliation_jobs\".\"checkout_attempt_id\" IS NOT NULL AND \"billing_reconciliation_jobs\".\"status\" IN ('pending', 'processing', 'failed')",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_reconciliation_jobs_live_plan_change_uidx": {
+                    "name": "billing_reconciliation_jobs_live_plan_change_uidx",
+                    "columns": [
+                        {
+                            "expression": "plan_change_attempt_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_reconciliation_jobs\".\"plan_change_attempt_id\" IS NOT NULL AND \"billing_reconciliation_jobs\".\"status\" IN ('pending', 'processing', 'failed')",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_reconciliation_jobs_live_subscription_uidx": {
+                    "name": "billing_reconciliation_jobs_live_subscription_uidx",
+                    "columns": [
+                        {
+                            "expression": "subscription_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_reconciliation_jobs\".\"subscription_id\" IS NOT NULL AND \"billing_reconciliation_jobs\".\"status\" IN ('pending', 'processing', 'failed')",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_reconciliation_jobs_live_customer_uidx": {
+                    "name": "billing_reconciliation_jobs_live_customer_uidx",
+                    "columns": [
+                        {
+                            "expression": "provider_customer_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_reconciliation_jobs\".\"provider_customer_id\" IS NOT NULL AND \"billing_reconciliation_jobs\".\"status\" IN ('pending', 'processing', 'failed')",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "billing_reconciliation_jobs_checkout_attempt_id_billing_checkout_attempts_id_fk": {
+                    "name": "billing_reconciliation_jobs_checkout_attempt_id_billing_checkout_attempts_id_fk",
+                    "tableFrom": "billing_reconciliation_jobs",
+                    "tableTo": "billing_checkout_attempts",
+                    "columnsFrom": ["checkout_attempt_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_reconciliation_jobs_plan_change_attempt_id_billing_plan_change_attempts_id_fk": {
+                    "name": "billing_reconciliation_jobs_plan_change_attempt_id_billing_plan_change_attempts_id_fk",
+                    "tableFrom": "billing_reconciliation_jobs",
+                    "tableTo": "billing_plan_change_attempts",
+                    "columnsFrom": ["plan_change_attempt_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_reconciliation_jobs_subscription_id_billing_subscriptions_id_fk": {
+                    "name": "billing_reconciliation_jobs_subscription_id_billing_subscriptions_id_fk",
+                    "tableFrom": "billing_reconciliation_jobs",
+                    "tableTo": "billing_subscriptions",
+                    "columnsFrom": ["subscription_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_reconciliation_jobs_provider_customer_id_billing_provider_customers_id_fk": {
+                    "name": "billing_reconciliation_jobs_provider_customer_id_billing_provider_customers_id_fk",
+                    "tableFrom": "billing_reconciliation_jobs",
+                    "tableTo": "billing_provider_customers",
+                    "columnsFrom": ["provider_customer_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {
+                "billing_reconciliation_jobs_exactly_one_subject": {
+                    "name": "billing_reconciliation_jobs_exactly_one_subject",
+                    "value": "((CASE WHEN \"billing_reconciliation_jobs\".\"checkout_attempt_id\" IS NOT NULL THEN 1 ELSE 0 END) + (CASE WHEN \"billing_reconciliation_jobs\".\"plan_change_attempt_id\" IS NOT NULL THEN 1 ELSE 0 END) + (CASE WHEN \"billing_reconciliation_jobs\".\"subscription_id\" IS NOT NULL THEN 1 ELSE 0 END) + (CASE WHEN \"billing_reconciliation_jobs\".\"provider_customer_id\" IS NOT NULL THEN 1 ELSE 0 END)) = 1"
+                },
+                "billing_reconciliation_jobs_status_check": {
+                    "name": "billing_reconciliation_jobs_status_check",
+                    "value": "\"billing_reconciliation_jobs\".\"status\" IN ('pending', 'processing', 'failed', 'completed', 'quarantined')"
+                },
+                "billing_reconciliation_jobs_operation_check": {
+                    "name": "billing_reconciliation_jobs_operation_check",
+                    "value": "\"billing_reconciliation_jobs\".\"operation\" = 'reconcile' OR (\"billing_reconciliation_jobs\".\"operation\" = 'cancellation' AND \"billing_reconciliation_jobs\".\"subscription_id\" IS NOT NULL)"
+                }
+            },
+            "isRLSEnabled": false
+        },
+        "public.billing_subscriptions": {
+            "name": "billing_subscriptions",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "billable_entity_id": {
+                    "name": "billable_entity_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "billing_customer_id": {
+                    "name": "billing_customer_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "payer_id": {
+                    "name": "payer_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "origin_checkout_attempt_id": {
+                    "name": "origin_checkout_attempt_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "provider": {
+                    "name": "provider",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "provider_subscription_id": {
+                    "name": "provider_subscription_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "provider_product_id": {
+                    "name": "provider_product_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "billing_price_entry_id": {
+                    "name": "billing_price_entry_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "catalog_revision": {
+                    "name": "catalog_revision",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "offer_key": {
+                    "name": "offer_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "plan": {
+                    "name": "plan",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "billing_interval": {
+                    "name": "billing_interval",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "status": {
+                    "name": "status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'pending'"
+                },
+                "current_period_starts_at": {
+                    "name": "current_period_starts_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "current_period_ends_at": {
+                    "name": "current_period_ends_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "paid_through_at": {
+                    "name": "paid_through_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "trial_ends_at": {
+                    "name": "trial_ends_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "cancel_at_period_end": {
+                    "name": "cancel_at_period_end",
+                    "type": "boolean",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": false
+                },
+                "is_entitlement_source": {
+                    "name": "is_entitlement_source",
+                    "type": "boolean",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": false
+                },
+                "provider_occurred_at": {
+                    "name": "provider_occurred_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "provider_version": {
+                    "name": "provider_version",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "last_observed_at": {
+                    "name": "last_observed_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "last_reconciled_at": {
+                    "name": "last_reconciled_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "past_due_at": {
+                    "name": "past_due_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "grace_ends_at": {
+                    "name": "grace_ends_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                }
+            },
+            "indexes": {
+                "billing_subscriptions_provider_subscription_uidx": {
+                    "name": "billing_subscriptions_provider_subscription_uidx",
+                    "columns": [
+                        {
+                            "expression": "provider",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "provider_subscription_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_subscriptions_entity_source_uidx": {
+                    "name": "billing_subscriptions_entity_source_uidx",
+                    "columns": [
+                        {
+                            "expression": "billable_entity_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_subscriptions\".\"is_entitlement_source\" = true",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "billing_subscriptions_billable_entity_id_organizations_id_fk": {
+                    "name": "billing_subscriptions_billable_entity_id_organizations_id_fk",
+                    "tableFrom": "billing_subscriptions",
+                    "tableTo": "organizations",
+                    "columnsFrom": ["billable_entity_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_subscriptions_billing_customer_id_billing_provider_customers_id_fk": {
+                    "name": "billing_subscriptions_billing_customer_id_billing_provider_customers_id_fk",
+                    "tableFrom": "billing_subscriptions",
+                    "tableTo": "billing_provider_customers",
+                    "columnsFrom": ["billing_customer_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_subscriptions_payer_id_user_id_fk": {
+                    "name": "billing_subscriptions_payer_id_user_id_fk",
+                    "tableFrom": "billing_subscriptions",
+                    "tableTo": "user",
+                    "columnsFrom": ["payer_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_subscriptions_origin_checkout_attempt_id_billing_checkout_attempts_id_fk": {
+                    "name": "billing_subscriptions_origin_checkout_attempt_id_billing_checkout_attempts_id_fk",
+                    "tableFrom": "billing_subscriptions",
+                    "tableTo": "billing_checkout_attempts",
+                    "columnsFrom": ["origin_checkout_attempt_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_subscriptions_billing_price_entry_id_billing_price_entries_id_fk": {
+                    "name": "billing_subscriptions_billing_price_entry_id_billing_price_entries_id_fk",
+                    "tableFrom": "billing_subscriptions",
+                    "tableTo": "billing_price_entries",
+                    "columnsFrom": ["billing_price_entry_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {
+                "billing_subscriptions_status_check": {
+                    "name": "billing_subscriptions_status_check",
+                    "value": "\"billing_subscriptions\".\"status\" IN ('pending', 'trialing', 'active', 'past_due', 'cancelled', 'expired')"
+                },
+                "billing_subscriptions_plan_check": {
+                    "name": "billing_subscriptions_plan_check",
+                    "value": "\"billing_subscriptions\".\"plan\" IN ('pro', 'business')"
+                },
+                "billing_subscriptions_interval_check": {
+                    "name": "billing_subscriptions_interval_check",
+                    "value": "\"billing_subscriptions\".\"billing_interval\" IN ('month', 'year')"
+                }
+            },
+            "isRLSEnabled": false
+        },
+        "public.billing_webhook_events": {
+            "name": "billing_webhook_events",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "provider": {
+                    "name": "provider",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "provider_event_id": {
+                    "name": "provider_event_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "event_type": {
+                    "name": "event_type",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "occurred_at": {
+                    "name": "occurred_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "subscription_id": {
+                    "name": "subscription_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "checkout_attempt_id": {
+                    "name": "checkout_attempt_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "payload_encrypted": {
+                    "name": "payload_encrypted",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "payload_key_version": {
+                    "name": "payload_key_version",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "verified_key_version": {
+                    "name": "verified_key_version",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "status": {
+                    "name": "status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'pending'"
+                },
+                "processing_attempts": {
+                    "name": "processing_attempts",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "last_error": {
+                    "name": "last_error",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "available_at": {
+                    "name": "available_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "locked_at": {
+                    "name": "locked_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "lease_expires_at": {
+                    "name": "lease_expires_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "worker_id": {
+                    "name": "worker_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "received_at": {
+                    "name": "received_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "processed_at": {
+                    "name": "processed_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                }
+            },
+            "indexes": {
+                "billing_webhook_events_provider_event_uidx": {
+                    "name": "billing_webhook_events_provider_event_uidx",
+                    "columns": [
+                        {
+                            "expression": "provider",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "provider_event_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_webhook_events_queue_idx": {
+                    "name": "billing_webhook_events_queue_idx",
+                    "columns": [
+                        {
+                            "expression": "status",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "available_at",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {
+                "billing_webhook_events_status_check": {
+                    "name": "billing_webhook_events_status_check",
+                    "value": "\"billing_webhook_events\".\"status\" IN ('pending', 'processing', 'processed', 'ignored', 'quarantined', 'failed')"
+                }
+            },
+            "isRLSEnabled": false
+        },
+        "public.billing_trial_claims": {
+            "name": "billing_trial_claims",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true
+                },
+                "user_id": {
+                    "name": "user_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "verified_email_fingerprint": {
+                    "name": "verified_email_fingerprint",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "fingerprint_key_version": {
+                    "name": "fingerprint_key_version",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "trial_key": {
+                    "name": "trial_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "organization_id": {
+                    "name": "organization_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "checkout_attempt_id": {
+                    "name": "checkout_attempt_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "status": {
+                    "name": "status",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'reserved'"
+                },
+                "expires_at": {
+                    "name": "expires_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "redeemed_at": {
+                    "name": "redeemed_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "billing_trial_claims_user_trial_uidx": {
+                    "name": "billing_trial_claims_user_trial_uidx",
+                    "columns": [
+                        {
+                            "expression": "user_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "trial_key",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_trial_claims\".\"status\" <> 'released'",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "billing_trial_claims_email_trial_uidx": {
+                    "name": "billing_trial_claims_email_trial_uidx",
+                    "columns": [
+                        {
+                            "expression": "verified_email_fingerprint",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "trial_key",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": true,
+                    "where": "\"billing_trial_claims\".\"status\" <> 'released'",
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "billing_trial_claims_user_id_user_id_fk": {
+                    "name": "billing_trial_claims_user_id_user_id_fk",
+                    "tableFrom": "billing_trial_claims",
+                    "tableTo": "user",
+                    "columnsFrom": ["user_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_trial_claims_organization_id_organizations_id_fk": {
+                    "name": "billing_trial_claims_organization_id_organizations_id_fk",
+                    "tableFrom": "billing_trial_claims",
+                    "tableTo": "organizations",
+                    "columnsFrom": ["organization_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                },
+                "billing_trial_claims_checkout_attempt_id_billing_checkout_attempts_id_fk": {
+                    "name": "billing_trial_claims_checkout_attempt_id_billing_checkout_attempts_id_fk",
+                    "tableFrom": "billing_trial_claims",
+                    "tableTo": "billing_checkout_attempts",
+                    "columnsFrom": ["checkout_attempt_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "restrict",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {
+                "billing_trial_claims_status_check": {
+                    "name": "billing_trial_claims_status_check",
+                    "value": "\"billing_trial_claims\".\"status\" IN ('reserved', 'redeemed', 'released')"
+                }
+            },
             "isRLSEnabled": false
         }
     },

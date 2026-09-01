@@ -1642,7 +1642,11 @@ Organizations, or remove the tab entirely. Accounts are never billed.
   require authentication within the last 15 minutes. Otherwise require a
   verified-email OTP/WebAuthn reauthentication and issue a single-purpose,
   five-minute server action token bound to user, organization, action, and
-  session. A normal long-lived session is insufficient.
+  session. A normal long-lived session is insufficient. Resuming checkout for
+  an organization already in `pending_payment` is the exception: the user
+  already started that attempt, so the existing human session may issue the
+  action token without a 15-minute reauthentication. The dashboard must not
+  treat `recent_authentication_required` as a dead session (no sign-out).
 - Cookie-authenticated billing mutations require the application's CSRF token
   and an exact allowlisted `Origin` (with a same-origin `Referer` fallback only
   where the browser omits Origin). Provider webhook routes are exempt from CSRF

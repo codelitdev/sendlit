@@ -2,7 +2,7 @@ import { and, count, eq, gt, gte, lt, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import logger from "../services/log";
 import {
-    organizationPlanStates,
+    billingPlanStates,
     organizationAuditEvents,
     outboundMessages,
     planSendReservations,
@@ -219,8 +219,8 @@ export async function evaluateAllTeamReputations(
         .select({ id: teams.id })
         .from(teams)
         .innerJoin(
-            organizationPlanStates,
-            eq(organizationPlanStates.organizationId, teams.organizationId),
+            billingPlanStates,
+            eq(billingPlanStates.billableEntityId, teams.organizationId),
         )
         .where(sql`${teams.status} IN ('active', 'sending_suspended')`);
     for (const row of rows) {

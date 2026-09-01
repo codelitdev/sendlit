@@ -12,6 +12,7 @@ vi.mock("../db/client", async () => {
 });
 
 import { db } from "../db/client";
+import { organizations } from "../db/schema";
 import { truncateAll, type TestDb } from "../test/db";
 import { issueBillingActionToken, requireBillingAction } from "./security";
 
@@ -93,6 +94,69 @@ describe("billing action authorization", () => {
 
         await expect(
             issueBillingActionToken(request(), response, "checkout", "org_1"),
+        ).resolves.toEqual({
+            status: 401,
+            body: { error: "recent_authentication_required" },
+        });
+    });
+
+    it("lets resume checkout finish a pending organization without recent authentication", async () => {
+        await tdb.insert(organizations).values({
+            organizationId: "org_pending",
+            name: "Pending org",
+            status: "pending_payment",
+        });
+        authMocks.getSession.mockResolvedValue({
+            user: { id: "user-1" },
+            session: {
+                id: "session-1",
+                createdAt: new Date(Date.now() - 60 * 60 * 1000),
+                updatedAt: new Date(),
+            },
+        });
+
+        const issued = await issueBillingActionToken(
+            request(),
+            response,
+            "checkout",
+            "org_pending",
+        );
+        expect("token" in issued).toBe(true);
+    });
+
+    it("still requires recent authentication to start checkout on an active organization", async () => {
+        await tdb.insert(organizations).values({
+            organizationId: "org_active",
+            name: "Active org",
+            status: "active",
+        });
+        authMocks.getSession.mockResolvedValue({
+            user: { id: "user-1" },
+            session: {
+                id: "session-1",
+                createdAt: new Date(Date.now() - 60 * 60 * 1000),
+                updatedAt: new Date(),
+            },
+        });
+
+        await expect(
+            issueBillingActionToken(
+                request(),
+                response,
+                "checkout",
+                "org_active",
+            ),
+        ).resolves.toEqual({
+            status: 401,
+            body: { error: "recent_authentication_required" },
+        });
+        await expect(
+            issueBillingActionToken(
+                request(),
+                response,
+                "organization_checkout",
+                "new",
+            ),
         ).resolves.toEqual({
             status: 401,
             body: { error: "recent_authentication_required" },

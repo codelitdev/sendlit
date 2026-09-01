@@ -737,12 +737,10 @@ async function organizationRequest<T>(
         error?: string;
     } | null;
     if (response.status === 401 && typeof window !== "undefined") {
+        // Step-up auth for billing, not a dead session. Keep the dashboard
+        // signed in and let the billing dialog show the error.
         if (body?.error === "recent_authentication_required") {
-            // A normal session refresh is not reauthentication. End the old
-            // session so the hosted email-OTP login must establish a new one.
-            await fetch("/api/auth/sign-out", { method: "POST" }).catch(
-                () => undefined,
-            );
+            throw new ApiError(401, "recent_authentication_required");
         }
         window.location.href = "/login";
         return new Promise<T>(() => {});

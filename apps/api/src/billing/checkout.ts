@@ -1,18 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { db } from "../db/client";
-import {
-    billingCheckoutAttempts,
-    billingPriceEntries,
-    billingProviderCustomers,
-    billingTrialClaims,
-    organizationMembers,
-    organizationPlanStates,
-    organizationSubscriptions,
-    organizations,
-    user,
-} from "../db/schema";
-import { encryptBillingValue, decryptBillingValue } from "./crypto";
+import { billingTrialClaims, organizations, user } from "../db/schema";
 import {
     fingerprintVerifiedEmail,
     getBillingOffer,
@@ -21,8 +9,13 @@ import {
 } from "./catalog";
 import { requireActiveCatalog, verifyCheckoutOffer } from "./catalog-store";
 import { getBillingProvider } from "./provider-registry";
-import { BillingProviderError, providerErrorSummary } from "./provider";
 import { createOrganization } from "../organization/queries";
+import { getBillingEngine, preconsumedGrant } from "./engine";
+import {
+    BillingWorkflowError,
+    retainsPaidEntitlement,
+} from "@codelitdev/billing/core";
+import type { BillingActionGrant } from "@codelitdev/billing/workflows";
 
 export class BillingCheckoutError extends Error {
     constructor(
@@ -35,12 +28,53 @@ export class BillingCheckoutError extends Error {
             | "active_subscription_exists"
             | "billing_checkout_pending"
             | "organization_name_already_exists"
+            | "pending_organization_exists"
             | "payment_required",
         public readonly status: 400 | 401 | 402 | 403 | 409 | 503,
         public readonly details: Record<string, unknown> = {},
     ) {
         super(code);
         this.name = "BillingCheckoutError";
+    }
+}
+
+function mapCheckoutWorkflowError(
+    error: unknown,
+    details: Record<string, unknown> = {},
+): BillingCheckoutError {
+    if (error instanceof BillingCheckoutError) return error;
+    const code =
+        error instanceof BillingWorkflowError
+            ? error.code
+            : "provider_unavailable";
+    switch (code) {
+        case "catalog_changed":
+            return new BillingCheckoutError(
+                "billing_catalog_changed",
+                409,
+                details,
+            );
+        case "catalog_unavailable":
+            return new BillingCheckoutError(
+                "billing_catalog_unavailable",
+                503,
+                details,
+            );
+        case "active_subscription_exists":
+            return new BillingCheckoutError("active_subscription_exists", 409);
+        case "checkout_pending":
+            return new BillingCheckoutError("billing_checkout_pending", 409);
+        case "payer_mismatch":
+        case "grant_invalid":
+        case "grant_consumed":
+            return new BillingCheckoutError("billing_owner_required", 403);
+        case "subscription_required":
+            return new BillingCheckoutError("payment_required", 402);
+        default:
+            return new BillingCheckoutError(
+                "billing_provider_unavailable",
+                503,
+            );
     }
 }
 
@@ -54,10 +88,6 @@ function errorDetails(config: ReturnType<typeof readBillingConfig>) {
         checkoutAvailable:
             config.deploymentMode === "cloud" && config.offers.length === 4,
     };
-}
-
-function expiration(now = new Date()): Date {
-    return new Date(now.getTime() + 24 * 60 * 60 * 1000);
 }
 
 async function reserveTrialInTransaction(
@@ -145,8 +175,7 @@ function returnUrl(organizationPublicId: string): string {
     // This is server-owned and intentionally has no client-supplied redirect.
     // Checkout returns to the dashboard origin (not the API origin), where the
     // UI can poll the webhook-backed billing projection.
-    const webClient = process.env.WEB_CLIENT;
-    if (!webClient) throw new Error("WEB_CLIENT_missing");
+    const webClient = process.env.WEB_CLIENT || "http://localhost:3000";
     const params = new URLSearchParams({
         tab: "plan",
         billing: "confirming",
@@ -155,19 +184,14 @@ function returnUrl(organizationPublicId: string): string {
     return `${new URL(webClient).origin}/organizations?${params.toString()}`;
 }
 
-function cancelUrl(organizationPublicId: string): string {
-    const webClient = process.env.WEB_CLIENT;
-    if (!webClient) throw new Error("WEB_CLIENT_missing");
-    return `${new URL(webClient).origin}/organizations?tab=plan&organization=${encodeURIComponent(organizationPublicId)}`;
-}
-
 export async function createOrganizationCheckout(input: {
     organizationId: string;
-    payerUserId: string;
+    payerId: string;
     plan: "pro" | "business";
     interval: "month" | "year";
     catalogRevision: number;
     pendingTeamName?: string;
+    grant?: BillingActionGrant;
 }) {
     let config: ReturnType<typeof readBillingConfig>;
     try {
@@ -214,7 +238,7 @@ export async function createOrganizationCheckout(input: {
         throw new BillingCheckoutError("billing_catalog_unavailable", 503);
     }
     const price = catalog.items.find(
-        (row) => row.catalogKey === offer.catalogKey,
+        (row) => row.offerKey === offer.catalogKey,
     )?.price;
     if (!price)
         throw new BillingCheckoutError("billing_catalog_unavailable", 503);
@@ -227,7 +251,7 @@ export async function createOrganizationCheckout(input: {
             emailVerified: user.emailVerified,
         })
         .from(user)
-        .where(eq(user.id, input.payerUserId))
+        .where(eq(user.id, input.payerId))
         .limit(1);
     if (!identity?.emailVerified) {
         throw new BillingCheckoutError("billing_owner_required", 403, {
@@ -242,324 +266,110 @@ export async function createOrganizationCheckout(input: {
         .limit(1);
     if (!organization)
         throw new BillingCheckoutError("billing_provider_unavailable", 503);
+    const [lockedOrganization] = await db
+        .select({ status: organizations.status })
+        .from(organizations)
+        .where(eq(organizations.id, input.organizationId))
+        .limit(1);
+    if (
+        !lockedOrganization ||
+        !["active", "pending_payment"].includes(lockedOrganization.status)
+    ) {
+        throw new BillingCheckoutError("billing_owner_required", 403);
+    }
+
+    const billing = getBillingEngine();
     const now = new Date();
-    // The durable attempt row owns the provider idempotency key. Repeated
-    // requests while an attempt is open return that attempt's URL; a fresh
-    // random suffix is generated only after the previous attempt is terminal.
-    const attemptKeyPrefix = `checkout:${input.organizationId}:${input.payerUserId}:${offer.catalogKey}:${config.catalogRevision}`;
-    const pending = await db.transaction(async (tx) => {
-        const [observedPlanState] = await tx
-            .select()
-            .from(organizationPlanStates)
+    const existingSub = await billing.store.findEntitlementSubscription(
+        input.organizationId,
+    );
+    if (existingSub && !retainsPaidEntitlement(existingSub, now)) {
+        existingSub.isEntitlementSource = false;
+        await billing.store.upsertSubscription(existingSub);
+        const planState = await billing.store.ensurePlanState(
+            input.organizationId,
+        );
+        planState.activeSubscriptionId = null;
+        await billing.store.savePlanState(planState);
+    }
+
+    let trialDays = 0;
+    if (offer.trialDays > 0) {
+        const secrets = trialHmacSecrets();
+        const fingerprints = secrets.map((secret) =>
+            fingerprintVerifiedEmail(identity.email, secret.secret),
+        );
+        const [existing] = await db
+            .select({
+                status: billingTrialClaims.status,
+            })
+            .from(billingTrialClaims)
             .where(
-                eq(organizationPlanStates.organizationId, input.organizationId),
+                and(
+                    eq(billingTrialClaims.trialKey, "pro_month"),
+                    inArray(
+                        billingTrialClaims.verifiedEmailFingerprint,
+                        fingerprints,
+                    ),
+                ),
             )
             .limit(1);
-        let subscription:
-            | Pick<
-                  typeof organizationSubscriptions.$inferSelect,
-                  "id" | "status" | "paidThroughAt" | "cancelAtPeriodEnd"
-              >
-            | undefined;
-        if (observedPlanState?.activeSubscriptionId) {
-            [subscription] = await tx
-                .select({
-                    id: organizationSubscriptions.id,
-                    status: organizationSubscriptions.status,
-                    paidThroughAt: organizationSubscriptions.paidThroughAt,
-                    cancelAtPeriodEnd:
-                        organizationSubscriptions.cancelAtPeriodEnd,
-                })
-                .from(organizationSubscriptions)
-                .where(
-                    eq(
-                        organizationSubscriptions.id,
-                        observedPlanState.activeSubscriptionId,
-                    ),
-                )
-                .limit(1)
-                .for("update");
-        }
-        const [existing] = await tx
-            .select()
-            .from(billingCheckoutAttempts)
+        const [existingUser] = await db
+            .select({ status: billingTrialClaims.status })
+            .from(billingTrialClaims)
             .where(
                 and(
-                    eq(
-                        billingCheckoutAttempts.organizationId,
-                        input.organizationId,
-                    ),
-                    inArray(billingCheckoutAttempts.status, [
-                        "creating",
-                        "open",
-                    ]),
+                    eq(billingTrialClaims.userId, identity.id),
+                    eq(billingTrialClaims.trialKey, "pro_month"),
                 ),
             )
-            .limit(1)
-            .for("update");
-        const [lockedOrganization] = await tx
-            .select({ status: organizations.status })
-            .from(organizations)
-            .where(eq(organizations.id, input.organizationId))
-            .limit(1)
-            .for("update");
-        if (
-            !lockedOrganization ||
-            !["active", "pending_payment"].includes(lockedOrganization.status)
-        ) {
-            throw new BillingCheckoutError("billing_owner_required", 403);
-        }
-        const [planState] = await tx
-            .select()
-            .from(organizationPlanStates)
-            .where(
-                eq(organizationPlanStates.organizationId, input.organizationId),
-            )
-            .limit(1)
-            .for("update");
-        if (!planState)
-            throw new BillingCheckoutError("billing_provider_unavailable", 503);
-        if (
-            planState.activeSubscriptionId !==
-            (observedPlanState?.activeSubscriptionId ?? null)
-        ) {
-            throw new BillingCheckoutError("billing_checkout_pending", 409);
-        }
-        if (planState.activeSubscriptionId) {
-            if (
-                subscription &&
-                (["pending", "trialing", "active", "past_due"].includes(
-                    subscription.status,
-                ) ||
-                    Boolean(
-                        subscription.cancelAtPeriodEnd &&
-                        subscription.paidThroughAt &&
-                        subscription.paidThroughAt > now,
-                    ))
-            ) {
-                throw new BillingCheckoutError(
-                    "active_subscription_exists",
-                    409,
-                );
-            }
-            // Detach an elapsed or immediately-cancelled source in the same
-            // transaction that creates its replacement checkout. Otherwise a
-            // payment completed before the hourly expiry sweep would be
-            // quarantined as a conflicting live subscription.
-            if (subscription) {
-                await tx
-                    .update(organizationSubscriptions)
-                    .set({ isEntitlementSource: false, updatedAt: now })
-                    .where(eq(organizationSubscriptions.id, subscription.id));
-            }
-            await tx
-                .update(organizationPlanStates)
-                .set({
-                    plan: "free",
-                    activeSubscriptionId: null,
-                    projectionVersion: planState.projectionVersion + 1,
-                    updatedAt: now,
-                })
-                .where(eq(organizationPlanStates.id, planState.id));
-        }
-        if (existing && existing.expiresAt > now) {
-            if (existing.checkoutUrlEncrypted) {
-                return { existing };
-            }
-            throw new BillingCheckoutError("billing_checkout_pending", 409);
-        }
-        const attemptKey = `${attemptKeyPrefix}:${randomUUID()}`;
-        if (existing) {
-            await tx
-                .update(billingCheckoutAttempts)
-                .set({
-                    status: "expired",
-                    completedAt: now,
-                    updatedAt: now,
-                    checkoutUrlEncrypted: null,
-                })
-                .where(eq(billingCheckoutAttempts.id, existing.id));
-        }
-
-        let [customer] = await tx
-            .select()
-            .from(billingProviderCustomers)
-            .where(
-                and(
-                    eq(billingProviderCustomers.provider, provider.provider),
-                    eq(billingProviderCustomers.userId, input.payerUserId),
-                ),
-            )
-            .limit(1)
-            .for("update");
-        if (!customer) {
-            [customer] = await tx
-                .insert(billingProviderCustomers)
-                .values({
-                    provider: provider.provider,
-                    userId: input.payerUserId,
-                    idempotencyKey: `customer:${provider.provider}:${input.payerUserId}`,
-                    status: "creating",
-                })
-                .onConflictDoNothing()
-                .returning();
-            if (!customer) {
-                [customer] = await tx
-                    .select()
-                    .from(billingProviderCustomers)
-                    .where(
-                        and(
-                            eq(
-                                billingProviderCustomers.provider,
-                                provider.provider,
-                            ),
-                            eq(
-                                billingProviderCustomers.userId,
-                                input.payerUserId,
-                            ),
-                        ),
-                    )
-                    .limit(1)
-                    .for("update");
-            }
-        }
-        if (!customer)
-            throw new BillingCheckoutError("billing_provider_unavailable", 503);
-        const [attempt] = await tx
-            .insert(billingCheckoutAttempts)
-            .values({
-                organizationId: input.organizationId,
-                payerUserId: input.payerUserId,
-                provider: provider.provider,
-                catalogRevision: config.catalogRevision!,
-                catalogKey: offer.catalogKey,
-                requestedPlan: offer.plan,
-                requestedInterval: offer.interval,
-                pendingTeamName: input.pendingTeamName ?? null,
-                billingPriceEntryId: price.id,
-                quotedAmountMinor: offer.amountMinor,
-                quotedCurrency: offer.currency,
-                billingCustomerId: customer.id,
-                idempotencyKey: attemptKey,
-                status: "creating",
-                expiresAt: expiration(now),
-            })
-            .returning();
-        if (!attempt)
-            throw new BillingCheckoutError("billing_provider_unavailable", 503);
-        let trialEligible = false;
-        if (offer.trialDays > 0) {
-            trialEligible = await reserveTrialInTransaction(tx, {
-                userId: identity.id,
-                email: identity.email,
-                organizationId: input.organizationId,
-                checkoutAttemptId: attempt.id,
-                expiresAt: attempt.expiresAt,
-            });
-        }
-        return {
-            attempt,
-            customer,
-            trialDays: trialEligible ? offer.trialDays : 0,
-        };
-    });
-
-    if ("existing" in pending && pending.existing) {
-        try {
-            return {
-                checkoutUrl: decryptBillingValue(
-                    pending.existing.checkoutUrlEncrypted!,
-                ),
-                expiresAt: pending.existing.expiresAt.toISOString(),
-            };
-        } catch {
-            throw new BillingCheckoutError("billing_checkout_pending", 409);
+            .limit(1);
+        const claimed = existing ?? existingUser;
+        if (!claimed || claimed.status === "released") {
+            trialDays = offer.trialDays;
         }
     }
 
-    const { attempt, customer, trialDays } = pending;
-    let customerId = customer.providerCustomerId;
     try {
-        if (!customerId) {
-            const created = await provider.createCustomer({
+        const result = await billing.startCheckout({
+            grant:
+                input.grant ??
+                preconsumedGrant(
+                    "checkout",
+                    input.organizationId,
+                    input.payerId,
+                ),
+            entity: { kind: "organization", id: input.organizationId },
+            payer: {
+                id: identity.id,
                 email: identity.email,
-                name: identity.name,
-                idempotencyKey: customer.idempotencyKey,
-            });
-            customerId = created.providerCustomerId;
-            await db
-                .update(billingProviderCustomers)
-                .set({
-                    providerCustomerId: customerId,
-                    status: "active",
-                    updatedAt: new Date(),
-                    lastError: null,
-                })
-                .where(eq(billingProviderCustomers.id, customer.id));
-        }
-        const checkout = await provider.createCheckout({
-            productId: offer.providerProductId,
-            currency: offer.currency,
-            customerId,
-            payerEmail: identity.email,
+                name: identity.name || identity.email,
+            },
+            offerKey: offer.catalogKey,
+            catalogRevision: input.catalogRevision,
             returnUrl: returnUrl(organization.organizationId),
-            cancelUrl: cancelUrl(organization.organizationId),
-            attemptId: attempt.attemptId,
-            catalogKey: offer.catalogKey,
             trialDays,
-            idempotencyKey: attempt.idempotencyKey,
+            applicationFields: {
+                pendingTeamName: input.pendingTeamName ?? null,
+            },
         });
-        await db
-            .update(billingCheckoutAttempts)
-            .set({
-                providerCheckoutSessionId: checkout.providerCheckoutSessionId,
-                checkoutUrlEncrypted: encryptBillingValue(checkout.checkoutUrl),
-                status: "open",
-                updatedAt: new Date(),
-            })
-            .where(eq(billingCheckoutAttempts.id, attempt.id));
+        if (trialDays > 0) {
+            await db.transaction((tx) =>
+                reserveTrialInTransaction(tx, {
+                    userId: identity.id,
+                    email: identity.email,
+                    organizationId: input.organizationId,
+                    checkoutAttemptId: result.attempt.id,
+                    expiresAt: result.attempt.expiresAt,
+                }),
+            );
+        }
         return {
-            checkoutUrl: checkout.checkoutUrl,
-            expiresAt: attempt.expiresAt.toISOString(),
+            checkoutUrl: result.checkoutUrl,
+            expiresAt: result.attempt.expiresAt.toISOString(),
         };
     } catch (error) {
-        // Only an explicitly definitive provider rejection can safely abandon
-        // the attempt. Unknown/network errors may have reached the provider,
-        // so leave the row creating for reconciliation with the same key.
-        const ambiguous =
-            !(error instanceof BillingProviderError) ||
-            error.code === "unavailable" ||
-            error.code === "rate_limited";
-        await db
-            .update(billingCheckoutAttempts)
-            .set({
-                status: ambiguous ? "creating" : "abandoned",
-                completedAt: ambiguous ? null : new Date(),
-                lastError: providerErrorSummary(error),
-                updatedAt: new Date(),
-            })
-            .where(eq(billingCheckoutAttempts.id, attempt.id));
-        await db
-            .update(billingProviderCustomers)
-            .set({
-                status: customerId ? "active" : "creating",
-                lastError: providerErrorSummary(error),
-                updatedAt: new Date(),
-            })
-            .where(eq(billingProviderCustomers.id, customer.id));
-        if (!ambiguous) {
-            await db
-                .update(billingTrialClaims)
-                .set({ status: "released", updatedAt: new Date() })
-                .where(
-                    and(
-                        eq(billingTrialClaims.checkoutAttemptId, attempt.id),
-                        eq(billingTrialClaims.status, "reserved"),
-                    ),
-                );
-        }
-        if (error instanceof BillingCheckoutError) throw error;
-        throw new BillingCheckoutError("billing_provider_unavailable", 503);
+        throw mapCheckoutWorkflowError(error, errorDetails(config));
     }
 }
 
@@ -571,121 +381,30 @@ export async function resumeOrganizationCheckoutAttempt(
     attemptId: string,
     now = new Date(),
 ): Promise<boolean> {
-    const [row] = await db
-        .select({
-            attempt: billingCheckoutAttempts,
-            customer: billingProviderCustomers,
-            organizationPublicId: organizations.organizationId,
-            email: user.email,
-            name: user.name,
-            price: billingPriceEntries,
-        })
-        .from(billingCheckoutAttempts)
-        .innerJoin(
-            billingProviderCustomers,
-            eq(
-                billingProviderCustomers.id,
-                billingCheckoutAttempts.billingCustomerId,
-            ),
-        )
-        .innerJoin(
-            organizations,
-            eq(organizations.id, billingCheckoutAttempts.organizationId),
-        )
-        .innerJoin(user, eq(user.id, billingCheckoutAttempts.payerUserId))
-        .innerJoin(
-            billingPriceEntries,
-            eq(
-                billingPriceEntries.id,
-                billingCheckoutAttempts.billingPriceEntryId,
-            ),
-        )
-        .where(eq(billingCheckoutAttempts.id, attemptId))
-        .limit(1);
-    if (
-        !row ||
-        row.attempt.status !== "creating" ||
-        row.attempt.expiresAt <= now
-    )
+    const billing = getBillingEngine();
+    const attempt = await billing.store.findCheckoutById(attemptId);
+    if (!attempt || attempt.status !== "creating" || attempt.expiresAt <= now) {
         return false;
-    const provider = getBillingProvider(row.attempt.provider);
-    let customerId = row.customer.providerCustomerId;
-    try {
-        if (!customerId) {
-            const created = await provider.createCustomer({
-                email: row.email,
-                name: row.name,
-                idempotencyKey: row.customer.idempotencyKey,
-            });
-            customerId = created.providerCustomerId;
-            await db
-                .update(billingProviderCustomers)
-                .set({
-                    providerCustomerId: customerId,
-                    status: "active",
-                    updatedAt: now,
-                    lastError: null,
-                })
-                .where(eq(billingProviderCustomers.id, row.customer.id));
-        }
-        const config = readBillingConfig();
-        const configuredOffer = getBillingOffer(
-            config,
-            row.attempt.requestedPlan as "pro" | "business",
-            row.attempt.requestedInterval as "month" | "year",
-        );
-        let trialDays = 0;
-        if (configuredOffer?.trialDays) {
-            const eligible = await db.transaction((tx) =>
-                reserveTrialInTransaction(tx, {
-                    userId: row.attempt.payerUserId,
-                    email: row.email,
-                    organizationId: row.attempt.organizationId,
-                    checkoutAttemptId: row.attempt.id,
-                    expiresAt: row.attempt.expiresAt,
-                }),
-            );
-            if (eligible) trialDays = configuredOffer.trialDays;
-        }
-        const checkout = await provider.createCheckout({
-            productId: row.price.providerProductId,
-            currency: row.price.currency,
-            customerId,
-            payerEmail: row.email,
-            returnUrl: returnUrl(row.organizationPublicId),
-            cancelUrl: cancelUrl(row.organizationPublicId),
-            attemptId: row.attempt.attemptId,
-            catalogKey: row.attempt.catalogKey,
-            trialDays,
-            idempotencyKey: row.attempt.idempotencyKey,
-        });
-        await db
-            .update(billingCheckoutAttempts)
-            .set({
-                providerCheckoutSessionId: checkout.providerCheckoutSessionId,
-                checkoutUrlEncrypted: encryptBillingValue(checkout.checkoutUrl),
-                status: "open",
-                updatedAt: now,
-                lastError: null,
-            })
-            .where(eq(billingCheckoutAttempts.id, row.attempt.id));
-        return true;
-    } catch (error) {
-        await db
-            .update(billingCheckoutAttempts)
-            .set({ lastError: providerErrorSummary(error), updatedAt: now })
-            .where(eq(billingCheckoutAttempts.id, row.attempt.id));
-        throw error;
     }
+    await billing.enqueueJob({
+        provider: attempt.provider,
+        checkoutAttemptId: attempt.id,
+    });
+    await billing.runReconciliationBatch({
+        workerId: `checkout-resume:${attempt.id}`,
+    });
+    const latest = await billing.store.findCheckoutById(attemptId);
+    return latest?.status === "open";
 }
 
 export async function createPaidOrganizationCheckout(input: {
-    payerUserId: string;
+    payerId: string;
     organizationName: string;
     teamName: string;
     plan: "pro" | "business";
     interval: "month" | "year";
     catalogRevision: number;
+    grant?: BillingActionGrant;
 }) {
     let config: ReturnType<typeof readBillingConfig>;
     try {
@@ -706,7 +425,7 @@ export async function createPaidOrganizationCheckout(input: {
     let organization;
     try {
         organization = await createOrganization(
-            input.payerUserId,
+            input.payerId,
             input.organizationName,
             {
                 pendingPayment: true,
@@ -726,23 +445,7 @@ export async function createPaidOrganizationCheckout(input: {
             error instanceof Error &&
             error.message === "pending_organization_exists"
         ) {
-            const [existing] = await db
-                .select({ organization: organizations })
-                .from(organizations)
-                .innerJoin(
-                    organizationMembers,
-                    eq(organizationMembers.organizationId, organizations.id),
-                )
-                .where(
-                    and(
-                        eq(organizationMembers.userId, input.payerUserId),
-                        eq(organizationMembers.role, "owner"),
-                        eq(organizations.status, "pending_payment"),
-                    ),
-                )
-                .limit(1);
-            if (!existing?.organization) throw error;
-            organization = existing.organization;
+            throw new BillingCheckoutError("pending_organization_exists", 409);
         } else {
             throw error;
         }
@@ -750,11 +453,12 @@ export async function createPaidOrganizationCheckout(input: {
     try {
         const checkout = await createOrganizationCheckout({
             organizationId: organization.id,
-            payerUserId: input.payerUserId,
+            payerId: input.payerId,
             plan: input.plan,
             interval: input.interval,
             catalogRevision: input.catalogRevision,
             pendingTeamName: input.teamName,
+            grant: input.grant,
         });
         return { ...checkout, organizationId: organization.organizationId };
     } catch (error) {

@@ -1,19 +1,18 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import {
-    billingCatalogRevisionItems,
-    billingCatalogRevisions,
     billingPlanChangeAttempts,
-    organizationPlanStates,
-    organizationSubscriptions,
+    billingPlanStates,
+    billingSubscriptions,
     organizations,
 } from "../db/schema";
-import { encryptBillingValue, decryptBillingValue } from "./crypto";
+import { decryptBillingValue } from "./crypto";
 import { readBillingConfig, getBillingOffer } from "./catalog";
 import { requireActiveCatalog, verifyCheckoutOffer } from "./catalog-store";
 import { getBillingProvider } from "./provider-registry";
-import type { BillingProviderError } from "./provider";
+import { getBillingEngine, preconsumedGrant } from "./engine";
+import { BillingWorkflowError } from "@codelitdev/billing/core";
+import type { BillingActionGrant } from "@codelitdev/billing/workflows";
 
 type PlanChangeCode =
     | "billing_catalog_changed"
@@ -86,41 +85,74 @@ function defaultPolicy(
     };
 }
 
-function providerErrorCode(error: unknown): string {
-    return error && typeof error === "object" && "code" in error
-        ? String((error as BillingProviderError).code)
-        : "provider_error";
-}
-
-async function currentCatalogRevision(
-    priceEntryId: string,
-    fallback: number,
-): Promise<number> {
-    const [row] = await db
-        .select({ revision: billingCatalogRevisions.revision })
-        .from(billingCatalogRevisionItems)
-        .innerJoin(
-            billingCatalogRevisions,
-            eq(
-                billingCatalogRevisions.id,
-                billingCatalogRevisionItems.catalogRevisionId,
-            ),
-        )
-        .where(
-            eq(billingCatalogRevisionItems.billingPriceEntryId, priceEntryId),
-        )
-        .orderBy(desc(billingCatalogRevisions.revision))
-        .limit(1);
-    return row?.revision ?? fallback;
+function mapPlanChangeWorkflowError(
+    error: unknown,
+    details: Record<string, unknown> = {},
+): BillingPlanChangeError {
+    if (error instanceof BillingPlanChangeError) return error;
+    const code =
+        error instanceof BillingWorkflowError
+            ? error.code
+            : "provider_unavailable";
+    switch (code) {
+        case "catalog_changed":
+            return new BillingPlanChangeError(
+                "billing_catalog_changed",
+                409,
+                details,
+            );
+        case "catalog_unavailable":
+            return new BillingPlanChangeError(
+                "billing_catalog_unavailable",
+                503,
+            );
+        case "subscription_required":
+            return new BillingPlanChangeError(
+                "billing_subscription_required",
+                402,
+            );
+        case "payer_mismatch":
+        case "grant_invalid":
+        case "grant_consumed":
+            return new BillingPlanChangeError("billing_owner_required", 403);
+        case "plan_change_pending":
+            return new BillingPlanChangeError(
+                "billing_plan_change_pending",
+                409,
+                details,
+            );
+        case "same_offer":
+            return new BillingPlanChangeError(
+                "billing_plan_change_same_plan",
+                409,
+            );
+        case "plan_change_not_supported":
+            return new BillingPlanChangeError(
+                "billing_plan_change_not_supported",
+                409,
+            );
+        case "subscription_not_changeable":
+            return new BillingPlanChangeError(
+                "billing_subscription_not_changeable",
+                409,
+            );
+        default:
+            return new BillingPlanChangeError(
+                "billing_provider_unavailable",
+                503,
+                details,
+            );
+    }
 }
 
 export async function createOrganizationPlanChange(input: {
     organizationId: string;
-    actorUserId: string;
+    actorId: string;
     plan: "pro" | "business";
     interval: "month" | "year";
     catalogRevision: number;
     idempotencyKey?: string;
+    grant?: BillingActionGrant;
 }) {
     let config: ReturnType<typeof readBillingConfig>;
     try {
@@ -169,271 +201,115 @@ export async function createOrganizationPlanChange(input: {
         throw new BillingPlanChangeError("billing_catalog_unavailable", 503);
     }
     const targetPrice = catalog.items.find(
-        (row) => row.catalogKey === offer.catalogKey,
+        (row) => row.offerKey === offer.catalogKey,
     )?.price;
     if (!targetPrice)
         throw new BillingPlanChangeError("billing_catalog_unavailable", 503);
 
-    const idempotencyKey = `plan-change:${input.organizationId}:${input.idempotencyKey?.trim() || randomUUID()}`;
-    const now = new Date();
-    const pending = await db.transaction(async (tx) => {
-        const [observedState] = await tx
-            .select()
-            .from(organizationPlanStates)
-            .where(
-                eq(organizationPlanStates.organizationId, input.organizationId),
-            )
-            .limit(1);
-        if (!observedState?.activeSubscriptionId) {
-            throw new BillingPlanChangeError(
-                "billing_subscription_required",
-                402,
-            );
-        }
-        const [subscription] = await tx
-            .select()
-            .from(organizationSubscriptions)
-            .where(
-                and(
-                    eq(
-                        organizationSubscriptions.id,
-                        observedState.activeSubscriptionId,
-                    ),
-                    eq(
-                        organizationSubscriptions.organizationId,
-                        input.organizationId,
-                    ),
-                ),
-            )
-            .limit(1)
-            .for("update");
-        if (!subscription)
-            throw new BillingPlanChangeError(
-                "billing_subscription_required",
-                402,
-            );
-        const [organization] = await tx
-            .select({ status: organizations.status })
-            .from(organizations)
-            .where(eq(organizations.id, input.organizationId))
-            .limit(1)
-            .for("update");
-        if (!organization || organization.status !== "active") {
-            throw new BillingPlanChangeError(
-                "billing_subscription_not_changeable",
-                409,
-            );
-        }
-        const [state] = await tx
-            .select()
-            .from(organizationPlanStates)
-            .where(
-                eq(organizationPlanStates.organizationId, input.organizationId),
-            )
-            .limit(1)
-            .for("update");
-        if (state?.activeSubscriptionId !== subscription.id) {
-            throw new BillingPlanChangeError(
-                "billing_subscription_not_changeable",
-                409,
-            );
-        }
-        if (subscription.billingManagerUserId !== input.actorUserId) {
-            throw new BillingPlanChangeError("billing_owner_required", 403);
-        }
-
-        // Idempotency is checked before validating the current projection: a
-        // successful request may already have moved the subscription to the
-        // target product by the time the client retries.
-        const [existingByKey] = await tx
-            .select()
-            .from(billingPlanChangeAttempts)
-            .where(eq(billingPlanChangeAttempts.idempotencyKey, idempotencyKey))
-            .limit(1)
-            .for("update");
-        if (existingByKey) {
-            if (
-                existingByKey.organizationId !== input.organizationId ||
-                existingByKey.targetPlan !== input.plan ||
-                existingByKey.targetInterval !== input.interval
-            ) {
-                throw new BillingPlanChangeError(
-                    "billing_plan_change_pending",
-                    409,
-                );
-            }
-            return { row: existingByKey, subscription };
-        }
-
-        if (!["trialing", "active"].includes(subscription.status)) {
-            throw new BillingPlanChangeError(
-                "billing_subscription_not_changeable",
-                409,
-            );
-        }
-        const currentPlan = subscription.plan as "pro" | "business";
-        const currentInterval = subscription.billingInterval as
-            "month" | "year";
-
-        if (currentPlan === input.plan && currentInterval === input.interval) {
-            throw new BillingPlanChangeError(
-                "billing_plan_change_same_plan",
-                409,
-            );
-        }
-        if (
-            !provider.capabilities.planChanges ||
-            (currentInterval !== input.interval &&
-                !provider.capabilities.intervalChanges)
-        ) {
-            throw new BillingPlanChangeError(
-                "billing_plan_change_not_supported",
-                409,
-            );
-        }
-
-        const [existing] = await tx
-            .select()
-            .from(billingPlanChangeAttempts)
-            .where(
-                and(
-                    eq(
-                        billingPlanChangeAttempts.organizationId,
-                        input.organizationId,
-                    ),
-                    inArray(billingPlanChangeAttempts.status, [
-                        "creating",
-                        "pending",
-                    ]),
-                ),
-            )
-            .limit(1)
-            .for("update");
-        if (existing)
-            throw new BillingPlanChangeError(
-                "billing_plan_change_pending",
-                409,
-                { changeId: existing.changeId },
-            );
-
-        const policy = defaultPolicy(
-            currentPlan,
-            currentInterval,
-            input.plan,
-            input.interval,
+    const [observedState] = await db
+        .select()
+        .from(billingPlanStates)
+        .where(eq(billingPlanStates.billableEntityId, input.organizationId))
+        .limit(1);
+    if (!observedState?.activeSubscriptionId) {
+        throw new BillingPlanChangeError("billing_subscription_required", 402);
+    }
+    const [subscription] = await db
+        .select()
+        .from(billingSubscriptions)
+        .where(
+            and(
+                eq(billingSubscriptions.id, observedState.activeSubscriptionId),
+                eq(billingSubscriptions.billableEntityId, input.organizationId),
+            ),
+        )
+        .limit(1);
+    if (!subscription)
+        throw new BillingPlanChangeError("billing_subscription_required", 402);
+    const [organization] = await db
+        .select({ status: organizations.status })
+        .from(organizations)
+        .where(eq(organizations.id, input.organizationId))
+        .limit(1);
+    if (!organization || organization.status !== "active") {
+        throw new BillingPlanChangeError(
+            "billing_subscription_not_changeable",
+            409,
         );
-        if (
-            policy.prorationMode === "prorated_immediately" &&
-            !provider.capabilities.proratedPlanChanges
-        ) {
-            throw new BillingPlanChangeError(
-                "billing_plan_change_not_supported",
-                409,
-            );
-        }
-        const [row] = await tx
-            .insert(billingPlanChangeAttempts)
-            .values({
-                organizationId: input.organizationId,
-                subscriptionId: subscription.id,
-                actorUserId: input.actorUserId,
-                provider: subscription.provider,
-                idempotencyKey,
-                currentCatalogRevision: await currentCatalogRevision(
-                    subscription.billingPriceEntryId,
-                    config.catalogRevision!,
+    }
+    if (subscription.payerId !== input.actorId) {
+        throw new BillingPlanChangeError("billing_owner_required", 403);
+    }
+    if (!["trialing", "active"].includes(subscription.status)) {
+        throw new BillingPlanChangeError(
+            "billing_subscription_not_changeable",
+            409,
+        );
+    }
+    const currentPlan = subscription.plan as "pro" | "business";
+    const currentInterval = subscription.billingInterval as "month" | "year";
+    if (currentPlan === input.plan && currentInterval === input.interval) {
+        throw new BillingPlanChangeError("billing_plan_change_same_plan", 409);
+    }
+    if (
+        !provider.capabilities.planChanges ||
+        (currentInterval !== input.interval &&
+            !provider.capabilities.intervalChanges)
+    ) {
+        throw new BillingPlanChangeError(
+            "billing_plan_change_not_supported",
+            409,
+        );
+    }
+    const policy = defaultPolicy(
+        currentPlan,
+        currentInterval,
+        input.plan,
+        input.interval,
+    );
+    if (
+        policy.prorationMode === "prorated_immediately" &&
+        !provider.capabilities.proratedPlanChanges
+    ) {
+        throw new BillingPlanChangeError(
+            "billing_plan_change_not_supported",
+            409,
+        );
+    }
+    const billing = getBillingEngine();
+    try {
+        const attempt = await billing.startPlanChange({
+            grant:
+                input.grant ??
+                preconsumedGrant(
+                    "plan_change",
+                    input.organizationId,
+                    input.actorId,
                 ),
-                currentBillingPriceEntryId: subscription.billingPriceEntryId,
-                currentPlan,
-                currentInterval,
-                targetCatalogRevision: config.catalogRevision!,
-                targetBillingPriceEntryId: targetPrice.id,
-                targetPlan: input.plan,
-                targetInterval: input.interval,
-                effectiveAt: policy.effectiveAt,
-                prorationMode: policy.prorationMode,
-                status: "creating",
-                requestedAt: now,
-            })
-            .returning();
+            entity: { kind: "organization", id: input.organizationId },
+            payer: {
+                id: input.actorId,
+                email: input.actorId,
+                name: input.actorId,
+            },
+            offerKey: offer.catalogKey,
+            catalogRevision: input.catalogRevision,
+            effectiveAt: policy.effectiveAt,
+            prorationMode: policy.prorationMode,
+        });
+        const [row] = await db
+            .select()
+            .from(billingPlanChangeAttempts)
+            .where(eq(billingPlanChangeAttempts.changeId, attempt.changeId))
+            .limit(1);
         if (!row)
             throw new BillingPlanChangeError(
                 "billing_provider_unavailable",
                 503,
             );
-        return { row, subscription };
-    });
-
-    if (pending.row.status !== "creating") {
-        return responseFor(
-            pending.row,
-            pending.row.actorUserId === input.actorUserId,
-        );
-    }
-
-    let result;
-    try {
-        result = await provider.changeSubscriptionPlan({
-            providerSubscriptionId: pending.subscription.providerSubscriptionId,
-            targetProviderProductId: offer.providerProductId,
-            effectiveAt: pending.row.effectiveAt as
-                "immediately" | "next_billing_date",
-            prorationMode: pending.row.prorationMode as
-                "prorated_immediately" | "do_not_bill",
-            idempotencyKey: pending.row.idempotencyKey,
-        });
+        return responseFor(row, true);
     } catch (error) {
-        const code = providerErrorCode(error);
-        const ambiguous = code === "unavailable" || code === "rate_limited";
-        const [updated] = await db
-            .update(billingPlanChangeAttempts)
-            .set({
-                status: ambiguous ? "pending" : "failed",
-                lastError: code.slice(0, 120),
-                completedAt: ambiguous ? null : new Date(),
-                updatedAt: new Date(),
-            })
-            .where(eq(billingPlanChangeAttempts.id, pending.row.id))
-            .returning();
-        if (ambiguous) {
-            // The request may have reached the provider even though the HTTP
-            // response was lost. Return the durable pending attempt and let
-            // reconciliation retry with the same idempotency key.
-            return responseFor(updated ?? pending.row, true);
-        }
-        throw new BillingPlanChangeError(
-            "billing_plan_change_not_supported",
-            409,
-            {
-                reason: code,
-            },
-        );
-    }
-
-    try {
-        const [updated] = await db
-            .update(billingPlanChangeAttempts)
-            .set({
-                status: "pending",
-                providerPaymentId: result.providerPaymentId,
-                paymentUrlEncrypted: result.paymentUrl
-                    ? encryptBillingValue(result.paymentUrl)
-                    : null,
-                lastError: null,
-                updatedAt: new Date(),
-            })
-            .where(eq(billingPlanChangeAttempts.id, pending.row.id))
-            .returning();
-        if (!updated) throw new Error("billing_plan_change_update_failed");
-        return responseFor(updated, true);
-    } catch {
-        // The provider mutation may already have succeeded. Leave the local
-        // row non-terminal so reconciliation can persist the result and the
-        // signed webhook can still project entitlements.
-        throw new BillingPlanChangeError("billing_provider_unavailable", 503, {
-            changeId: pending.row.changeId,
-            pending: true,
-        });
+        throw mapPlanChangeWorkflowError(error);
     }
 }
 
@@ -448,7 +324,7 @@ export async function getOrganizationPlanChange(input: {
         .where(
             and(
                 eq(
-                    billingPlanChangeAttempts.organizationId,
+                    billingPlanChangeAttempts.billableEntityId,
                     input.organizationId,
                 ),
                 eq(billingPlanChangeAttempts.changeId, input.changeId),
@@ -456,5 +332,5 @@ export async function getOrganizationPlanChange(input: {
         )
         .limit(1);
     if (!row) return null;
-    return responseFor(row, row.actorUserId === input.userId);
+    return responseFor(row, row.actorId === input.userId);
 }
