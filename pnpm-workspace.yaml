@@ -4,6 +4,10 @@ packages:
 
 allowBuilds:
   "@scarf/scarf": false
+  # posthog-js depends on core-js; its postinstall is a funding notice, not a
+  # required native build. Explicit false so `pnpm install` succeeds in CI
+  # and Docker (pnpm 11 errors on unreviewed lifecycle scripts).
+  core-js: false
   esbuild: true
   msgpackr-extract: true
   protobufjs: false

@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Hanken_Grotesk, Spline_Sans_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/codelit/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { getPosthogBrowserConfig } from "@/lib/config";
+import { PostHogProvider } from "@/components/posthog-provider";
 
 const hankenGrotesk = Hanken_Grotesk({
     subsets: ["latin"],
@@ -19,11 +22,23 @@ export const metadata: Metadata = {
     description: "Compose, send and automate email.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
+    // Request-time read so POSTHOG_* can change at container start. Static
+    // generation would freeze the build-time (usually empty) value into the
+    // OSS image.
+    await headers();
+    const posthog = getPosthogBrowserConfig();
+    const content = (
+        <TooltipProvider>
+            {children}
+            <Toaster />
+        </TooltipProvider>
+    );
+
     return (
         <html
             lang="en"
@@ -35,10 +50,17 @@ export default function RootLayout({
             )}
         >
             <body className="antialiased">
-                <TooltipProvider>
-                    {children}
-                    <Toaster />
-                </TooltipProvider>
+                {posthog ? (
+                    <PostHogProvider
+                        apiKey={posthog.apiKey}
+                        host={posthog.host}
+                        environment={posthog.environment}
+                    >
+                        {content}
+                    </PostHogProvider>
+                ) : (
+                    content
+                )}
             </body>
         </html>
     );

@@ -18,6 +18,7 @@ import {
     SidebarMenuItem,
     useSidebar,
 } from "@/components/ui/sidebar";
+import { resetPosthogUser } from "@/lib/posthog-browser";
 
 export interface CurrentAccount {
     email: string;
@@ -91,7 +92,13 @@ export function NavUser({ user }: { user: CurrentAccount | null }) {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem asChild>
-                            <form action="/api/auth/sign-out" method="POST">
+                            <form
+                                action="/api/auth/sign-out"
+                                method="POST"
+                                onSubmit={() => {
+                                    resetPosthogUser();
+                                }}
+                            >
                                 <button
                                     type="submit"
                                     className="flex w-full items-center gap-2"
