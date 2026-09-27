@@ -31,7 +31,7 @@ import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
 import suppressionsRoutes from "./delivery-feedback/suppressions-routes";
 import { assertEspEncryptionKeyConfigured } from "./utils/secret-crypto";
 import { assertSuppressionHashKeyConfigured } from "./delivery-feedback/suppression-hash";
-import { createSuperAdminIfMissing } from "./bootstrap";
+import { createInitialOrganizationOwnerIfMissing } from "./bootstrap";
 import { openApiDocument } from "./openapi";
 import {
     captureError,
@@ -192,7 +192,7 @@ checkConfig()
             await recordRequestedCatalogRevision(billingConfig);
         }
     })
-    .then(createSuperAdminIfMissing)
+    .then(createInitialOrganizationOwnerIfMissing)
     .then(() => {
         app.listen(port, () => {
             logger.info(`SendLit API running at ${port}`);

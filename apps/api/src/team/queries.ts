@@ -215,8 +215,8 @@ export async function getProvisionedTeamView(team: Team) {
  *
  * `withDefaultApiKey` opts into also minting a "Default" API key for the new
  * team — only worth doing when the caller has an actual way to hand the
- * one-time secret to whoever needs it (provisioning's response body,
- * bootstrap's startup log). Dashboard/MCP-driven team creation has no such
+ * one-time secret to whoever needs it (provisioning's response body).
+ * Dashboard/MCP-driven team creation has no such
  * surface, so it defaults to `false`: better to have the user mint a key
  * explicitly (and see it) than to silently burn one they'll never see.
  */

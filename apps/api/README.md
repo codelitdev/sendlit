@@ -16,13 +16,18 @@ email provider configuration.
   receipt inbox, canonical delivery events, and a per-workspace suppression
   list enforced on every send path.
 - Open and click tracking, plus unsubscribe handling.
-- Better Auth session login, OAuth2 bearer-token authentication, and
-  team-scoped API key authentication.
+- Better Auth session login, OAuth2 bearer-token authentication, team-scoped
+  API keys, and scoped organization API keys.
 - An MCP server exposing the same core capabilities for API/MCP clients.
 
 ## Running Locally
 
-1. Start Postgres and Redis.
+1. Start the local dependencies from the repository root:
+
+    ```sh
+    docker compose -f docker-compose.local.yml up -d
+    ```
+
 2. Copy `.env.example` to `.env` and fill in the required values.
 3. Push the database schema:
 
@@ -36,8 +41,10 @@ email provider configuration.
     pnpm --filter @sendlit/api dev
     ```
 
-The server listens on `PORT` from `.env` (`4000` in `.env.example`; `80` if
-unset).
+The server listens on `PORT` from `.env` (`5000` in `.env.example`; `80` if
+unset). The local Compose file publishes Postgres on `5434`, Redis on `6380`,
+and Mailpit on SMTP/UI ports `1027`/`8027`; the example environment is set to
+use them. These ports are distinct from the CourseLit and FrontLit local stacks.
 
 ## Database Migrations In Docker
 
@@ -51,7 +58,7 @@ The root self-hosted deployment runs this through a Compose `init` service:
 
 ```sh
 cp .env.example .env
-# Fill in the required secrets and SUPER_ADMIN_EMAIL.
+# Fill in the required secrets and BOOTSTRAP_ORGANIZATION_OWNER_EMAIL.
 docker compose up --build -d
 docker compose logs init
 ```
@@ -60,8 +67,9 @@ Startup order:
 
 1. Postgres starts and passes its health check.
 2. Redis starts and passes its health check.
-3. `init` runs `node apps/api/dist/db/migrate.js`, then creates the configured
-   super-admin account, default team, and one-time API key.
+3. `init` runs `node apps/api/dist/db/migrate.js`, ensures the configured
+   initial organization owner and default organization/team exist, then
+   registers configured organization keys from `.env`.
 4. The init container exits successfully.
 5. `api` starts.
 6. `web` starts.
@@ -113,15 +121,18 @@ SendLit supports three authentication modes:
   authorization-server metadata at
   `/.well-known/oauth-authorization-server` and OIDC metadata at
   `/.well-known/openid-configuration`.
-- **API keys** for server-to-server, REST, and MCP clients. API keys are scoped
-  to one team and are sent with the `x-sendlit-apikey` header.
+- **Team API keys** for server-to-server REST and MCP clients; send them with
+  the `x-sendlit-apikey` header. **Organization API keys** are scoped to one
+  organization and sent as Bearer credentials for provisioning and selected
+  organization REST operations.
 
 Session and OAuth requests resolve the active team through the
 `X-Sendlit-Team-Id` header. If the account belongs to exactly one team, the
 header may be omitted.
 
 API keys are stored hashed and cannot be recovered after creation. If a key is
-lost, create a new one and revoke the old key.
+lost, create a new one and revoke the old key. Self-host bootstrap reads both
+configured keys from the environment; neither is printed to logs.
 
 When the API runs behind the web BFF or another reverse proxy, set
 `ENABLE_TRUST_PROXY=true` so auth endpoint rate limits can use the real client
@@ -155,24 +166,30 @@ curl http://localhost:5000/contacts \
 The `X-Sendlit-Team-Id` header is optional only when the account belongs to
 exactly one team.
 
-## Bootstrap API Key
+## Headless organization setup
 
-For local development or self-hosted installs, set `SUPER_ADMIN_EMAIL` before
-starting the API. On startup, if no account exists for that email, SendLit
-creates:
+`BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` selects the initial owner; it does not
+grant a special global-admin role. Bootstrap also runs when this user already
+exists, reuses their default organization, and registers configured
+organization API keys from `BOOTSTRAP_DELIVERY_SETUP_API_KEY` and
+`BOOTSTRAP_TEAM_PROVISIONING_API_KEY`. Both values are set in `.env`. Bootstrap stores
+only their hashes, never logs the secrets, and fails closed if a key is
+revoked, expired, belongs to another organization, or has different scopes.
 
-- the account;
-- its default team;
-- a default team-scoped API key.
+Use separate keys: the short-lived delivery setup key has
+`organization:read`, `esps:read`, `esps:manage`, `delivery:read`, and
+`delivery:manage`; the runtime team provisioning key has only
+`organization:read`, `teams:provision`, and `teams:read`. `delivery:manage`
+also authorizes quota and team-delivery policy fields, so revoke it after
+one-time setup if it is no longer needed. Compose passes both keys only to
+`init` and clears them from the long-running API and web containers. Configure
+the team key in the consuming integration's server-side environment.
 
-The plaintext API key is logged once with the `Super admin account created`
-message. After that, only the hash is stored. Copy the key from the first
-startup logs (`docker compose logs`, or the API process logs) and use it as
-`x-sendlit-apikey` for REST or MCP requests.
-
-If the account already exists, bootstrap does nothing and cannot re-print the
-key. Create or rotate keys through the dashboard, `POST /teams/:teamId/keys`,
-or the MCP `create_api_key` tool.
+Follow the [Headless organization setup guide](../docs/content/docs/developers/headless-provisioning.mdx)
+for Compose configuration, REST examples, reruns, rotation, old-key migration, and the
+team grant/default inheritance flow. The API's machine-readable contract is
+available at `/openapi.json`. The raw Markdown guide is
+[`../docs/integrations/headless-provisioning.md`](../docs/integrations/headless-provisioning.md).
 
 ## Teams And Tenancy
 
@@ -189,9 +206,10 @@ multi-tenant consumers, such as CourseLit, to find or create one SendLit team
 per external tenant. It requires a scoped organization API key as a Bearer
 token; it is not authenticated by an end-user OAuth session or team API key.
 
-`SUPER_ADMIN_EMAIL` is only a boot-time convenience for the first local or
-self-hosted account. It is not the provisioning mechanism for multi-tenant
-consumers.
+`BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` selects the initial local or self-hosted
+organization owner; it is not the provisioning mechanism for multi-tenant
+consumers. Integrations use `/provisioning/teams` with a narrowly scoped
+organization key.
 
 ## Architecture
 

@@ -188,6 +188,8 @@ function serializeOrganizationKey(
         keyPrefix: key.keyPrefix,
         scopes: key.scopes as Array<
             | "organization:read"
+            | "delivery:read"
+            | "delivery:manage"
             | "teams:provision"
             | "teams:read"
             | "teams:manage"
@@ -1571,7 +1573,10 @@ const impl = s.router(contract.organizations, {
         if (!authorization) {
             return { status: 404, body: { error: "organization_not_found" } };
         }
-        if (!hasRole(authorization, ["owner", "admin"])) {
+        const mayRead =
+            hasRole(authorization, ["owner", "admin"]) ||
+            Boolean(authorization.keyScopes?.includes("delivery:read"));
+        if (!mayRead) {
             return {
                 status: 403,
                 body: { error: "organization_permission_required" },
@@ -1596,7 +1601,10 @@ const impl = s.router(contract.organizations, {
         if (!authorization) {
             return { status: 404, body: { error: "organization_not_found" } };
         }
-        if (!hasRole(authorization, ["owner", "admin"])) {
+        const mayManage =
+            hasRole(authorization, ["owner", "admin"]) ||
+            Boolean(authorization.keyScopes?.includes("delivery:manage"));
+        if (!mayManage) {
             return {
                 status: 403,
                 body: { error: "organization_permission_required" },

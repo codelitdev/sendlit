@@ -63,8 +63,7 @@ export function recordWebhookSignatureFailure(now = new Date()): number {
 }
 
 function adminRecipients(): string[] {
-    const raw =
-        process.env.BILLING_ALERT_EMAIL || process.env.SUPER_ADMIN_EMAIL || "";
+    const raw = process.env.BILLING_ALERT_EMAIL || "";
     return raw
         .split(",")
         .map((value) => value.trim())

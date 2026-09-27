@@ -6,6 +6,7 @@ import {
     generateApiKeySecret,
     generateOrganizationApiKeySecret,
     hashApiKeySecret,
+    isOrganizationApiKeySecret,
 } from "./secret";
 
 export type ApiKey = typeof teamApiKeys.$inferSelect;
@@ -104,6 +105,77 @@ export async function createOrganizationApiKey(
         })
         .returning();
     return { apiKey, secret };
+}
+
+/** Register an operator-supplied organization key without ever returning or
+ * logging its plaintext. Re-running bootstrap with the same secret and role
+ * is a no-op; a revoked, expired, cross-organization, or differently scoped
+ * key fails closed instead of being silently repaired. */
+export async function registerConfiguredOrganizationApiKey(
+    organizationId: string,
+    name: string,
+    scopes: string[],
+    secret: string,
+    createdByUserId?: string,
+): Promise<{ apiKey: OrganizationApiKey; created: boolean }> {
+    if (!isOrganizationApiKeySecret(secret)) {
+        throw new Error("configured_organization_api_key_invalid");
+    }
+
+    const keyHash = hashApiKeySecret(secret);
+    const expectedScopes = [...new Set(scopes)].sort();
+    const validateExisting = (
+        apiKey: OrganizationApiKey,
+    ): { apiKey: OrganizationApiKey; created: false } => {
+        if (apiKey.organizationId !== organizationId) {
+            throw new Error("configured_organization_api_key_org_mismatch");
+        }
+        if (apiKey.revokedAt) {
+            throw new Error("configured_organization_api_key_revoked");
+        }
+        if (apiKey.expiresAt && apiKey.expiresAt <= new Date()) {
+            throw new Error("configured_organization_api_key_expired");
+        }
+        const actualScopes = [...new Set(apiKey.scopes)].sort();
+        if (JSON.stringify(actualScopes) !== JSON.stringify(expectedScopes)) {
+            throw new Error("configured_organization_api_key_scope_mismatch");
+        }
+        return { apiKey, created: false };
+    };
+
+    const [existing] = await db
+        .select()
+        .from(organizationApiKeys)
+        .where(eq(organizationApiKeys.keyHash, keyHash))
+        .limit(1);
+    if (existing) return validateExisting(existing);
+
+    const [created] = await db
+        .insert(organizationApiKeys)
+        .values({
+            organizationId,
+            name,
+            scopes: expectedScopes,
+            keyHash,
+            keyPrefix: displayPrefix(secret),
+            createdByUserId,
+        })
+        .onConflictDoNothing({ target: organizationApiKeys.keyHash })
+        .returning();
+    if (created) return { apiKey: created, created: true };
+
+    // Another bootstrap process may have registered this hash concurrently.
+    const [raced] = await db
+        .select()
+        .from(organizationApiKeys)
+        .where(eq(organizationApiKeys.keyHash, keyHash))
+        .limit(1);
+    if (!raced) {
+        throw new Error(
+            "configured_organization_api_key_registration_conflict",
+        );
+    }
+    return validateExisting(raced);
 }
 
 export async function getOrganizationApiKeys(

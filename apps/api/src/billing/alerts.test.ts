@@ -1,4 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const emailMocks = vi.hoisted(() => ({
+    createTransport: vi.fn(),
+    sendMail: vi.fn(),
+}));
+
+vi.mock("nodemailer", () => ({
+    createTransport: emailMocks.createTransport,
+}));
+vi.mock("../services/log", () => ({
+    default: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+}));
+vi.mock("../observability/posthog", () => ({
+    captureError: vi.fn(),
+    captureEvent: vi.fn(),
+}));
+vi.mock("./metrics", () => ({ recordBillingMetric: vi.fn() }));
 
 vi.mock("../db/client", async () => {
     const { makeTestDb } = await import("../test/db.js");
@@ -8,6 +25,7 @@ vi.mock("../db/client", async () => {
 import { db } from "../db/client";
 import { billingCatalogRevisions, billingWebhookEvents } from "../db/schema";
 import { truncateAll, type TestDb } from "../test/db";
+import { pageBillingAlert } from "./alerts";
 import {
     collectBillingSloAlerts,
     recordBillingHourlySuccess,
@@ -20,7 +38,15 @@ const tdb = db as unknown as TestDb;
 beforeEach(async () => {
     resetBillingAlertsForTests();
     recordBillingHourlySuccess();
+    emailMocks.createTransport.mockReturnValue({
+        sendMail: emailMocks.sendMail,
+    });
     await truncateAll(tdb);
+});
+
+afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
 });
 
 describe("billing SLO alerts", () => {
@@ -72,5 +98,45 @@ describe("billing SLO alerts", () => {
             count = recordWebhookSignatureFailure(now);
         }
         expect(count).toBe(10);
+    });
+
+    it("sends billing emails only to BILLING_ALERT_EMAIL recipients", async () => {
+        vi.stubEnv("NODE_ENV", "production");
+        vi.stubEnv("EMAIL_HOST", "mail.example.com");
+        vi.stubEnv("EMAIL_FROM", "alerts@example.com");
+        vi.stubEnv(
+            "BILLING_ALERT_EMAIL",
+            " admin@example.com, ops@example.com ",
+        );
+
+        await pageBillingAlert({
+            code: "webhook_quarantined",
+            message: "Review quarantined event",
+            details: { count: 1 },
+        });
+
+        expect(emailMocks.createTransport).toHaveBeenCalledOnce();
+        expect(emailMocks.sendMail).toHaveBeenCalledWith(
+            expect.objectContaining({
+                to: "admin@example.com, ops@example.com",
+            }),
+        );
+    });
+
+    it("does not fall back to SUPER_ADMIN_EMAIL when alert recipients are unset", async () => {
+        vi.stubEnv("NODE_ENV", "production");
+        vi.stubEnv("EMAIL_HOST", "mail.example.com");
+        vi.stubEnv("EMAIL_FROM", "alerts@example.com");
+        vi.stubEnv("BILLING_ALERT_EMAIL", "");
+        vi.stubEnv("SUPER_ADMIN_EMAIL", "legacy@example.com");
+
+        await pageBillingAlert({
+            code: "webhook_quarantined",
+            message: "Review quarantined event",
+            details: { count: 1 },
+        });
+
+        expect(emailMocks.createTransport).not.toHaveBeenCalled();
+        expect(emailMocks.sendMail).not.toHaveBeenCalled();
     });
 });

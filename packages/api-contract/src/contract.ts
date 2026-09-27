@@ -785,6 +785,19 @@ const teamsContract = c.router(
 
 const provisioningContract = c.router(
     {
+        getOrganization: {
+            method: "GET",
+            path: "/provisioning/organization",
+            responses: {
+                200: organizationSchema,
+                401: errorSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Get the organization bound to the calling API key",
+            description:
+                "Returns only the organization associated with the authenticated organization API key. Requires the organization:read scope; the organization cannot be selected in the request.",
+        },
         provisionTeam: {
             method: "POST",
             path: "/provisioning/teams",
@@ -1127,6 +1140,8 @@ const organizationsContract = c.router(
                 502: testEspConfigResponseSchema,
             },
             summary: "Test an organization-owned ESP configuration",
+            description:
+                "Organization API keys may test an ESP with an explicit `to` address; they have no signed-in user email to use as a fallback. Requires `esps:manage` and organization binding.",
         },
         activateEsp: {
             method: "POST",
@@ -1251,6 +1266,8 @@ const organizationsContract = c.router(
                 404: errorSchema,
             },
             summary: "Get organization delivery policy",
+            description:
+                "Organization API keys require the delivery:read scope and must be bound to the path organization. Owner/admin user sessions remain supported.",
         },
         updateDeliveryPolicy: {
             method: "PUT",
@@ -1263,6 +1280,8 @@ const organizationsContract = c.router(
                 422: errorSchema,
             },
             summary: "Update organization delivery policy",
+            description:
+                "Organization API keys require the delivery:manage scope and must be bound to the path organization. This scope authorizes every field in the delivery-policy schema, including shared quotas and team delivery controls. Owner/admin user sessions remain supported.",
         },
         getUsage: {
             method: "GET",

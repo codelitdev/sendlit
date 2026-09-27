@@ -47,6 +47,8 @@ export const updateOrganizationMemberBodySchema = z.object({
 
 export const organizationKeyScopes = [
     "organization:read",
+    "delivery:read",
+    "delivery:manage",
     "teams:provision",
     "teams:read",
     "teams:manage",

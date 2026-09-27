@@ -157,13 +157,15 @@ can use that mailbox.
 ## Provision teams from your platform
 
 For a CourseLit-style integration, set up the organization once in the
-dashboard:
+dashboard or follow the [headless organization setup](/developers/headless-provisioning)
+guide:
 
 1. Create or select the organization.
 2. Add, test, and activate a shared mailbox.
 3. Set the default-delivery policy and any quotas.
-4. Create an organization API key with the `teams:provision` scope. Store the
-   secret in your platform’s server-side secret manager; it is shown once.
+4. Create a runtime organization API key with `organization:read`,
+   `teams:provision`, and `teams:read`. Store it in your platform’s server-side
+   secret manager and do not include delivery-administration scopes.
 5. On each customer signup, your backend calls `POST /provisioning/teams` with
    `Authorization: Bearer <organization key>`, a stable `externalId`, and the
    team’s sender, delivery, and quota settings.

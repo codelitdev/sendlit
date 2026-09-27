@@ -31,7 +31,9 @@ import {
     provisionTeamBodySchema,
     renameTeamBodySchema,
 } from "../../../packages/api-contract/src/schemas/teams";
+import { organizationKeyScopes } from "../../../packages/api-contract/src/schemas/organizations";
 import { upsertFeedbackConnectionBodySchema } from "../../../packages/api-contract/src/schemas/feedback";
+import { createOrganizationApiKeyBodySchema } from "../../../packages/api-contract/src/schemas/organizations";
 import { listDeliveryEventsQuerySchema } from "../../../packages/api-contract/src/schemas/delivery-events";
 import {
     listSuppressionsQuerySchema,
@@ -41,6 +43,25 @@ import { openApiDocument } from "./openapi";
 import { transactionalEmailSchema } from "../../../packages/api-contract/src/schemas/transactional";
 
 describe("API input validation schemas", () => {
+    it("accepts the explicit organization delivery scopes", () => {
+        expect(
+            createOrganizationApiKeyBodySchema.safeParse({
+                name: "Delivery setup",
+                scopes: [
+                    "organization:read",
+                    "delivery:read",
+                    "delivery:manage",
+                ],
+            }).success,
+        ).toBe(true);
+        expect(
+            createOrganizationApiKeyBodySchema.safeParse({
+                name: "Invalid scope",
+                scopes: ["delivery:write"],
+            }).success,
+        ).toBe(false);
+    });
+
     it("validates create and partial-update bodies for user ESPs", () => {
         expect(
             createEspConfigBodySchema.safeParse({
@@ -525,18 +546,129 @@ describe("bounce/complaint feedback and suppression schemas", () => {
 });
 
 describe("OpenAPI authentication metadata", () => {
-    it("declares API key auth globally so Swagger UI sends the header", () => {
+    it("declares distinct team, user, and organization credentials", () => {
         expect(openApiDocument.components?.securitySchemes).toMatchObject({
-            apiKeyAuth: {
+            teamApiKey: {
                 type: "apiKey",
                 in: "header",
                 name: "x-sendlit-apikey",
             },
+            userAccessToken: {
+                type: "http",
+                scheme: "bearer",
+            },
+            organizationApiKey: {
+                type: "http",
+                scheme: "bearer",
+            },
         });
-        expect(openApiDocument.security).toContainEqual({ apiKeyAuth: [] });
+        expect(openApiDocument.security).toEqual([
+            { teamApiKey: [] },
+            { userAccessToken: [] },
+        ]);
+        expect(openApiDocument.components?.securitySchemes).toMatchObject({
+            dashboardSession: { type: "apiKey", in: "cookie" },
+            dashboardSecureSession: { type: "apiKey", in: "cookie" },
+        });
+        expect(organizationKeyScopes).toEqual(
+            expect.arrayContaining(["delivery:read", "delivery:manage"]),
+        );
+    });
+
+    it("documents the accepted credentials on each operation", () => {
+        expect(openApiDocument.paths["/contacts"]?.post?.security).toEqual([
+            { teamApiKey: [] },
+            { userAccessToken: [] },
+            { dashboardSession: [] },
+            { dashboardSecureSession: [] },
+        ]);
+        expect(openApiDocument.paths["/teams"]?.get?.security).toEqual([
+            { userAccessToken: [] },
+            { dashboardSession: [] },
+            { dashboardSecureSession: [] },
+        ]);
+        expect(
+            openApiDocument.paths["/provisioning/teams"]?.post?.security,
+        ).toEqual([{ organizationApiKey: [] }]);
+        expect(
+            openApiDocument.paths["/organizations/{organizationId}/teams"]?.get
+                ?.security,
+        ).toEqual([
+            { userAccessToken: [] },
+            { dashboardSession: [] },
+            { dashboardSecureSession: [] },
+            { organizationApiKey: [] },
+        ]);
+        expect(openApiDocument.paths["/organizations"]?.post?.security).toEqual(
+            [
+                { userAccessToken: [] },
+                { dashboardSession: [] },
+                { dashboardSecureSession: [] },
+            ],
+        );
+        expect(
+            openApiDocument.paths["/organizations/{organizationId}"]?.get
+                ?.security,
+        ).toEqual([
+            { userAccessToken: [] },
+            { dashboardSession: [] },
+            { dashboardSecureSession: [] },
+            { organizationApiKey: [] },
+        ]);
+        expect(
+            openApiDocument.paths["/provisioning/organization"]?.get?.security,
+        ).toEqual([{ organizationApiKey: [] }]);
+        expect(
+            openApiDocument.paths[
+                "/organizations/{organizationId}/delivery-policy"
+            ]?.get?.security,
+        ).toEqual([
+            { userAccessToken: [] },
+            { dashboardSession: [] },
+            { dashboardSecureSession: [] },
+            { organizationApiKey: [] },
+        ]);
+        expect(
+            openApiDocument.paths[
+                "/organizations/{organizationId}/delivery-policy"
+            ]?.put?.security,
+        ).toEqual([
+            { userAccessToken: [] },
+            { dashboardSession: [] },
+            { dashboardSecureSession: [] },
+            { organizationApiKey: [] },
+        ]);
+        expect(
+            openApiDocument.paths[
+                "/organizations/{organizationId}/delivery-policy"
+            ]?.put?.description,
+        ).toContain("including shared quotas and team delivery controls");
+        expect(
+            openApiDocument.paths["/provisioning/organization"]?.get
+                ?.description,
+        ).toContain("organization:read scope");
+        expect(
+            openApiDocument.paths[
+                "/organizations/{organizationId}/esps/{espId}/test"
+            ]?.post?.description,
+        ).toContain("explicit `to` address");
+        expect(
+            openApiDocument.paths["/organizations/{organizationId}/keys"]?.get
+                ?.security,
+        ).toEqual([
+            { userAccessToken: [] },
+            { dashboardSession: [] },
+            { dashboardSecureSession: [] },
+        ]);
+        expect(
+            openApiDocument.paths["/billing/catalog"]?.get?.security,
+        ).toEqual([]);
         expect(
             openApiDocument.paths["/provisioning/teams"]?.post?.description,
         ).toContain("scoped organization key as a Bearer token");
+        expect(openApiDocument.paths["/contacts"]?.post?.description).toContain(
+            "team API key or a user OAuth access token",
+        );
     });
 
     it("generates paths for the feedback, delivery-events, and suppressions routes", () => {

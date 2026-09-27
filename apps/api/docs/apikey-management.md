@@ -5,8 +5,9 @@ see `apps/docs/content/docs/developers/authentication.mdx`.
 
 ## Key format
 
-A key is `sl_live_` followed by 32 CSPRNG bytes encoded as base64url (43
-chars, 256 bits of entropy), generated in `src/apikey/secret.ts`:
+Team keys use `sl_live_`; organization keys use `sl_org_live_`. Each prefix is
+followed by 32 CSPRNG bytes encoded as base64url (43 chars, 256 bits of
+entropy), generated in `src/apikey/secret.ts`:
 
 ```
 sl_live_3xKf9q2mVbA7cD1eF8gH4iJ6kL0nP5rS9tU2wX7yZ4o
@@ -21,7 +22,8 @@ aesthetics:
 
 ## Storage: hashed, never plaintext
 
-The `api_keys` table (`src/db/schema.ts`) does **not** store the secret.
+The team `api_keys` and organization-key tables (`src/db/schema.ts`) do **not**
+store the secret.
 It stores:
 
 | column       | contents                                               |
@@ -36,9 +38,11 @@ A plain SHA-256 (not bcrypt/argon2) is deliberate: the secret is already 256
 bits of CSPRNG output, so brute-forcing the hash is infeasible, and a slow
 KDF would only add latency to every authenticated request.
 
-Consequence: **the plaintext secret exists only in the response that creates
-the key.** It can never be re-read, re-listed, or recovered — only revoked
-and replaced.
+For API-generated keys, the plaintext secret exists only in the create
+response. It can never be re-read, re-listed, or recovered—only revoked and
+replaced. Configured self-host keys are supplied and retained by the operator
+through `.env`; SendLit stores only their hashes and does not return the
+values.
 
 ## Scoping
 
@@ -61,8 +65,10 @@ secret surfaces exactly once, through whichever surface created it:
   actually created the team** (provisioning is idempotent per `externalId`;
   repeat calls return the team with no key, since the hash can't be
   reversed — the consumer must persist it on first provision);
-- boot-time super admin (`src/bootstrap.ts`) → logged once so an operator can
-  grab it from `docker compose logs`.
+- self-host bootstrap keys supplied through `.env` → their values are hashed
+  into organization-key rows and never logged or returned by bootstrap. See
+  the
+  [headless provisioning guide](../../docs/integrations/headless-provisioning.md).
 
 `createTeam` (`src/team/queries.ts`) can also mint a "Default" key as part of
 creating the team, via `withDefaultApiKey: true` — its one-time secret
@@ -70,7 +76,7 @@ propagates up as `defaultApiKeySecret` on the returned team, and from
 `createAccount` as well (which forwards its own `withDefaultApiKey` param).
 This defaults to `false` and is opt-in, precisely because it's only useful to
 callers with an actual way to hand that secret to someone: provisioning
-(response body) and boot-time super admin (startup log). Dashboard-driven
+(response body). Dashboard-driven
 team creation (signup, `POST /teams`, MCP `create_team`) leaves it `false` —
 otherwise the key would be minted with no way for the user to ever see its
 secret, defeating the whole point of a one-time reveal.
@@ -93,8 +99,9 @@ key stop working on their next request.
 
 ## Rules of thumb when touching this code
 
-- Never persist or log the plaintext secret outside the documented
-  create-time surfaces above.
+- Never log the plaintext secret outside the documented create-time surfaces
+  above. The operator supplies configured self-host keys through `.env`;
+  SendLit only hashes them and never logs or returns them.
 - Never return `key_hash` in any API/MCP response.
 - New response shapes for keys should build on `apiKeySchema` /
   `createdApiKeySchema` in `packages/api-contract/src/schemas/teams.ts`, and

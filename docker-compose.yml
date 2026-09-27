@@ -44,7 +44,9 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
       PIXEL_SIGNING_SECRET: ${PIXEL_SIGNING_SECRET:?Set PIXEL_SIGNING_SECRET in .env}
       ESP_CREDENTIALS_ENCRYPTION_KEY: ${ESP_CREDENTIALS_ENCRYPTION_KEY:?Set ESP_CREDENTIALS_ENCRYPTION_KEY in .env}
-      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:?Set SUPER_ADMIN_EMAIL in .env}
+      BOOTSTRAP_ORGANIZATION_OWNER_EMAIL: ${BOOTSTRAP_ORGANIZATION_OWNER_EMAIL:?Set BOOTSTRAP_ORGANIZATION_OWNER_EMAIL in .env}
+      BOOTSTRAP_DELIVERY_SETUP_API_KEY: ${BOOTSTRAP_DELIVERY_SETUP_API_KEY:-}
+      BOOTSTRAP_TEAM_PROVISIONING_API_KEY: ${BOOTSTRAP_TEAM_PROVISIONING_API_KEY:-}
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
       WEB_CLIENT: ${WEB_CLIENT:-http://localhost:3000}
       PROTOCOL: ${PROTOCOL:-http}
@@ -63,7 +65,10 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     env_file: .env
-    environment: *api-environment
+    environment:
+      <<: *api-environment
+      BOOTSTRAP_DELIVERY_SETUP_API_KEY: ""
+      BOOTSTRAP_TEAM_PROVISIONING_API_KEY: ""
     depends_on:
       init:
         condition: service_completed_successfully
@@ -87,6 +92,8 @@ services:
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
       WEB_CLIENT: ${WEB_CLIENT:-http://localhost:3000}
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10485760}
+      BOOTSTRAP_DELIVERY_SETUP_API_KEY: ""
+      BOOTSTRAP_TEAM_PROVISIONING_API_KEY: ""
     depends_on:
       api:
         condition: service_healthy

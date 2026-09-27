@@ -59,6 +59,9 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
     await db.delete(schema.espConfigTeamGrants);
     await db.delete(schema.teamDeliverySettings);
     await db.delete(schema.teamSendingControls);
+    // A policy may point at an organization ESP; clear the reference before
+    // truncating ESP rows to preserve the composite foreign-key invariant.
+    await db.delete(schema.organizationDeliveryPolicies);
     await db.delete(schema.espConfigs);
     await db.delete(schema.teams);
     await db.delete(schema.sendingDomains);
@@ -76,7 +79,6 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
     await db.delete(schema.organizationApiKeys);
     await db.delete(schema.organizationAuditEvents);
     await db.delete(schema.organizationMembers);
-    await db.delete(schema.organizationDeliveryPolicies);
     await db.delete(schema.organizations);
     await db.delete(schema.user);
 }

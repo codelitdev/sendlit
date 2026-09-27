@@ -1,8 +1,9 @@
-import { and, eq, count, asc } from "drizzle-orm";
+import { and, eq, count, asc, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import {
     sequences,
     sequenceEmails,
+    ongoingSequences,
     emailDeliveries,
     emailEvents,
     contacts,
@@ -50,6 +51,7 @@ export type SequenceEmail = typeof sequenceEmails.$inferSelect;
 export type HydratedSequence = Sequence & {
     emails: SequenceEmail[];
     deliverySource: DeliverySourceSelection | null;
+    entrantsCount?: number;
 };
 
 function clearDeletedDeliverySourceMarker(
@@ -244,7 +246,31 @@ export async function listSequences({
         .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)))
         .limit(pageSize)
         .offset((Math.max(offset, 1) - 1) * pageSize);
-    return Promise.all(rows.map(hydrate));
+    if (rows.length === 0) return [];
+
+    const activeEntrants = await db
+        .select({ sequenceId: ongoingSequences.sequenceId, value: count() })
+        .from(ongoingSequences)
+        .where(
+            inArray(
+                ongoingSequences.sequenceId,
+                rows.map((row) => row.id),
+            ),
+        )
+        .groupBy(ongoingSequences.sequenceId);
+    const activeEntrantsBySequenceId = new Map(
+        activeEntrants.map((row) => [row.sequenceId, row.value]),
+    );
+
+    return Promise.all(
+        rows.map(async (row) => ({
+            ...(await hydrate(row)),
+            entrantsCount:
+                row.type === "broadcast"
+                    ? row.entrants.length
+                    : (activeEntrantsBySequenceId.get(row.id) ?? 0),
+        })),
+    );
 }
 
 export async function countSequences(

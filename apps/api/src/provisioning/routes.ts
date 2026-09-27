@@ -20,6 +20,7 @@ import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
 import { requireAuth } from "../auth/middleware";
 import { recordOrganizationAuditEvent } from "../organization/audit";
+import { getOrganization } from "../organization/queries";
 import {
     assertCapability,
     getOrganizationEntitlements,
@@ -103,6 +104,40 @@ async function auditProvisioningAction(
  * organization is always derived from the key, never request input.
  */
 const impl = s.router(contract.provisioning, {
+    getOrganization: async ({ req }) => {
+        const authReq = req as any;
+        if (authReq.authKind !== "organization_key") {
+            return {
+                status: 403,
+                body: { error: "organization_key_required" },
+            };
+        }
+        if (!hasScope(authReq, "organization:read")) {
+            return {
+                status: 403,
+                body: { error: "organization_scope_required" },
+            };
+        }
+        const organization = await getOrganization(authReq.organizationId);
+        if (!organization) {
+            return { status: 404, body: { error: "organization_not_found" } };
+        }
+        return {
+            status: 200,
+            body: {
+                organizationId: organization.organizationId,
+                name: organization.name,
+                status: organization.status as
+                    | "pending_payment"
+                    | "active"
+                    | "suspended"
+                    | "abandoned"
+                    | "closed",
+                createdAt: organization.createdAt.toISOString(),
+                updatedAt: organization.updatedAt.toISOString(),
+            },
+        };
+    },
     provisionTeam: async ({ body, req }) => {
         const authReq = req as any;
         if (authReq.authKind !== "organization_key") {

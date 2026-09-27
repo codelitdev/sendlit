@@ -6,6 +6,11 @@ team delivery capabilities, hybrid managed/custom routing, managed-delivery
 quota, provisioning, feedback correlation, REST/OpenAPI, MCP, and operator
 controls._
 
+> Superseded by [`organizations.md`](./organizations.md). This historical
+> proposal describes a platform-customer model that was not implemented; use
+> the [headless provisioning guide](/developers/headless-provisioning) for the
+> current REST setup and organization-key scopes.
+
 ## Executive summary
 
 SendLit serves two related but distinct customer models:

@@ -37,31 +37,39 @@ analytics, bounce handling and multi-user accounts are still on the roadmap.
 
 ## Local development
 
-Start Postgres and Redis, then run the API and web app on the host.
+Start the local dependencies with the dedicated Compose file, then run the API
+and web app on the host:
 
 ```sh
-docker run -d --name sendlit-postgres --restart unless-stopped \
-  -e POSTGRES_DB=sendlit \
-  -e POSTGRES_USER=sendlit \
-  -e POSTGRES_PASSWORD=sendlit \
-  -p 5432:5432 \
-  postgres:17-alpine
-
-docker run -d --name sendlit-redis --restart unless-stopped \
-  -p 6379:6379 \
-  redis:7-alpine redis-server --appendonly yes
+docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml ps
 ```
 
-These ports match `apps/api/.env.example` (`localhost:5432` and `localhost:6379`).
-If a host port is already in use, change the left-hand side of `-p` and update
-`DB_CONNECTION_STRING` or `REDIS_PORT` to match.
+The local stack provides Postgres on `localhost:5434`, Redis on
+`localhost:6380`, and Mailpit SMTP/UI on `localhost:1027`/`localhost:8027`.
+Those defaults avoid collisions with the CourseLit local stack (Postgres
+`5432`, Mailpit `1026`/`8026`) and the FrontLit local stack (Postgres `5433`,
+Redis `6379`, Mailpit `1025`/`8025`). You can override the SendLit host ports
+with `SENDLIT_LOCAL_POSTGRES_PORT`, `SENDLIT_LOCAL_REDIS_PORT`,
+`SENDLIT_LOCAL_MAILPIT_SMTP_PORT`, and `SENDLIT_LOCAL_MAILPIT_HTTP_PORT` in
+the shell or root `.env`; if you override them, update the matching database,
+Redis, and SMTP ports in `apps/api/.env` too.
 
-To wipe the local Postgres data and start over, remove the container (and its
-volume) and run the `docker run` command again:
+The `apps/api/.env.example` database, Redis, and platform SMTP settings match
+these local services. Mailpit captures platform emails such as sign-in OTPs;
+campaign and ESP test emails use the ESP configured in SendLit. When testing an
+SMTP ESP against local Mailpit from the host-run API, use `127.0.0.1:1027`.
+Open the Mailpit UI at <http://localhost:8027>.
+
+Then push the development schema and start the apps as described below. To stop
+the dependencies without deleting local database/queue data:
 
 ```sh
-docker rm -fv sendlit-postgres
+docker compose -f docker-compose.local.yml down
 ```
+
+To intentionally delete the local Postgres and Redis data as well, use
+`docker compose -f docker-compose.local.yml down -v`.
 
 Then:
 
@@ -107,7 +115,8 @@ API startup; `catalog-verify` checks it against Dodo and activates it.
 
 The root Compose stack runs PostgreSQL, Redis, the API, and the web dashboard.
 It also uses a one-shot `init` service to apply database migrations and create
-the first account, its default team, and a team-scoped API key.
+or find the initial organization owner, their default team, and any configured
+organization API keys.
 
 ```sh
 cp .env.example .env
@@ -116,11 +125,17 @@ docker compose up --build -d
 docker compose logs init
 ```
 
-Set `SUPER_ADMIN_EMAIL` before the first start. The `init` logs contain the
-initial API key exactly once; save it in a password manager and use it as the
-`x-sendlit-apikey` header. If it is lost, create a replacement in the dashboard
-or through the authenticated API. Open the dashboard at `WEB_CLIENT` (by
-default, `http://localhost:3000`) and API documentation at `API_PUBLIC_URL/docs`.
+`BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` selects an ordinary initial organization
+owner; it does not create a special global-admin role. To integrate
+headlessly, set `BOOTSTRAP_DELIVERY_SETUP_API_KEY` and `BOOTSTRAP_TEAM_PROVISIONING_API_KEY` in
+`.env`. Bootstrap hashes both keys and never logs them.
+See the [Headless organization setup](./apps/docs/content/docs/developers/headless-provisioning.mdx)
+for the complete REST sequence, scopes, rotation, and migration from the old
+log-generated key. The plain Markdown guide is at
+[`apps/docs/integrations/headless-provisioning.md`](./apps/docs/integrations/headless-provisioning.md).
+
+Open the dashboard at `WEB_CLIENT` (by default,
+`http://localhost:3000`) and API documentation at `API_PUBLIC_URL/docs`.
 
 For an internet-facing deployment, set `API_PUBLIC_URL`, `WEB_CLIENT`,
 `PROTOCOL=https`, and `DOMAIN` to the public values before the first start.
