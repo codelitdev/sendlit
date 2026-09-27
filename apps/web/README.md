@@ -8,6 +8,11 @@ This web application provides a user interface for managing email automation bas
 - Authenticates through Better Auth. The same-origin BFF proxies
   `app/api/auth/*` to the API, keeps the Better Auth session cookie httpOnly,
   and sends dashboard REST calls through `app/api/proxy/[...path]`.
+- Optional PostHog: set `POSTHOG_API_KEY` (and optionally `POSTHOG_HOST`) at
+  runtime. The key is read by the server and passed into the browser SDK so
+  it is not compiled into `next build`. When set, signed-in users are
+  identified and session recording runs if Session replay is enabled on the
+  PostHog project. Unset keeps telemetry off.
 - Uses `packages/email-blocks` for composing broadcasts/sequences/templates,
   and `packages/email-editor` (via `email-blocks`) for the WYSIWYG editor.
 

@@ -24,6 +24,7 @@ import {
     espConfigs,
     media,
     mediaReferences,
+    ongoingSequences,
     rules,
     sequences,
     sequenceEmails,
@@ -46,6 +47,7 @@ import {
     getSequenceOpenRate,
     getSubscribers,
     getSubscribersCount,
+    listSequences,
     pauseSequence,
     startSequence,
     updateMailInSequence,
@@ -81,6 +83,31 @@ function emailWithImage(mediaId: string): Email {
 }
 
 describe("sequence queries", () => {
+    it("includes the active entrant count when listing sequences", async () => {
+        const { team, contact } = await seedTeamAndContact(tdb);
+        const template = await makeTemplate(team.id);
+        const sequence = await createSequence({
+            teamId: team.id,
+            type: "sequence",
+            templateId: template.templateId,
+        });
+
+        await tdb.insert(ongoingSequences).values({
+            teamId: team.id,
+            sequenceId: sequence.id,
+            contactId: contact.id,
+            nextEmailScheduledTime: Date.now(),
+        });
+
+        const items = await listSequences({
+            teamId: team.id,
+            type: "sequence",
+        });
+        expect(
+            items.find((item) => item.sequenceId === sequence.sequenceId),
+        ).toMatchObject({ entrantsCount: 1 });
+    });
+
     it("creates a draft sequence from a team-owned template and adds/removes mails safely", async () => {
         const { team } = await seedTeamAndContact(tdb);
         const template = await makeTemplate(team.id);

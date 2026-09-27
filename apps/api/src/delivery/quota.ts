@@ -93,6 +93,24 @@ export async function reserveOrganizationQuota(
         throw new Error("organization_delivery_disabled");
     }
 
+    const [existingReservation] = await tx
+        .select()
+        .from(organizationEspQuotaReservations)
+        .where(
+            eq(
+                organizationEspQuotaReservations.outboundMessageId,
+                input.outboundMessageId,
+            ),
+        )
+        .limit(1)
+        .for("update");
+    if (
+        existingReservation?.state === "reserved" ||
+        existingReservation?.state === "committed"
+    ) {
+        return existingReservation;
+    }
+
     const periods = utcPeriods();
     const specs = [
         {
@@ -166,16 +184,36 @@ export async function reserveOrganizationQuota(
             })
             .where(eq(organizationEspUsageBuckets.id, bucket.id));
     }
-    const [reservation] = await tx
-        .insert(organizationEspQuotaReservations)
-        .values({
-            outboundMessageId: input.outboundMessageId,
-            grantId: context.grant.id,
-            organizationId: context.grant.organizationId,
-            dayPeriodStart: periods.day,
-            monthPeriodStart: periods.month,
-        })
-        .returning();
+    const [reservation] = existingReservation
+        ? await tx
+              .update(organizationEspQuotaReservations)
+              .set({
+                  grantId: context.grant.id,
+                  organizationId: context.grant.organizationId,
+                  dayPeriodStart: periods.day,
+                  monthPeriodStart: periods.month,
+                  state: "reserved",
+                  releaseReason: null,
+                  committedAt: null,
+                  releasedAt: null,
+              })
+              .where(
+                  eq(
+                      organizationEspQuotaReservations.id,
+                      existingReservation.id,
+                  ),
+              )
+              .returning()
+        : await tx
+              .insert(organizationEspQuotaReservations)
+              .values({
+                  outboundMessageId: input.outboundMessageId,
+                  grantId: context.grant.id,
+                  organizationId: context.grant.organizationId,
+                  dayPeriodStart: periods.day,
+                  monthPeriodStart: periods.month,
+              })
+              .returning();
     return reservation;
 }
 

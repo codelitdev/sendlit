@@ -1,8 +1,9 @@
-import { and, eq, count, asc } from "drizzle-orm";
+import { and, eq, count, asc, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import {
     sequences,
     sequenceEmails,
+    ongoingSequences,
     emailDeliveries,
     emailEvents,
     contacts,
@@ -36,12 +37,21 @@ import {
     resolveDeliverySource,
     type DeliverySourceSelection,
 } from "../delivery/queries";
+import { getTeam } from "../team/queries";
+import {
+    assertMarketingAllowedForContactUsage,
+    assertSendAllowedForTeam,
+    getOrganizationEntitlements,
+    PlanGateError,
+} from "../billing/entitlements";
+import { usageForOrganization } from "../billing/usage";
 
 export type Sequence = typeof sequences.$inferSelect;
 export type SequenceEmail = typeof sequenceEmails.$inferSelect;
 export type HydratedSequence = Sequence & {
     emails: SequenceEmail[];
     deliverySource: DeliverySourceSelection | null;
+    entrantsCount?: number;
 };
 
 function clearDeletedDeliverySourceMarker(
@@ -236,7 +246,31 @@ export async function listSequences({
         .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)))
         .limit(pageSize)
         .offset((Math.max(offset, 1) - 1) * pageSize);
-    return Promise.all(rows.map(hydrate));
+    if (rows.length === 0) return [];
+
+    const activeEntrants = await db
+        .select({ sequenceId: ongoingSequences.sequenceId, value: count() })
+        .from(ongoingSequences)
+        .where(
+            inArray(
+                ongoingSequences.sequenceId,
+                rows.map((row) => row.id),
+            ),
+        )
+        .groupBy(ongoingSequences.sequenceId);
+    const activeEntrantsBySequenceId = new Map(
+        activeEntrants.map((row) => [row.sequenceId, row.value]),
+    );
+
+    return Promise.all(
+        rows.map(async (row) => ({
+            ...(await hydrate(row)),
+            entrantsCount:
+                row.type === "broadcast"
+                    ? row.entrants.length
+                    : (activeEntrantsBySequenceId.get(row.id) ?? 0),
+        })),
+    );
 }
 
 export async function countSequences(
@@ -618,10 +652,18 @@ export async function startSequence({
         throw new Error(responses.no_published_emails);
     }
 
+    await assertSendAllowedForTeam(teamId, "marketing");
+    const team = await getTeam(teamId);
+    if (!team) throw new Error("team_not_found");
+    await db.transaction(async (tx) => {
+        await assertMarketingAllowedForContactUsage(tx, team.organizationId);
+    });
+
     const pin = await resolveDeliverySource(
         teamId,
         (sequence.deliverySourceIntent as DeliverySourceSelection | null) ??
             undefined,
+        "marketing",
     );
 
     if (sequence.type === "sequence") {
@@ -654,6 +696,26 @@ export async function startSequence({
         );
         if (recipientIds.length === 0) {
             throw new Error(responses.broadcast_no_recipients);
+        }
+        const entitlements = await getOrganizationEntitlements(
+            team.organizationId,
+        );
+        if (entitlements.monthlySendsLimit !== null) {
+            const usage = await usageForOrganization(team.organizationId);
+            const projected =
+                usage.monthlySends +
+                usage.monthlySendsReserved +
+                recipientIds.length;
+            if (projected > entitlements.monthlySendsLimit) {
+                throw new PlanGateError("plan_limit_reached", {
+                    organizationId: team.organizationId,
+                    capability: "monthly_sends",
+                    limit: entitlements.monthlySendsLimit,
+                    usage: usage.monthlySends + usage.monthlySendsReserved,
+                    plan: entitlements.plan,
+                    requiredPlan: "pro",
+                });
+            }
         }
     }
 

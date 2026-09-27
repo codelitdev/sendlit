@@ -20,3 +20,25 @@ export function getMaxUploadSizeBytes() {
     const parsed = Number(process.env.MAX_UPLOAD_SIZE);
     return parsed > 0 ? parsed : DEFAULT_MAX_UPLOAD_SIZE_BYTES;
 }
+
+export const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
+
+/**
+ * PostHog browser config. Optional, same contract as `apps/api`: missing
+ * `POSTHOG_API_KEY` returns null and the dashboard never loads the SDK.
+ * Server-only — read from the root layout and passed into a client provider
+ * so the token can be set at container start without a rebuild.
+ */
+export function getPosthogBrowserConfig() {
+    const apiKey = process.env.POSTHOG_API_KEY?.trim() || null;
+    if (!apiKey) {
+        return null;
+    }
+
+    return {
+        apiKey,
+        host: process.env.POSTHOG_HOST?.trim() || DEFAULT_POSTHOG_HOST,
+        environment:
+            process.env.DEPLOY_ENV || process.env.NODE_ENV || "unknown",
+    };
+}

@@ -21,6 +21,7 @@ import {
 import { getSegment } from "./segments-queries";
 import { serializeDates } from "../utils/serialize";
 import { omitInternal } from "../utils/public";
+import { isPlanGateError } from "../billing/errors";
 
 const router = Router();
 router.use("/contacts", requireAuth, requireTeam);
@@ -36,11 +37,21 @@ const s = initServer();
  */
 const impl = s.router(contract.contacts, {
     create: async ({ body, req }) => {
-        const contact = await createContact({
-            teamId: (req as any).teamId,
-            ...body,
-        });
-        return { status: 201, body: serializeDates(omitInternal(contact)) };
+        try {
+            const contact = await createContact({
+                teamId: (req as any).teamId,
+                ...body,
+            });
+            return { status: 201, body: serializeDates(omitInternal(contact)) };
+        } catch (error) {
+            if (isPlanGateError(error)) {
+                return {
+                    status: error.status,
+                    body: { error: error.code, ...error.details },
+                } as any;
+            }
+            throw error;
+        }
     },
     list: async ({ query, req }) => {
         const teamId = (req as any).teamId;
@@ -97,11 +108,22 @@ const impl = s.router(contract.contacts, {
         return { status: 200, body: serializeDates(omitInternal(contact)) };
     },
     update: async ({ params, body, req }) => {
-        const contact = await updateContact(
-            (req as any).teamId,
-            params.contactId,
-            body,
-        );
+        let contact;
+        try {
+            contact = await updateContact(
+                (req as any).teamId,
+                params.contactId,
+                body,
+            );
+        } catch (error) {
+            if (isPlanGateError(error)) {
+                return {
+                    status: error.status,
+                    body: { error: error.code, ...error.details },
+                } as any;
+            }
+            throw error;
+        }
         if (!contact)
             return { status: 404, body: { error: "Contact not found" } };
         return { status: 200, body: serializeDates(omitInternal(contact)) };

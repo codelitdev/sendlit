@@ -116,6 +116,22 @@ import {
     updateTeamDeliverySettingsBodySchema,
     upsertEspGrantBodySchema,
 } from "./schemas/delivery";
+import {
+    billingCatalogSchema,
+    billingActionTokenBodySchema,
+    billingActionTokenResponseSchema,
+    billingCheckoutBodySchema,
+    billingCheckoutResponseSchema,
+    billingPortalResponseSchema,
+    billingPlanChangeBodySchema,
+    billingPlanChangeResponseSchema,
+    createSendingDomainBodySchema,
+    sendingDomainSchema,
+    organizationCheckoutBodySchema,
+    organizationCheckoutResponseSchema,
+    organizationBillingSchema,
+    organizationPlanUsageSchema,
+} from "./schemas/billing";
 
 const c = initContract();
 
@@ -133,7 +149,11 @@ const contactsContract = c.router(
             method: "POST",
             path: "/contacts",
             body: createContactBodySchema,
-            responses: { 201: contactSchema },
+            responses: {
+                201: contactSchema,
+                402: errorSchema,
+                409: errorSchema,
+            },
             summary: "Create a contact",
             description:
                 "Creates a contact (subscriber). If a contact with the same email already exists for this team, the existing contact is returned.",
@@ -161,7 +181,12 @@ const contactsContract = c.router(
             method: "PATCH",
             path: "/contacts/:contactId",
             body: updateContactBodySchema,
-            responses: { 200: contactSchema, 404: errorSchema },
+            responses: {
+                200: contactSchema,
+                402: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
             summary: "Update a contact",
         },
         addTag: {
@@ -517,11 +542,13 @@ const transactionalContract = c.router(
             responses: {
                 202: sendEmailResponseSchema,
                 400: errorSchema,
+                402: errorSchema,
                 422: z.union([
                     missingTemplateVariablesErrorSchema,
                     templateNotTransactionalErrorSchema,
                     errorSchema,
                 ]),
+                409: errorSchema,
                 429: errorSchema,
             },
             summary: "Send a transactional email",
@@ -712,6 +739,7 @@ const teamsContract = c.router(
             body: createTeamBodySchema,
             responses: {
                 201: teamSchema,
+                402: errorSchema,
                 403: errorSchema,
                 409: errorSchema,
             },
@@ -757,6 +785,19 @@ const teamsContract = c.router(
 
 const provisioningContract = c.router(
     {
+        getOrganization: {
+            method: "GET",
+            path: "/provisioning/organization",
+            responses: {
+                200: organizationSchema,
+                401: errorSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Get the organization bound to the calling API key",
+            description:
+                "Returns only the organization associated with the authenticated organization API key. Requires the organization:read scope; the organization cannot be selected in the request.",
+        },
         provisionTeam: {
             method: "POST",
             path: "/provisioning/teams",
@@ -765,6 +806,7 @@ const provisioningContract = c.router(
                 200: provisionTeamResponseSchema,
                 400: errorSchema,
                 401: errorSchema,
+                402: errorSchema,
                 403: errorSchema,
                 409: errorSchema,
                 500: errorSchema,
@@ -858,7 +900,10 @@ const organizationsContract = c.router(
             method: "GET",
             path: "/organizations",
             responses: {
-                200: itemsList(organizationSchema),
+                200: z.object({
+                    items: z.array(organizationSchema),
+                    ownsFreeOrganization: z.boolean(),
+                }),
                 403: errorSchema,
             },
             summary: "List organizations for the current user",
@@ -867,7 +912,11 @@ const organizationsContract = c.router(
             method: "POST",
             path: "/organizations",
             body: createOrganizationBodySchema,
-            responses: { 201: organizationSchema, 403: errorSchema },
+            responses: {
+                201: organizationSchema,
+                403: errorSchema,
+                409: errorSchema,
+            },
             summary: "Create an organization",
         },
         get: {
@@ -896,10 +945,27 @@ const organizationsContract = c.router(
             path: "/organizations/:organizationId",
             responses: {
                 204: c.noBody(),
+                401: errorSchema,
                 403: errorSchema,
                 404: errorSchema,
+                409: errorSchema,
+                503: errorSchema,
             },
             summary: "Close an organization",
+        },
+        abandon: {
+            method: "POST",
+            path: "/organizations/:organizationId/abandon",
+            body: c.noBody(),
+            responses: {
+                204: c.noBody(),
+                401: errorSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary:
+                "Hide a pending-payment organization after a cancelled checkout",
         },
         listMembers: {
             method: "GET",
@@ -1074,6 +1140,8 @@ const organizationsContract = c.router(
                 502: testEspConfigResponseSchema,
             },
             summary: "Test an organization-owned ESP configuration",
+            description:
+                "Organization API keys may test an ESP with an explicit `to` address; they have no signed-in user email to use as a fallback. Requires `esps:manage` and organization binding.",
         },
         activateEsp: {
             method: "POST",
@@ -1198,6 +1266,8 @@ const organizationsContract = c.router(
                 404: errorSchema,
             },
             summary: "Get organization delivery policy",
+            description:
+                "Organization API keys require the delivery:read scope and must be bound to the path organization. Owner/admin user sessions remain supported.",
         },
         updateDeliveryPolicy: {
             method: "PUT",
@@ -1210,6 +1280,8 @@ const organizationsContract = c.router(
                 422: errorSchema,
             },
             summary: "Update organization delivery policy",
+            description:
+                "Organization API keys require the delivery:manage scope and must be bound to the path organization. This scope authorizes every field in the delivery-policy schema, including shared quotas and team delivery controls. Owner/admin user sessions remain supported.",
         },
         getUsage: {
             method: "GET",
@@ -1294,6 +1366,47 @@ const organizationsContract = c.router(
             },
             summary:
                 "Transition a team's organization ESP grant; revoking detaches safe campaigns",
+        },
+        listSendingDomains: {
+            method: "GET",
+            path: "/organizations/:organizationId/sending-domains",
+            responses: {
+                200: itemsList(sendingDomainSchema),
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "List verified sending domains",
+        },
+        createSendingDomain: {
+            method: "POST",
+            path: "/organizations/:organizationId/sending-domains",
+            body: createSendingDomainBodySchema,
+            responses: {
+                201: sendingDomainSchema,
+                400: errorSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+            },
+            summary: "Create a DNS verification challenge for a sending domain",
+        },
+        verifySendingDomain: {
+            method: "POST",
+            path: "/organizations/:organizationId/sending-domains/:domainId/verify",
+            body: c.noBody(),
+            responses: {
+                200: sendingDomainSchema,
+                403: errorSchema,
+                404: errorSchema,
+                422: errorSchema,
+            },
+            summary: "Refresh DNS verification for a sending domain",
+        },
+        revokeSendingDomain: {
+            method: "DELETE",
+            path: "/organizations/:organizationId/sending-domains/:domainId",
+            responses: { 204: c.noBody(), 403: errorSchema, 404: errorSchema },
+            summary: "Revoke a sending domain",
         },
     },
     { metadata: { tag: "Organizations" } },
@@ -1470,6 +1583,123 @@ const suppressionsContract = c.router(
     { metadata: { tag: "Delivery" } },
 );
 
+const billingContract = c.router(
+    {
+        actionToken: {
+            method: "POST",
+            path: "/billing/action-token",
+            body: billingActionTokenBodySchema,
+            responses: {
+                201: billingActionTokenResponseSchema,
+                401: errorSchema,
+                403: errorSchema,
+                503: errorSchema,
+            },
+            summary: "Issue a single-use token for a sensitive billing action",
+        },
+        organizationCheckout: {
+            method: "POST",
+            path: "/billing/organization-checkouts",
+            body: organizationCheckoutBodySchema,
+            responses: {
+                201: organizationCheckoutResponseSchema,
+                400: errorSchema,
+                401: errorSchema,
+                402: errorSchema,
+                403: errorSchema,
+                409: errorSchema,
+                503: errorSchema,
+            },
+            summary: "Create a paid organization and hosted checkout",
+        },
+        catalog: {
+            method: "GET",
+            path: "/billing/catalog",
+            responses: { 200: billingCatalogSchema, 503: errorSchema },
+            summary: "Read the active billing catalog",
+            description:
+                "Returns environment-configured offers without provider product IDs. Amounts are integer minor units.",
+        },
+        organizationBilling: {
+            method: "GET",
+            path: "/organizations/:organizationId/billing",
+            responses: {
+                200: organizationBillingSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Read organization plan and billing status",
+        },
+        organizationPlanUsage: {
+            method: "GET",
+            path: "/organizations/:organizationId/plan-usage",
+            responses: {
+                200: organizationPlanUsageSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Read organization plan usage",
+        },
+        checkout: {
+            method: "POST",
+            path: "/organizations/:organizationId/billing/checkout",
+            body: billingCheckoutBodySchema,
+            responses: {
+                201: billingCheckoutResponseSchema,
+                400: errorSchema,
+                401: errorSchema,
+                402: errorSchema,
+                403: errorSchema,
+                409: errorSchema,
+                503: errorSchema,
+            },
+            summary: "Create a hosted organization checkout",
+        },
+        portal: {
+            method: "POST",
+            path: "/organizations/:organizationId/billing/portal",
+            body: c.noBody(),
+            responses: {
+                201: billingPortalResponseSchema,
+                401: errorSchema,
+                402: errorSchema,
+                403: errorSchema,
+                404: errorSchema,
+                503: errorSchema,
+            },
+            summary: "Create the billing manager's hosted portal session",
+        },
+        changePlan: {
+            method: "POST",
+            path: "/organizations/:organizationId/billing/plan-change",
+            body: billingPlanChangeBodySchema,
+            responses: {
+                202: billingPlanChangeResponseSchema,
+                200: billingPlanChangeResponseSchema,
+                400: errorSchema,
+                401: errorSchema,
+                402: errorSchema,
+                403: errorSchema,
+                404: errorSchema,
+                409: errorSchema,
+                503: errorSchema,
+            },
+            summary: "Request a SendLit-owned organization plan change",
+        },
+        getPlanChange: {
+            method: "GET",
+            path: "/organizations/:organizationId/billing/plan-changes/:changeId",
+            responses: {
+                200: billingPlanChangeResponseSchema,
+                403: errorSchema,
+                404: errorSchema,
+            },
+            summary: "Read a plan-change request status",
+        },
+    },
+    { metadata: { tag: "Billing" } },
+);
+
 export const contract = c.router({
     contacts: contactsContract,
     segments: segmentsContract,
@@ -1486,6 +1716,7 @@ export const contract = c.router({
     feedback: feedbackContract,
     deliveryEvents: deliveryEventsContract,
     suppressions: suppressionsContract,
+    billing: billingContract,
 });
 
 export type Contract = typeof contract;

@@ -4,6 +4,10 @@ packages:
 
 allowBuilds:
   "@scarf/scarf": false
+  # posthog-js depends on core-js; its postinstall is a funding notice, not a
+  # required native build. Explicit false so `pnpm install` succeeds in CI
+  # and Docker (pnpm 11 errors on unreviewed lifecycle scripts).
+  core-js: false
   esbuild: true
   msgpackr-extract: true
   protobufjs: false
@@ -13,6 +17,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@codelitdev/design-system@0.1.0-alpha.0 || 0.1.0-alpha.2 || 0.1.0-alpha.3 || 0.1.0-alpha.4 || 0.1.0-alpha.5 || 0.1.0-alpha.6'
   - '@codelitdev/oauth-server-kit@0.1.0-alpha.0 || 0.1.0-alpha.1'
+  - '@codelitdev/billing@0.1.0-alpha.0 || 0.1.0-alpha.1 || 0.1.0-alpha.2 || 0.1.0-alpha.3'
 
 overrides:
   "@types/node": ^22.14.1

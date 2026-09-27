@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import {
     Home,
-    Building2,
     Images,
     Mail,
     MailCheck,
@@ -64,7 +63,6 @@ const ACTIVITY_NAV: NavMainItem[] = [
 ];
 
 const SECONDARY_NAV: NavMainItem[] = [
-    { url: "/organizations", title: "Organizations", icon: Building2 },
     { url: "/settings", title: "Settings", icon: Settings },
 ];
 

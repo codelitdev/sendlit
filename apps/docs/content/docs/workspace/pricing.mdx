@@ -1,0 +1,227 @@
+---
+title: Pricing and billing
+description: Choose a SendLit plan, understand organization limits, and manage subscriptions.
+---
+
+SendLit is a ready-to-use email marketing platform for contacts, templates,
+broadcasts, sequences, and transactional email. You keep your own email
+service provider (such as Resend, Amazon SES, or Postmark), while SendLit
+provides the workspace and delivery workflows.
+
+The cloud plans and the self-hosted distribution use the same product. Cloud
+plans include managed hosting and operations. Self-hosting is the free OSS
+distribution.
+
+## Plans at a glance
+
+|                                        | OSS          | Free          | Pro                       | Business                  |
+| -------------------------------------- | ------------ | ------------- | ------------------------- | ------------------------- |
+| Where it runs                          | Your servers | SendLit cloud | SendLit cloud             | SendLit cloud             |
+| Price                                  | $0           | $0            | From the live catalog     | From the live catalog     |
+| Teams                                  | Unlimited    | 1             | 5                         | 25; higher by arrangement |
+| Subscribed contacts                    | Unlimited    | 1,000         | 10,000 per organization   | No published cap\*        |
+| Sends through your ESP                 | Unlimited    | 3,000/month   | No usage charge; fair use | No usage charge; fair use |
+| Shared organization mailbox            | Yes          | No            | Yes                       | Yes                       |
+| Provisioning API                       | Yes          | No            | No                        | Yes                       |
+| Organization API keys                  | Yes          | No            | No                        | Yes                       |
+| Embeddable React blocks                | Yes          | Yes           | Yes                       | Yes                       |
+| “Sent with SendLit” on marketing email | Off          | On            | Off                       | Off                       |
+| Support                                | GitHub       | GitHub        | Email                     | Email                     |
+
+Yearly plans charge for ten months, so two months are free. The Pro monthly
+plan includes a 14-day trial. Business has no trial. Checkout displays the
+live catalog amounts and currency configured for the deployment; those amounts
+are never hardcoded in the app.
+
+Free's 3,000-email allowance is monthly; there is no separate daily cap.
+
+\* Business has no published contact cap, but infrastructure and abuse
+safeguards still apply.
+
+### What is included
+
+All plans include sequences, transactional email, the REST API, MCP, team ESP
+connections, and the reusable React blocks. Blocks are part of SendLit; they
+are not a separate paid kit.
+
+People are not seats. Members and logins are unlimited and are not billed.
+SendLit also does not sell add-on packs of teams or contacts, and Pro and
+Business are not charged per email. You pay your email provider separately.
+
+## How billing is scoped
+
+Billing belongs to an **organization**:
+
+- Your **account** is your login. It is never billed.
+- An **organization** owns a plan and, on a paid plan, one subscription.
+- A **team** owns contacts, templates, campaigns, sequences, and sending
+  settings. Teams are not billed separately.
+
+Two organizations with paid plans have two subscriptions. Being invited to
+someone else's paid organization does not create a subscription for you.
+
+Open **Organizations** in the dashboard to select an organization, view its
+plan and usage, upgrade, or create another organization. Billing is always
+shown in the context of the organization being changed.
+
+## Cloud signup and upgrades
+
+Cloud signup creates one Free organization with one team. That team sends
+through its own ESP. From the organization's **Plan** tab, choose **Upgrade**
+to start Pro or Business checkout. A team-row **Upgrade parent organization**
+action opens the same Plan tab; billing always belongs to the parent
+organization.
+
+You may create additional organizations. You can own only one Free
+organization; if you already own one, the next organization must be upgraded
+as part of creation or the existing Free organization must be upgraded first.
+Invitations do not count toward this rule.
+
+The organization and its team stay in place when you upgrade. No contacts,
+sequences, templates, media, or sending history are migrated because nothing
+needs to move.
+
+## Changing a paid plan
+
+SendLit owns the plan-change flow. From **Organizations → Plan**, choose
+**Change plan** and select Pro or Business and the monthly or yearly interval.
+
+- Upgrades, including monthly to yearly, take effect immediately and use the
+  provider's supported proration behavior.
+- Downgrades, including yearly to monthly, normally take effect on the next
+  billing date. Your current plan remains active until then.
+- SendLit waits for a verified provider update before changing entitlements.
+  The organization may briefly show a pending plan change while that update is
+  being confirmed.
+
+**Manage billing** opens the payment provider's hosted portal for the selected
+organization. Use it to update a card, view invoices, cancel a subscription,
+or recover a failed payment. Plan and interval changes are initiated in
+SendLit, not by editing the subscription in the provider portal.
+
+## Cancellation and expiry
+
+Cancellation normally takes effect at the end of the current paid period.
+Until that verified paid-through time, the organization keeps its paid plan
+and entitlements. Cancelling immediately (not at period end) removes paid
+access as soon as SendLit receives the provider update, even if the previous
+period end is still in the future. The Organizations **Plan** tab shows the
+cancellation status when the provider update has been received.
+
+Checkout, plan changes, the billing portal, and closing an organization
+require a recent sign-in. If the current session is too old, SendLit asks you
+to sign in again before it can continue.
+
+If a checkout is interrupted, returning to the same organization and plan
+resumes the pending checkout instead of starting a second subscription.
+
+At expiry, the organization becomes Free. Free limits are one active team,
+1,000 subscribed contacts, and 3,000 sends per month. Expiry does **not**
+delete data:
+
+- Organizations, teams, contacts, templates, sequences, broadcasts, media,
+  and logs remain available.
+- Teams above the Free limit remain accessible, but no new team can be added.
+- Contacts above the Free limit remain available for export, unsubscribe, and
+  deletion. New subscribed contacts and subscribed-contact imports are blocked
+  until usage is below the limit or the organization upgrades.
+- Sequence and broadcast definitions, enrollments, send history, and logs are
+  retained. Queued marketing sends are rechecked against the Free plan; they
+  can continue only through a team ESP and within Free limits. Shared-mailbox
+  sends are blocked.
+- Templates and media remain accessible; expiry does not run a cleanup or
+  delete them.
+- Existing shared mailboxes and grants remain stored and readable, but cannot
+  be changed or used for new sends on Free. Configure a team ESP to continue
+  sending.
+- Provisioning and organization-key mutations stop. Existing keys remain
+  available for audit and revocation; they do not bypass plan checks.
+
+An active sequence or broadcast is never allowed to bypass a plan limit after
+expiry. Queued work is checked again at delivery time. Marketing delivery can
+continue through a team ESP only when Free's limits and delivery checks allow
+it. Transactional mail remains supported through a team ESP, subject to the
+applicable Free sending limit; transactional-only recipients do not count as
+subscribed contacts.
+
+Upgrading the same organization restores the paid capabilities without
+recreating or migrating the data.
+
+## Contact and team limits
+
+Contact limits are per organization, not per team. For example, Pro's 10,000
+subscribed-contact allowance is shared by all five teams. The same email on two
+teams counts twice. Password-reset and other transactional-only recipients do
+not count as subscribed contacts.
+
+When an organization is over a new plan's limit, SendLit preserves the data
+and blocks only operations that would make the overage worse. The dashboard and
+API show current usage, the effective limit, and an upgrade path.
+
+## Team ESP and shared mailbox delivery
+
+Free uses a team-owned ESP configured in the team's settings. Pro, Business,
+and OSS can additionally configure an organization-owned mailbox and grant it
+to selected teams without exposing its credentials.
+
+The email provider's charges are separate from SendLit. SendLit does not add a
+per-email charge to Pro or Business. Cloud volume sending is subject to
+deliverability and fair-use controls, including bounce and complaint feedback
+for volume providers. A team can be paused when its reputation crosses the
+published safety thresholds.
+
+See [Acceptable use and deliverability](/workspace/acceptable-use) for the
+full fair-use policy. For cloud paid plans, volume sending requires bounce and
+complaint webhooks from a supported ESP. After enough volume (about 500
+accepted messages in seven days), SendLit applies these safeguards:
+
+| Signal                           | Action                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------- |
+| Bounce ≥ 2% or complaint ≥ 0.05% | Warn the team                                                             |
+| Bounce ≥ 5% or complaint ≥ 0.1%  | Stop broadcasts and sequences; transactional delivery may continue slowly |
+| Complaint ≥ 0.3%                 | Stop all new sends for that team                                          |
+
+Small samples are not judged by percentages alone; a short list with a few
+bounces should not trip a threshold, while clear complaint abuse can still be
+stopped. New paid organizations also ramp marketing volume gradually. Cloud
+accounts need a verified email and a verified From domain before leaving test
+volume. Self-hosted OSS installations run their own infrastructure and are not
+frozen by SendLit cloud controls.
+
+## Self-hosting with OSS
+
+Docker Compose is the OSS distribution: all product features are enabled, no
+payment provider is required, and there are no SendLit cloud plan limits or
+marketing footer. CourseLit, FrontLit, and other products may run SendLit on
+their own infrastructure under OSS. That is a self-hosted deployment, not a
+cloud subscription.
+
+## Frequently asked questions
+
+### Do I pay per user, team, contact, or email?
+
+No. Paid plans are per organization. Members are free, teams and contacts are
+bounded by the plan, and Pro and Business do not charge per email. You pay your
+ESP directly for delivery.
+
+### Can I use one Pro subscription for two companies?
+
+No. Each organization has its own plan and subscription. Two paid
+organizations mean two subscriptions.
+
+### Which plan is needed for an embedded product?
+
+Use OSS when you run SendLit yourself. Use Business on SendLit cloud when your
+product needs the provisioning API and one SendLit team per tenant. Raise the
+Business team cap by arrangement when 25 teams is not enough.
+
+### What happens if I need more contacts or teams?
+
+There are no add-on packs. Upgrade the organization. For more than 25 Business
+teams, contact SendLit about a raised cap or self-host with OSS.
+
+### Who handles invoices and payment methods?
+
+The payment provider handles cards, taxes, invoices, and the hosted billing
+portal. SendLit stores the subscription state and applies the plan rules. The
+provider can change over time without changing these plan rules.

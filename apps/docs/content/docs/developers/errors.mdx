@@ -35,3 +35,25 @@ Missing and conversion errors include the affected paths:
 All template-purpose, structural, and missing-variable checks happen before an
 email is queued. A rejected request does not create a partial destination
 template or transactional delivery.
+
+## Plan and billing errors
+
+Plan limits and billing mutations use the same stable codes on REST and MCP:
+
+| Status | Error                              | Meaning                                                                 |
+| ------ | ---------------------------------- | ----------------------------------------------------------------------- |
+| `403`  | `plan_feature_unavailable`         | The current plan does not include that capability.                      |
+| `409`  | `plan_limit_reached`               | A team, contact, or send cap was reached.                               |
+| `402`  | `payment_required`                 | The organization cannot send until payment or activation.               |
+| `403`  | `billing_owner_required`           | Only an owner (or the billing manager) can perform that billing action. |
+| `409`  | `free_organization_already_owned`  | The user already owns a Free organization.                              |
+| `409`  | `organization_name_already_exists` | The name is already used by an owned organization.                      |
+| `409`  | `billing_checkout_pending`         | A checkout attempt is already open.                                     |
+| `409`  | `billing_catalog_changed`          | Prices changed; review the new catalog before retrying.                 |
+| `503`  | `billing_catalog_unavailable`      | Checkout is frozen until the catalog is verified.                       |
+| `409`  | `active_subscription_exists`       | Close is blocked while a subscription is live.                          |
+| `401`  | `recent_authentication_required`   | Sign in again before a billing mutation.                                |
+| `403`  | `domain_verification_required`     | The From domain must be verified after test volume.                     |
+| `403`  | `sending_paused`                   | Payment grace expired or a fair-use control paused sending.             |
+
+Limit errors include `plan`, `usage`, `limit`, `requiredPlan`, and `upgradeUrl`. MCP tools return the same object in `structuredContent` instead of `internal_error`.

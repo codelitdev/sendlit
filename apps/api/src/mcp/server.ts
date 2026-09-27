@@ -25,11 +25,11 @@ export function buildMcpServer(): McpServer {
             name: "SendLit",
             version: SENDLIT_MCP_VERSION,
             description:
-                "SendLit MCP server — compose, send and automate email for a SendLit team. Manage contacts and segments, templates and media, broadcasts and sequences, transactional email, sending providers, settings, API keys, and delivery feedback.",
+                "SendLit MCP server — compose, send and automate email for a SendLit team. Manage contacts and segments, templates and media, broadcasts and sequences, transactional email, sending providers, settings, team API keys, and delivery feedback. Organization bootstrap, shared-delivery policy, and team provisioning use the REST API, not MCP.",
         },
         {
             instructions:
-                "Use read tools to inspect existing state before mutations. Sending, activation, deletion, key management, and suppression-release tools have external or destructive effects; confirm the requested target and inputs before calling them.",
+                "Use read tools to inspect existing state before mutations. Sending, activation, deletion, key management, and suppression-release tools have external or destructive effects; confirm the requested target and inputs before calling them. MCP is team-scoped and does not accept organization API keys. Use the REST API and /openapi.json for organization discovery, headless shared-delivery setup, and team provisioning.",
             cacheHints: {
                 "server/discover": {
                     ttlMs: 300_000,

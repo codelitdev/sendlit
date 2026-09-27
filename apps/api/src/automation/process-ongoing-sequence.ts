@@ -39,10 +39,12 @@ import { markOutboundAccepted } from "../delivery-feedback/outbound-queries";
 import { normalizeEmail } from "../utils/email";
 import { validateTemplateContent } from "../templates/validation";
 import { resolvePinnedDeliverySource } from "../delivery/queries";
+import { getOrganizationEntitlements } from "../billing/entitlements";
+import { commitQuotaForOutbound } from "../delivery/quota";
 import {
-    commitQuotaForOutbound,
-    reserveOrganizationQuotaForOutbound,
-} from "../delivery/quota";
+    commitSendReservation,
+    releaseSendReservation,
+} from "../billing/entitlements";
 
 type OngoingSequenceRow = typeof ongoingSequences.$inferSelect;
 type SequenceEmailRow = typeof sequenceEmails.$inferSelect;
@@ -211,6 +213,7 @@ async function attemptMailSending({
         type: sequence.deliverySourceType as "organization" | "team",
         espConfigId: sequence.outboxId,
         espGrantId: sequence.espGrantId,
+        purpose: "marketing",
     });
     const from = getEmailFrom({
         name: pin.fromName,
@@ -276,6 +279,10 @@ async function attemptMailSending({
     const renderedHtml = await renderEmailContent({
         content: emailContentWithPixel,
         variables: templatePayload,
+        brandingText: (await getOrganizationEntitlements(team.organizationId))
+            .marketingBranding
+            ? "Sent with SendLit"
+            : undefined,
     });
 
     const contentWithTrackedLinks = transformLinksForClickTracking(
@@ -293,6 +300,7 @@ async function attemptMailSending({
         { sequence_id: sequence.sequenceId, email_id: email.emailId },
     );
 
+    let outboundForReservation: { id: string } | null = null;
     try {
         // Outbound ledger row must exist before transport submission — see
         // docs/bounces-and-complaints.md#1-outbound-message-ledger.
@@ -306,12 +314,17 @@ async function attemptMailSending({
             submissionKey: `campaign:${ongoingSequence.id}:${email.id}`,
             recipientEmail: to,
             normalizedRecipient: normalizeEmail(to),
+            organizationQuotaGrantId:
+                pin.type === "organization" ? pin.espGrantId : null,
         });
-        if (pin.type === "organization") {
-            await reserveOrganizationQuotaForOutbound({
-                outboundMessageId: outbound.id,
-                grantId: pin.espGrantId!,
-            });
+        outboundForReservation = outbound;
+        // A transport may have succeeded immediately before the worker
+        // crashed. The durable outbound ledger is then the source of truth:
+        // finish the workflow action without submitting the same message a
+        // second time.
+        if (outbound.deliveryStatus === "accepted") {
+            await applyEmailAction({ team, contact, sequence, email });
+            return;
         }
         const result = await sendMail({
             from,
@@ -337,10 +350,16 @@ async function attemptMailSending({
             campaignDeliveryId: delivery.id,
         });
         await commitQuotaForOutbound(outbound.id);
+        await commitSendReservation(outbound.id);
         await applyEmailAction({ team, contact, sequence, email });
     } catch (err: any) {
         const retryCount = ongoingSequence.retryCount + 1;
         if (retryCount >= sequenceBounceLimit) {
+            if (outboundForReservation) {
+                await releaseSendReservation(outboundForReservation.id).catch(
+                    () => undefined,
+                );
+            }
             await db
                 .update(sequences)
                 .set({
@@ -359,6 +378,9 @@ async function attemptMailSending({
                 .where(eq(sequences.id, sequence.id));
             await deleteOngoingSequence(ongoingSequence.id);
         } else {
+            // Keep the reservation through a transient retry. It expires and
+            // is reopened atomically by reserveSend, preventing a retry from
+            // bypassing the monthly quota.
             await db
                 .update(ongoingSequences)
                 .set({ retryCount })

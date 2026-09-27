@@ -489,7 +489,8 @@ must not be interpreted more broadly than these actions.
 | Create/update/test/rotate organization ESP             | Yes   | Yes   | No     | `esps:manage`                          |
 | Retire/delete organization ESP                         | Yes   | No    | No     | No                                     |
 | Read organization ESP metadata/health                  | Yes   | Yes   | No     | `esps:read`                            |
-| Change organization delivery/quota policy              | Yes   | Yes   | No     | No                                     |
+| Read organization delivery policy                      | Yes   | Yes   | No     | `delivery:read`                        |
+| Change organization delivery/quota policy              | Yes   | Yes   | No     | `delivery:manage`                      |
 | Create/update/archive teams                            | Yes   | Yes   | No     | `teams:provision` / `teams:manage`     |
 | Physically purge organization/team                     | No    | No    | No     | No; operator retention workflow only   |
 | Create/suspend/resume/revoke an ESP grant              | Yes   | Yes   | No     | `grants:manage`                        |
@@ -722,12 +723,16 @@ organization_api_keys
   created_at               timestamptz
 ```
 
-Plaintext keys use a distinct prefix such as `sl_org_live_...`, are returned
-once, and are stored only as a cryptographic hash.
+Organization keys use the `sl_org_live_...` prefix and are stored only as a
+cryptographic hash. API-created keys are returned once; self-host configured
+keys are supplied by the operator through `.env` and are never returned or
+logged by SendLit.
 
 Supported Phase 1 scopes:
 
 - `organization:read`
+- `delivery:read`
+- `delivery:manage`
 - `teams:provision`
 - `teams:read`
 - `teams:manage`
@@ -737,9 +742,12 @@ Supported Phase 1 scopes:
 - `grants:manage`
 - `usage:read`
 
-The common CourseLit runtime key should omit `esps:manage`; provider
-credentials are configured through a more privileged dashboard session or
-separate key.
+The CourseLit runtime key should use only `organization:read`,
+`teams:provision`, and `teams:read`. A one-time delivery setup key may use
+`organization:read`, `esps:read`, `esps:manage`, `delivery:read`, and
+`delivery:manage`. The last scope authorizes every field in the delivery
+policy schema, including quota and team-delivery controls, so revoke that key
+after setup when no further policy automation is required.
 
 ### Team API keys
 
@@ -1526,6 +1534,11 @@ DELETE /organizations/:organizationId
 ```
 
 - Signup automatically creates the first organization and owner membership.
+- Any automatically-created initial/default team is named from its
+  organization (`<organization name> Team`) unless a flow supplies an explicit
+  team name.
+- An owner cannot create another active, suspended, or pending organization
+  whose name differs only by casing; closed and abandoned names may be reused.
 - Additional organization creation requires an authenticated user.
 - Responses contain public organization data only.
 - `DELETE` is owner-only, audited, and changes status to `closed`.
@@ -1551,6 +1564,19 @@ provision an identity from an email address: a missing email returns
 before adding them. Email invitation and acceptance tokens are deferred.
 
 ### Organization policy and grants
+
+```text
+GET    /provisioning/organization
+```
+
+`GET /provisioning/organization` requires an organization key with
+`organization:read` and returns only the organization bound to that key.
+Delivery-policy reads and updates continue to accept owner/admin user
+sessions; organization keys must be bound to the path organization and have
+`delivery:read` or `delivery:manage`, respectively. The `delivery:manage`
+scope covers all fields in the update schema, including quota and team
+delivery controls. Policy changes made by a key are audited with that key as
+the actor.
 
 ```text
 GET    /organizations/:organizationId/delivery-policy
@@ -2157,8 +2183,9 @@ content, or unredacted webhook credentials.
 - Better Auth user deletion cannot bypass last-owner or membership-retention
   rules; membership FKs restrict user deletion.
 - Better Auth API keys and API-key-created mock sessions are not enabled.
-- Organization and team key secrets are hashed, scoped, expirable, revocable,
-  and shown once.
+- Organization and team key secrets are hashed, scoped, expirable, and
+  revocable. API-created secrets are shown once; configured bootstrap keys are
+  supplied by the operator and never logged or returned.
 - Provider secrets are encrypted and never returned.
 - Sender/header values reject injection.
 - Provider correlation metadata uses opaque SendLit IDs, not external tenant ID
@@ -2238,7 +2265,9 @@ content, or unredacted webhook credentials.
 - Team pages show a sanitized "Provided by <organization>" sending option.
 - Team ESP pages show only team-owned configurations.
 - Team creation offers/apply organization defaults.
-- Organization keys are shown once at creation.
+- API-created organization keys are shown once at creation; configured
+  self-host keys are supplied and retained by the operator (`.env` for the
+  delivery setup and team provisioning keys in `.env`.
 - Managed/shared quota appears only for organization delivery.
 - Team-source sends clearly show that they bypass organization quota.
 - Organization members and team members are administered separately.
@@ -2339,13 +2368,18 @@ Do not automatically create a team until the user chooses team name/delivery
 setup, unless product UX explicitly decides to combine organization and first
 team onboarding. Either path uses the same transactional creation service.
 
-Bootstrap/super-admin initialization creates:
+Initial organization owner bootstrap creates:
 
 - the user;
 - its organization;
-- owner membership; and
-- optionally an organization key/team only when the plaintext can be shown
-  safely.
+- owner membership;
+- the default team if one is missing; and
+- any configured organization keys after storing only their hashes. Bootstrap
+  never logs key secrets and also registers keys when the configured owner
+  already exists.
+
+For the copyable headless REST workflow and key configuration, see the
+[headless provisioning guide](../../docs/integrations/headless-provisioning.md).
 
 ### Removed configuration
 

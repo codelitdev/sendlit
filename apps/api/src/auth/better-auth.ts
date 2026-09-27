@@ -140,14 +140,17 @@ export const auth = betterAuth({
         schema,
     }),
     trustedOrigins: [webClientUrl, authBaseUrl],
-    advanced: authCookieDomain
-        ? {
-              crossSubDomainCookies: {
-                  enabled: true,
-                  domain: authCookieDomain,
-              },
-          }
-        : undefined,
+    advanced: {
+        cookiePrefix: "sendlit",
+        ...(authCookieDomain
+            ? {
+                  crossSubDomainCookies: {
+                      enabled: true,
+                      domain: authCookieDomain,
+                  },
+              }
+            : {}),
+    },
     user: {
         additionalFields: {
             defaultOrganizationId: {

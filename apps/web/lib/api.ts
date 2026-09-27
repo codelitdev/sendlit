@@ -717,10 +717,15 @@ async function organizationRequest<T>(
     path: string,
     init: RequestInit = {},
 ): Promise<T> {
+    const csrf =
+        typeof document !== "undefined"
+            ? document.cookie.match(/(?:^|;\s*)sendlit_csrf=([^;]+)/)?.[1]
+            : undefined;
     const response = await fetch(`/api/proxy${path}`, {
         ...init,
         headers: {
             ...(init.body ? { "Content-Type": "application/json" } : {}),
+            ...(csrf ? { "X-Sendlit-CSRF": decodeURIComponent(csrf) } : {}),
             ...init.headers,
         },
     });
@@ -728,23 +733,60 @@ async function organizationRequest<T>(
         if (response.status === 204) return undefined as T;
         return (await response.json()) as T;
     }
-    if (response.status === 401 && typeof window !== "undefined") {
-        window.location.href = "/login";
-        return new Promise<T>(() => {});
-    }
     const body = (await response.json().catch(() => null)) as {
         error?: string;
     } | null;
+    if (response.status === 401 && typeof window !== "undefined") {
+        // Step-up auth for billing, not a dead session. Keep the dashboard
+        // signed in and let the billing dialog show the error.
+        if (body?.error === "recent_authentication_required") {
+            throw new ApiError(401, "recent_authentication_required");
+        }
+        window.location.href = "/login";
+        return new Promise<T>(() => {});
+    }
     throw new ApiError(
         response.status,
         body?.error || `Request failed (${response.status})`,
     );
 }
 
+type BillingAction =
+    | "organization_checkout"
+    | "checkout"
+    | "portal"
+    | "plan_change"
+    | "organization_close"
+    | "pending_hide";
+
+/** Sensitive billing writes use a short-lived, single-use token bound to the
+ * current human session, action, and target organization. */
+async function billingActionRequest<T>(
+    action: BillingAction,
+    target: string,
+    path: string,
+    init: RequestInit,
+): Promise<T> {
+    const authorization = await organizationRequest<{
+        token: string;
+        expiresAt: string;
+    }>("/billing/action-token", {
+        method: "POST",
+        body: JSON.stringify({ action, target }),
+    });
+    return organizationRequest<T>(path, {
+        ...init,
+        headers: {
+            ...init.headers,
+            "X-Sendlit-Billing-Action-Token": authorization.token,
+        },
+    });
+}
+
 export interface Organization {
     organizationId: string;
     name: string;
-    status: "active" | "suspended" | "closed";
+    status: "pending_payment" | "active" | "suspended" | "abandoned" | "closed";
     createdAt: string;
     updatedAt: string;
 }
@@ -874,7 +916,19 @@ export interface OrganizationDeliveryPolicy {
 }
 
 export function listOrganizations() {
-    return organizationRequest<{ items: Organization[] }>("/organizations");
+    return organizationRequest<{
+        items: Organization[];
+        ownsFreeOrganization: boolean;
+    }>("/organizations");
+}
+
+export function abandonPendingOrganization(organizationId: string) {
+    return billingActionRequest<void>(
+        "pending_hide",
+        organizationId,
+        `/organizations/${organizationId}/abandon`,
+        { method: "POST" },
+    );
 }
 
 export function createOrganization(name: string) {
@@ -882,6 +936,71 @@ export function createOrganization(name: string) {
         method: "POST",
         body: JSON.stringify({ name }),
     });
+}
+
+export function createPaidOrganizationBillingCheckout(input: {
+    organizationName: string;
+    teamName: string;
+    plan: "pro" | "business";
+    interval: "month" | "year";
+    catalogRevision: number;
+}) {
+    return billingActionRequest<{
+        organizationId: string;
+        checkoutUrl: string;
+        expiresAt: string;
+    }>("organization_checkout", "new", "/billing/organization-checkouts", {
+        method: "POST",
+        body: JSON.stringify(input),
+    });
+}
+
+export interface SendingDomain {
+    domainId: string;
+    domain: string;
+    status: "pending" | "verified" | "revoked" | "failed";
+    verifiedAt: string | null;
+    lastCheckedAt: string | null;
+    nextCheckAt: string | null;
+    challengeToken: string | null;
+    challengeRecordName: string | null;
+    challengeRecordValue: string | null;
+}
+
+export function listOrganizationSendingDomains(organizationId: string) {
+    return organizationRequest<{ items: SendingDomain[] }>(
+        `/organizations/${organizationId}/sending-domains`,
+    );
+}
+
+export function createOrganizationSendingDomain(
+    organizationId: string,
+    domain: string,
+) {
+    return organizationRequest<SendingDomain>(
+        `/organizations/${organizationId}/sending-domains`,
+        { method: "POST", body: JSON.stringify({ domain }) },
+    );
+}
+
+export function verifyOrganizationSendingDomain(
+    organizationId: string,
+    domainId: string,
+) {
+    return organizationRequest<SendingDomain>(
+        `/organizations/${organizationId}/sending-domains/${domainId}/verify`,
+        { method: "POST" },
+    );
+}
+
+export function revokeOrganizationSendingDomain(
+    organizationId: string,
+    domainId: string,
+) {
+    return organizationRequest<void>(
+        `/organizations/${organizationId}/sending-domains/${domainId}`,
+        { method: "DELETE" },
+    );
 }
 
 export function updateOrganization(organizationId: string, name: string) {
@@ -1208,6 +1327,148 @@ export function transitionOrganizationEspGrant(
     return organizationRequest<OrganizationEspGrant>(
         `/organizations/${organizationId}/teams/${teamId}/esp-grant/transition`,
         { method: "POST", body: JSON.stringify(input) },
+    );
+}
+
+// ---- Billing --------------------------------------------------------------
+
+export interface BillingOffer {
+    catalogKey: "pro_month" | "pro_year" | "business_month" | "business_year";
+    plan: "pro" | "business";
+    interval: "month" | "year";
+    currency: string;
+    amountMinor: number;
+    trialDays: number;
+}
+
+export interface BillingCatalog {
+    catalogRevision: number | null;
+    currency: string | null;
+    offers: BillingOffer[];
+    checkoutAvailable: boolean;
+}
+
+export type OrganizationPaymentStatus =
+    | "free"
+    | "checkout_pending"
+    | "trialing"
+    | "active"
+    | "past_due"
+    | "cancel_at_period_end"
+    | "cancelled"
+    | "expired";
+
+export interface OrganizationPlanUsage {
+    plan: "oss" | "free" | "pro" | "business";
+    paymentStatus: OrganizationPaymentStatus;
+    teams: number;
+    subscribedContacts: number;
+    monthlySends: number;
+    monthlySendsReserved: number;
+    bucketStartsAt: string;
+    bucketEndsAt: string;
+    teamsLimit: number | null;
+    subscribedContactsLimit: number | null;
+    monthlySendsLimit: number | null;
+}
+
+export interface OrganizationEntitlements {
+    teamsLimit: number | null;
+    subscribedContactsLimit: number | null;
+    monthlySendsLimit: number | null;
+    sharedOrganizationMailbox: boolean;
+    provisioning: boolean;
+    organizationApiKeys: boolean;
+    marketingBranding: boolean;
+}
+
+export interface OrganizationBilling {
+    plan: "oss" | "free" | "pro" | "business";
+    billingInterval: "month" | "year" | null;
+    paymentStatus: OrganizationPaymentStatus;
+    trialEndsAt: string | null;
+    currentPeriodEndsAt: string | null;
+    cancelAtPeriodEnd: boolean;
+    graceEndsAt: string | null;
+    canManageBilling: boolean;
+    entitlements: OrganizationEntitlements;
+    usage: OrganizationPlanUsage;
+    pendingPlanChange: {
+        changeId: string;
+        targetPlan: "pro" | "business";
+        targetInterval: "month" | "year";
+        effectiveAt: "immediately" | "next_billing_date";
+    } | null;
+}
+
+export function getBillingCatalog() {
+    return organizationRequest<BillingCatalog>("/billing/catalog");
+}
+
+export function getOrganizationBilling(organizationId: string) {
+    return organizationRequest<OrganizationBilling>(
+        `/organizations/${organizationId}/billing`,
+    );
+}
+
+export function createOrganizationBillingCheckout(
+    organizationId: string,
+    input: {
+        plan: "pro" | "business";
+        interval: "month" | "year";
+        catalogRevision: number;
+    },
+) {
+    return billingActionRequest<{ checkoutUrl: string; expiresAt: string }>(
+        "checkout",
+        organizationId,
+        `/organizations/${organizationId}/billing/checkout`,
+        { method: "POST", body: JSON.stringify(input) },
+    );
+}
+
+export function createOrganizationBillingPortal(organizationId: string) {
+    return billingActionRequest<{ portalUrl: string }>(
+        "portal",
+        organizationId,
+        `/organizations/${organizationId}/billing/portal`,
+        { method: "POST" },
+    );
+}
+
+export interface OrganizationPlanChange {
+    changeId: string;
+    status: "pending" | "succeeded" | "failed" | "conflicted";
+    targetPlan: "pro" | "business";
+    targetInterval: "month" | "year";
+    effectiveAt: "immediately" | "next_billing_date";
+    paymentUrl: string | null;
+    completedAt: string | null;
+}
+
+export function createOrganizationBillingPlanChange(
+    organizationId: string,
+    input: {
+        plan: "pro" | "business";
+        interval: "month" | "year";
+        catalogRevision: number;
+        idempotencyKey?: string;
+    },
+) {
+    return billingActionRequest<OrganizationPlanChange>(
+        "plan_change",
+        organizationId,
+        `/organizations/${organizationId}/billing/plan-change`,
+        { method: "POST", body: JSON.stringify(input) },
+    );
+}
+
+export function getOrganizationBillingPlanChange(
+    organizationId: string,
+    changeId: string,
+) {
+    return organizationRequest<OrganizationPlanChange>(
+        `/organizations/${organizationId}/billing/plan-changes/${changeId}`,
     );
 }
 

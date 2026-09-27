@@ -18,8 +18,7 @@ describe("auth proxy sign-out", () => {
                 status: 200,
                 headers: {
                     "Content-Type": "application/json",
-                    "Set-Cookie":
-                        "better-auth.session_token=; Path=/; Max-Age=0",
+                    "Set-Cookie": "sendlit.session_token=; Path=/; Max-Age=0",
                 },
             }),
         );
@@ -29,7 +28,7 @@ describe("auth proxy sign-out", () => {
             new NextRequest("http://localhost:3000/api/auth/sign-out", {
                 method: "POST",
                 headers: {
-                    cookie: "better-auth.session_token=opaque",
+                    cookie: "sendlit.session_token=opaque",
                     origin: "http://localhost:3000",
                 },
             }),

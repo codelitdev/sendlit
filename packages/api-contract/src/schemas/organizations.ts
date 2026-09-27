@@ -5,7 +5,13 @@ export const organizationRoleSchema = z.enum(["owner", "admin", "member"]);
 export const organizationSchema = z.object({
     organizationId: z.string(),
     name: z.string(),
-    status: z.enum(["active", "suspended", "closed"]),
+    status: z.enum([
+        "pending_payment",
+        "active",
+        "suspended",
+        "abandoned",
+        "closed",
+    ]),
     createdAt: z.string(),
     updatedAt: z.string(),
 });
@@ -41,6 +47,8 @@ export const updateOrganizationMemberBodySchema = z.object({
 
 export const organizationKeyScopes = [
     "organization:read",
+    "delivery:read",
+    "delivery:manage",
     "teams:provision",
     "teams:read",
     "teams:manage",

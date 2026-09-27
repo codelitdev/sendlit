@@ -44,7 +44,11 @@ OAuth authorization, consent, token, introspection, revocation, and userinfo end
 
 Use Authorization Code with S256 PKCE, request only the scopes your client needs, and keep any refresh token in the client's secure credential store. The authorization request must include an explicit, non-empty `scope`; SendLit does not turn a missing value into a full-access grant. Every authorization requires a SendLit user to sign in, select a team when necessary, and approve consent.
 
-API keys always select one fixed team and currently grant the complete MCP tool set for that team. Dashboard session cookies and `X-Sendlit-Team-Id` are not accepted as MCP authentication.
+Team API keys always select one fixed team and currently grant the complete
+MCP tool set for that team. Organization API keys, dashboard session cookies,
+and `X-Sendlit-Team-Id` are not accepted as MCP authentication. Use the REST
+API for organization discovery, shared-delivery setup, and team provisioning;
+see [Headless organization setup](/developers/headless-provisioning).
 
 OAuth clients (including MCP clients like Claude) have no way to send a custom header during authorization, so a multi-team account instead picks a team as part of the OAuth flow itself: after login, and before the consent screen, the account is shown a "select a team" step (mirroring how apps like Notion resolve their own multi-workspace ambiguity). The chosen team is baked into the issued access token and used for every subsequent request — no header needed. Accounts with exactly one team skip this step entirely.
 
@@ -128,7 +132,10 @@ The ESP tools manage the team’s sending providers and default provider. Secret
 ### Teams and API keys
 
 - `list_teams`, `create_team`, `rename_team`, `delete_team`
+- `get_plan_usage` returns the current team's parent-organization plan, usage, and limits. It never returns provider IDs or portal links.
 - `list_api_keys`, `create_api_key`, `delete_api_key`
+
+Mutating tools such as `create_team`, `create_contact`, `update_contact`, `send_email`, and `start_sequence` return the same plan-gate error object as REST (`plan_limit_reached`, `plan_feature_unavailable`, `sending_paused`) in `structuredContent`. Checkout, portal, and invoice tools are not exposed through MCP.
 
 The full API key secret is returned only by `create_api_key`. Store it immediately; it cannot be recovered from a later listing.
 

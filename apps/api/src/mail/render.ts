@@ -268,11 +268,14 @@ export async function renderEmailContent({
     content,
     variables,
     requireVariables = false,
+    brandingText,
 }: {
     content: EmailType;
     variables: Record<string, unknown>;
     /** Transactional sends reject unguarded values that would render blank. */
     requireVariables?: boolean;
+    /** Server-owned Free-plan branding; callers cannot supply it in template data. */
+    brandingText?: string;
 }): Promise<string> {
     const hasFooter = content.content.some(
         (block) => block.blockType === "footer",
@@ -296,7 +299,7 @@ export async function renderEmailContent({
             throw error;
         }
         renderContext = {
-            footer: { mailingAddress, unsubscribeUrl },
+            footer: { mailingAddress, unsubscribeUrl, brandingText },
         };
     }
 

@@ -58,6 +58,10 @@ const CONTEXT_ALLOWLIST = new Set([
     "response_code",
     "route",
     "worker_name",
+    "alert_code",
+    "billing_alert",
+    "age_ms",
+    "count",
 ]);
 
 const perSourceCap = getPerSourceCap();

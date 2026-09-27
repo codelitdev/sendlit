@@ -31,6 +31,7 @@ import {
 import { generateRfcMessageId } from "../utils/rfc-message-id";
 import { getActiveFeedbackConnectionForEspConfig } from "../delivery-feedback/feedback-connection-queries";
 import { reserveOrganizationQuota } from "../delivery/quota";
+import { reserveSend } from "../billing/entitlements";
 
 export type TransactionalEmail = typeof transactionalEmails.$inferSelect;
 export type { TransactionalEmailStatus };
@@ -268,7 +269,11 @@ export async function createTransactionalEmail({
     const team = await getTeam(teamId);
     if (!team) throw new Error("esp_not_configured");
 
-    const pin = await resolveDeliverySource(teamId, deliverySource);
+    const pin = await resolveDeliverySource(
+        teamId,
+        deliverySource,
+        "transactional",
+    );
 
     let renderedHtml: string;
     let resolvedTemplateId: string | null = null;
@@ -403,6 +408,11 @@ export async function createTransactionalEmail({
                 rfcMessageId: generateRfcMessageId(),
             })
             .returning();
+        await reserveSend(tx, {
+            organizationId: team.organizationId,
+            outboundMessageId: outbound.id,
+            purpose: "transactional",
+        });
         if (pin.type === "organization") {
             await reserveOrganizationQuota(tx, {
                 outboundMessageId: outbound.id,
