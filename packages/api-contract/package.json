@@ -2,7 +2,7 @@
     "name": "@sendlit/api-contract",
     "private": true,
     "version": "0.1.0",
-    "description": "Shared ts-rest contract (Zod schemas + route definitions) for the SendLit API \u2014 single source of truth for server validation, the OpenAPI doc, and the typed web client",
+    "description": "Shared ts-rest contract (Zod schemas + route definitions) for the SendLit API — single source of truth for server validation, the OpenAPI doc, and the typed web client",
     "author": "SendLit",
     "license": "MIT",
     "main": "dist/index.mjs",
@@ -29,8 +29,8 @@
         "check-types": "tsc --noEmit"
     },
     "devDependencies": {
-        "@types/node": "^22.14.1",
-        "rimraf": "^4.1.1",
+        "@types/node": "^22.20.0",
+        "rimraf": "^4.4.1",
         "tsup": "6.6.0",
         "typescript": "^5.9.3"
     },
