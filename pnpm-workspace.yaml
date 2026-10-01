@@ -13,6 +13,35 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@codelitdev/design-system@0.1.0-alpha.0 || 0.1.0-alpha.2 || 0.1.0-alpha.3 || 0.1.0-alpha.4 || 0.1.0-alpha.5 || 0.1.0-alpha.6'
   - '@codelitdev/oauth-server-kit@0.1.0-alpha.0 || 0.1.0-alpha.1'
+  - esbuild@0.24.3 || 0.28.1
+  - tsup@8.3.5
+  - postcss@8.5.10 || 8.5.12 || 8.5.18 || 8.5.23
+  - ts-deepmerge@8.0.0
+  - brace-expansion@1.1.16 || 1.1.17 || 1.1.18 || 1.1.19 || 1.1.20 || 1.1.21 || 2.1.2 || 2.1.3 || 2.1.4 || 2.1.5 || 2.1.6 || 2.1.7 || 5.0.8 || 5.0.9 || 5.0.10 || 5.0.11 || 5.0.12
+  - body-parser@1.20.6
+  - fast-uri@3.1.4 || 3.1.5 || 3.1.6 || 3.1.7 || 3.1.8
+  - sharp@0.35.0 || 0.35.4
+  - next@16.2.11 || 16.3.3 || 16.3.6
+  - undici@7.29.0 || 7.29.1
+  - ip-address@10.2.1 || 10.2.2 || 10.3.1 || 10.5.1 || 10.7.1
+  - hono@4.12.34 || 4.13.5
+  - js-yaml@3.15.1 || 3.15.2 || 4.3.1 || 4.3.2
+  - nanoid@3.3.16 || 3.3.18
+  - '@hono/node-server@1.19.15'
+  - fast-xml-parser@5.10.1
+  - browserslist@4.28.7
+  - '@opentelemetry/core@2.8.0'
+  - pnpm@11.11.0
+  - qs@6.15.4 || 6.16.0
+  - liquidjs@10.27.2
+  - vitest@4.1.11
+  - '@vitest/mocker@4.1.11'
+  - baseline-browser-mapping@2.11.0
+  - nodemailer@9.1.0 || 9.1.1 || 10.0.2 || 10.0.6
+  - image-size@2.0.3
+  - '@grpc/grpc-js@1.14.5'
 
 overrides:
-  "@types/node": ^22.14.1
+  "@types/node": ^22.20.0
+  "@opentelemetry/core@>=2 <3": ">=2.8.0 <3"
+  "qs@>=6 <7": ">=6.16.0 <7"
