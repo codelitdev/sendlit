@@ -43,3 +43,5 @@ minimumReleaseAgeExclude:
 
 overrides:
   "@types/node": ^22.20.0
+  "@opentelemetry/core@>=2 <3": ">=2.8.0 <3"
+  "qs@>=6 <7": ">=6.16.0 <7"
