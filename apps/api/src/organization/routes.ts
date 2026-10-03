@@ -1151,9 +1151,6 @@ const impl = s.router(contract.organizations, {
         if (result.noDestination) {
             return { status: 400, body: { error: result.error! } };
         }
-        if (result.mailingAddressRequired) {
-            return { status: 422, body: { error: result.error! } };
-        }
         if (!result.success) {
             return {
                 status: 502,

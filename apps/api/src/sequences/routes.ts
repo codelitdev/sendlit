@@ -184,7 +184,7 @@ const impl = s.router(contract.sequences, {
                 ? {
                       status: 422,
                       body: {
-                          error: "A mailing address is required before sending email.",
+                          error: "A mailing address is required for broadcasts and sequences.",
                       },
                   }
                 : err.message === "esp_not_configured"

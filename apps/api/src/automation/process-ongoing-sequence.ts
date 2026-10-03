@@ -327,6 +327,7 @@ async function attemptMailSending({
             return;
         }
         const result = await sendMail({
+            purpose: "campaign",
             from,
             to,
             subject,

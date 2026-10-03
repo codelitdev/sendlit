@@ -68,7 +68,7 @@ export function OverviewDashboard() {
         !setup?.hasMailingAddress && {
             title: "Add your mailing address",
             description:
-                "A physical mailing address is required before this workspace can send email.",
+                "A physical mailing address is required for broadcasts and sequences. Transactional email can be sent without one.",
             href: "/settings",
         },
     ].filter(Boolean) as {

@@ -11,7 +11,6 @@ import {
     listTransactionalEmails,
     toPublicTransactionalEmail,
 } from "./queries";
-import { MAILING_ADDRESS_REQUIRED } from "../settings/general/constants";
 import {
     MISSING_TEMPLATE_VARIABLES,
     MissingTemplateVariablesError,
@@ -146,13 +145,6 @@ const impl = s.router(contract.transactional, {
                     return {
                         status: 422,
                         body: { error: "Team ESP is not configured." },
-                    };
-                case MAILING_ADDRESS_REQUIRED:
-                    return {
-                        status: 422,
-                        body: {
-                            error: "A mailing address is required before sending email.",
-                        },
                     };
                 case "esp_not_found":
                     return { status: 422, body: { error: "ESP not found" } };

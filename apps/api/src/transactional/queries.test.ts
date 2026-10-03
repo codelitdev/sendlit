@@ -452,6 +452,24 @@ describe("createTransactionalEmail happy paths", () => {
         expect(row.html).toBe("<p>Hello {{ not_a_liquid_tag }}</p>");
     });
 
+    it("accepts transactional sends without a workspace mailing address", async () => {
+        const { team } = await seedTeamAndContact(tdb, {
+            settings: { mailingAddress: null },
+        });
+
+        const row = await createTransactionalEmail({
+            teamId: team.id,
+            to: "owner@example.com",
+            subject: "Your sign-in code",
+            html: "<p>123456</p>",
+        });
+
+        expect(row.status).toBe("queued");
+        expect(await db.select().from(schema.mailDispatchOutbox)).toHaveLength(
+            1,
+        );
+    });
+
     it("associates the row with an existing contact by email, purely for analytics", async () => {
         const { team, contact } = await seedTeamAndContact(tdb);
 

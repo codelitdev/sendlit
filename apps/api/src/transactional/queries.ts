@@ -7,7 +7,6 @@ import {
     transactionalEmails,
 } from "../db/schema";
 import { getTeam } from "../team/queries";
-import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTemplate } from "../templates/queries";
 import { findContactByEmail } from "../contacts/queries";
 import {
@@ -224,10 +223,6 @@ export async function createTransactionalEmail({
     trackClicks?: boolean;
     deliverySource?: DeliverySourceSelection;
 }): Promise<TransactionalEmail> {
-    // Reject before persisting or queueing so an unconfigured team cannot
-    // create delivery work that would later fail in a worker.
-    await assertMailingAddressConfigured(teamId);
-
     if (!!templateId === !!html) {
         throw new Error("invalid_content");
     }

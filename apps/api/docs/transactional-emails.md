@@ -18,8 +18,9 @@ invariants:
 
 - Recipients must be subscribed `contacts` rows; transactional mail **must**
   reach unsubscribed addresses and addresses that aren't contacts at all.
-- A team must configure a non-empty physical mailing address before any email,
-  including transactional mail, can be accepted or delivered.
+- Campaign mail requires a non-empty physical mailing address for its managed
+  compliance footer. Transactional mail does not render that footer and does
+  not require a mailing address.
 - The campaign renderer injects an unsubscribe link and the CAN-SPAM mailing
   address — required for marketing mail, actively wrong for a password reset.
 - Delivery is driven by a 60s due-poll over `ongoing_sequences`; transactional

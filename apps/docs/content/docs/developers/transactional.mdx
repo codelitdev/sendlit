@@ -8,10 +8,10 @@ password reset, OTP, or security notification. Transactional sends appear in
 the dashboard’s **Transactional log**. They do not enroll a contact in a
 sequence or use a broadcast audience.
 
-A non-empty workspace mailing address and a configured ESP are still required
-before SendLit accepts any send. This workspace policy is separate from message
-content: transactional templates do not render a marketing footer or
-unsubscribe link.
+A configured ESP is required before SendLit accepts a send. A workspace mailing
+address is not required for transactional messages: they do not render a
+marketing footer or unsubscribe link. The address remains required for
+broadcasts and sequences, whose managed footer includes it.
 
 ## Create a transactional template
 

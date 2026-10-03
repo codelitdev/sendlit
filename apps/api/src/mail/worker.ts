@@ -43,7 +43,15 @@ import { db } from "../db/client";
 async function processCampaignJob(job: Job) {
     const { to, from, subject, body, headers, teamId } = job.data;
     try {
-        await sendMail({ from, to, subject, html: body, headers, teamId });
+        await sendMail({
+            purpose: "campaign",
+            from,
+            to,
+            subject,
+            html: body,
+            headers,
+            teamId,
+        });
     } catch (err: any) {
         logger.error(
             {
@@ -160,6 +168,7 @@ async function processTransactionalJob(job: Job) {
         }
 
         const result = await sendMail({
+            purpose: "transactional",
             from: row.fromEmail || "",
             to: row.toEmail,
             subject: row.subject,

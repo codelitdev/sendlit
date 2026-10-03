@@ -42,6 +42,7 @@ describe("sendMail", () => {
 
         await expect(
             sendMail({
+                purpose: "campaign",
                 from: "Sender <sender@example.com>",
                 to: "contact@example.com",
                 subject: "Hello",
@@ -60,6 +61,7 @@ describe("sendMail", () => {
 
         await expect(
             sendMail({
+                purpose: "campaign",
                 from: "Sender <sender@example.com>",
                 to: "contact@example.com",
                 subject: "Hello",
@@ -85,6 +87,7 @@ describe("sendMail", () => {
 
         await expect(
             sendMail({
+                purpose: "campaign",
                 from: "Sender <sender@example.com>",
                 to: "contact@example.com",
                 subject: "Hello",
@@ -99,6 +102,7 @@ describe("sendMail", () => {
         const { sendMail } = await import("./send.js");
 
         await sendMail({
+            purpose: "campaign",
             from: "Sender <sender@example.com>",
             to: "contact@example.com",
             subject: "Hello",
@@ -121,5 +125,48 @@ describe("sendMail", () => {
                 teamId: "team-1",
             }),
         );
+    });
+
+    it("sends transactional mail without requiring a mailing address", async () => {
+        assertMailingAddressConfiguredMock.mockRejectedValueOnce(
+            new Error("mailing_address_required"),
+        );
+        getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
+        const { sendMail } = await import("./send.js");
+
+        await expect(
+            sendMail({
+                purpose: "transactional",
+                from: "Sender <sender@example.com>",
+                to: "contact@example.com",
+                subject: "Your sign-in code",
+                html: "<p>123456</p>",
+                teamId: "team-1",
+            }),
+        ).resolves.toEqual({ messageId: null, providerResponse: null });
+
+        expect(assertMailingAddressConfiguredMock).not.toHaveBeenCalled();
+        expect(sendMailMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not require a mailing address to test an ESP", async () => {
+        assertMailingAddressConfiguredMock.mockRejectedValueOnce(
+            new Error("mailing_address_required"),
+        );
+        getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
+        const { sendTestMail } = await import("./send.js");
+
+        await expect(
+            sendTestMail({
+                from: "Sender <sender@example.com>",
+                to: "owner@example.com",
+                subject: "ESP test",
+                html: "<p>Test</p>",
+                teamId: "team-1",
+            }),
+        ).resolves.toBeUndefined();
+
+        expect(assertMailingAddressConfiguredMock).not.toHaveBeenCalled();
+        expect(sendMailMock).toHaveBeenCalledTimes(1);
     });
 });

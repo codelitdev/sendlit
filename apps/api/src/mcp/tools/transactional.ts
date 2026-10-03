@@ -13,7 +13,6 @@ import {
     listTransactionalEmails,
     toPublicTransactionalEmail,
 } from "../../transactional/queries";
-import { MAILING_ADDRESS_REQUIRED } from "../../settings/general/constants";
 import {
     MISSING_TEMPLATE_VARIABLES,
     MissingTemplateVariablesError,
@@ -155,10 +154,6 @@ export function registerTransactionalTools(server: McpToolRegistrar): void {
                         return errorResult("Template rendering failed");
                     case "esp_not_configured":
                         return errorResult("Team ESP is not configured.");
-                    case MAILING_ADDRESS_REQUIRED:
-                        return errorResult(
-                            "A mailing address is required before sending email.",
-                        );
                     case "esp_not_found":
                         return errorResult("ESP not found");
                     case "recipient_suppressed":
