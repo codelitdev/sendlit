@@ -45,3 +45,7 @@ overrides:
   "@types/node": ^22.20.0
   "@opentelemetry/core@>=2 <3": ">=2.8.0 <3"
   "qs@>=6 <7": ">=6.16.0 <7"
+  "proxy-addr@<3": ">=2.0.8 <3"
+  "source-map-js@<2": ">=1.2.2 <2"
+  "postcss-selector-parser@>=7 <8": ">=7.1.6 <8"
+  "@modelcontextprotocol/sdk@>=1 <2": ">=1.31.0 <2"
