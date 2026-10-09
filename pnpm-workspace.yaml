@@ -21,7 +21,7 @@ minimumReleaseAgeExclude:
   - body-parser@1.20.6
   - fast-uri@3.1.4 || 3.1.5 || 3.1.6 || 3.1.7 || 3.1.8
   - sharp@0.35.0 || 0.35.4
-  - next@16.2.11 || 16.3.3 || 16.3.6
+  - next@16.2.11 || 16.3.3 || 16.3.6 || 16.3.8 || 16.4.0
   - undici@7.29.0 || 7.29.1
   - ip-address@10.2.1 || 10.2.2 || 10.3.1 || 10.5.1 || 10.7.1
   - hono@4.12.34 || 4.13.5
@@ -37,12 +37,16 @@ minimumReleaseAgeExclude:
   - vitest@4.1.11
   - '@vitest/mocker@4.1.11'
   - baseline-browser-mapping@2.11.0
-  - nodemailer@9.1.0 || 9.1.1 || 10.0.2 || 10.0.6
+  - nodemailer@9.1.0 || 9.1.1 || 10.0.2 || 10.0.5 || 10.0.6 || 10.0.9
   - image-size@2.0.3
   - '@grpc/grpc-js@1.14.5'
+  - braces@3.0.4
+  - sprintf-js@1.1.4
+  - postcss-selector-parser@7.1.6
 
 overrides:
   "@types/node": ^22.20.0
+  "esbuild@>=0.27.3 <0.28.1": ">=0.28.1 <0.29"
   "@opentelemetry/core@>=2 <3": ">=2.8.0 <3"
   "qs@>=6 <7": ">=6.16.0 <7"
   "proxy-addr@<3": ">=2.0.8 <3"
