@@ -6,7 +6,7 @@ import {
     transformLinksForClickTracking,
 } from "./render";
 import { generatePixelToken } from "../utils/pixel-jwt";
-import { getSiteUrl } from "../utils/mail";
+import { getTrackedClickUrl, getTrackingPixelUrl } from "../utils/mail";
 import { getTeam } from "../team/queries";
 import {
     claimTransactionalEmailForSending,
@@ -128,7 +128,7 @@ async function processTransactionalJob(job: Job) {
                         index,
                         link: encodeURIComponent(originalUrl),
                     });
-                    return `${getSiteUrl()}/api/track/click?d=${token}`;
+                    return getTrackedClickUrl(token);
                 },
                 { txe_id: row.txeId },
             );
@@ -138,7 +138,7 @@ async function processTransactionalJob(job: Job) {
                 type: "txe",
                 txeId: row.txeId,
             });
-            const pixelUrl = `${getSiteUrl()}/api/track/open?d=${pixelToken}`;
+            const pixelUrl = getTrackingPixelUrl(pixelToken);
             html = appendTrackingPixelToHtml(html, pixelUrl);
         }
 

@@ -11,6 +11,12 @@ Marketing templates contain one final managed footer. SendLit renders the
 workspace mailing address and recipient-specific unsubscribe URL at delivery
 time.
 
+Opening the unsubscribe URL shows a confirmation page; the contact is
+unsubscribed only when they confirm. Security scanners and mail clients that
+prefetch links therefore can't unsubscribe anyone. A `POST` to the same URL
+unsubscribes immediately, which is how mailbox providers' one-click
+unsubscribe (RFC 8058) works.
+
 Broadcast delivery uses the same sequence state machine as automations:
 
 - `draft` means the broadcast is editable.
