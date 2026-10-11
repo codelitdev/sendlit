@@ -229,20 +229,4 @@ describe("tracking and unsubscribe routes", () => {
         const unknown = await get("/unsubscribe/unknown");
         expect(unknown.status).toBe(404);
     });
-
-    it("serves legacy /api/track links already embedded in delivered mail", async () => {
-        mocks.verifyPixelToken.mockReturnValue({
-            type: "txe",
-            txeId: "txe_1",
-            index: 0,
-            link: encodeURIComponent("https://example.com/"),
-        });
-
-        const open = await get("/api/track/open?d=valid");
-        const click = await get("/api/track/click?d=valid");
-
-        expect(open.headers["content-type"]).toContain("image/gif");
-        expect(click.status).toBe(302);
-        expect(click.headers.location).toBe("https://example.com/");
-    });
 });

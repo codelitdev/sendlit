@@ -255,7 +255,6 @@ describe("mail render helpers", () => {
     it("skips only this API's own tracking links, not lookalike paths", () => {
         const tracked = transformLinksForClickTracking(
             `<a href="https://sendlit.test/track/click?d=t">own</a>
-             <a href="https://sendlit.test/api/track/click?d=t">legacy</a>
              <a href="https://shop.example.com/api/track/123">parcel</a>`,
             (url, index) =>
                 `https://track.test/${index}?u=${encodeURIComponent(url)}`,
@@ -264,10 +263,7 @@ describe("mail render helpers", () => {
             'href="https://sendlit.test/track/click?d=t"',
         );
         expect(tracked).toContain(
-            'href="https://sendlit.test/api/track/click?d=t"',
-        );
-        expect(tracked).toContain(
-            "https://track.test/2?u=https%3A%2F%2Fshop.example.com%2Fapi%2Ftrack%2F123",
+            "https://track.test/1?u=https%3A%2F%2Fshop.example.com%2Fapi%2Ftrack%2F123",
         );
     });
 });

@@ -58,13 +58,8 @@ function isTransactionalPayload(
     return payload.type === "txe";
 }
 
-// Mail sent before tracking links were fixed embeds `/api/track/*`; keep those
-// already-delivered pixels and links working.
-const OPEN_PATHS = ["/track/open", "/api/track/open"];
-const CLICK_PATHS = ["/track/click", "/api/track/click"];
-
 // Open-tracking pixel embedded in outgoing mail.
-router.get(OPEN_PATHS, async (req: Request, res: Response) => {
+router.get("/track/open", async (req: Request, res: Response) => {
     const token = String(req.query.d || "");
     const payload = verifyPixelToken<Record<string, unknown>>(token);
 
@@ -112,7 +107,7 @@ router.get(OPEN_PATHS, async (req: Request, res: Response) => {
 });
 
 // Click-tracking redirect embedded in outgoing mail links.
-router.get(CLICK_PATHS, async (req: Request, res: Response) => {
+router.get("/track/click", async (req: Request, res: Response) => {
     const token = String(req.query.d || "");
     const payload = verifyPixelToken<Record<string, unknown>>(token);
     if (!payload || typeof payload.link !== "string" || !payload.link) {

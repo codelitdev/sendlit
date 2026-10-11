@@ -129,21 +129,6 @@ describe("tracking links in delivered mail", () => {
             }),
         ]);
     });
-
-    it("still serves links in the legacy /api/track form", async () => {
-        const { contact, links } = await sendSequenceEmail();
-
-        const open = await requestApp(app, `/api${pathOf(links.pixel)}`);
-        const click = await requestApp(app, `/api${pathOf(links.click)}`);
-
-        expect(open.status).toBe(200);
-        expect(click.status).toBe(302);
-        await vi.waitFor(async () =>
-            expect(
-                (await eventsFor(contact.id)).map((e) => e.action).sort(),
-            ).toEqual(["click", "open"]),
-        );
-    });
 });
 
 describe("unsubscribe link in delivered mail", () => {
