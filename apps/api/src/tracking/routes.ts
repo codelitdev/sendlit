@@ -16,6 +16,11 @@ import {
 import { EmailEventAction } from "../config/constants";
 import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
+import {
+    invalidUnsubscribeLinkPage,
+    unsubscribeConfirmPage,
+    unsubscribedPage,
+} from "./unsubscribe-page";
 
 const router = Router();
 
@@ -163,29 +168,84 @@ router.get("/track/click", async (req: Request, res: Response) => {
     res.redirect(destination);
 });
 
-// Unsubscribe a contact via their unsubscribe link.
+// Unsubscribe links. A GET never changes anything: link scanners and mail
+// clients prefetch every URL in an email, so the GET only renders a
+// confirmation page. The unsubscribe happens on POST, which serves both that
+// page's form (`source=page`) and RFC 8058 one-click requests sent by mailbox
+// providers (`List-Unsubscribe=One-Click`), which only need a 2xx.
 router.get(
     "/unsubscribe/:unsubscribeToken",
     async (req: Request, res: Response) => {
-        const contact = await getContactByUnsubscribeToken(
-            req.params.unsubscribeToken,
-        );
-        if (!contact) return res.status(404).send("Invalid unsubscribe link");
+        try {
+            const contact = await getContactByUnsubscribeToken(
+                req.params.unsubscribeToken,
+            );
+            if (!contact) {
+                return res
+                    .status(404)
+                    .type("html")
+                    .send(invalidUnsubscribeLinkPage());
+            }
 
-        await updateContact(contact.teamId, contact.contactId, {
-            subscribed: false,
-        });
-        captureEvent({
-            event: "contact_unsubscribed",
-            source: "tracking.unsubscribe",
-            teamId: contact.teamId,
-        });
-
-        res.type("html").send(
-            "<!DOCTYPE html><html><body>You have been unsubscribed.</body></html>",
-        );
+            res.type("html").send(
+                contact.subscribed
+                    ? unsubscribeConfirmPage(contact.email)
+                    : unsubscribedPage(contact.email),
+            );
+        } catch (err: any) {
+            handleUnsubscribeError(err, res);
+        }
     },
 );
+
+router.post(
+    "/unsubscribe/:unsubscribeToken",
+    async (req: Request, res: Response) => {
+        try {
+            const contact = await getContactByUnsubscribeToken(
+                req.params.unsubscribeToken,
+            );
+            if (!contact) {
+                return res
+                    .status(404)
+                    .type("html")
+                    .send(invalidUnsubscribeLinkPage());
+            }
+
+            if (contact.subscribed) {
+                await updateContact(contact.teamId, contact.contactId, {
+                    subscribed: false,
+                });
+                captureEvent({
+                    event: "contact_unsubscribed",
+                    source: "tracking.unsubscribe",
+                    teamId: contact.teamId,
+                    properties: {
+                        method:
+                            req.body?.source === "page" ? "page" : "one_click",
+                    },
+                });
+            }
+
+            if (req.body?.source === "page") {
+                return res.type("html").send(unsubscribedPage(contact.email));
+            }
+            res.status(200).end();
+        } catch (err: any) {
+            handleUnsubscribeError(err, res);
+        }
+    },
+);
+
+function handleUnsubscribeError(err: any, res: Response) {
+    logger.error({ error: err.message }, "Failed to process unsubscribe");
+    captureError({
+        error: err,
+        source: "tracking.unsubscribe",
+        context: { route: "/unsubscribe/:unsubscribeToken" },
+    });
+    res.status(500).send("Something went wrong. Please try again.");
+}
 
 /** Resolves the public ids decoded from a tracking JWT into the internal ids
  * `email_events` now requires as FKs. Fails soft (returns `null`) if the

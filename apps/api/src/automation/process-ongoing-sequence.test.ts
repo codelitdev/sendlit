@@ -273,8 +273,9 @@ describe("processOngoingSequence", () => {
         const { html } = mockedSendMail.mock.calls[0][0];
         expect(html).toContain("Hello Ada Lovelace!");
         expect(html).toContain(`/unsubscribe/${contact.unsubscribeToken}`);
-        expect(html).toContain("https://sendlit.test/api/track/open?d=");
-        expect(html).toContain("https://sendlit.test/api/track/click?d=");
+        expect(html).toContain("https://sendlit.test/track/open?d=");
+        expect(html).toContain("https://sendlit.test/track/click?d=");
+        expect(html).not.toContain("/api/track/");
         // The original destination must only survive inside the signed token.
         expect(html).not.toContain('href="https://example.com/offer"');
     });

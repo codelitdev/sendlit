@@ -9,3 +9,16 @@ export function getSiteUrl(): string {
 export function getUnsubLink(unsubscribeToken: string): string {
     return `${getSiteUrl()}/unsubscribe/${unsubscribeToken}`;
 }
+
+export function getTrackingPixelUrl(token: string): string {
+    return `${getSiteUrl()}/track/open?d=${token}`;
+}
+
+export function getTrackedClickUrl(token: string): string {
+    return `${getSiteUrl()}/track/click?d=${token}`;
+}
+
+/** Whether `url` already points at this API's tracking routes. */
+export function isTrackingUrl(url: string): boolean {
+    return url.startsWith(`${getSiteUrl()}/track/`);
+}

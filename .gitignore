@@ -1,3 +1,6 @@
+# Secrets (copied from .env.example for self-hosting)
+.env
+
 # Dependencies
 node_modules/
 .npmrc

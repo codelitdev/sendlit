@@ -1,3 +1,4 @@
+import express from "express";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
@@ -30,6 +31,8 @@ import * as schema from "../db/schema";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
 import { getTransactionalEmailById } from "../transactional/queries";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
+import { requestApp } from "../test/http";
+import trackingRoutes from "../tracking/routes";
 import { sendMail } from "./send";
 import "./worker";
 
@@ -65,7 +68,12 @@ function job(transactionalEmailId: string, attemptsMade = 0): Job {
 
 async function queuedEmail(
     teamId: string,
-    options: { outboxId?: string | null } = {},
+    options: {
+        outboxId?: string | null;
+        html?: string;
+        trackOpens?: boolean;
+        trackClicks?: boolean;
+    } = {},
 ) {
     const [esp] = await tdb
         .select()
@@ -81,7 +89,9 @@ async function queuedEmail(
             toEmail: "buyer@example.com",
             fromEmail: "sender@example.com",
             subject: "Hi",
-            html: "<p>hi</p>",
+            html: options.html ?? "<p>hi</p>",
+            trackOpens: options.trackOpens ?? false,
+            trackClicks: options.trackClicks ?? false,
             status: "queued",
         })
         .returning();
@@ -135,6 +145,47 @@ describe("mail worker transactional processing", () => {
         });
         await expect(isRecipientSuppressed(team.id, row.toEmail)).resolves.toBe(
             true,
+        );
+    });
+
+    it("embeds tracking links that resolve against the tracking routes", async () => {
+        const { team } = await seedTeamAndContact(tdb);
+        const row = await queuedEmail(team.id, {
+            html: '<html><body><a href="https://example.com/receipt">Receipt</a></body></html>',
+            trackOpens: true,
+            trackClicks: true,
+        });
+        sendMailMock.mockResolvedValueOnce({
+            messageId: null,
+            providerResponse: null,
+        });
+
+        await processor(job(row.id));
+
+        const { html } = sendMailMock.mock.calls[0][0];
+        const pixel = new URL(
+            html.match(/src="([^"]+\/track\/open[^"]*)"/)![1],
+        );
+        const click = new URL(
+            html.match(/href="([^"]+\/track\/click[^"]*)"/)![1],
+        );
+        expect(pixel.origin).toBe("https://sendlit.test");
+        expect(pixel.pathname).toBe("/track/open");
+        expect(click.pathname).toBe("/track/click");
+
+        const app = express();
+        app.use(trackingRoutes);
+        const opened = await requestApp(app, pixel.pathname + pixel.search);
+        const clicked = await requestApp(app, click.pathname + click.search);
+
+        expect(opened.status).toBe(200);
+        expect(clicked.status).toBe(302);
+        expect(clicked.headers.location).toBe("https://example.com/receipt");
+        await vi.waitFor(async () =>
+            expect(await getTransactionalEmailById(row.id)).toMatchObject({
+                openCount: 1,
+                clickCount: 1,
+            }),
         );
     });
 });

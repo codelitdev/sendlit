@@ -7,6 +7,7 @@ import {
 import logger from "../services/log";
 import { captureError } from "../observability/posthog";
 import { SENDLIT_FOOTER_BLOCK } from "../templates/footer";
+import { isTrackingUrl } from "../utils/mail";
 import type { SendLitEmailRenderContext } from "@sendlit/email-blocks/footer";
 
 const liquidEngine = new Liquid();
@@ -413,7 +414,7 @@ export function transformLinksForClickTracking(
             const originalUrl = link.getAttribute("href");
             if (!originalUrl) return;
             if (
-                originalUrl.includes("/api/track") ||
+                isTrackingUrl(originalUrl) ||
                 originalUrl.includes("/unsubscribe") ||
                 originalUrl.startsWith("mailto:") ||
                 originalUrl.startsWith("tel:") ||
