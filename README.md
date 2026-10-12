@@ -14,7 +14,7 @@ a REST API, an MCP server and an embeddable email editor. Bring your own SMTP pr
 [![Tests](https://github.com/codelitdev/sendlit/actions/workflows/test.yaml/badge.svg)](https://github.com/codelitdev/sendlit/actions/workflows/test.yaml)
 [![Code quality](https://github.com/codelitdev/sendlit/actions/workflows/code-quality.yaml/badge.svg)](https://github.com/codelitdev/sendlit/actions/workflows/code-quality.yaml)
 
-[Website](https://sendlit.app) · [Docs](./apps/docs/content/docs/index.mdx) · [Getting started](./apps/docs/content/docs/getting-started/overview.mdx) · [Self-hosting](#self-hosting)
+[Website](https://sendlit.app) · [Docs](https://docs.sendlit.app) · [Getting started](https://docs.sendlit.app/getting-started/overview) · [Self-hosting](#self-hosting)
 
 </div>
 
@@ -45,7 +45,7 @@ docker compose up --build -d
 docker compose logs init
 ```
 
-Open the dashboard at <http://localhost:3000>, sign in with an email one-time code, and follow [Send your first broadcast](./apps/docs/content/docs/getting-started/first-broadcast.mdx).
+Open the dashboard at <http://localhost:3000>, sign in with an email one-time code, and follow [Send your first broadcast](https://docs.sendlit.app/getting-started/first-broadcast).
 
 Call the API with the key printed by the `init` service:
 
@@ -54,7 +54,7 @@ curl http://localhost:5000/contacts \
   -H "x-sendlit-apikey: sl_live_..."
 ```
 
-Connect an AI agent: add `https://api.sendlit.app/mcp` (or `http://localhost:5000/mcp` for your own instance) as a remote MCP server in your client and sign in. See the [MCP guide](./apps/docs/content/docs/developers/mcp.mdx).
+Connect an AI agent: add `https://api.sendlit.app/mcp` (or `http://localhost:5000/mcp` for your own instance) as a remote MCP server in your client and sign in. See the [MCP guide](https://docs.sendlit.app/developers/mcp).
 
 ## Packages
 
@@ -123,7 +123,7 @@ pnpm prettier      # Format the codebase
 
 ## Documentation
 
-Product, API and email-block docs live in [`apps/docs`](apps/docs). The REST reference is generated from the API contract, and the running API serves interactive documentation at `/docs`.
+Product, API and email-block docs are at [docs.sendlit.app](https://docs.sendlit.app); the source lives in [`apps/docs`](apps/docs). The REST reference is generated from the API contract, and the running API serves interactive documentation at `/docs`.
 
 ## Contributing
 
