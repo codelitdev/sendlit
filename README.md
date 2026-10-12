@@ -148,4 +148,6 @@ SendLit is split into two licenses:
 - **AGPL-3.0-or-later** covers the server (`apps/api`), the dashboard (`apps/web`), the docs site (`apps/docs`) and internal tooling. If you run a modified SendLit as a hosted service, you must share your changes under the same license. Self-hosting is free.
 - **MIT** covers the packages you embed in your own products: `@sendlit/email-editor`, `@sendlit/email-blocks` and `@sendlit/api-contract`. Each published package declares MIT in its `package.json`.
 
+The AGPL license text is in [LICENSE](./LICENSE).
+
 SendLit grew out of the email capabilities of [CourseLit](https://courselit.app) and shares its OAuth2 foundations with [MediaLit](https://medialit.cloud).
