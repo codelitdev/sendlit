@@ -13,6 +13,7 @@ vi.mock("../mail/send", () => ({
 
 import { db } from "../db/client";
 import { sendMail } from "../mail/send";
+import { getUnsubLink } from "../utils/mail";
 import {
     contacts,
     emailDeliveries,
@@ -125,6 +126,10 @@ describe("processOngoingSequence", () => {
         expect(sent.to).toBe(contact.email);
         expect(sent.subject).toBe("First");
         expect(sent.from).toBe("Test Sender <sender@example.com>");
+        expect(sent.headers).toEqual({
+            "List-Unsubscribe": `<${getUnsubLink(contact.unsubscribeToken)}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        });
 
         const deliveries = await tdb
             .select()

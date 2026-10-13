@@ -10,6 +10,22 @@ export function getUnsubLink(unsubscribeToken: string): string {
     return `${getSiteUrl()}/unsubscribe/${unsubscribeToken}`;
 }
 
+/**
+ * RFC 2369 / RFC 8058 headers for marketing (broadcast and sequence) mail.
+ * Mailbox providers POST `List-Unsubscribe=One-Click` to the https URL, which
+ * `tracking/routes.ts` handles without a confirmation page. The URL is the
+ * contact's existing per-contact unsubscribe link. No mailto is included
+ * because there is no configured unsubscribe mailbox to receive it.
+ */
+export function getListUnsubscribeHeaders(
+    unsubscribeToken: string,
+): Record<string, string> {
+    return {
+        "List-Unsubscribe": `<${getUnsubLink(unsubscribeToken)}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    };
+}
+
 export function getTrackingPixelUrl(token: string): string {
     return `${getSiteUrl()}/track/open?d=${token}`;
 }
