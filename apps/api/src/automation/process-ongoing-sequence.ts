@@ -20,7 +20,12 @@ import {
     renderEmailContent,
     transformLinksForClickTracking,
 } from "../mail/render";
-import { getEmailFrom, getSiteUrl, getUnsubLink } from "../utils/mail";
+import {
+    getEmailFrom,
+    getTrackedClickUrl,
+    getTrackingPixelUrl,
+    getUnsubLink,
+} from "../utils/mail";
 import { generatePixelToken } from "../utils/pixel-jwt";
 import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
@@ -265,7 +270,7 @@ async function attemptMailSending({
         sequenceId: sequence.sequenceId,
         emailId: email.emailId,
     });
-    const pixelUrl = `${getSiteUrl()}/api/track/open?d=${pixelToken}`;
+    const pixelUrl = getTrackingPixelUrl(pixelToken);
     const content = email.content as EmailType;
     const emailContentWithPixel = appendTrackingPixel(content, pixelUrl);
     // Stored sequence content is normally validated on every write. Recheck
@@ -288,7 +293,7 @@ async function attemptMailSending({
                 index,
                 link: encodeURIComponent(originalUrl),
             });
-            return `${getSiteUrl()}/api/track/click?d=${linkToken}`;
+            return getTrackedClickUrl(linkToken);
         },
         { sequence_id: sequence.sequenceId, email_id: email.emailId },
     );
