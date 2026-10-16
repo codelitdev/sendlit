@@ -235,6 +235,8 @@ export const feedbackConnectionSchema = z.object({
     provider: z.string(),
     webhookUrl: z.string(),
     hasCredential: z.boolean(),
+    expectedTopicArn: z.string().nullable().optional(),
+    subscriptionConfirmedAt: z.string().nullable().optional(),
     status: z.enum([
         "pending",
         "healthy",

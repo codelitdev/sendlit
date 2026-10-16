@@ -10,7 +10,6 @@ describe("provider adapter registry", () => {
     });
 
     it("returns null for unsupported providers", () => {
-        expect(getProviderAdapter("ses")).toBeNull();
         expect(getProviderAdapter("smtp")).toBeNull();
     });
 });

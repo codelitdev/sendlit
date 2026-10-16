@@ -34,7 +34,11 @@ import {
 } from "./queries";
 import { sequenceBounceLimit } from "../config/constants";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
-import { createPinnedOutboundMessage } from "../delivery-feedback/outbound-send";
+import {
+    createPinnedOutboundMessage,
+    extractProviderMessageId,
+    withCorrelationHeaders,
+} from "../delivery-feedback/outbound-send";
 import { markOutboundAccepted } from "../delivery-feedback/outbound-queries";
 import { normalizeEmail } from "../utils/email";
 import { validateTemplateContent } from "../templates/validation";
@@ -318,6 +322,7 @@ async function attemptMailSending({
             to,
             subject,
             html: contentWithTrackedLinks,
+            headers: withCorrelationHeaders(outbound),
             teamId: team.id,
             espConfigId: pin.espConfigId,
             secretVersion: pin.secretVersion,
@@ -333,7 +338,10 @@ async function attemptMailSending({
             })
             .returning();
         await markOutboundAccepted(outbound.id, {
-            providerMessageId: result.providerResponse,
+            providerMessageId: extractProviderMessageId(
+                outbound.provider,
+                result.providerResponse,
+            ),
             campaignDeliveryId: delivery.id,
         });
         await commitQuotaForOutbound(outbound.id);

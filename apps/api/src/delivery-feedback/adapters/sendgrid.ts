@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import type { BounceClass, DeliveryEventType } from "../../config/constants";
 import { headerString } from "./header-utils";
-import type { NormalizedCanonicalEvent, ProviderAdapter } from "./types";
+import type { NormalizedCanonicalEvent, SyncProviderAdapter } from "./types";
 
 /**
  * SendGrid's Signed Event Webhook signs `timestamp + rawBody` with ECDSA
@@ -76,7 +76,7 @@ function parsePayload(rawBody: Buffer): any {
     return JSON.parse(rawBody.toString("utf8"));
 }
 
-export const sendgridAdapter: ProviderAdapter = {
+export const sendgridAdapter: SyncProviderAdapter = {
     provider: "sendgrid",
     verify({ rawBody, headers, credential, previousCredential }) {
         const signature = headerString(headers, SIGNATURE_HEADER);

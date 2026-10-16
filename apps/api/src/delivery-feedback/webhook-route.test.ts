@@ -1,7 +1,7 @@
 import express from "express";
 import { IncomingMessage, ServerResponse } from "http";
 import { Socket } from "net";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
 vi.mock("../db/client", async () => {
@@ -17,9 +17,21 @@ vi.mock("./feedback-queue", () => ({
 }));
 
 import { db } from "../db/client";
-import { espConfigs, espWebhookReceipts } from "../db/schema";
+import {
+    espConfigs,
+    espFeedbackConnections,
+    espWebhookReceipts,
+} from "../db/schema";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
+import {
+    signSnsMessage,
+    snsNotification,
+    TEST_SNS_CERT_URL,
+    TEST_SNS_PUBLIC_KEY_PEM,
+    TEST_TOPIC_ARN,
+} from "../test/sns";
 import { upsertFeedbackConnection } from "./feedback-connection-queries";
+import { decryptReceiptPayload } from "./webhook-receipt-queries";
 
 const tdb = db as unknown as TestDb;
 
@@ -206,5 +218,181 @@ describe("POST /webhooks/esp/:provider/:connectionId (integration)", () => {
             .from(espWebhookReceipts)
             .where(eq(espWebhookReceipts.connectionId, connection.id));
         expect(receipts).toHaveLength(0);
+    });
+
+    describe("Amazon SES over SNS", () => {
+        const fetchMock = vi.fn();
+        const subscribeUrl = `https://sns.us-east-1.amazonaws.com/?Action=ConfirmSubscription&TopicArn=${encodeURIComponent(TEST_TOPIC_ARN)}&Token=tok`;
+
+        beforeEach(() => {
+            fetchMock.mockReset();
+            fetchMock.mockImplementation(async (url: string) =>
+                url === TEST_SNS_CERT_URL
+                    ? new Response(TEST_SNS_PUBLIC_KEY_PEM)
+                    : new Response("<ConfirmSubscriptionResponse/>"),
+            );
+            vi.stubGlobal("fetch", fetchMock);
+        });
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        async function seedSesConnection() {
+            const { team } = await seedTeamAndContact(tdb);
+            const [esp] = await tdb
+                .select()
+                .from(espConfigs)
+                .where(eq(espConfigs.teamId, team.id));
+            return upsertFeedbackConnection({
+                teamId: team.id,
+                espConfigId: esp.id,
+                provider: "ses",
+                expectedTopicArn: TEST_TOPIC_ARN,
+            });
+        }
+
+        async function receipts(connectionId: string) {
+            return tdb
+                .select()
+                .from(espWebhookReceipts)
+                .where(eq(espWebhookReceipts.connectionId, connectionId));
+        }
+
+        const bounce = {
+            eventType: "Bounce",
+            mail: {
+                messageId: "ses-1",
+                headers: [{ name: "Subject", value: "secret subject" }],
+            },
+            bounce: {
+                bounceType: "Permanent",
+                bouncedRecipients: [{ emailAddress: "a@example.com" }],
+            },
+        };
+
+        it("stores a signed notification without mail headers and dedupes redelivery", async () => {
+            const connection = await seedSesConnection();
+            const body = Buffer.from(
+                JSON.stringify(signSnsMessage(snsNotification(bounce))),
+            );
+            const path = `/webhooks/esp/ses/${connection.connectionId}`;
+
+            expect((await post(path, { body })).status).toBe(200);
+            expect((await post(path, { body })).status).toBe(200);
+
+            const stored = await receipts(connection.id);
+            expect(stored).toHaveLength(1);
+            expect(stored[0].providerRequestId).toBe("sns-msg-1");
+            const payload = decryptReceiptPayload(stored[0])!.toString("utf8");
+            expect(payload).not.toContain("secret subject");
+            // The certificate is fetched once and cached.
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+        });
+
+        it("rejects another topic before fetching anything", async () => {
+            const connection = await seedSesConnection();
+            const res = await post(
+                `/webhooks/esp/ses/${connection.connectionId}`,
+                {
+                    body: Buffer.from(
+                        JSON.stringify(
+                            signSnsMessage(
+                                snsNotification(bounce, {
+                                    TopicArn:
+                                        "arn:aws:sns:us-east-1:123456789012:other",
+                                }),
+                            ),
+                        ),
+                    ),
+                },
+            );
+            expect(res.status).toBe(401);
+            expect(fetchMock).not.toHaveBeenCalled();
+            expect(await receipts(connection.id)).toHaveLength(0);
+        });
+
+        it("answers 503 when the signing certificate can't be fetched", async () => {
+            const connection = await seedSesConnection();
+            fetchMock.mockRejectedValue(new Error("network down"));
+            const res = await post(
+                `/webhooks/esp/ses/${connection.connectionId}`,
+                {
+                    body: Buffer.from(
+                        JSON.stringify(signSnsMessage(snsNotification(bounce))),
+                    ),
+                },
+            );
+            expect(res.status).toBe(503);
+            expect(await receipts(connection.id)).toHaveLength(0);
+        });
+
+        it("rejects a body over 512 KB", async () => {
+            const connection = await seedSesConnection();
+            const res = await post(
+                `/webhooks/esp/ses/${connection.connectionId}`,
+                { body: Buffer.alloc(512 * 1024 + 1, "a") },
+            );
+            expect(res.status).toBe(413);
+        });
+
+        it("confirms a signed subscription once and stores no receipt", async () => {
+            const connection = await seedSesConnection();
+            const res = await post(
+                `/webhooks/esp/ses/${connection.connectionId}`,
+                {
+                    body: Buffer.from(
+                        JSON.stringify(
+                            signSnsMessage({
+                                Type: "SubscriptionConfirmation",
+                                MessageId: "sns-sub-1",
+                                Token: "tok",
+                                TopicArn: TEST_TOPIC_ARN,
+                                Message: "You have chosen to subscribe…",
+                                SubscribeURL: subscribeUrl,
+                                Timestamp: "2026-10-14T10:00:00.000Z",
+                                SigningCertURL: TEST_SNS_CERT_URL,
+                            }),
+                        ),
+                    ),
+                },
+            );
+            expect(res.status).toBe(200);
+            const subscribeCalls = fetchMock.mock.calls.filter(
+                ([url]) => url === subscribeUrl,
+            );
+            expect(subscribeCalls).toHaveLength(1);
+            expect(await receipts(connection.id)).toHaveLength(0);
+            const [row] = await tdb
+                .select()
+                .from(espFeedbackConnections)
+                .where(eq(espFeedbackConnections.id, connection.id));
+            expect(row.subscriptionConfirmedAt).toBeTruthy();
+        });
+
+        it("never confirms a subscription whose signature doesn't verify", async () => {
+            const connection = await seedSesConnection();
+            const signed = signSnsMessage({
+                Type: "SubscriptionConfirmation",
+                MessageId: "sns-sub-1",
+                Token: "tok",
+                TopicArn: TEST_TOPIC_ARN,
+                Message: "m",
+                SubscribeURL: subscribeUrl,
+                Timestamp: "2026-10-14T10:00:00.000Z",
+                SigningCertURL: TEST_SNS_CERT_URL,
+            });
+            const res = await post(
+                `/webhooks/esp/ses/${connection.connectionId}`,
+                {
+                    body: Buffer.from(
+                        JSON.stringify({ ...signed, Token: "forged" }),
+                    ),
+                },
+            );
+            expect(res.status).toBe(401);
+            expect(
+                fetchMock.mock.calls.some(([url]) => url === subscribeUrl),
+            ).toBe(false);
+        });
     });
 });

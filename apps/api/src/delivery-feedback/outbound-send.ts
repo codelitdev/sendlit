@@ -5,6 +5,7 @@ import {
     type OutboundMessage,
 } from "./outbound-queries";
 import type { OutboundSourceType } from "../config/constants";
+import { SES_MESSAGE_TAG } from "./adapters/ses";
 
 /**
  * Creates the outbound-ledger row for an already-authorized pinned source,
@@ -58,4 +59,43 @@ export async function createPinnedOutboundMessage({
         rfcMessageId,
     });
     return { outbound, rfcMessageId: outbound.rfcMessageId || rfcMessageId };
+}
+
+/** SES's SMTP interface answers `250 Ok <ses-message-id>`, and that id is
+ * what SES events carry as `mail.messageId`. Other providers keep the raw
+ * response line, as before. */
+const SES_SMTP_RESPONSE = /^250\s+Ok\s+(\S+)/i;
+
+export function extractProviderMessageId(
+    provider: string | null,
+    response: string | null,
+): string | null {
+    if (provider === "ses" && response) {
+        const match = response.match(SES_SMTP_RESPONSE);
+        if (match) return match[1];
+    }
+    return response;
+}
+
+/**
+ * Adds the provider headers that let a later webhook correlate straight back
+ * to the outbound row. For SES that's a `sendlit_message_id` message tag,
+ * merged with any tags the caller already set.
+ */
+export function withCorrelationHeaders(
+    outbound: Pick<OutboundMessage, "provider" | "messageId"> | null,
+    headers?: Record<string, string>,
+): Record<string, string> | undefined {
+    if (outbound?.provider !== "ses") return headers;
+    const tag = `${SES_MESSAGE_TAG}=${outbound.messageId}`;
+    const merged = { ...headers };
+    const existingKey = Object.keys(merged).find(
+        (key) => key.toLowerCase() === "x-ses-message-tags",
+    );
+    if (existingKey) {
+        merged[existingKey] = `${merged[existingKey]}, ${tag}`;
+    } else {
+        merged["X-SES-MESSAGE-TAGS"] = tag;
+    }
+    return merged;
 }

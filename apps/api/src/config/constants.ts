@@ -79,6 +79,7 @@ export const feedbackCapableProviders = [
     "postmark",
     "sendgrid",
     "mailgun",
+    "ses",
 ] as const;
 export type FeedbackCapableProvider = (typeof feedbackCapableProviders)[number];
 

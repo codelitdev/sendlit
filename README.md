@@ -71,3 +71,8 @@ Put the API and web ports behind a TLS reverse proxy; set `ENABLE_TRUST_PROXY=tr
 when that proxy forwards client IPs. Back up the `postgres-data` volume and
 keep the `.env` secrets stable: changing the ESP encryption key makes stored
 team SMTP credentials unreadable.
+
+To have SendLit suppress bounced and complaining addresses when you send
+through Amazon SES, follow the docs site's
+[Amazon SES bounces and complaints](./apps/docs/content/docs/self-hosting/amazon-ses-feedback.mdx)
+guide: it covers the SNS topic, subscription, and configuration set setup.

@@ -12,7 +12,8 @@ email provider configuration.
   broadcasts.
 - Email delivery through BullMQ and nodemailer, using each team's configured
   ESP.
-- Bounce and complaint webhook ingestion (Resend, Postmark) with a durable
+- Bounce and complaint webhook ingestion (Resend, Postmark, SendGrid,
+  Mailgun, and Amazon SES via SNS) with a durable
   receipt inbox, canonical delivery events, and a per-workspace suppression
   list enforced on every send path.
 - Open and click tracking, plus unsubscribe handling.
@@ -247,7 +248,8 @@ Summary of what's implemented:
   response. `src/delivery-feedback/outbound-send.ts` /
   `outbound-queries.ts`.
 - **Feedback connections.** Each user ESP with a reviewed provider adapter
-  (Resend, Postmark, SendGrid, and Mailgun — see `feedbackCapableProviders` in
+  (Resend, Postmark, SendGrid, Mailgun, and Amazon SES — see
+  `feedbackCapableProviders` in
   `src/config/constants.ts`) can configure its own webhook connection under
   `GET/PUT /settings/esps/:espId/feedback`, `POST .../feedback/rotate`,
   `POST .../feedback/test`, `DELETE .../feedback`. Every configuration has
@@ -261,7 +263,8 @@ Summary of what's implemented:
   parsing and before any session/API-key middleware — it authenticates
   purely via the resolved connection's provider adapter (Svix signature for
   Resend, a shared secret for Postmark, ECDSA Signed Event Webhook for
-  SendGrid, HMAC over timestamp+token for Mailgun), commits a durable,
+  SendGrid, HMAC over timestamp+token for Mailgun, Amazon SNS signatures
+  plus the configured `TopicArn` for SES), commits a durable,
   encrypted receipt (`esp_webhook_receipts`) before returning `200`, and
   never itself normalizes the payload inline.
 - **Async processing.** A BullMQ `esp-feedback` queue/worker
@@ -282,11 +285,24 @@ Summary of what's implemented:
   complaint suppressions can only be released by a `sendlit_operator` actor.
 - **Retention.** `retention.ts` (hourly loop) purges raw receipt payloads
   after 30 days and delivery events after 13 months, in bounded batches.
-- **Not yet implemented:** the Amazon SES adapter (its own PRD phase,
-  [`docs/aws-bounces-and-complaints.md`](./docs/aws-bounces-and-complaints.md) —
-  SNS signature/subscription handling is materially different from a direct
-  signed webhook); a provider without an adapter is never presented as
-  feedback-capable. Observability is limited
+- **Amazon SES.** SES has no webhooks of its own: it publishes to an SNS
+  topic, which POSTs to the connection URL. The SES connection stores the
+  topic's ARN (`expectedTopicArn`) instead of a secret. The adapter
+  (`adapters/ses.ts`, `adapters/sns.ts`) verifies SNS signature versions 1
+  and 2 against a certificate fetched only from an exact
+  `sns.<region>.amazonaws.com` host (no redirects, cached), confirms the
+  subscription by fetching its `SubscribeURL` (recorded as
+  `subscription_confirmed_at`), and answers `503` when the certificate
+  can't be fetched so SNS retries. SES sends carry an
+  `X-SES-MESSAGE-TAGS: sendlit_message_id=msg_...` header, so
+  configuration-set events correlate even before the SES message id (parsed
+  from the `250 Ok <id>` SMTP reply) is saved. `mail.headers` is stripped
+  before storage, and `Delivery` receipts drop their raw payload once
+  processed. Setup steps for self-hosters are in the docs site's "Amazon SES
+  bounces and complaints" page; the original design is
+  [`docs/aws-bounces-and-complaints.md`](./docs/aws-bounces-and-complaints.md).
+- **Not yet implemented:** a provider without an adapter is never presented
+  as feedback-capable. Observability is limited
   to the existing `captureEvent`/`captureError` posthog pattern — dedicated
   dashboards/alerting and load/chaos testing are deployment-level follow-ups.
 

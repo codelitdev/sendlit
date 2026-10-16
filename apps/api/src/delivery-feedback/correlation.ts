@@ -12,11 +12,13 @@ const CORRELATION_WINDOW_DAYS = 7;
 /**
  * Correlation priority per `docs/bounces-and-complaints.md#6-correlation`:
  *
- * 1. Opaque SendLit `msg_...` provider metadata/custom argument — not
- *    populated in v1. SendLit sends over generic SMTP relay rather than
- *    each provider's REST API, so provider-supported custom
- *    metadata/arguments (an API-only feature) aren't available; see
- *    `utils/rfc-message-id.ts`.
+ * 1. Opaque SendLit `msg_...` provider metadata. Only SES populates it:
+ *    its SMTP interface accepts message tags via the
+ *    `X-SES-MESSAGE-TAGS` header (see `outbound-send.ts`), and
+ *    configuration-set events echo them back. Other providers only take
+ *    custom metadata through their REST APIs, which SendLit doesn't use.
+ *    This is the only tier that matches an event arriving before the send
+ *    response (and so the provider message id) has been saved.
  * 2. Stored provider message ID scoped to the feedback connection.
  * 3. Stored RFC `Message-ID` scoped to the connection + recipient — not
  *    reachable either in v1: neither adapter's payload echoes the
@@ -34,13 +36,29 @@ const CORRELATION_WINDOW_DAYS = 7;
  */
 export async function correlateOutboundMessage({
     connectionId,
+    sendlitMessageId,
     providerMessageId,
     recipientEmail,
 }: {
     connectionId: string;
+    sendlitMessageId?: string | null;
     providerMessageId?: string | null;
     recipientEmail?: string | null;
 }): Promise<OutboundMessage | null> {
+    if (sendlitMessageId) {
+        const [row] = await db
+            .select()
+            .from(outboundMessages)
+            .where(
+                and(
+                    eq(outboundMessages.feedbackConnectionId, connectionId),
+                    eq(outboundMessages.messageId, sendlitMessageId),
+                ),
+            )
+            .limit(1);
+        if (row) return row;
+    }
+
     if (providerMessageId) {
         const rows = await db
             .select()

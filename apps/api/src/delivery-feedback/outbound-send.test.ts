@@ -9,7 +9,11 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { espConfigs, outboundMessages } from "../db/schema";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
-import { createPinnedOutboundMessage } from "./outbound-send";
+import {
+    createPinnedOutboundMessage,
+    extractProviderMessageId,
+    withCorrelationHeaders,
+} from "./outbound-send";
 
 const tdb = db as unknown as TestDb;
 
@@ -77,5 +81,48 @@ describe("outbound submission idempotency", () => {
 
         expect(second.outbound.id).not.toBe(first.outbound.id);
         expect(second.rfcMessageId).not.toBe(first.rfcMessageId);
+    });
+});
+
+describe("SES send-time correlation", () => {
+    it("extracts the SES message id from the SMTP reply", () => {
+        expect(
+            extractProviderMessageId("ses", "250 Ok 0100018f-abc-000000"),
+        ).toBe("0100018f-abc-000000");
+        // Other providers (and unexpected replies) keep the raw line.
+        expect(extractProviderMessageId("postmark", "250 Ok abc")).toBe(
+            "250 Ok abc",
+        );
+        expect(extractProviderMessageId("ses", "250 queued")).toBe(
+            "250 queued",
+        );
+        expect(extractProviderMessageId("ses", null)).toBeNull();
+    });
+
+    it("tags SES sends with the outbound message id, keeping caller tags", () => {
+        const outbound = { provider: "ses", messageId: "msg_abc" };
+        expect(withCorrelationHeaders(outbound)).toEqual({
+            "X-SES-MESSAGE-TAGS": "sendlit_message_id=msg_abc",
+        });
+        expect(
+            withCorrelationHeaders(outbound, {
+                "x-ses-message-tags": "campaign=fall",
+                "List-Unsubscribe": "<https://x>",
+            }),
+        ).toEqual({
+            "x-ses-message-tags": "campaign=fall, sendlit_message_id=msg_abc",
+            "List-Unsubscribe": "<https://x>",
+        });
+    });
+
+    it("leaves other providers' headers untouched", () => {
+        const headers = { "List-Unsubscribe": "<https://x>" };
+        expect(
+            withCorrelationHeaders(
+                { provider: "postmark", messageId: "msg_abc" },
+                headers,
+            ),
+        ).toBe(headers);
+        expect(withCorrelationHeaders(null, headers)).toBe(headers);
     });
 });

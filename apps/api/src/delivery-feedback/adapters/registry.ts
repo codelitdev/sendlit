@@ -3,6 +3,7 @@ import { mailgunAdapter } from "./mailgun";
 import { postmarkAdapter } from "./postmark";
 import { resendAdapter } from "./resend";
 import { sendgridAdapter } from "./sendgrid";
+import { sesAdapter } from "./ses";
 import type { ProviderAdapter } from "./types";
 
 /** Every provider presented as feedback-capable must have an entry here —
@@ -14,6 +15,7 @@ const adapters: Record<string, ProviderAdapter> = {
     postmark: postmarkAdapter,
     sendgrid: sendgridAdapter,
     mailgun: mailgunAdapter,
+    ses: sesAdapter,
 };
 
 export function getProviderAdapter(provider: string): ProviderAdapter | null {

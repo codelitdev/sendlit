@@ -45,9 +45,23 @@ export const providerCapabilities: Record<EspProvider, ProviderCapabilities> = {
         lookupSubmission: false,
         feedbackRequiredForOrganizationDelivery: true,
     },
-    ses: { ...testVerifiedOnly, returnsProviderMessageId: true },
-    sendgrid: { ...testVerifiedOnly, returnsProviderMessageId: true },
-    mailgun: { ...testVerifiedOnly, returnsProviderMessageId: true },
+    // Feedback adapters exist for these, but organization delivery doesn't
+    // yet require a verified connection before activation.
+    ses: {
+        ...testVerifiedOnly,
+        returnsProviderMessageId: true,
+        feedbackAdapter: true,
+    },
+    sendgrid: {
+        ...testVerifiedOnly,
+        returnsProviderMessageId: true,
+        feedbackAdapter: true,
+    },
+    mailgun: {
+        ...testVerifiedOnly,
+        returnsProviderMessageId: true,
+        feedbackAdapter: true,
+    },
     smtp: testVerifiedOnly,
 };
 

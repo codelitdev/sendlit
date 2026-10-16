@@ -29,6 +29,10 @@ import {
 } from "../delivery-feedback/outbound-queries";
 import { resolvePinnedDeliverySource } from "../delivery/queries";
 import {
+    extractProviderMessageId,
+    withCorrelationHeaders,
+} from "../delivery-feedback/outbound-send";
+import {
     commitQuotaForOutbound,
     releaseQuotaForOutbound,
 } from "../delivery/quota";
@@ -147,8 +151,10 @@ async function processTransactionalJob(job: Job) {
             to: row.toEmail,
             subject: row.subject,
             html,
-            headers:
+            headers: withCorrelationHeaders(
+                outbound,
                 (row.headers as Record<string, string> | null) ?? undefined,
+            ),
             teamId: row.teamId,
             espConfigId: row.outboxId,
             secretVersion: pin.secretVersion,
@@ -157,7 +163,10 @@ async function processTransactionalJob(job: Job) {
         await markTransactionalEmailSent(row.id);
         if (outbound) {
             await markOutboundAccepted(outbound.id, {
-                providerMessageId: result.providerResponse,
+                providerMessageId: extractProviderMessageId(
+                    outbound.provider,
+                    result.providerResponse,
+                ),
             });
             await commitQuotaForOutbound(outbound.id);
         }

@@ -4,16 +4,18 @@ import {
     getEspConfigByEspId,
     listEspConfigs,
 } from "../../settings/esp/queries";
-import { getSiteUrl } from "../../utils/mail";
 import { feedbackCapableProviders as feedbackCapableProvidersConst } from "../../config/constants";
 import {
-    decryptFeedbackCredentials,
     disableFeedbackConnection,
+    feedbackConnectionReadinessError,
     getFeedbackConnectionForTeamEsp,
     recordFeedbackConnectionVerified,
     upsertFeedbackConnection,
-    type FeedbackConnection,
 } from "../../delivery-feedback/feedback-connection-queries";
+import {
+    feedbackConnectionInputError,
+    toPublicFeedbackConnection,
+} from "../../delivery-feedback/feedback-connection-shape";
 import {
     countDeliveryEvents,
     getDeliveryEventByEventId,
@@ -39,28 +41,6 @@ import {
     testEspResultSchema,
 } from "./schemas";
 import { getAuthUser, getTeamId } from "./auth";
-
-function webhookUrlFor(connection: {
-    provider: string;
-    connectionId: string;
-}): string {
-    return `${getSiteUrl()}/webhooks/esp/${connection.provider}/${connection.connectionId}`;
-}
-
-function toPublicConnection(espId: string, connection: FeedbackConnection) {
-    return {
-        connectionId: connection.connectionId,
-        espId,
-        provider: connection.provider,
-        webhookUrl: webhookUrlFor(connection),
-        hasCredential: Boolean(connection.encryptedCredentials),
-        status: connection.status as
-            "pending" | "healthy" | "stale" | "error" | "retiring" | "disabled",
-        lastReceivedAt: connection.lastReceivedAt,
-        lastVerifiedAt: connection.lastVerifiedAt,
-        lastErrorCode: connection.lastErrorCode,
-    };
-}
 
 function toPublicSuppression(suppression: Suppression) {
     return {
@@ -149,7 +129,7 @@ export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
             );
             return jsonResult({
                 connection: connection
-                    ? toPublicConnection(esp.espId, connection)
+                    ? toPublicFeedbackConnection(esp.espId, connection)
                     : null,
             });
         },
@@ -161,19 +141,22 @@ export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
             description:
                 "Creates a user ESP's feedback connection (first call) or rotates its credential (later calls) — the webhook URL stays stable across rotation. The provider is always the ESP's current provider (must be one of: " +
                 feedbackCapableProvidersConst.join(", ") +
-                ").",
+                "). Amazon SES takes `expectedTopicArn` (the SNS topic subscribed to the returned webhook URL) instead of a credential; every other provider requires `credential`.",
             inputSchema: {
                 espId: z.string().min(1),
                 credential: z
                     .string()
                     .min(1)
+                    .optional()
                     .describe(
-                        "The provider's webhook signing secret / shared header value",
+                        "The provider's webhook signing secret / shared header value. Required for every provider except SES.",
                     ),
                 expectedTopicArn: z
                     .string()
                     .optional()
-                    .describe("SES only — reserved, not yet usable"),
+                    .describe(
+                        "SES only, required: the ARN of the SNS topic SES publishes bounce/complaint events to",
+                    ),
             },
             outputSchema: feedbackConnectionSchema,
             annotations: {
@@ -196,6 +179,8 @@ export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
                     `Provider "${esp.provider}" does not have a reviewed feedback adapter yet.`,
                 );
             }
+            const inputError = feedbackConnectionInputError(esp.provider, args);
+            if (inputError) return errorResult(inputError);
             const connection = await upsertFeedbackConnection({
                 teamId,
                 espConfigId: esp.id,
@@ -204,7 +189,9 @@ export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
                 credential: args.credential,
                 expectedTopicArn: args.expectedTopicArn,
             });
-            return jsonResult(toPublicConnection(esp.espId, connection));
+            return jsonResult(
+                toPublicFeedbackConnection(esp.espId, connection),
+            );
         },
     );
 
@@ -212,7 +199,7 @@ export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
         "test_esp_feedback_connection",
         {
             description:
-                "Verifies a feedback connection's stored credential can be decrypted (a smoke test — it does not call the provider).",
+                "Checks a feedback connection is fully armed (a smoke test — it does not call the provider): the stored credential decrypts, or for SES, the SNS subscription has been confirmed.",
             inputSchema: { espId: z.string().min(1) },
             outputSchema: testEspResultSchema,
             annotations: {
@@ -236,12 +223,9 @@ export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
                     error: "feedback_not_configured",
                 });
             }
-            const decrypted = decryptFeedbackCredentials(connection);
-            if (!decrypted) {
-                return jsonResult({
-                    success: false,
-                    error: "feedback_invalid_credentials",
-                });
+            const readinessError = feedbackConnectionReadinessError(connection);
+            if (readinessError) {
+                return jsonResult({ success: false, error: readinessError });
             }
             await recordFeedbackConnectionVerified(connection.id);
             return jsonResult({ success: true });
