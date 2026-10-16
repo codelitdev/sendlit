@@ -211,23 +211,19 @@ describe("tracking and unsubscribe routes", () => {
         },
     );
 
-    it("unsubscribes idempotently and rejects an unknown token", async () => {
+    it("renders a confirmation page on GET without unsubscribing", async () => {
         mocks.getContactByUnsubscribeToken.mockResolvedValue({
             teamId: "team-internal",
             contactId: "cnt_public",
+            email: "reader@example.com",
+            subscribed: true,
         });
 
-        const first = await get("/unsubscribe/unsub-token");
-        const second = await get("/unsubscribe/unsub-token");
+        const response = await get("/unsubscribe/unsub-token");
 
-        expect(first.status).toBe(200);
-        expect(second.status).toBe(200);
-        expect(mocks.updateContact).toHaveBeenCalledTimes(2);
-        expect(mocks.updateContact).toHaveBeenCalledWith(
-            "team-internal",
-            "cnt_public",
-            { subscribed: false },
-        );
+        expect(response.status).toBe(200);
+        expect(response.body.toString()).toContain('<form method="post">');
+        expect(mocks.updateContact).not.toHaveBeenCalled();
 
         mocks.getContactByUnsubscribeToken.mockResolvedValue(null);
         const unknown = await get("/unsubscribe/unknown");

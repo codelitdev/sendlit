@@ -7,15 +7,7 @@ import express, {
     type Response,
 } from "express";
 import type { SendLitOAuthTeamSelectionAdapter } from "./oauth-team-selection";
-
-function escapeHtml(value: string): string {
-    return value
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
+import { escapeHtml } from "../utils/html";
 
 function page(body: string) {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Select a SendLit team</title></head><body><main>${body}</main></body></html>`;
