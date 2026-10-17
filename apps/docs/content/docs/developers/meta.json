@@ -5,6 +5,7 @@
         "overview",
         "authentication",
         "api-keys",
+        "sdk",
         "errors",
         "mcp",
         "transactional",

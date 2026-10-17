@@ -1,0 +1,149 @@
+---
+title: TypeScript SDK
+description: Call the SendLit API from Node.js with the official typed client.
+---
+
+The `sendlit` package is the official server-side SDK for the SendLit REST
+API. Its request and response types come from the same contract the API
+validates against.
+
+```bash
+npm install sendlit
+```
+
+The SDK requires Node.js 18 or later and runs on the server only. It throws if
+it's constructed in a browser, so an API key can't end up in client code.
+
+## Quickstart
+
+```ts
+import { SendLit } from "sendlit";
+
+const sendlit = new SendLit({ apiKey: process.env.SENDLIT_API_KEY });
+
+const contact = await sendlit.contacts.create({
+    email: "ada@example.com",
+    name: "Ada Lovelace",
+    tags: ["signup"],
+});
+
+await sendlit.contacts.addTag(contact.contactId, "onboarding");
+```
+
+## Configuration
+
+| Option        | Env var            | Description                                                                                                                                  |
+| ------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiKey`      | `SENDLIT_API_KEY`  | A [team key](/developers/api-keys) (`sl_live_…`) or an organization key (`sl_org_live_…`). The SDK sends each in the header the API expects. |
+| `accessToken` | —                  | An OAuth access token. Use it instead of `apiKey`.                                                                                           |
+| `endpoint`    | `SENDLIT_ENDPOINT` | The API base URL. Defaults to `https://api.sendlit.app`. Set it to your own API URL when self-hosting.                                       |
+| `teamId`      | `SENDLIT_TEAM_ID`  | The team to act on, when the credential can reach more than one team. A team key is already bound to one team.                               |
+| `maxRetries`  | —                  | How many times to retry a failed call. Default `2`.                                                                                          |
+| `timeout`     | —                  | Per-attempt timeout in milliseconds. Default `30000`.                                                                                        |
+
+## Resources
+
+| Resource                 | Covers                                                                  |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `sendlit.contacts`       | Contacts, tags, and the emails delivered to a contact                   |
+| `sendlit.segments`       | Saved segments                                                          |
+| `sendlit.templates`      | Team templates and built-in starters                                    |
+| `sendlit.sequences`      | Broadcasts and sequences, their emails, and stats                       |
+| `sendlit.emails`         | [Transactional email](/developers/transactional)                        |
+| `sendlit.provisioning`   | [Provisioned teams](/developers/provisioning), with an organization key |
+| `sendlit.suppressions`   | The team's do-not-send list                                             |
+| `sendlit.deliveryEvents` | Delivery, bounce, and complaint history                                 |
+
+List methods return one page as `{ items, total }`. Methods named `listAll`
+return an async iterator that fetches the remaining pages as you go:
+
+```ts
+for await (const contact of sendlit.contacts.listAll()) {
+    console.log(contact.email);
+}
+```
+
+## Contacts and onboarding sequences
+
+`contacts.create` finds or creates a contact by email within the team.
+
+- A new contact fires `subscriber:added`, which enrolls it in every active
+  sequence with that trigger. Use this to start an onboarding sequence when a
+  user signs up.
+- If the email already exists, SendLit returns the existing contact unchanged
+  and fires no event. A repeat signup doesn't re-enroll the contact.
+- Tags passed to `create` don't fire `tag:added`.
+
+## Errors
+
+Every failed call rejects with a `SendLitError`. It has these fields:
+
+- `status`: the HTTP status, or `0` when no response was received.
+- `code`: the API's `error` value. See [Errors](/developers/errors).
+- `message`: a readable description.
+- `body`: the full response body.
+
+The SDK validates resource IDs before it sends a request. An empty or
+malformed ID rejects with `invalid_argument` and never reaches the API.
+
+## Retries
+
+The SDK retries with exponential backoff and honors `Retry-After`.
+
+- A `429` is retried for every call, because the API rejected the request
+  before doing any work.
+- A `5xx`, timeout, or network error is retried only when the call is safe to
+  repeat. That covers reads, `PUT` and `DELETE` requests, `contacts.create`,
+  `contacts.addTag`, `provisioning.provisionTeam`, and `emails.send` with an
+  `idempotencyKey`.
+
+```ts
+await sendlit.emails.send({
+    to: "ada@example.com",
+    subject: "Your receipt",
+    templateId: "tpl_…",
+    variables: { amount: "$10" },
+    idempotencyKey: `receipt-${order.id}`,
+});
+```
+
+## Platform example
+
+A multi-tenant platform provisions one team per tenant with its organization
+key, then uses each team's own key for contacts and email.
+
+```ts
+import { SendLit } from "sendlit";
+
+const platform = new SendLit({ apiKey: process.env.SENDLIT_ORG_API_KEY });
+
+const team = await platform.provisioning.provisionTeam({
+    externalId: tenant.id,
+    name: tenant.name,
+    mailingAddress: tenant.address,
+});
+if (team.created) {
+    // The plaintext key is returned only once. Encrypt and store it now.
+    await saveTeamKey(tenant.id, team.teamId, team.apiKey);
+}
+
+const sendlit = new SendLit({ apiKey: await loadTeamKey(tenant.id) });
+
+await sendlit.contacts.create({ email: user.email, name: user.name });
+
+const [template] = await sendlit.templates.list({ purpose: "marketing" });
+const broadcast = await sendlit.sequences.create({
+    type: "broadcast",
+    templateId: template.templateId,
+});
+await sendlit.sequences.updateEmail(
+    broadcast.sequenceId,
+    broadcast.emails[0].emailId,
+    { subject: "What's new", published: true, delayInMillis: Date.now() },
+);
+await sendlit.sequences.start(broadcast.sequenceId);
+```
+
+Starting a broadcast or sequence requires a mailing address in the team's
+settings and a way to send email: an organization delivery grant or the
+team's own ESP.
