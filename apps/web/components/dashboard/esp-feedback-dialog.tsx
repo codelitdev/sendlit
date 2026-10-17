@@ -116,6 +116,7 @@ export function EspFeedbackDialog({
     );
     const [loading, setLoading] = useState(false);
     const [credential, setCredential] = useState("");
+    const [topicArn, setTopicArn] = useState("");
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -137,7 +138,10 @@ export function EspFeedbackDialog({
             ? getOrganizationEspFeedback(organizationId, esp.espId)
             : getEspFeedback(esp.espId)
         )
-            .then(setConnection)
+            .then((loaded) => {
+                setConnection(loaded);
+                setTopicArn(loaded?.expectedTopicArn ?? "");
+            })
             .catch((err) =>
                 setError(
                     err instanceof ApiError
@@ -152,23 +156,29 @@ export function EspFeedbackDialog({
 
     const credentialCopy =
         CREDENTIAL_COPY[esp.provider] ?? DEFAULT_CREDENTIAL_COPY;
+    // SES authenticates through Amazon-signed SNS messages: the connection is
+    // armed by its SNS topic rather than a shared secret.
+    const isSes = esp.provider === "ses";
+    const canSave = isSes
+        ? Boolean(topicArn) && topicArn !== connection?.expectedTopicArn
+        : Boolean(credential);
 
     async function save() {
         if (!esp) return;
         setSaving(true);
         setError(null);
+        const input = isSes ? { expectedTopicArn: topicArn } : { credential };
         try {
             const updated = organizationId
                 ? await upsertOrganizationEspFeedback(
                       organizationId,
                       esp.espId,
-                      {
-                          credential,
-                      },
+                      input,
                   )
-                : await upsertEspFeedback(esp.espId, { credential });
+                : await upsertEspFeedback(esp.espId, input);
             setConnection(updated);
             setCredential("");
+            setTopicArn(updated.expectedTopicArn ?? "");
         } catch (err) {
             setError(
                 err instanceof ApiError
@@ -235,9 +245,10 @@ export function EspFeedbackDialog({
                         <p className="text-sm text-muted-foreground">
                             Receives bounce and spam-complaint events from{" "}
                             {esp.name} so SendLit can suppress future sends to
-                            addresses that hard-bounce or complain. This URL and
-                            secret are unique to this ESP — switching the
-                            team&apos;s default ESP never affects it.
+                            addresses that hard-bounce or complain. This URL and{" "}
+                            {isSes ? "topic" : "secret"} are unique to this ESP
+                            — switching the team&apos;s default ESP never
+                            affects it.
                         </p>
 
                         {connection && (
@@ -274,9 +285,22 @@ export function EspFeedbackDialog({
                                     </p>
                                 )}
                                 <p className="text-xs text-muted-foreground">
-                                    This URL is an identifier, not a credential
-                                    — configure the shared secret below on{" "}
-                                    {esp.name}&apos;s side too.
+                                    {isSes ? (
+                                        <>
+                                            Subscribe this URL to your SNS topic
+                                            using the HTTPS protocol, with raw
+                                            message delivery off. SendLit
+                                            confirms the subscription
+                                            automatically.
+                                        </>
+                                    ) : (
+                                        <>
+                                            This URL is an identifier, not a
+                                            credential — configure the shared
+                                            secret below on {esp.name}&apos;s
+                                            side too.
+                                        </>
+                                    )}
                                 </p>
                             </div>
                         )}
@@ -288,6 +312,19 @@ export function EspFeedbackDialog({
                                 >
                                     {STATUS_LABEL[connection.status]}
                                 </Badge>
+                                {isSes && (
+                                    <Badge
+                                        variant={
+                                            connection.subscriptionConfirmedAt
+                                                ? "success"
+                                                : "secondary"
+                                        }
+                                    >
+                                        {connection.subscriptionConfirmedAt
+                                            ? "SNS subscription confirmed"
+                                            : "Waiting for SNS subscription"}
+                                    </Badge>
+                                )}
                                 {connection.lastReceivedAt && (
                                     <span className="text-muted-foreground">
                                         Last event:{" "}
@@ -304,23 +341,48 @@ export function EspFeedbackDialog({
                             </div>
                         )}
 
-                        <div className="space-y-1.5">
-                            <Label htmlFor="feedback-credential">
-                                {connection ? "Rotate " : ""}
-                                {credentialCopy.label}
-                            </Label>
-                            <Input
-                                id="feedback-credential"
-                                type="password"
-                                value={credential}
-                                onChange={(e) => setCredential(e.target.value)}
-                                placeholder={credentialCopy.placeholder}
-                                autoComplete="new-password"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                {credentialCopy.hint}
-                            </p>
-                        </div>
+                        {isSes ? (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="feedback-topic-arn">
+                                    SNS topic ARN
+                                </Label>
+                                <Input
+                                    id="feedback-topic-arn"
+                                    value={topicArn}
+                                    onChange={(e) =>
+                                        setTopicArn(e.target.value.trim())
+                                    }
+                                    placeholder="arn:aws:sns:us-east-1:123456789012:sendlit-feedback"
+                                    className="font-mono text-xs"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    The topic your SES configuration set (or
+                                    identity) publishes bounce and complaint
+                                    events to. Messages from any other topic are
+                                    rejected.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="feedback-credential">
+                                    {connection ? "Rotate " : ""}
+                                    {credentialCopy.label}
+                                </Label>
+                                <Input
+                                    id="feedback-credential"
+                                    type="password"
+                                    value={credential}
+                                    onChange={(e) =>
+                                        setCredential(e.target.value)
+                                    }
+                                    placeholder={credentialCopy.placeholder}
+                                    autoComplete="new-password"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    {credentialCopy.hint}
+                                </p>
+                            </div>
+                        )}
 
                         {testResult && (
                             <Banner
@@ -370,12 +432,14 @@ export function EspFeedbackDialog({
                         <Button
                             type="button"
                             onClick={save}
-                            disabled={saving || !credential || loading}
+                            disabled={saving || !canSave || loading}
                         >
                             {saving
                                 ? "Saving…"
                                 : connection
-                                  ? "Rotate secret"
+                                  ? isSes
+                                      ? "Update topic"
+                                      : "Rotate secret"
                                   : "Save"}
                         </Button>
                     </div>

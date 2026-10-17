@@ -138,7 +138,7 @@ The full API key secret is returned only by `create_api_key`. Store it immediate
 - `list_delivery_events`, `get_delivery_event`
 - `list_suppressions`, `get_suppression`, `release_suppression`
 
-Delivery-feedback connections are supported only for providers with a reviewed asynchronous feedback adapter. Releasing a SendLit suppression does not remove a provider-native suppression, and complaint suppressions are not releasable through the owner API.
+Delivery-feedback connections are supported only for providers with a reviewed asynchronous feedback adapter: Resend, Postmark, SendGrid, Mailgun, and Amazon SES. For SES, pass `expectedTopicArn` (the SNS topic subscribed to the webhook URL) to `upsert_esp_feedback_connection` instead of `credential`; see [Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback). Releasing a SendLit suppression does not remove a provider-native suppression, and complaint suppressions are not releasable through the owner API.
 
 ## Example client configuration
 

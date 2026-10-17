@@ -657,6 +657,7 @@ export const feedbackCapableProviders: EspProvider[] = [
     "postmark",
     "sendgrid",
     "mailgun",
+    "ses",
 ];
 
 export type FeedbackConnectionStatus =
@@ -668,10 +669,21 @@ export interface FeedbackConnection {
     provider: string;
     webhookUrl: string;
     hasCredential: boolean;
+    /** SES only: the SNS topic this connection accepts messages from. */
+    expectedTopicArn?: string | null;
+    /** SES only: when SendLit confirmed the SNS subscription. */
+    subscriptionConfirmedAt?: string | null;
     status: FeedbackConnectionStatus;
     lastReceivedAt?: string | null;
     lastVerifiedAt?: string | null;
     lastErrorCode?: string | null;
+}
+
+/** `credential` for every provider except SES, which takes the SNS
+ * `expectedTopicArn` instead. */
+export interface FeedbackConnectionInput {
+    credential?: string;
+    expectedTopicArn?: string;
 }
 
 export function getEspFeedback(espId: string) {
@@ -682,7 +694,7 @@ export function getEspFeedback(espId: string) {
 
 export function upsertEspFeedback(
     espId: string,
-    input: { credential: string; expectedTopicArn?: string },
+    input: FeedbackConnectionInput,
 ) {
     return unwrap<FeedbackConnection>(
         client.feedback.upsert({ params: { espId }, body: input }),
@@ -691,7 +703,7 @@ export function upsertEspFeedback(
 
 export function rotateEspFeedback(
     espId: string,
-    input: { credential: string; expectedTopicArn?: string },
+    input: FeedbackConnectionInput,
 ) {
     return unwrap<FeedbackConnection>(
         client.feedback.rotate({ params: { espId }, body: input }),
@@ -1114,7 +1126,7 @@ export function getOrganizationEspFeedback(
 export function upsertOrganizationEspFeedback(
     organizationId: string,
     espId: string,
-    input: { credential: string; expectedTopicArn?: string },
+    input: FeedbackConnectionInput,
 ) {
     return organizationRequest<FeedbackConnection>(
         `/organizations/${organizationId}/esps/${espId}/feedback`,

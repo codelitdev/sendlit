@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
     listEspConfigs: vi.fn(),
     getFeedbackConnectionForTeamEsp: vi.fn(),
     upsertFeedbackConnection: vi.fn(),
-    decryptFeedbackCredentials: vi.fn(),
+    feedbackConnectionReadinessError: vi.fn(),
     recordFeedbackConnectionVerified: vi.fn(),
     disableFeedbackConnection: vi.fn(),
     listDeliveryEvents: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock("../../settings/esp/queries", () => ({
 vi.mock("../../delivery-feedback/feedback-connection-queries", () => ({
     getFeedbackConnectionForTeamEsp: mocks.getFeedbackConnectionForTeamEsp,
     upsertFeedbackConnection: mocks.upsertFeedbackConnection,
-    decryptFeedbackCredentials: mocks.decryptFeedbackCredentials,
+    feedbackConnectionReadinessError: mocks.feedbackConnectionReadinessError,
     recordFeedbackConnectionVerified: mocks.recordFeedbackConnectionVerified,
     disableFeedbackConnection: mocks.disableFeedbackConnection,
 }));
@@ -102,7 +102,7 @@ describe("MCP delivery-feedback tools", () => {
         mocks.getEspConfigByEspId.mockResolvedValue({
             id: "esp-internal-1",
             espId: "esp_1",
-            provider: "ses",
+            provider: "smtp",
         });
 
         const result = await tools
@@ -111,6 +111,51 @@ describe("MCP delivery-feedback tools", () => {
 
         expect(result.isError).toBe(true);
         expect(mocks.upsertFeedbackConnection).not.toHaveBeenCalled();
+    });
+
+    it("requires an SNS topic ARN instead of a credential for SES", async () => {
+        const tools = makeToolRegistry();
+        mocks.getEspConfigByEspId.mockResolvedValue({
+            id: "esp-internal-1",
+            espId: "esp_1",
+            provider: "ses",
+        });
+
+        const missing = await tools
+            .get("upsert_esp_feedback_connection")!
+            .handler({ espId: "esp_1", credential: "secret" }, auth);
+        expect(missing.isError).toBe(true);
+        expect(mocks.upsertFeedbackConnection).not.toHaveBeenCalled();
+
+        mocks.upsertFeedbackConnection.mockResolvedValue({
+            id: "conn-1",
+            connectionId: "whc_ses",
+            provider: "ses",
+            encryptedCredentials: null,
+            expectedTopicArn: "arn:aws:sns:us-east-1:123456789012:feedback",
+            subscriptionConfirmedAt: null,
+            status: "pending",
+            lastReceivedAt: null,
+            lastVerifiedAt: null,
+            lastErrorCode: null,
+        });
+        const created = await tools
+            .get("upsert_esp_feedback_connection")!
+            .handler(
+                {
+                    espId: "esp_1",
+                    expectedTopicArn:
+                        "arn:aws:sns:us-east-1:123456789012:feedback",
+                },
+                auth,
+            );
+        expect(created.isError).toBeFalsy();
+        expect(mocks.upsertFeedbackConnection).toHaveBeenCalledWith(
+            expect.objectContaining({
+                provider: "ses",
+                expectedTopicArn: "arn:aws:sns:us-east-1:123456789012:feedback",
+            }),
+        );
     });
 
     it("upserts a feedback connection for a capable provider", async () => {

@@ -1163,6 +1163,7 @@ const organizationsContract = c.router(
             body: upsertFeedbackConnectionBodySchema,
             responses: {
                 200: feedbackConnectionSchema,
+                400: errorSchema,
                 403: errorSchema,
                 404: errorSchema,
             },
@@ -1378,7 +1379,7 @@ const feedbackContract = c.router(
             summary:
                 "Create or rotate a user ESP's delivery-feedback connection",
             description:
-                "Creates the connection (and its stable webhook URL) on first call; a later call rotates the credential without changing the URL. The provider is always the ESP's current provider, not client-writable.",
+                "Creates the connection (and its stable webhook URL) on first call; a later call rotates the credential without changing the URL. The provider is always the ESP's current provider, not client-writable. Amazon SES takes `expectedTopicArn` (the SNS topic subscribed to the webhook URL) instead of `credential`; SendLit confirms the SNS subscription automatically. Fails with 400 `feedback_credential_required`, `feedback_topic_arn_required`, or `feedback_topic_arn_invalid` when the body doesn't fit the provider.",
         },
         rotate: {
             method: "POST",
@@ -1402,6 +1403,8 @@ const feedbackContract = c.router(
                 404: errorSchema,
             },
             summary: "Verify a feedback connection's stored credential",
+            description:
+                "A smoke test that does not call the provider. Fails with `feedback_invalid_credentials` when the stored credential can't be read, or for Amazon SES with `feedback_subscription_unconfirmed` until SNS has confirmed the subscription.",
         },
         remove: {
             method: "DELETE",

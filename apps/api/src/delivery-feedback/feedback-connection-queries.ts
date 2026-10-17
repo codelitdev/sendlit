@@ -3,6 +3,7 @@ import { db } from "../db/client";
 import { espConfigs, espFeedbackConnections } from "../db/schema";
 import { decryptSecret, encryptSecret } from "../utils/secret-crypto";
 import type { FeedbackCapableProvider } from "../config/constants";
+import type { ControlMessageOutcome } from "./adapters/types";
 
 export type FeedbackConnection = typeof espFeedbackConnections.$inferSelect;
 
@@ -111,12 +112,11 @@ export async function upsertFeedbackConnection({
     espConfigId: string;
     provider: FeedbackCapableProvider;
     /** Raw webhook secret/public key/basic-auth value — encrypted before
-     * storage, never returned. */
-    credential: string;
+     * storage, never returned. Absent for credentialless providers (SES). */
+    credential?: string | null;
     expectedTopicArn?: string | null;
 }): Promise<FeedbackConnection> {
     const existing = await getFeedbackConnectionForTeamEsp(teamId, espConfigId);
-    const encryptedCredentials = encryptSecret(credential);
 
     if (!existing) {
         const [row] = await db
@@ -126,7 +126,9 @@ export async function upsertFeedbackConnection({
                 espConfigId,
                 ownerScope: "team",
                 provider,
-                encryptedCredentials,
+                encryptedCredentials: credential
+                    ? encryptSecret(credential)
+                    : null,
                 expectedTopicArn: expectedTopicArn ?? null,
                 status: "pending",
             })
@@ -134,24 +136,9 @@ export async function upsertFeedbackConnection({
         return row;
     }
 
-    const previousExpiresAt = new Date(
-        Date.now() + CREDENTIAL_ROTATION_GRACE_HOURS * 60 * 60 * 1000,
-    );
     const [row] = await db
         .update(espFeedbackConnections)
-        .set({
-            previousEncryptedCredentials: existing.encryptedCredentials,
-            previousCredentialExpiresAt: existing.encryptedCredentials
-                ? previousExpiresAt
-                : null,
-            encryptedCredentials,
-            expectedTopicArn: expectedTopicArn ?? existing.expectedTopicArn,
-            // A credential rotation on a previously-erroring connection
-            // deserves a fresh chance rather than staying flagged `error`.
-            status: existing.status === "error" ? "pending" : existing.status,
-            lastErrorCode: null,
-            updatedAt: new Date(),
-        })
+        .set(rotationPatch(existing, { credential, expectedTopicArn }))
         .where(eq(espFeedbackConnections.id, existing.id))
         .returning();
     return row;
@@ -161,14 +148,13 @@ export async function upsertOrganizationFeedbackConnection(input: {
     organizationId: string;
     espConfigId: string;
     provider: FeedbackCapableProvider;
-    credential: string;
+    credential?: string | null;
     expectedTopicArn?: string | null;
 }): Promise<FeedbackConnection> {
     const existing = await getFeedbackConnectionForOrganizationEsp(
         input.organizationId,
         input.espConfigId,
     );
-    const encryptedCredentials = encryptSecret(input.credential);
     if (!existing) {
         const [row] = await db
             .insert(espFeedbackConnections)
@@ -177,7 +163,9 @@ export async function upsertOrganizationFeedbackConnection(input: {
                 ownerScope: "organization",
                 espConfigId: input.espConfigId,
                 provider: input.provider,
-                encryptedCredentials,
+                encryptedCredentials: input.credential
+                    ? encryptSecret(input.credential)
+                    : null,
                 expectedTopicArn: input.expectedTopicArn ?? null,
                 status: "pending",
             })
@@ -186,24 +174,88 @@ export async function upsertOrganizationFeedbackConnection(input: {
     }
     const [row] = await db
         .update(espFeedbackConnections)
-        .set({
-            previousEncryptedCredentials: existing.encryptedCredentials,
-            previousCredentialExpiresAt: existing.encryptedCredentials
-                ? new Date(
-                      Date.now() +
-                          CREDENTIAL_ROTATION_GRACE_HOURS * 60 * 60 * 1000,
-                  )
-                : null,
-            encryptedCredentials,
-            expectedTopicArn:
-                input.expectedTopicArn ?? existing.expectedTopicArn,
-            status: existing.status === "error" ? "pending" : existing.status,
-            lastErrorCode: null,
-            updatedAt: new Date(),
-        })
+        .set(rotationPatch(existing, input))
         .where(eq(espFeedbackConnections.id, existing.id))
         .returning();
     return row;
+}
+
+/** The update applied when an existing connection is re-saved. A new
+ * credential keeps the old one valid for the rotation grace window; a new
+ * SES topic invalidates the old subscription confirmation. */
+function rotationPatch(
+    existing: FeedbackConnection,
+    {
+        credential,
+        expectedTopicArn,
+    }: { credential?: string | null; expectedTopicArn?: string | null },
+) {
+    const topicArn = expectedTopicArn ?? existing.expectedTopicArn;
+    return {
+        ...(credential
+            ? {
+                  previousEncryptedCredentials: existing.encryptedCredentials,
+                  previousCredentialExpiresAt: existing.encryptedCredentials
+                      ? new Date(
+                            Date.now() +
+                                CREDENTIAL_ROTATION_GRACE_HOURS *
+                                    60 *
+                                    60 *
+                                    1000,
+                        )
+                      : null,
+                  encryptedCredentials: encryptSecret(credential),
+              }
+            : {}),
+        expectedTopicArn: topicArn,
+        ...(topicArn !== existing.expectedTopicArn
+            ? { subscriptionConfirmedAt: null }
+            : {}),
+        // Re-saving a previously-erroring connection deserves a fresh
+        // chance rather than staying flagged `error`.
+        status: existing.status === "error" ? "pending" : existing.status,
+        lastErrorCode: null,
+        updatedAt: new Date(),
+    };
+}
+
+/** Backs the manual "test" action, which can't call the provider: checks
+ * the connection is fully armed. Returns the error code, or `null`. */
+export function feedbackConnectionReadinessError(
+    connection: FeedbackConnection,
+): "feedback_invalid_credentials" | "feedback_subscription_unconfirmed" | null {
+    if (connection.provider === "ses") {
+        return connection.expectedTopicArn && connection.subscriptionConfirmedAt
+            ? null
+            : "feedback_subscription_unconfirmed";
+    }
+    return decryptFeedbackCredentials(connection)
+        ? null
+        : "feedback_invalid_credentials";
+}
+
+/** Records the result of an authenticated SNS subscription handshake.
+ * Confirmation alone never marks the connection `healthy` — that still takes
+ * a processed event — and an unsubscribe flags it so the UI asks the
+ * customer to re-subscribe (SendLit never re-subscribes on its own). */
+export async function recordFeedbackControlOutcome(
+    id: string,
+    outcome: ControlMessageOutcome,
+): Promise<void> {
+    const patch =
+        outcome === "subscription_confirmed"
+            ? { subscriptionConfirmedAt: new Date(), lastErrorCode: null }
+            : outcome === "unsubscribed"
+              ? {
+                    subscriptionConfirmedAt: null,
+                    status: "error",
+                    lastErrorCode: "sns_unsubscribed",
+                }
+              : { status: "error", lastErrorCode: "sns_confirmation_failed" };
+    await db
+        .update(espFeedbackConnections)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(eq(espFeedbackConnections.id, id));
 }
 
 /** Called when an ESP's `provider` changes — the old feedback connection

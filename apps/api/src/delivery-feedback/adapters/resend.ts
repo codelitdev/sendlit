@@ -3,7 +3,7 @@ import type { DeliveryEventType, BounceClass } from "../../config/constants";
 import { headerString } from "./header-utils";
 import type {
     NormalizedCanonicalEvent,
-    ProviderAdapter,
+    SyncProviderAdapter,
     VerifyWebhookInput,
 } from "./types";
 
@@ -48,7 +48,7 @@ function parsePayload(rawBody: Buffer): any {
     return JSON.parse(rawBody.toString("utf8"));
 }
 
-export const resendAdapter: ProviderAdapter = {
+export const resendAdapter: SyncProviderAdapter = {
     provider: "resend",
     verify({ rawBody, headers, credential, previousCredential }) {
         const providerRequestId = headerString(headers, "svix-id") || null;

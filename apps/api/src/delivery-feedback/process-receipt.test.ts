@@ -10,6 +10,7 @@ import { db } from "../db/client";
 import {
     emailDeliveryEvents,
     espConfigs,
+    espWebhookReceipts,
     outboundMessages,
 } from "../db/schema";
 import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
@@ -21,6 +22,7 @@ import {
 } from "./outbound-queries";
 import { processWebhookReceipt } from "./process-receipt";
 import { isRecipientSuppressed } from "./suppression-queries";
+import { snsNotification, TEST_TOPIC_ARN } from "../test/sns";
 
 const tdb = db as unknown as TestDb;
 
@@ -157,5 +159,107 @@ describe("processWebhookReceipt (integration)", () => {
         expect(events).toHaveLength(1);
         expect(events[0].eventType).toBe("unknown");
         expect(events[0].outboundMessageId).toBeNull();
+    });
+
+    describe("Amazon SES", () => {
+        async function seedSes() {
+            const { team } = await seedTeamAndContact(tdb);
+            const [esp] = await tdb
+                .select()
+                .from(espConfigs)
+                .where(eq(espConfigs.teamId, team.id));
+            const connection = await upsertFeedbackConnection({
+                teamId: team.id,
+                espConfigId: esp.id,
+                provider: "ses",
+                expectedTopicArn: TEST_TOPIC_ARN,
+            });
+            const outbound = await createOutboundMessage({
+                teamId: team.id,
+                deliverySourceType: "team",
+                espGrantId: null,
+                espConfigId: esp.id,
+                feedbackConnectionId: connection.id,
+                sourceType: "transactional",
+                recipientEmail: "bounce@example.com",
+                normalizedRecipient: "bounce@example.com",
+                provider: "ses",
+                rfcMessageId: "ses123@sendlit.test",
+            });
+            return { team, connection, outbound };
+        }
+
+        async function receive(
+            connectionId: string,
+            teamId: string,
+            sesEvent: Record<string, unknown>,
+        ) {
+            const receipt = await createWebhookReceipt({
+                connectionId,
+                teamId,
+                provider: "ses",
+                providerRequestId: "sns-msg-1",
+                rawBody: Buffer.from(JSON.stringify(snsNotification(sesEvent))),
+                safeHeaders: {},
+            });
+            await processWebhookReceipt(receipt.id);
+            const [stored] = await tdb
+                .select()
+                .from(espWebhookReceipts)
+                .where(eq(espWebhookReceipts.id, receipt.id));
+            return stored;
+        }
+
+        it("correlates by message tag before the SES message id is saved", async () => {
+            const { team, connection, outbound } = await seedSes();
+            // No providerMessageId on the outbound row yet: the bounce beat
+            // the send response.
+            const receipt = await receive(connection.id, team.id, {
+                eventType: "Bounce",
+                mail: {
+                    messageId: "ses-unsaved-id",
+                    tags: { sendlit_message_id: [outbound.messageId] },
+                },
+                bounce: {
+                    bounceType: "Permanent",
+                    bouncedRecipients: [{ emailAddress: "bounce@example.com" }],
+                },
+            });
+
+            const [event] = await tdb
+                .select()
+                .from(emailDeliveryEvents)
+                .where(eq(emailDeliveryEvents.receiptId, receipt.id));
+            expect(event).toMatchObject({
+                eventType: "hard_bounce",
+                outboundMessageId: outbound.id,
+            });
+            expect(
+                await isRecipientSuppressed(team.id, "bounce@example.com"),
+            ).toBe(true);
+            // A bounce keeps its raw payload for operators.
+            expect(receipt.status).toBe("processed");
+            expect(receipt.encryptedPayload).not.toBeNull();
+        });
+
+        it("drops a Delivery event's raw payload once processed", async () => {
+            const { team, connection, outbound } = await seedSes();
+            await tdb
+                .update(outboundMessages)
+                .set({ providerMessageId: "ses-id-1" })
+                .where(eq(outboundMessages.id, outbound.id));
+
+            const receipt = await receive(connection.id, team.id, {
+                eventType: "Delivery",
+                mail: { messageId: "ses-id-1" },
+                delivery: { recipients: ["bounce@example.com"] },
+            });
+
+            expect(receipt.status).toBe("processed");
+            expect(receipt.encryptedPayload).toBeNull();
+            expect(
+                (await getOutboundMessageById(outbound.id))?.deliveryStatus,
+            ).toBe("delivered");
+        });
     });
 });

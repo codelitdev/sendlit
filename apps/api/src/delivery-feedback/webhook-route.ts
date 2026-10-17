@@ -6,6 +6,7 @@ import {
     getFeedbackConnectionByConnectionId,
     recordFeedbackConnectionError,
     recordFeedbackConnectionReceived,
+    recordFeedbackControlOutcome,
 } from "./feedback-connection-queries";
 import { getProviderAdapter } from "./adapters/registry";
 import {
@@ -57,22 +58,32 @@ router.post(
             ? req.body
             : Buffer.from(typeof req.body === "string" ? req.body : "");
 
-        const decrypted = decryptFeedbackCredentials(connection);
-        if (!decrypted) {
-            return res.status(401).json({ error: "unauthorized" });
+        if (adapter.maxBodyBytes && rawBody.length > adapter.maxBodyBytes) {
+            return res.status(413).json({ error: "payload_too_large" });
+        }
+
+        // Credentialless providers (SES) are armed by the connection's
+        // expected topic instead of a stored secret.
+        let decrypted: ReturnType<typeof decryptFeedbackCredentials> = null;
+        if (!adapter.credentialless) {
+            decrypted = decryptFeedbackCredentials(connection);
+            if (!decrypted) {
+                return res.status(401).json({ error: "unauthorized" });
+            }
         }
 
         // 4. Verify signature/credential.
         let verifyResult;
         try {
-            verifyResult = adapter.verify({
+            verifyResult = await adapter.verify({
                 rawBody,
                 headers: req.headers as Record<
                     string,
                     string | string[] | undefined
                 >,
-                credential: decrypted.credential,
-                previousCredential: decrypted.previousCredential,
+                credential: decrypted?.credential ?? "",
+                previousCredential: decrypted?.previousCredential,
+                expectedTopicArn: connection.expectedTopicArn,
             });
         } catch (err) {
             captureError({
@@ -81,6 +92,17 @@ router.post(
                 context: { provider, connection_id: connectionId },
             });
             return res.status(401).json({ error: "unauthorized" });
+        }
+
+        // Verification couldn't complete (e.g. the SNS signing certificate
+        // was unreachable) — a 5xx keeps the provider retrying.
+        if (verifyResult.retryable) {
+            captureEvent({
+                event: "webhook_verification_unavailable",
+                source: "webhook.receive",
+                properties: { provider, connection_id: connectionId },
+            });
+            return res.status(503).json({ error: "unavailable" });
         }
 
         if (!verifyResult.valid) {
@@ -108,6 +130,39 @@ router.post(
             }
         }
 
+        // Authenticated control message (e.g. an SNS subscription
+        // handshake) — acted on here, never stored as a receipt.
+        if (adapter.handleControl) {
+            let outcome;
+            try {
+                outcome = await adapter.handleControl(rawBody);
+                if (outcome) {
+                    await recordFeedbackControlOutcome(connection.id, outcome);
+                }
+            } catch (err) {
+                captureError({
+                    error: err,
+                    source: "webhook.control",
+                    context: { provider, connection_id: connectionId },
+                });
+                return res.status(503).json({ error: "unavailable" });
+            }
+            if (outcome) {
+                captureEvent({
+                    event: "webhook_control_message",
+                    source: "webhook.receive",
+                    properties: {
+                        provider,
+                        connection_id: connectionId,
+                        outcome,
+                    },
+                });
+                return outcome === "subscription_confirm_failed"
+                    ? res.status(502).json({ error: outcome })
+                    : res.status(200).json({ status: "ok" });
+            }
+        }
+
         // 5. Minimal envelope validation — not full normalization.
         try {
             adapter.validateEnvelope(rawBody);
@@ -129,7 +184,9 @@ router.post(
                     connection.ownerScope === "team" ? connection.teamId : null,
                 provider,
                 providerRequestId: verifyResult.providerRequestId ?? null,
-                rawBody,
+                rawBody: adapter.redactForStorage
+                    ? adapter.redactForStorage(rawBody)
+                    : rawBody,
                 safeHeaders: sanitizeHeaders(
                     req.headers as Record<
                         string,

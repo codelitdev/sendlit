@@ -117,10 +117,20 @@ export async function claimReceiptForProcessing(id: string): Promise<boolean> {
     return Boolean(row);
 }
 
-export async function markReceiptProcessed(id: string): Promise<void> {
+/** `dropPayload` purges the raw payload right away instead of waiting for
+ * the retention loop — for events whose canonical row is all SendLit keeps
+ * (see `ProviderAdapter.retainPayloadAfterProcessing`). */
+export async function markReceiptProcessed(
+    id: string,
+    { dropPayload = false }: { dropPayload?: boolean } = {},
+): Promise<void> {
     await db
         .update(espWebhookReceipts)
-        .set({ status: "processed", processedAt: new Date() })
+        .set({
+            status: "processed",
+            processedAt: new Date(),
+            ...(dropPayload ? { encryptedPayload: null, safeHeaders: {} } : {}),
+        })
         .where(eq(espWebhookReceipts.id, id));
 }
 
