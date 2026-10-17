@@ -25,6 +25,7 @@ import {
     getTrackedClickUrl,
     getTrackingPixelUrl,
     getUnsubLink,
+    getListUnsubscribeHeaders,
 } from "../utils/mail";
 import { generatePixelToken } from "../utils/pixel-jwt";
 import logger from "../services/log";
@@ -327,6 +328,7 @@ async function attemptMailSending({
             espConfigId: pin.espConfigId,
             secretVersion: pin.secretVersion,
             messageId: rfcMessageId,
+            headers: getListUnsubscribeHeaders(contact.unsubscribeToken),
         });
         const [delivery] = await db
             .insert(emailDeliveries)
