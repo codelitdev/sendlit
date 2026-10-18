@@ -4,12 +4,14 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/api-contract/package.json ./packages/api-contract/package.json
+COPY packages/test-utils/package.json ./packages/test-utils/package.json
 COPY packages/email-editor/package.json ./packages/email-editor/package.json
 COPY packages/email-blocks/package.json ./packages/email-blocks/package.json
 
 RUN bun install --frozen-lockfile --ignore-scripts --filter @sendlit/web --filter @sendlit/email-editor --filter @sendlit/email-blocks
 
 COPY packages/api-contract ./packages/api-contract
+COPY packages/test-utils ./packages/test-utils
 COPY packages/email-editor ./packages/email-editor
 COPY packages/email-blocks ./packages/email-blocks
 COPY apps/web ./apps/web

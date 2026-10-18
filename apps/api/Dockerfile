@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY packages/api-contract/package.json ./packages/api-contract/package.json
+COPY packages/test-utils/package.json ./packages/test-utils/package.json
 COPY packages/email-editor/package.json ./packages/email-editor/package.json
 COPY packages/email-blocks/package.json ./packages/email-blocks/package.json
 
@@ -23,6 +24,7 @@ ENV NODE_ENV=production
 COPY package.json bun.lock ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY packages/api-contract/package.json ./packages/api-contract/package.json
+COPY packages/test-utils/package.json ./packages/test-utils/package.json
 COPY packages/email-editor/package.json ./packages/email-editor/package.json
 COPY packages/email-blocks/package.json ./packages/email-blocks/package.json
 
