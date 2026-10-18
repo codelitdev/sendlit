@@ -2,7 +2,7 @@ import type { SendLitEmailRenderContext } from "@sendlit/email-blocks/footer";
 import { type Email as EmailType, renderEmailToHtml } from "@sendlit/email-editor";
 import { JSDOM } from "jsdom";
 import { Liquid } from "liquidjs";
-import { captureError } from "../observability/posthog";
+import { captureError } from "../observability";
 import logger from "../services/log";
 import { SENDLIT_FOOTER_BLOCK } from "../templates/footer";
 import { isTrackingUrl } from "../utils/mail";

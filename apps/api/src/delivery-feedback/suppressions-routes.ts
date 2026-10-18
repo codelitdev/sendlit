@@ -3,7 +3,7 @@ import { createExpressEndpoints, initServer } from "@ts-rest/express";
 import { Router } from "express";
 import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
-import { captureEvent } from "../observability/posthog";
+import { captureEvent } from "../observability";
 import {
   countSuppressions,
   getSuppressionBySuppressionId,

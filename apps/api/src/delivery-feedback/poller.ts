@@ -1,4 +1,4 @@
-import { captureError } from "../observability/posthog";
+import { captureError } from "../observability";
 import logger from "../services/log";
 import { processWebhookReceipt } from "./process-receipt";
 import {

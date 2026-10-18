@@ -16,7 +16,7 @@ mock.module("./webhook-receipt-queries", () => ({
 mock.module("./process-receipt", () => ({
   processWebhookReceipt: mocks.processReceipt,
 }));
-mock.module("../observability/posthog", () => ({
+mock.module("../observability", () => ({
   captureError: mocks.captureError,
 }));
 mock.module("../services/log", () => ({

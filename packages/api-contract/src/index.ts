@@ -1,4 +1,10 @@
 export { type Contract, contract } from "./contract";
+export {
+  type McpParityExemption,
+  type McpParityManifestEntry,
+  type McpParityRisk,
+  mcpParityManifest,
+} from "./mcp-parity";
 export * from "./schemas/billing";
 export * from "./schemas/common";
 export * from "./schemas/contacts";

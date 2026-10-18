@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { type Event, EventType } from "../config/constants";
 import { db } from "../db/client";
 import { rules, sequences } from "../db/schema";
-import { captureError, captureEvent } from "../observability/posthog";
+import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import { enrollContactsInOngoingSequence } from "./queries";
 

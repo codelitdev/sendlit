@@ -35,7 +35,7 @@ import {
 } from "../delivery/queries";
 import { syncEmailContentMediaReferences } from "../media/email-content";
 import { deleteMediaReferencesForResource } from "../media/queries";
-import { captureEvent } from "../observability/posthog";
+import { captureEvent } from "../observability";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
 import { resolveStartingTemplate } from "../templates/queries";

@@ -1,5 +1,5 @@
-import { contract } from "@sendlit/api-contract";
 import { generateOpenApi } from "@ts-rest/open-api";
+import { contract } from "./contract";
 
 type AuthMode =
   | "teamOrUser"
@@ -12,6 +12,7 @@ type AuthMode =
 const securityByAuthMode: Record<AuthMode, Array<Record<string, string[]>>> = {
   teamOrUser: [
     { teamApiKey: [] },
+    { teamApiKeyStandardHeader: [] },
     { userAccessToken: [] },
     { dashboardSession: [] },
     { dashboardSecureSession: [] },
@@ -101,6 +102,26 @@ function getAuthMode(path: string, method: string): AuthMode {
   return "teamOrUser";
 }
 
+/** Every authenticated route accepts exactly one credential (Platform ADR 0001). */
+const CREDENTIAL_AMBIGUOUS =
+  "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one.";
+
+function withCredentialError(responses: Record<string, any> = {}) {
+  const existing = responses["400"];
+  return {
+    ...responses,
+    "400": existing
+      ? {
+          ...existing,
+          description:
+            `${existing.description ?? ""}\n\nOr ${CREDENTIAL_AMBIGUOUS}`.trim(),
+        }
+      : { description: CREDENTIAL_AMBIGUOUS },
+  };
+}
+
+/** The SendLit OpenAPI document, generated from the ts-rest contract. Served by
+ * the API at /openapi.json and rendered by the docs site. */
 export const openApiDocument = generateOpenApi(
   contract,
   {
@@ -175,6 +196,12 @@ export const openApiDocument = generateOpenApi(
           name: "x-sendlit-apikey",
           description: "Team-scoped API key (sl_live_...) for REST requests.",
         },
+        teamApiKeyStandardHeader: {
+          type: "apiKey",
+          in: "header",
+          name: "X-API-Key",
+          description: "The same team API key in the standard X-API-Key header.",
+        },
         userAccessToken: {
           type: "http",
           scheme: "bearer",
@@ -213,6 +240,10 @@ export const openApiDocument = generateOpenApi(
       }`;
       return {
         ...operation,
+        responses:
+          authMode === "public"
+            ? operation.responses
+            : withCredentialError(operation.responses),
         tags: (route.metadata as { tag?: string } | undefined)?.tag
           ? [(route.metadata as { tag: string }).tag]
           : operation.tags,

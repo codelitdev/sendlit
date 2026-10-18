@@ -1,5 +1,5 @@
 import { Router, raw } from "express";
-import { captureError, captureEvent } from "../observability/posthog";
+import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import { getProviderAdapter } from "./adapters/registry";
 import {

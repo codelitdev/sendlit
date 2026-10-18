@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { processOngoingSequence } from "../automation/process-ongoing-sequence";
-import { captureError } from "../observability/posthog";
+import { captureError } from "../observability";
 import logger from "../services/log";
 import { registerWorkerEvents, workerOptions } from "./worker-options";
 

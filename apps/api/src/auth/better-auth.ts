@@ -52,6 +52,11 @@ export const mcpResourceUrl = `${authBaseUrl}/mcp`;
  * therefore every value `resolve-auth.ts` must accept back when verifying —
  * single source of truth shared between `oauthProvider({ validAudiences })`
  * below and `resolve-auth.ts`'s bearer verification. */
+/** Product-specific Better Auth cookie prefix (Platform AGENTS.md), so SendLit
+ * and other CodeLit products on one hostname keep separate sessions. */
+export const AUTH_COOKIE_PREFIX = "sendlit";
+/** Session cookie name; Better Auth adds `__Secure-` over HTTPS. */
+export const SESSION_COOKIE_NAME = `${AUTH_COOKIE_PREFIX}.session_token`;
 export const validOAuthAudiences = [authBaseUrl, mcpResourceUrl];
 export const OAUTH_CLIENT_DEFAULT_SCOPES = ["openid", "profile", "email"] as const;
 export const OAUTH_CLIENT_REQUESTABLE_SCOPES = [
@@ -134,7 +139,7 @@ export const auth = betterAuth({
   }),
   trustedOrigins: [webClientUrl, authBaseUrl],
   advanced: {
-    cookiePrefix: "sendlit",
+    cookiePrefix: AUTH_COOKIE_PREFIX,
     ...(authCookieDomain
       ? {
           crossSubDomainCookies: {

@@ -23,7 +23,7 @@ mock.module("./queries", () => ({
   lockBroadcast: mocks.lockBroadcast,
   markBroadcastSent: mocks.markBroadcastSent,
 }));
-mock.module("../observability/posthog", () => ({
+mock.module("../observability", () => ({
   captureError: mocks.captureError,
   captureEvent: mocks.captureEvent,
 }));

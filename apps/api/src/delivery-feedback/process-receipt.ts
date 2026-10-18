@@ -3,7 +3,7 @@ import {
   type DeliveryEventType,
   finalSoftBounceSuppressionThreshold,
 } from "../config/constants";
-import { captureError } from "../observability/posthog";
+import { captureError } from "../observability";
 import logger from "../services/log";
 import { normalizeEmail } from "../utils/email";
 import { getProviderAdapter } from "./adapters/registry";

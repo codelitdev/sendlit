@@ -1,5 +1,5 @@
 import sequenceQueue from "../mail/sequence-queue";
-import { captureError } from "../observability/posthog";
+import { captureError } from "../observability";
 import logger from "../services/log";
 import { getDueOngoingSequences } from "./queries";
 

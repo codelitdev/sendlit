@@ -1,5 +1,5 @@
 import type { ContactFilterWithAggregator } from "../contacts/segment";
-import { captureError, captureEvent } from "../observability/posthog";
+import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import {
   deleteRule,

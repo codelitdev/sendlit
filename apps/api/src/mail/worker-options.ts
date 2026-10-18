@@ -1,5 +1,5 @@
 import type { Job, Worker, WorkerOptions } from "bullmq";
-import { captureError } from "../observability/posthog";
+import { captureError } from "../observability";
 import redis from "../services/redis";
 
 export const workerOptions: WorkerOptions = {

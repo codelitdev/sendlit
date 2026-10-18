@@ -17,7 +17,7 @@ mock.module("../auth/require-team", () => ({
     next();
   },
 }));
-mock.module("../observability/posthog", () => ({
+mock.module("../observability", () => ({
   captureEvent: vi.fn(),
   captureError: vi.fn(),
 }));

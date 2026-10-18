@@ -35,7 +35,7 @@ OAuth flow; the resulting token is restricted to that chosen team.
 
 ## API keys
 
-API keys look like `sl_live_...` followed by a random secret, and are sent via the `x-sendlit-apikey` header. The `sl_live_` prefix makes leaked keys detectable by secret scanners, so treat anything matching it as a credential.
+API keys look like `sl_live_...` followed by a random secret, and are sent via the `x-sendlit-apikey` header (the standard `X-API-Key` header works too). The `sl_live_` prefix makes leaked keys detectable by secret scanners, so treat anything matching it as a credential.
 
 Keys are stored hashed (SHA-256), which means:
 
@@ -50,6 +50,21 @@ Organization keys use the `sl_org_live_...` prefix and are sent with
 scoped; see [Headless organization setup](/developers/headless-provisioning)
 for discovery, shared-delivery setup, and key roles. An organization key does
 not authenticate to MCP, which remains team-scoped.
+
+## One credential per request
+
+Send exactly one credential with each request: an OAuth access token or
+organization key in `Authorization: Bearer`, a team API key, or (for the
+dashboard) a session cookie. SendLit never picks one of several, and never
+falls back to another credential when one is invalid:
+
+- More than one credential returns `400 credential_ambiguous`.
+- An invalid, expired or revoked credential returns `401`; the request is not
+  retried with anonymous access.
+- An `Authorization` header that is not `Bearer <token>` returns `401`.
+
+MCP accepts an OAuth access token or a team API key; a browser session cookie is
+not an MCP credential and is ignored there.
 
 ## Dashboard sign-in
 

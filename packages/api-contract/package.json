@@ -14,7 +14,8 @@
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./schemas/*": "./src/schemas/*.ts"
+    "./schemas/*": "./src/schemas/*.ts",
+    "./openapi": "./src/openapi.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "@ts-rest/core": "3.52.1",
+    "@ts-rest/open-api": "3.52.1",
     "zod": "3.25.76"
   }
 }

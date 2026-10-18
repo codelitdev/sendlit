@@ -13,7 +13,7 @@ mock.module("./transport", () => ({
   getTeamTransport: getTeamTransportMock,
 }));
 
-mock.module("../observability/posthog", () => ({
+mock.module("../observability", () => ({
   captureError: captureErrorMock,
   captureEvent: captureEventMock,
 }));

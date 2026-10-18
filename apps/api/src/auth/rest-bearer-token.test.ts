@@ -11,6 +11,7 @@ const mocks = {
 };
 
 mock.module("./better-auth", () => ({
+  SESSION_COOKIE_NAME: "sendlit.session_token",
   auth: {
     api: {
       getSession: vi.fn(async () => null),

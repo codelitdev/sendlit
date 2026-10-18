@@ -8,6 +8,7 @@ const getSelectedTeamId = vi.fn(async () => null as string | null);
 const setSelectedTeamId = vi.fn(async () => {});
 
 mock.module("./better-auth", () => ({
+  SESSION_COOKIE_NAME: "sendlit.session_token",
   webClientUrl: "http://localhost:3000",
   authBasePath: "/api/auth",
   hostedLoginMethods: [{ type: "email-otp" }],

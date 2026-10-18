@@ -11,7 +11,7 @@ import { planGateHttp } from "../billing/errors";
 import { db } from "../db/client";
 import { teamApiKeys } from "../db/schema";
 import { getTeamQuotaUsage } from "../delivery/quota";
-import { captureError, captureEvent } from "../observability/posthog";
+import { captureError, captureEvent } from "../observability";
 import { recordOrganizationAuditEvent } from "../organization/audit";
 import { getOrganization } from "../organization/queries";
 import logger from "../services/log";

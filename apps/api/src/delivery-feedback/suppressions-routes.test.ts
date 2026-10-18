@@ -19,7 +19,7 @@ mock.module("../auth/require-team", () => ({
     next();
   },
 }));
-mock.module("../observability/posthog", () => ({ captureEvent: mock() }));
+mock.module("../observability", () => ({ captureEvent: mock() }));
 
 const { db } = await import("../db/client");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");

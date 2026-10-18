@@ -21,7 +21,7 @@ import { reserveOrganizationQuota } from "../delivery/quota";
 import { getActiveFeedbackConnectionForEspConfig } from "../delivery-feedback/feedback-connection-queries";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
 import { MissingTemplateVariablesError, renderEmailContent } from "../mail/render";
-import { captureEvent } from "../observability/posthog";
+import { captureEvent } from "../observability";
 import { getTeam } from "../team/queries";
 import { getTemplate } from "../templates/queries";
 import { normalizeEmail } from "../utils/email";

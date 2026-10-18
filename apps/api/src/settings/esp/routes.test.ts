@@ -32,7 +32,7 @@ mock.module("../../mail/transport", () => ({
 mock.module("./test", () => ({
   testEspConfig: vi.fn().mockResolvedValue({ success: true }),
 }));
-mock.module("../../observability/posthog", () => ({ captureEvent: vi.fn() }));
+mock.module("../../observability", () => ({ captureEvent: vi.fn() }));
 
 const { db } = await import("../../db/client");
 const { espConfigs, outboundMessages } = await import("../../db/schema");

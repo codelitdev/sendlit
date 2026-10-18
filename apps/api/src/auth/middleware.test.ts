@@ -1,6 +1,7 @@
 import { describe, expect, it, mock, vi } from "bun:test";
 
 mock.module("./better-auth", () => ({
+  SESSION_COOKIE_NAME: "sendlit.session_token",
   mcpProtectedResourceMetadataUrl:
     "https://sendlit.test/.well-known/oauth-protected-resource/mcp",
 }));

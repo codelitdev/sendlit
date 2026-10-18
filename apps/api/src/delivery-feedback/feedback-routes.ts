@@ -4,7 +4,7 @@ import { Router } from "express";
 import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { feedbackCapableProviders } from "../config/constants";
-import { captureEvent } from "../observability/posthog";
+import { captureEvent } from "../observability";
 import { getEspConfigByEspId } from "../settings/esp/queries";
 import {
   disableFeedbackConnection,

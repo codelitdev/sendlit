@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { openApiDocument } from "@sendlit/api-contract/openapi";
 import { defaultEmail } from "@sendlit/email-editor";
 import {
   createContactBodySchema,
@@ -42,7 +43,6 @@ import {
   updateTemplateBodySchema,
 } from "../../../packages/api-contract/src/schemas/templates";
 import { transactionalEmailSchema } from "../../../packages/api-contract/src/schemas/transactional";
-import { openApiDocument } from "./openapi";
 
 describe("API input validation schemas", () => {
   it("accepts the explicit organization delivery scopes", () => {
@@ -566,9 +566,19 @@ describe("OpenAPI authentication metadata", () => {
     );
   });
 
+  it("documents credential_ambiguous on authenticated operations only", () => {
+    const responses = (path: string, method: "get" | "post") =>
+      (openApiDocument.paths[path] as any)?.[method]?.responses ?? {};
+    expect(responses("/contacts", "post")["400"]?.description).toContain(
+      "credential_ambiguous",
+    );
+    expect(responses("/billing/catalog", "get")["400"]).toBeUndefined();
+  });
+
   it("documents the accepted credentials on each operation", () => {
     expect(openApiDocument.paths["/contacts"]?.post?.security).toEqual([
       { teamApiKey: [] },
+      { teamApiKeyStandardHeader: [] },
       { userAccessToken: [] },
       { dashboardSession: [] },
       { dashboardSecureSession: [] },

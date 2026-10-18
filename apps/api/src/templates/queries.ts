@@ -5,7 +5,7 @@ import { db } from "../db/client";
 import { emailTemplates } from "../db/schema";
 import { syncEmailContentMediaReferences } from "../media/email-content";
 import { deleteMediaReferencesForResource } from "../media/queries";
-import { captureEvent } from "../observability/posthog";
+import { captureEvent } from "../observability";
 import { getSystemTemplate } from "./system-templates";
 import {
   getRequiredTemplateVariables,

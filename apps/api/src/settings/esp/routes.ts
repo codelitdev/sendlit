@@ -5,7 +5,7 @@ import { requireAuth } from "../../auth/middleware";
 import { requireTeam } from "../../auth/require-team";
 import { getTeamDeliverySetting } from "../../delivery/queries";
 import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
-import { captureEvent } from "../../observability/posthog";
+import { captureEvent } from "../../observability";
 import { getTeamMembership } from "../../team/queries";
 import {
   createEspConfig,

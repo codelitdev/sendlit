@@ -1,8 +1,16 @@
-import type {
-  AuthenticatedIdentity,
-  AuthenticationResult,
+import {
+  type AuthenticatedIdentity,
+  type AuthenticationResult,
+  verifyOAuthAccessToken,
 } from "@codelitdev/oauth-server-kit";
 import { resolveBetterAuthSession } from "@codelitdev/oauth-server-kit/better-auth";
+import {
+  extractHttpCredentials,
+  extractMcpCredentials,
+  type HeaderMap,
+  type PresentedCredential,
+  selectSingleCredential,
+} from "@codelitdev/platform";
 import { fromNodeHeaders } from "better-auth/node";
 import {
   type ApiKey,
@@ -18,6 +26,7 @@ import {
   authIssuer,
   mcpResourceUrl,
   oauthResourceClient,
+  SESSION_COOKIE_NAME,
   validOAuthAudiences,
 } from "./better-auth";
 
@@ -26,6 +35,9 @@ export type AuthInput = {
   apiKeyHeader?: unknown;
   bodyApiKey?: unknown;
   headers?: Record<string, string | string[] | undefined>;
+  /** MCP accepts bearer tokens and API keys only; browser sessions are not
+   * credentials there (and so never make an MCP request ambiguous). */
+  transport?: "http" | "mcp";
 };
 
 export type AuthResult =
@@ -63,6 +75,7 @@ export type AuthResult =
       organizationApiKeyId: string;
       organizationScopes: string[];
     }
+  | { status: "ambiguous" }
   | { status: "invalid_token" }
   | { status: "unauthorized" }
   | { status: "missing" }
@@ -94,11 +107,55 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function stringClaims(value: unknown): string[] {
-  if (typeof value === "string") return [value];
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
+/** The kit returns protocol identity only. SendLit's `team_id` claim (the team
+ * picked on `/oauth/select-team`) is read from the token the kit has just
+ * verified; membership is re-checked before it is trusted. */
+function verifiedTeamClaim(token: string): string | undefined {
+  const payload = token.split(".")[1];
+  if (!payload) return undefined;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return optionalString(claims?.team_id);
+  } catch {
+    return undefined;
+  }
+}
+
+const ORGANIZATION_KEY_PREFIX = "sl_org_live_";
+
+/**
+ * Every credential the request presents, using the Platform kernel's
+ * extraction (Better Auth session cookie, `Authorization: Bearer`,
+ * `X-API-Key`) plus SendLit's own API-key locations. A bearer value with the
+ * organization-key prefix is an API key, not an OAuth token.
+ */
+function presentedCredentials(input: AuthInput): PresentedCredential[] {
+  const authorization = headerValue(input.authorization);
+  const headers: HeaderMap = {
+    ...(input.headers ?? {}),
+    ...(authorization !== undefined ? { authorization } : {}),
+  };
+  const presented =
+    input.transport === "mcp"
+      ? extractMcpCredentials(headers)
+      : extractHttpCredentials(headers, { sessionCookieName: SESSION_COOKIE_NAME });
+  for (const value of [
+    headerValue(input.apiKeyHeader),
+    headerValue(input.bodyApiKey),
+  ]) {
+    if (value) presented.push({ kind: "api_key", secret: value });
+  }
+  return presented.map((credential) =>
+    credential.kind === "oauth" && credential.secret.startsWith(ORGANIZATION_KEY_PREFIX)
+      ? { kind: "api_key", secret: credential.secret }
+      : credential,
+  );
+}
+
+function hasMalformedAuthorization(authorization: string | undefined) {
+  return (
+    Boolean(authorization?.trim()) && !/^Bearer\s+\S+$/i.test(authorization!.trim())
+  );
 }
 
 const defaultDependencies: AuthDependencies = {
@@ -112,106 +169,59 @@ const defaultDependencies: AuthDependencies = {
     );
   },
   async authenticateBearer(token) {
-    try {
-      // This is Better Auth's current resource-server API. The prior
-      // oauth-server-kit verifier expected an obsolete
-      // `getActions().verifyAccessToken` method, so every otherwise
-      // valid SDK 2 bearer token was rejected after OAuth completed.
-      const claims = await oauthResourceClient.getActions().verifyBearerToken(token, {
-        verifyOptions: {
-          issuer: authIssuer,
-          audience: validOAuthAudiences,
-        },
+    const result = await verifyOAuthAccessToken(
+      {
+        oauthResourceClient,
+        issuer: authIssuer,
+        audiences: validOAuthAudiences,
         resourceMetadataMappings: { mcp: mcpResourceUrl },
-      });
-      const subject = optionalString(claims.sub);
-      const clientId = optionalString(claims.azp) ?? optionalString(claims.client_id);
-      const audiences = stringClaims(claims.aud).filter((audience) =>
-        validOAuthAudiences.includes(audience),
-      );
-      if (!subject || !clientId || audiences.length === 0) return null;
-      const email = optionalString(claims.email);
-      const name = optionalString(claims.name);
-      const scopes = stringClaims(claims.scope).flatMap((scope) =>
-        scope.split(/\s+/).filter(Boolean),
-      );
-
-      return {
-        identity: {
-          method: "oauth",
-          issuer: authIssuer,
-          subject,
-          ...(email ? { email } : {}),
-          ...(name ? { name } : {}),
-          clientId,
-          scopes,
-          audiences,
-        },
-        teamId: optionalString(claims.team_id),
-      };
-    } catch {
+      },
+      token,
+    );
+    if (result.status !== "authenticated" || result.identity.method !== "oauth") {
       return null;
     }
+    return { identity: result.identity, teamId: verifiedTeamClaim(token) };
   },
   ensureDefaultOrganization,
   getTeamMembership,
 };
 
+/**
+ * Resolves the single credential a request presents (Platform ADR 0001): more
+ * than one is `ambiguous`, an invalid one is rejected, and nothing ever falls
+ * back to another mechanism or to anonymous access.
+ */
 export async function resolveAuth(
   input: AuthInput,
   dependencies: AuthDependencies = defaultDependencies,
 ): Promise<AuthResult> {
-  const authorization = headerValue(input.authorization);
-  if (authorization) {
-    const match = authorization.match(/^Bearer\s+(.+)$/i);
-    if (match) {
-      const token = match[1];
-      if (token.startsWith("sl_org_live_")) {
-        const organizationKey = await dependencies.getOrganizationApiKeyBySecret(token);
-        if (!organizationKey) return { status: "unauthorized" };
-        return {
-          status: "authenticated",
-          kind: "organization_key",
-          user: null,
-          organizationId: organizationKey.organizationId,
-          organizationApiKeyId: organizationKey.organizationApiKeyId,
-          organizationScopes: organizationKey.scopes,
-        };
-      }
+  const authorization = headerValue(
+    input.authorization ?? input.headers?.authorization,
+  );
+  if (hasMalformedAuthorization(authorization)) return { status: "invalid_token" };
 
-      const authenticated = await dependencies.authenticateBearer(token);
-      if (!authenticated) return { status: "invalid_token" };
-      const user = await dependencies.getUser(authenticated.identity.subject);
-      if (!user) return { status: "unauthorized" };
-      if (!(await dependencies.ensureDefaultOrganization(user.id))) {
-        return { status: "unauthorized" };
-      }
+  const selection = selectSingleCredential(presentedCredentials(input));
+  if (selection.kind === "absent") return { status: "missing" };
+  if (selection.kind !== "single") return { status: "ambiguous" };
+  const credential = selection.credential;
 
-      let teamId: string | undefined;
-      if (
-        authenticated.teamId &&
-        (await dependencies.getTeamMembership(authenticated.teamId, user.id))
-      ) {
-        teamId = authenticated.teamId;
-      }
+  if (credential.kind === "api_key") {
+    if (credential.secret.startsWith(ORGANIZATION_KEY_PREFIX)) {
+      const organizationKey = await dependencies.getOrganizationApiKeyBySecret(
+        credential.secret,
+      );
+      if (!organizationKey) return { status: "unauthorized" };
       return {
         status: "authenticated",
-        kind: "oauth",
-        identity: authenticated.identity,
-        user,
-        userId: user.id,
-        token,
-        clientId: authenticated.identity.clientId,
-        scopes: authenticated.identity.scopes,
-        teamId,
+        kind: "organization_key",
+        user: null,
+        organizationId: organizationKey.organizationId,
+        organizationApiKeyId: organizationKey.organizationApiKeyId,
+        organizationScopes: organizationKey.scopes,
       };
     }
-  }
-
-  const submittedApiKey =
-    headerValue(input.bodyApiKey) ?? headerValue(input.apiKeyHeader);
-  if (submittedApiKey) {
-    const apiKey = await dependencies.getApiKeyBySecret(submittedApiKey);
+    const apiKey = await dependencies.getApiKeyBySecret(credential.secret);
     if (!apiKey) return { status: "unauthorized" };
     return {
       status: "authenticated",
@@ -222,27 +232,54 @@ export async function resolveAuth(
     };
   }
 
-  if (input.headers) {
-    const session = await dependencies.resolveSession(input.headers);
-    if (session.status === "unavailable") return { status: "unavailable" };
-    if (session.status === "authenticated" && session.identity.method === "session") {
-      const user = await dependencies.getUser(session.identity.subject);
-      if (!user) return { status: "unauthorized" };
-      if (!(await dependencies.ensureDefaultOrganization(user.id))) {
-        return { status: "unauthorized" };
-      }
-      return {
-        status: "authenticated",
-        kind: "session",
-        identity: session.identity,
-        user,
-        userId: user.id,
-        scopes: ["web"],
-      };
+  if (credential.kind === "oauth") {
+    const token = credential.secret;
+    const authenticated = await dependencies.authenticateBearer(token);
+    if (!authenticated) return { status: "invalid_token" };
+    const user = await dependencies.getUser(authenticated.identity.subject);
+    if (!user) return { status: "unauthorized" };
+    if (!(await dependencies.ensureDefaultOrganization(user.id))) {
+      return { status: "unauthorized" };
     }
+
+    let teamId: string | undefined;
+    if (
+      authenticated.teamId &&
+      (await dependencies.getTeamMembership(authenticated.teamId, user.id))
+    ) {
+      teamId = authenticated.teamId;
+    }
+    return {
+      status: "authenticated",
+      kind: "oauth",
+      identity: authenticated.identity,
+      user,
+      userId: user.id,
+      token,
+      clientId: authenticated.identity.clientId,
+      scopes: authenticated.identity.scopes,
+      teamId,
+    };
   }
 
-  return { status: "missing" };
+  const session = await dependencies.resolveSession(input.headers ?? {});
+  if (session.status === "unavailable") return { status: "unavailable" };
+  if (session.status !== "authenticated" || session.identity.method !== "session") {
+    return { status: "unauthorized" };
+  }
+  const user = await dependencies.getUser(session.identity.subject);
+  if (!user) return { status: "unauthorized" };
+  if (!(await dependencies.ensureDefaultOrganization(user.id))) {
+    return { status: "unauthorized" };
+  }
+  return {
+    status: "authenticated",
+    kind: "session",
+    identity: session.identity,
+    user,
+    userId: user.id,
+    scopes: ["web"],
+  };
 }
 
 export function sendAuthError(
@@ -256,6 +293,14 @@ export function sendAuthError(
   if (result.status === "authenticated") return false;
   if (result.status === "unavailable") {
     response.status(503).json({ error: "authentication_unavailable" });
+    return true;
+  }
+  if (result.status === "ambiguous") {
+    response.status(400).json({
+      error: "credential_ambiguous",
+      error_description:
+        "Send exactly one credential: a session cookie, an Authorization bearer token, or an API key.",
+    });
     return true;
   }
   if (resourceMetadataUrl) {

@@ -18,6 +18,7 @@ mock.module("../user/queries", () => ({
   getUser: vi.fn(),
 }));
 mock.module("./better-auth", () => ({
+  SESSION_COOKIE_NAME: "sendlit.session_token",
   auth: { api: { getSession: vi.fn(async () => null) } },
   authIssuer: "https://sendlit.test/api/auth",
   mcpResourceUrl: "https://sendlit.test/mcp",
@@ -82,29 +83,72 @@ function deps(overrides: Partial<AuthDependencies> = {}): AuthDependencies {
 }
 
 describe("resolveAuth", () => {
-  it("rejects an invalid explicit bearer without falling back to an API key", async () => {
+  it("rejects an invalid explicit bearer without falling back to anything", async () => {
     const authDeps = deps({ authenticateBearer: vi.fn(async () => null) });
 
     await expect(
+      resolveAuth({ authorization: "Bearer expired" }, authDeps),
+    ).resolves.toEqual({ status: "invalid_token" });
+    expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+    expect(authDeps.resolveSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects more than one credential as ambiguous without checking any", async () => {
+    const cases = [
+      { authorization: "Bearer token", apiKeyHeader: "api-key" },
+      { apiKeyHeader: "api-key", headers: { cookie: "sendlit.session_token=s" } },
+      { authorization: "Bearer token", headers: { cookie: "sendlit.session_token=s" } },
+      { apiKeyHeader: "api-key", bodyApiKey: "other-key" },
+      { apiKeyHeader: "api-key", headers: { "x-api-key": "api-key" } },
+    ];
+    for (const input of cases) {
+      const authDeps = deps();
+      await expect(resolveAuth(input, authDeps)).resolves.toEqual({
+        status: "ambiguous",
+      });
+      expect(authDeps.authenticateBearer).not.toHaveBeenCalled();
+      expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+      expect(authDeps.resolveSession).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects a malformed Authorization header instead of ignoring it", async () => {
+    const authDeps = deps();
+    await expect(
       resolveAuth(
-        { authorization: "Bearer expired", apiKeyHeader: "api-key" },
+        { authorization: "Basic dXNlcjpwYXNz", apiKeyHeader: "api-key" },
         authDeps,
       ),
     ).resolves.toEqual({ status: "invalid_token" });
     expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
   });
 
-  it("maps a verified OAuth identity to a SendLit user", async () => {
+  it("does not count a browser session on MCP, where it is not a credential", async () => {
     const authDeps = deps();
-
     await expect(
       resolveAuth(
         {
           authorization: "Bearer better-auth-token",
-          apiKeyHeader: "api-key",
+          headers: { cookie: "sendlit.session_token=s" },
+          transport: "mcp",
         },
         authDeps,
       ),
+    ).resolves.toMatchObject({ status: "authenticated", kind: "oauth" });
+    await expect(
+      resolveAuth(
+        { headers: { cookie: "sendlit.session_token=s" }, transport: "mcp" },
+        authDeps,
+      ),
+    ).resolves.toEqual({ status: "missing" });
+    expect(authDeps.resolveSession).not.toHaveBeenCalled();
+  });
+
+  it("maps a verified OAuth identity to a SendLit user", async () => {
+    const authDeps = deps();
+
+    await expect(
+      resolveAuth({ authorization: "Bearer better-auth-token" }, authDeps),
     ).resolves.toMatchObject({
       status: "authenticated",
       kind: "oauth",
@@ -193,27 +237,12 @@ describe("resolveAuth", () => {
     expect(authDeps.authenticateBearer).not.toHaveBeenCalled();
   });
 
-  it("prefers an explicit API key over a browser session", async () => {
-    const authDeps = deps({
-      resolveSession: vi.fn(
-        async () =>
-          ({
-            status: "authenticated",
-            identity: sessionIdentity,
-          }) as AuthenticationResult,
-      ),
-    });
-
+  it("accepts the Platform-standard X-API-Key header", async () => {
+    const authDeps = deps();
     await expect(
-      resolveAuth(
-        {
-          apiKeyHeader: "api-key",
-          headers: { cookie: "sendlit.session_token=s" },
-        },
-        authDeps,
-      ),
+      resolveAuth({ headers: { "x-api-key": "api-key" } }, authDeps),
     ).resolves.toMatchObject({ kind: "team_key", teamId: "team-1" });
-    expect(authDeps.resolveSession).not.toHaveBeenCalled();
+    expect(authDeps.getApiKeyBySecret).toHaveBeenCalledWith("api-key");
   });
 
   it("distinguishes missing credentials, unknown credentials, and unavailable authentication", async () => {
@@ -276,5 +305,11 @@ describe("sendAuthError", () => {
 
     expect(sendAuthError(response, { status: "unavailable" })).toBe(true);
     expect(response.status).toHaveBeenLastCalledWith(503);
+
+    expect(sendAuthError(response, { status: "ambiguous" })).toBe(true);
+    expect(response.status).toHaveBeenLastCalledWith(400);
+    expect(response.json).toHaveBeenLastCalledWith(
+      expect.objectContaining({ error: "credential_ambiguous" }),
+    );
   });
 });

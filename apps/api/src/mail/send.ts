@@ -1,4 +1,4 @@
-import { captureError, captureEvent } from "../observability/posthog";
+import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getEspTransport, getTeamTransport } from "./transport";

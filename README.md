@@ -56,14 +56,14 @@ for the complete REST sequence, scopes, rotation, and migration from the old
 log-generated key. The plain Markdown guide is at
 [`apps/docs/integrations/headless-provisioning.md`](./apps/docs/integrations/headless-provisioning.md).
 
-Call the API with the key printed by the `init` service:
+Create a team API key in the dashboard (Settings → API keys) and call the API with it:
 
 ```bash
-curl http://localhost:5000/contacts \
+curl http://localhost:4000/contacts \
   -H "x-sendlit-apikey: sl_live_..."
 ```
 
-Connect an AI agent: add `https://api.sendlit.app/mcp` (or `http://localhost:5000/mcp` for your own instance) as a remote MCP server in your client and sign in. See the [MCP guide](./apps/docs/content/docs/developers/mcp.mdx).
+Connect an AI agent: add `https://api.sendlit.app/mcp` (or `http://localhost:4000/mcp` for your own Compose instance) as a remote MCP server in your client and sign in. See the [MCP guide](./apps/docs/content/docs/developers/mcp.mdx).
 
 ## Packages
 
@@ -79,7 +79,7 @@ The repository also contains the API (`apps/api`), which owns all product behavi
 
 ## Self-hosting
 
-The root Compose stack runs PostgreSQL, Redis, the API and the web dashboard, plus a one-shot `init` service that applies migrations and creates the first account, its default team and a team-scoped API key.
+The root Compose stack runs PostgreSQL, Redis, the API and the web dashboard, plus a one-shot `init` service that applies migrations and creates the initial owner's organization and default team. The API reports `/ready` once Postgres and Redis answer, and the dashboard waits for it.
 
 1. Set `BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` and the required secrets in `.env` before the first start.
 2. Run `docker compose up --build -d`. The `init` service applies migrations and creates the owner's organization and default team.
@@ -130,6 +130,8 @@ Re-run `bun run build:packages` (or use the packages' `dev` scripts) after chang
 
 ```bash
 bun run test       # API, web and package unit tests
+bun --filter @sendlit/api test:conformance  # CodeLit Platform conformance
+bun --filter @sendlit/api check:drift       # billing and Better Auth schema drift
 bun run typecheck  # TypeScript in every workspace
 bun run lint       # Biome lint
 bun run format     # Biome format (bun run format:check in CI)

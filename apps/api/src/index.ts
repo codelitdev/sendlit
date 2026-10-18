@@ -1,200 +1,98 @@
-import { toNodeHandler } from "better-auth/node";
-import cors from "cors";
-import express from "express";
-import rateLimit from "express-rate-limit";
-import swaggerUi from "swagger-ui-express";
-import { auth } from "./auth/better-auth";
-import oauthPagesRoutes from "./auth/oauth-pages";
-import { createInitialOrganizationOwnerIfMissing } from "./bootstrap";
-import contactsRoutes from "./contacts/routes";
-import segmentsRoutes from "./contacts/segments-routes";
-import { checkDatabaseConnection } from "./db/client";
-import deliveryRoutes from "./delivery/routes";
-import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
-import feedbackRoutes from "./delivery-feedback/feedback-routes";
-import { assertSuppressionHashKeyConfigured } from "./delivery-feedback/suppression-hash";
-import suppressionsRoutes from "./delivery-feedback/suppressions-routes";
-import espWebhookRoutes from "./delivery-feedback/webhook-route";
-import mcpRoutes from "./mcp/routes";
-import mediaRoutes from "./media/routes";
-import {
-  captureError,
-  getTeamId,
-  setupPosthogExpressErrorHandler,
-} from "./observability/posthog";
-import { openApiDocument } from "./openapi";
-import organizationRoutes from "./organization/routes";
-import overviewRoutes from "./overview/routes";
-import provisioningRoutes from "./provisioning/routes";
-import sequencesRoutes from "./sequences/routes";
-import logger from "./services/log";
-import espRoutes from "./settings/esp/routes";
-import generalSettingsRoutes from "./settings/general/routes";
-import teamRoutes from "./team/routes";
-import templatesRoutes from "./templates/routes";
-import trackingRoutes from "./tracking/routes";
-import transactionalRoutes from "./transactional/routes";
-import { assertEspEncryptionKeyConfigured } from "./utils/secret-crypto";
-
-// Start BullMQ workers
-import "./mail/worker";
-import "./mail/sequence-worker";
-import "./delivery-feedback/feedback-worker";
-
+import { createApp } from "./app";
 import { startAutomation } from "./automation/start";
-import { assertBillingProviderConfig, readBillingConfig } from "./billing/catalog";
-import { recordRequestedCatalogRevision } from "./billing/catalog-store";
-import { assertBillingEncryptionKeyConfigured } from "./billing/crypto";
-import { startBillingReconciliation } from "./billing/reconciliation";
-import billingRoutes from "./billing/routes";
-import billingWebhookRoutes from "./billing/webhooks/routes";
-import { startDeliveryLifecycleJobs } from "./delivery/lifecycle-jobs";
+import {
+  prepareBilling,
+  startBillingMaintenance,
+  validateBillingConfig,
+} from "./billing/lifecycle";
+import { createInitialOrganizationOwnerIfMissing } from "./bootstrap";
+import { checkDatabaseConnection, pool } from "./db/client";
+import {
+  startDeliveryLifecycleJobs,
+  stopDeliveryLifecycleJobs,
+} from "./delivery/lifecycle-jobs";
+import feedbackQueue from "./delivery-feedback/feedback-queue";
+import feedbackWorker from "./delivery-feedback/feedback-worker";
 import { startFeedbackReceiptPoller } from "./delivery-feedback/poller";
 import { startRetentionLoop } from "./delivery-feedback/retention-loop";
-import { startMailDispatchOutbox } from "./mail/dispatch-outbox";
+import { assertSuppressionHashKeyConfigured } from "./delivery-feedback/suppression-hash";
+import { checkReadiness, createApiShutdown, type ProcessState } from "./lifecycle";
+import {
+  startMailDispatchOutbox,
+  stopMailDispatchOutbox,
+} from "./mail/dispatch-outbox";
+import mailQueue from "./mail/queue";
+import sequenceQueue from "./mail/sequence-queue";
+import sequenceWorker from "./mail/sequence-worker";
+import mailWorker from "./mail/worker";
+import { captureError, getTeamId, shutdownObservability } from "./observability";
+import logger from "./services/log";
+import { assertEspEncryptionKeyConfigured } from "./utils/secret-crypto";
 
-const app = express();
+const state: ProcessState = { started: false, shuttingDown: false };
+
+const app = createApp({
+  readiness: () =>
+    checkReadiness(state, {
+      database: () => pool.query("select 1"),
+      redis: () => mailQueue.getJobCounts("wait"),
+    }),
+});
+
 startMailDispatchOutbox();
 startDeliveryLifecycleJobs();
 
-app.set("trust proxy", process.env.ENABLE_TRUST_PROXY === "true" ? 1 : false);
-
-app.use(cors());
-// MCP clients may use public dynamic client registration (DCR) during their
-// first OAuth connection. Keep that standards-based bootstrap available while
-// bounding anonymous client creation independently from authenticated API
-// traffic. Better Auth still validates the allowed scopes and PKCE below.
-app.use(
-  "/api/auth/oauth2/register",
-  rateLimit({
-    windowMs: 60_000,
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-      error: "too_many_requests",
-      error_description: "Too many client registration requests.",
-    },
-  }),
-);
-app.all("/api/auth/*", toNodeHandler(auth));
-app.use(oauthPagesRoutes);
-// The MCP handler owns JSON parsing and protocol content-type errors, so it
-// must be mounted before the API's global Express body parser.
-app.use(mcpRoutes);
-// Mounted before global body parsing: this route needs the unmodified raw
-// request bytes for provider signature verification and has no
-// session/API-key concept at all — see delivery-feedback/webhook-route.ts.
-app.use(espWebhookRoutes);
-app.use(billingWebhookRoutes);
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-
-// Status of the server and uptime.
-app.get("/health", (_req, res) => {
-  res.status(200).json({ status: "ok", uptime: process.uptime() });
+process.on("unhandledRejection", (reason) => {
+  logger.error({ error: (reason as Error)?.message }, "Unhandled promise rejection");
+  captureError({ error: reason, source: "process.unhandled_rejection" });
 });
-
-app.get("/openapi.json", (_req, res) => {
-  res.json(openApiDocument);
-});
-
-app.use(
-  "/docs",
-  swaggerUi.serve,
-  swaggerUi.setup(openApiDocument, {
-    explorer: true,
-    swaggerOptions: {
-      persistAuthorization: true,
-      displayRequestDuration: true,
-      docExpansion: "none",
-      defaultModelsExpandDepth: -1,
-    },
-  }),
-);
-
-// Public routes first: the MCP endpoint authenticates per-request via
-// OAuth bearer tokens or API keys; tracking/unsubscribe links are opened
-// directly by email clients/recipients. Since the routers below gate all of
-// their traffic with `router.use(requireAuth)`, anything mounted after them
-// would otherwise be incorrectly blocked by that blanket check.
-app.use(trackingRoutes);
-app.use(billingRoutes);
-app.use(provisioningRoutes);
-app.use(organizationRoutes);
-
-// Team management is user-scoped: `/teams` must be registered before the
-// routers below, whose blanket `requireTeam` middleware otherwise intercepts
-// it for multi-team accounts before `teamRoutes` can create/list teams.
-app.use(teamRoutes);
-app.use(deliveryRoutes);
-
-app.use(contactsRoutes);
-app.use(segmentsRoutes);
-app.use(mediaRoutes);
-app.use(templatesRoutes);
-app.use(sequencesRoutes);
-app.use(transactionalRoutes);
-app.use(espRoutes);
-app.use(generalSettingsRoutes);
-app.use(overviewRoutes);
-app.use(feedbackRoutes);
-app.use(deliveryEventsRoutes);
-app.use(suppressionsRoutes);
-
-app.use(
-  (
-    err: any,
-    req: express.Request,
-    _res: express.Response,
-    next: express.NextFunction,
-  ) => {
-    captureError({
-      error: err,
-      source: "express.uncaught",
-      teamId: getTeamId((req as any)?.user?.teamId),
-      context: {
-        path: req?.path,
-        method: req?.method,
-      },
-    });
-    next(err);
-  },
-);
-
-setupPosthogExpressErrorHandler(app);
-
-app.use(
-  (
-    err: any,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction,
-  ) => {
-    logger.error({ error: err.message }, "Unhandled express error");
-    res.status(500).json({ error: "server_error" });
-  },
-);
 
 const port = process.env.PORT || 80;
 
 checkConfig()
   .then(checkDatabaseConnection)
-  .then(async () => {
-    const billingConfig = readBillingConfig();
-    if (billingConfig.deploymentMode === "cloud") {
-      await recordRequestedCatalogRevision(billingConfig);
-    }
-  })
+  .then(prepareBilling)
   .then(createInitialOrganizationOwnerIfMissing)
   .then(() => {
-    app.listen(port, () => {
+    const server = app.listen(port, () => {
       logger.info(`SendLit API running at ${port}`);
     });
     startAutomation();
-    startBillingReconciliation();
+    const billingMaintenance = startBillingMaintenance();
     startFeedbackReceiptPoller();
     startRetentionLoop();
+    state.started = true;
+
+    const shutdown = createApiShutdown({
+      server,
+      steps: [
+        { name: "mail_dispatch_outbox", run: stopMailDispatchOutbox },
+        { name: "delivery_lifecycle_jobs", run: stopDeliveryLifecycleJobs },
+        { name: "billing_maintenance", run: () => billingMaintenance.stop() },
+        // Closing a BullMQ worker waits for the job it is running.
+        { name: "mail_worker", run: () => mailWorker.close() },
+        { name: "sequence_worker", run: () => sequenceWorker.close() },
+        { name: "feedback_worker", run: () => feedbackWorker.close() },
+        { name: "mail_queue", run: () => mailQueue.close() },
+        { name: "sequence_queue", run: () => sequenceQueue.close() },
+        { name: "feedback_queue", run: () => feedbackQueue.close() },
+        { name: "database", run: () => pool.end() },
+        { name: "observability", run: () => shutdownObservability(2_000) },
+      ],
+    });
+    for (const signal of ["SIGTERM", "SIGINT"] as const) {
+      process.once(signal, () => {
+        state.shuttingDown = true;
+        logger.info({ signal }, "Shutting down SendLit API");
+        shutdown
+          .shutdown()
+          .then(() => process.exit(0))
+          .catch((error) => {
+            logger.error({ error: error.message }, "Shutdown did not finish in time");
+            process.exit(1);
+          });
+      });
+    }
   })
   .catch((err) => {
     logger.error({ error: err.message }, "Failed to start SendLit API");
@@ -222,12 +120,7 @@ async function checkConfig() {
   }
   assertEspEncryptionKeyConfigured();
   assertSuppressionHashKeyConfigured();
-  // Billing mode is explicit and fail-closed. Local/self-hosted development
-  // must opt into OSS; cloud deployments must provide a complete, validated
-  // catalog instead of silently inheriting an environment default.
-  const billingConfig = readBillingConfig();
-  if (billingConfig.deploymentMode === "cloud") {
-    assertBillingProviderConfig(billingConfig);
-    assertBillingEncryptionKeyConfigured();
-  }
+  // Billing mode is explicit and fail-closed: OSS must be opted into, and
+  // cloud needs a complete, validated catalog and encryption key.
+  validateBillingConfig();
 }

@@ -12,7 +12,7 @@ import {
   sequences,
   teams,
 } from "../db/schema";
-import { captureEvent } from "../observability/posthog";
+import { captureEvent } from "../observability";
 // `contacts.contactId` auto-generates via `$defaultFn` (see `db/schema.ts`);
 // `generateUniqueId` is only still needed here for `unsubscribeToken`, an
 // opaque secret rather than a public resource ID.

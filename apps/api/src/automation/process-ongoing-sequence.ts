@@ -33,7 +33,7 @@ import {
   transformLinksForClickTracking,
 } from "../mail/render";
 import { sendMail } from "../mail/send";
-import { captureError, captureEvent } from "../observability/posthog";
+import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import { getGeneralSettings } from "../settings/general/queries";
 import { getTeam } from "../team/queries";

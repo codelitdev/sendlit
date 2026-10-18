@@ -21,7 +21,7 @@ import {
   addOrStrengthenSuppression,
   isRecipientSuppressed,
 } from "../delivery-feedback/suppression-queries";
-import { captureError } from "../observability/posthog";
+import { captureError } from "../observability";
 import logger from "../services/log";
 import { getTeam } from "../team/queries";
 import {

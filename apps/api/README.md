@@ -108,7 +108,11 @@ REST API reference, including request and response schemas.
 
 Fetch `GET /openapi.json` for the raw OpenAPI document.
 
-`GET /health` is available as a lightweight liveness check.
+`GET /health` is a lightweight liveness check. `GET /ready` returns 503 until
+startup finishes, while Postgres or Redis do not answer, and once shutdown
+starts; use it for load balancers and the Compose health check. On `SIGTERM`
+the API stops taking requests, lets workers finish their current job, then
+closes Redis, Postgres and telemetry.
 
 ## Authentication
 
@@ -360,6 +364,88 @@ feedback (`get_esp_feedback_connection`/`upsert_esp_feedback_connection`/
 `test_esp_feedback_connection`/`delete_esp_feedback_connection`,
 `list_delivery_events`/`get_delivery_event`,
 `list_suppressions`/`get_suppression`/`release_suppression`).
+
+## Billing operations
+
+Cloud billing (`SENDLIT_DEPLOYMENT_MODE=cloud`) runs on `@codelitdev/billing`
+with the `@codelitdev/platform` billing adapters. The engine owns paid state;
+SendLit reads it with `commercialState` and adds plan limits, operator
+overrides, the fair-use ramp and the 7-day past-due grace. The Dodo webhook URL
+is `POST /webhooks/billing/dodo`.
+
+Background work starts with `startBillingMaintenance()` (`src/billing/lifecycle.ts`):
+
+- Platform billing workers, every minute: catalog verification, the webhook
+  inbox, reconciliation (including stuck checkouts, plan changes and stale
+  subscriptions), deadlines (expired checkouts and lapsed paid access), and
+  hourly retention of stored secrets. The first batch runs one minute after
+  boot, never at boot.
+- SendLit loops: expired send reservations every 5 seconds (all modes), and
+  hourly pending-organization cleanup, sending-domain checks, reputation, and
+  SLO alerts.
+
+Shutdown awaits `stop()`, which waits for work already running.
+
+### Operator CLI
+
+Run `bun --filter @sendlit/api billing <command>` with the production
+environment. Commands that change state or decrypt data require
+`--operator <id>` (your user ID or handle) and are audited.
+
+| Command | Use |
+| --- | --- |
+| `health` | Inbox age, quarantined webhooks and jobs, stuck work, catalog state |
+| `catalog-status`, `catalog-verify` | Inspect, record and verify the requested catalog |
+| `catalog-abandon <revision> --operator <id> --reason <text>` | Abandon the requested revision (only that one) |
+| `inspect-org <org_id>` | The engine's paid state for an organization |
+| `reconcile-org <org_id> --operator <id>` | Re-read the organization's subscription from the provider |
+| `reconcile-cancellations [--dry-run]` | Report scheduled cancellations and queued cancellation jobs |
+| `reconcile-cancellations --apply --operator <id>` | Re-read each of them from the provider |
+| `webhook-retry <event_id> --operator <id> [--new-budget]` | Retry one webhook (drains the inbox) |
+| `webhook-inspect <event_id> --operator <id> --reason <text>` | Show one webhook, with its decrypted payload |
+| `set-override <org_id> --teams <n>\|none --contacts <n>\|none --operator <id> --reason <text>` | Operator limit overrides (audited) |
+| `cancel-subscription <org_id> --operator <id> --reason <text>` | Schedule cancellation at the period end. To end immediately, cancel in the Dodo dashboard. |
+
+### Deploying the 0.4.1 billing release
+
+`@codelitdev/billing` 0.4.1 stops paid access for a subscription whose
+cancellation was scheduled for the period end once its paid-through date has
+passed, even if the provider still reports it as active. The previous release
+kept such rows paid. The first deadline batch after deploy releases them, so a
+stale row (the customer renewed or resumed in Dodo and the webhook was missed)
+would be downgraded wrongly.
+
+Operators must run `reconcile-cancellations` once against production right
+after deploying this release, before the first billing worker tick (one
+minute after the API starts). Ideally, run it from the new image before
+switching traffic:
+
+1. Dry run and review the report: `subscriptions` (rows with
+   `paidThroughPassed: true` lose paid access unless Dodo says otherwise) and
+   `queuedCancellationJobs`. Queued cancellation jobs from the old release now
+   schedule cancellation at the period end when retried, instead of ending the
+   subscription immediately. Check them in Dodo first.
+
+   ```bash
+   bun --filter @sendlit/api billing reconcile-cancellations
+   ```
+
+2. Apply. Each subscription is re-read from Dodo and projected, so the
+   deadline batch then acts on current provider state:
+
+   ```bash
+   bun --filter @sendlit/api billing reconcile-cancellations --apply --operator <your-id>
+   ```
+
+   The command exits non-zero if any subscription could not be reconciled;
+   rerun it, or use `reconcile-org` for that organization.
+
+3. Run `billing health` and check that nothing is quarantined.
+
+Other one-time effects: action tokens issued in the five minutes before the
+deploy are rejected (the dashboard asks the person to retry), and the first
+reconciliation runs queue a one-time burst of Dodo reads for subscriptions not
+reconciled in the last hour.
 
 ## More Context
 

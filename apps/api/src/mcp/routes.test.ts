@@ -19,6 +19,7 @@ const mocks = {
 };
 
 mock.module("../auth/better-auth", () => ({
+  SESSION_COOKIE_NAME: "sendlit.session_token",
   auth: {
     options: { baseURL: "http://localhost:5000", basePath: "/api/auth" },
   },

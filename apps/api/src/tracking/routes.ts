@@ -8,7 +8,7 @@ import {
 } from "../contacts/queries";
 import { db } from "../db/client";
 import { emailEvents } from "../db/schema";
-import { captureError, captureEvent } from "../observability/posthog";
+import { captureError, captureEvent } from "../observability";
 import { getSequenceEmailByEmailId } from "../sequences/queries";
 import logger from "../services/log";
 import {

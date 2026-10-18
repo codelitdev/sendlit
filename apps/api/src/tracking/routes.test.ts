@@ -39,7 +39,7 @@ mock.module("../transactional/queries", () => ({
   incrementTransactionalEmailOpenCount: mocks.incrementOpen,
   incrementTransactionalEmailClickCount: mocks.incrementClick,
 }));
-mock.module("../observability/posthog", () => ({
+mock.module("../observability", () => ({
   captureEvent: mocks.captureEvent,
   captureError: mocks.captureError,
 }));

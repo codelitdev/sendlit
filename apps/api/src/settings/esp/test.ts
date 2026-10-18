@@ -1,5 +1,5 @@
 import { sendTestMail } from "../../mail/send";
-import { captureError, captureEvent } from "../../observability/posthog";
+import { captureError, captureEvent } from "../../observability";
 import { getEmailFrom } from "../../utils/mail";
 import { decryptEspCredentials, type EspConfig, recordEspTestResult } from "./queries";
 

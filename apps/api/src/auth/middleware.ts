@@ -60,6 +60,7 @@ export function createAuthMiddleware(
         apiKeyHeader: req.headers["x-sendlit-apikey"],
         bodyApiKey: req.body?.apikey,
         headers: req.headers,
+        transport: mode === "mcp" ? "mcp" : "http",
       });
 
       if (sendAuthError(res, auth, resourceMetadataUrl)) return;

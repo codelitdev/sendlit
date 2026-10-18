@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
 import { defaultEmail } from "@sendlit/email-editor";
 
-mock.module("../observability/posthog", () => ({
+mock.module("../observability", () => ({
   captureError: mock(),
 }));
 mock.module("../services/log", () => ({

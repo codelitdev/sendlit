@@ -36,6 +36,15 @@ All template-purpose, structural, and missing-variable checks happen before an
 email is queued. A rejected request does not create a partial destination
 template or transactional delivery.
 
+## Authentication errors
+
+| Status | Error                        | Meaning                                                                                                 |
+| ------ | ---------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `400`  | `credential_ambiguous`       | The request sent more than one credential. Send exactly one; see [Authentication](/developers/authentication). |
+| `401`  | `unauthorized`               | No credential, or an unknown, revoked or expired one.                                                    |
+| `401`  | `invalid_token`              | The bearer token is invalid or expired, or `Authorization` is not `Bearer <token>`.                       |
+| `503`  | `authentication_unavailable` | SendLit could not check the credential right now. Retry.                                                  |
+
 ## Plan and billing errors
 
 Plan limits and billing mutations use the same stable codes on REST and MCP:
