@@ -2,31 +2,48 @@
     "name": "sendlit-monorepo",
     "private": true,
     "version": "1.0.0",
-    "description": "",
-    "main": "index.js",
-    "scripts": {
-        "dev:api": "pnpm --filter @sendlit/api dev",
-        "dev:web": "pnpm --filter @sendlit/web dev",
-        "dev:docs": "pnpm --filter @sendlit/docs dev",
-        "ci:publish": "pnpm publish -r --no-git-checks",
-        "lint": "eslint packages apps --quiet",
-        "prettier": "prettier --write packages apps *.md",
-        "prepare": "husky",
-        "test": "pnpm --filter @sendlit/api test && pnpm --filter @sendlit/web test && pnpm --filter @sendlit/email-editor test && pnpm --filter @sendlit/email-blocks test && pnpm --filter sendlit test"
-    },
-    "keywords": [],
-    "author": "",
     "license": "AGPL-3.0-or-later",
-    "packageManager": "pnpm@11.11.0",
-    "devEngines": {
-        "packageManager": {
-            "name": "pnpm",
-            "version": "11.11.0",
-            "onFail": "download"
-        }
+    "type": "module",
+    "packageManager": "bun@1.4.1",
+    "engines": {
+        "bun": ">=1.4.1"
+    },
+    "workspaces": [
+        "apps/*",
+        "packages/*"
+    ],
+    "trustedDependencies": [
+        "esbuild",
+        "msgpackr-extract",
+        "sharp",
+        "unrs-resolver"
+    ],
+    "overrides": {
+        "@types/express": "4.17.25",
+        "@types/node": "22.20.0",
+        "mdast-util-to-markdown": "2.1.2",
+        "next": "16.3.6",
+        "qs": "6.16.0",
+        "react": "19.2.8",
+        "react-dom": "19.2.8"
+    },
+    "scripts": {
+        "dev:api": "bun --filter @sendlit/api dev",
+        "dev:web": "bun --filter @sendlit/web dev",
+        "dev:docs": "bun --filter @sendlit/docs dev",
+        "build:packages": "bun --filter @sendlit/email-editor build && bun --filter @sendlit/email-blocks build",
+        "build": "bun run build:packages && bun --filter sendlit build && bun --filter @sendlit/api build && bun --filter @sendlit/web build",
+        "typecheck": "bun run --workspaces --if-present typecheck",
+        "test": "bun run --workspaces --if-present test",
+        "ci:publish": "bun .github/scripts/resolve-workspace-ranges.mjs && bun run build:packages && bun --filter sendlit build && changeset publish",
+        "changeset": "changeset",
+        "prepare": "husky",
+        "lint": "eslint packages apps --quiet",
+        "prettier": "prettier --write packages apps *.md"
     },
     "devDependencies": {
         "@changesets/cli": "^2.31.0",
+        "@types/bun": "1.4.1",
         "eslint": "^9.39.4",
         "eslint-config-next": "16.0.3",
         "eslint-config-prettier": "^8.10.2",
@@ -38,7 +55,7 @@
         "husky": "^9.1.7",
         "lint-staged": "^15.5.2",
         "prettier": "^3.9.4",
+        "typescript": "5.9.3",
         "typescript-eslint": "^8.62.1"
-    },
-    "type": "module"
+    }
 }

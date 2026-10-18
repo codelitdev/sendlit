@@ -97,38 +97,42 @@ Prebuilt images are published on release tags: [`codelit/sendlit`](https://hub.d
 
 ## Development
 
-**Requirements:** Node.js 24, [pnpm](https://pnpm.io) 11, and Docker for PostgreSQL and Redis. We develop on Linux; on Windows, use WSL.
+**Requirements:** [Bun](https://bun.sh) 1.4.1 and Docker. We develop on Linux; on Windows, use WSL.
+
+SendLit follows the [CodeLit Platform](https://github.com/codelitdev/platform) conventions: one Bun workspace, the API runs its TypeScript directly on Bun, and shared infrastructure comes from the published `@codelitdev/*` packages.
 
 ```bash
-pnpm install
+bun install
 
-# 1. Start PostgreSQL and Redis (for example from docker-compose.yml).
-docker compose up -d postgres redis
+# 1. Start Postgres, Redis and Mailpit for local development.
+docker compose -f docker-compose.local.yml up -d
 
 # 2. Configure the API and create its tables.
 cp apps/api/.env.example apps/api/.env
-pnpm --filter @sendlit/api db:push
+bun --filter @sendlit/api db:migrate
 
-# 3. Build the shared packages once so the dashboard can import them.
-pnpm --filter @sendlit/email-editor build
-pnpm --filter @sendlit/email-blocks build
+# 3. Build the shared packages once so the API and dashboard can import them.
+bun run build:packages
 
 # 4. Configure the dashboard (API_URL must point at the API).
 cp apps/web/.env.example apps/web/.env.local
 
-pnpm dev:api    # API
-pnpm dev:web    # Dashboard on http://localhost:3000
-pnpm dev:docs   # Docs site
+bun run dev:api    # API
+bun run dev:web    # Dashboard on http://localhost:3000
+bun run dev:docs   # Docs site
 ```
 
-Re-run the package builds (or use their `dev` scripts) after changing either shared package. For full end-to-end work you'll also want a local SMTP catcher such as [Mailpit](https://mailpit.axllent.org).
+The local Compose file publishes Postgres on `5434`, Redis on `6380` and Mailpit on `1027` (SMTP) and `8027` (UI), so it can run next to the CourseLit and FrontLit local stacks. `apps/api/.env.example` already points at those ports. Bun loads `apps/api/.env` automatically.
+
+Re-run `bun run build:packages` (or use the packages' `dev` scripts) after changing `@sendlit/email-editor` or `@sendlit/email-blocks`.
 
 ### Tests
 
 ```bash
-pnpm test          # API, web and package unit tests
-pnpm lint          # ESLint
-pnpm prettier      # Format the codebase
+bun run test       # API, web and package unit tests
+bun run typecheck  # TypeScript in every workspace
+bun run lint       # ESLint
+bun run prettier   # Format the codebase
 ```
 
 ## Operator billing CLI
@@ -137,8 +141,8 @@ Cloud billing recovery is a CLI, not the dashboard. From the repo root it
 loads `apps/api/.env` and talks to that API's database:
 
 ```sh
-pnpm --filter @sendlit/api billing catalog-status
-pnpm --filter @sendlit/api billing catalog-verify
+bun --filter @sendlit/api billing catalog-status
+bun --filter @sendlit/api billing catalog-verify
 ```
 
 Run it with no arguments for the full list. Subcommands:
@@ -163,9 +167,9 @@ Product, API and email-block docs live in [`apps/docs`](apps/docs). The REST ref
 Contributions are welcome. For anything larger than a small fix, please open an issue first so we can agree on the approach.
 
 1. Fork the repository and create a branch.
-2. Make your change, with tests. If you change a published package, add a changeset with `pnpm changeset`.
+2. Make your change, with tests. If you change a published package, add a changeset with `bun run changeset`.
 3. If you change `apps/api`, update the REST API documentation and the MCP server too.
-4. Run `pnpm lint`, `pnpm prettier` and `pnpm test`.
+4. Run `bun run lint`, `bun run prettier`, `bun run typecheck` and `bun run test`.
 5. Open a pull request.
 
 Questions and ideas are welcome in [GitHub issues](https://github.com/codelitdev/sendlit/issues).

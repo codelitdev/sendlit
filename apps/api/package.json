@@ -2,26 +2,23 @@
     "name": "@sendlit/api",
     "version": "0.1.0",
     "private": true,
-    "description": "Better Auth protected REST API for composing, sending and automating email — the SendLit backend",
+    "description": "Better Auth protected REST API for composing, sending and automating email \u2014 the SendLit backend",
     "license": "AGPL-3.0-or-later",
-    "main": "dist/index.js",
     "scripts": {
         "prebuild": "codelit-billing generate --check --config billing.config.ts",
-        "build": "tsc",
-        "predev": "pnpm --filter @sendlit/api-contract build",
-        "dev": "nodemon --exec 'node --env-file=.env --import tsx' src/index.ts",
-        "access-token": "tsx --env-file=.env scripts/token.ts",
-        "billing": "tsx --env-file=.env scripts/billing.ts",
+        "build": "tsc --noEmit",
+        "dev": "bun --watch src/index.ts",
+        "access-token": "bun scripts/token.ts",
+        "billing": "bun scripts/billing.ts",
         "billing:generate": "codelit-billing generate --config billing.config.ts",
         "billing:generate:check": "codelit-billing generate --check --config billing.config.ts",
-        "start": "node dist/index.js",
-        "db:migrate": "node --import dotenv/config dist/db/migrate.js",
+        "start": "bun src/index.ts",
+        "db:migrate": "bun src/db/migrate.ts",
         "db:generate": "codelit-billing generate --config billing.config.ts && drizzle-kit generate",
         "db:push": "drizzle-kit push",
         "db:studio": "drizzle-kit studio",
         "test": "vitest run",
-        "test:watch": "vitest",
-        "typecheck": "tsc -p tsconfig.test.json"
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
         "@better-auth/cimd": "1.7.0-rc.4",
@@ -39,7 +36,6 @@
         "bullmq": "^5.79.2",
         "cors": "^2.8.6",
         "dodopayments": "^2.48.0",
-        "dotenv": "^17.4.2",
         "drizzle-orm": "^0.45.2",
         "express": "^4.22.2",
         "express-rate-limit": "^7.5.1",
@@ -72,9 +68,7 @@
         "@types/pg": "^8.20.0",
         "@types/swagger-ui-express": "^4.1.8",
         "drizzle-kit": "^0.28.1",
-        "nodemon": "^3.1.14",
-        "tsx": "^4.22.4",
-        "typescript": "^5.9.3",
+        "typescript": "5.9.3",
         "vitest": "^4.1.11"
     }
 }

@@ -1,21 +1,25 @@
 {
     "compilerOptions": {
-        "outDir": "dist",
-        "target": "es2020",
-        "module": "nodenext",
+        "target": "es2022",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "noEmit": true,
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
         "resolveJsonModule": true,
-        "moduleResolution": "nodenext",
+        "types": ["node", "bun"],
         "baseUrl": ".",
         "paths": {
             "@/*": ["./src/*"]
         }
     },
-    "include": ["src"],
-    // Tests are excluded from the production build (vitest is a devDependency);
-    // they're typechecked via tsconfig.test.json (`pnpm typecheck`) instead.
-    "exclude": ["**/*.test.ts", "src/test"]
+    "include": [
+        "src",
+        "scripts",
+        "billing.config.ts",
+        "drizzle.config.ts",
+        "vitest.config.ts"
+    ]
 }

@@ -2,10 +2,10 @@
     "exclude": ["dist", "build", "node_modules"],
     "compilerOptions": {
         "outDir": "./dist",
-        "lib": ["es2017"],
+        "lib": ["es2020"],
         "strict": true,
         "module": "esnext",
-        "moduleResolution": "node",
+        "moduleResolution": "bundler",
         "target": "es2017",
         "skipLibCheck": true,
         "baseUrl": ".",

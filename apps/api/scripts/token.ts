@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 import { eq } from "drizzle-orm";
 import { auth, authIssuer, validOAuthAudiences } from "../src/auth/better-auth";
 import { db, pool } from "../src/db/client";

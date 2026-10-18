@@ -16,6 +16,6 @@
 
 ## Testing Tips
 
-- From browser based smoke testing, boot up the API and Web app using `pnpm dev:api` and `pnpm dev:web` respectively.
+- From browser based smoke testing, boot up the API and Web app using `bun run dev:api` and `bun run dev:web` respectively.
 - The following docker containers need to be running: `postgres`, `redis`, `mailpit` for full integration testing.
 - Prefer Chrome DevTools MCP for browser-based debugging, in the headful mode.

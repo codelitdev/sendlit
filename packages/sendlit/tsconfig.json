@@ -6,7 +6,7 @@
         "types": ["node"],
         "strict": true,
         "module": "esnext",
-        "moduleResolution": "node",
+        "moduleResolution": "bundler",
         "target": "es2020",
         "skipLibCheck": true,
         "esModuleInterop": true,

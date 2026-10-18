@@ -48,19 +48,21 @@ describe("dashboard API client auth handling", () => {
 
     it("does not sign out on billing recent-authentication 401", async () => {
         const location = installWindow("/organizations");
-        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-            const url = String(input);
-            if (url.includes("/api/auth/sign-out")) {
-                return new Response(null, { status: 204 });
-            }
-            return new Response(
-                JSON.stringify({ error: "recent_authentication_required" }),
-                {
-                    status: 401,
-                    headers: { "content-type": "application/json" },
-                },
-            );
-        });
+        const fetchMock = vi.fn(
+            async (input: RequestInfo | URL, _init?: RequestInit) => {
+                const url = String(input);
+                if (url.includes("/api/auth/sign-out")) {
+                    return new Response(null, { status: 204 });
+                }
+                return new Response(
+                    JSON.stringify({ error: "recent_authentication_required" }),
+                    {
+                        status: 401,
+                        headers: { "content-type": "application/json" },
+                    },
+                );
+            },
+        );
         vi.stubGlobal("fetch", fetchMock);
         vi.stubGlobal("document", { cookie: "" });
 

@@ -47,11 +47,10 @@
     "scripts": {
         "test": "vitest run",
         "clean": "rimraf dist/",
-        "prebuild": "pnpm --filter @sendlit/api-contract build",
         "build": "tsup && node -e \"require('fs').copyFileSync('dist/index.d.ts', 'dist/index.d.mts')\"",
-        "prepublishOnly": "pnpm run build",
+        "prepublishOnly": "bun run build",
         "dev": "tsup --watch",
-        "check-types": "tsc --noEmit"
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
         "@ts-rest/core": "^3.52.1",
@@ -62,7 +61,7 @@
         "@types/node": "^22.20.0",
         "rimraf": "^4.4.1",
         "tsup": "6.6.0",
-        "typescript": "^5.9.3",
+        "typescript": "5.9.3",
         "vitest": "^4.1.11"
     }
 }

@@ -1,8 +1,8 @@
 # Local development dependencies only. Run the SendLit API and web app on the host.
 #
 #   docker compose -f docker-compose.local.yml up -d
-#   pnpm --filter @sendlit/api db:push
-#   pnpm dev:api
+#   bun --filter @sendlit/api db:migrate
+#   bun run dev:api
 #
 # Defaults are intentionally distinct from the CourseLit and FrontLit local
 # Compose stacks so all three can run at the same time.

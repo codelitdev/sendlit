@@ -1,6 +1,3 @@
-import { config as loadDotFile } from "dotenv";
-loadDotFile();
-
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";

@@ -33,13 +33,13 @@ email provider configuration.
 3. Push the database schema:
 
     ```sh
-    pnpm --filter @sendlit/api db:push
+    bun --filter @sendlit/api db:push
     ```
 
 4. Start the API:
 
     ```sh
-    pnpm --filter @sendlit/api dev
+    bun --filter @sendlit/api dev
     ```
 
 The server listens on `PORT` from `.env` (`5000` in `.env.example`; `80` if
@@ -53,7 +53,7 @@ Production-style Docker deployments should apply the checked-in Drizzle SQL
 migrations before starting the API. The API image includes:
 
 - `apps/api/drizzle` — generated migration SQL and metadata;
-- `apps/api/dist/db/migrate.js` — a one-shot migration runner.
+- `apps/api/src/db/migrate.ts` — a one-shot migration runner (`bun apps/api/src/db/migrate.ts`).
 
 The root self-hosted deployment runs this through a Compose `init` service:
 
@@ -68,7 +68,7 @@ Startup order:
 
 1. Postgres starts and passes its health check.
 2. Redis starts and passes its health check.
-3. `init` runs `node apps/api/dist/db/migrate.js`, ensures the configured
+3. `init` runs `bun apps/api/src/db/migrate.ts`, ensures the configured
    initial organization owner and default organization/team exist, then
    registers configured organization keys from `.env`.
 4. The init container exits successfully.
@@ -77,7 +77,7 @@ Startup order:
 
 This mirrors an init-container pattern. The API process itself does not apply
 migrations on every boot; it only checks that the database is reachable. For
-local development, continue using `pnpm --filter @sendlit/api db:push` unless
+local development, continue using `bun --filter @sendlit/api db:push` unless
 you are explicitly testing generated migration files.
 
 ### Development-only template reset
@@ -93,7 +93,7 @@ For a disposable local database only, reset the schema and recreate it:
 # Verify DB_CONNECTION_STRING points at a disposable development/test database.
 psql "$DB_CONNECTION_STRING" \
   -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-pnpm --filter @sendlit/api db:push
+bun --filter @sendlit/api db:push
 ```
 
 This destroys all rows in that database. Never run it against a deployment
@@ -145,7 +145,7 @@ For local REST API testing with `Authorization: Bearer <token>`, run the API
 package helper:
 
 ```sh
-pnpm --filter @sendlit/api run access-token email@address.com
+bun --filter @sendlit/api run access-token email@address.com
 ```
 
 The email must already belong to a registered SendLit account and Better Auth
@@ -153,7 +153,7 @@ user. The account must also belong to a team. If the account belongs to more
 than one team, pass the public team ID explicitly:
 
 ```sh
-pnpm --filter @sendlit/api run access-token email@address.com --team team_...
+bun --filter @sendlit/api run access-token email@address.com --team team_...
 ```
 
 The command prints only the access token. Use it in REST requests as:

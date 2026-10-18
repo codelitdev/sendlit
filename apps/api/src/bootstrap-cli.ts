@@ -1,6 +1,3 @@
-import { config as loadDotFile } from "dotenv";
-loadDotFile();
-
 import { createInitialOrganizationOwnerIfMissing } from "./bootstrap.js";
 import { pool } from "./db/client.js";
 import logger from "./services/log.js";

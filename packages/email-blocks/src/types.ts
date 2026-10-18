@@ -1,5 +1,5 @@
 import type { Email } from "@sendlit/email-editor";
-import type { TemplatePurpose } from "@sendlit/api-contract";
+import type { TemplatePurpose } from "@sendlit/api-contract/schemas/templates";
 
 export type MailType = "broadcast" | "sequence";
 export type SequenceStatus = "draft" | "active" | "paused" | "completed";

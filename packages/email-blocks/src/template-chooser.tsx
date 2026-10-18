@@ -3,7 +3,7 @@
 import type { EmailTemplate } from "./types";
 import type { Email } from "@sendlit/email-editor";
 import type { BlockComponent } from "@sendlit/email-editor";
-import type { TemplatePurpose } from "@sendlit/api-contract";
+import type { TemplatePurpose } from "@sendlit/api-contract/schemas/templates";
 import { EmailPreview } from "./email-preview";
 import { Badge } from "./components/ui/badge";
 
