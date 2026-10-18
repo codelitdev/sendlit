@@ -1,8 +1,7 @@
 import { DEFAULT_MAX_UPLOAD_SIZE_BYTES } from "@/lib/media-limits";
 
 export const API_URL = process.env.API_URL || "http://localhost:5000";
-export const API_PUBLIC_URL =
-    process.env.API_PUBLIC_URL || "http://localhost:5000";
+export const API_PUBLIC_URL = process.env.API_PUBLIC_URL || "http://localhost:5000";
 
 /** This app's own public origin — sent to `apps/api`'s hosted login page
  * (`GET /login?redirect=...`) as where to bounce the browser back to after
@@ -17,8 +16,8 @@ export const WEB_CLIENT = process.env.WEB_CLIENT || "http://localhost:3000";
  * `MaxUploadSizeProvider`, so it can be changed at deploy/container-start
  * time without rebuilding the app — unlike `NEXT_PUBLIC_*` vars. */
 export function getMaxUploadSizeBytes() {
-    const parsed = Number(process.env.MAX_UPLOAD_SIZE);
-    return parsed > 0 ? parsed : DEFAULT_MAX_UPLOAD_SIZE_BYTES;
+  const parsed = Number(process.env.MAX_UPLOAD_SIZE);
+  return parsed > 0 ? parsed : DEFAULT_MAX_UPLOAD_SIZE_BYTES;
 }
 
 export const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
@@ -30,15 +29,14 @@ export const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
  * so the token can be set at container start without a rebuild.
  */
 export function getPosthogBrowserConfig() {
-    const apiKey = process.env.POSTHOG_API_KEY?.trim() || null;
-    if (!apiKey) {
-        return null;
-    }
+  const apiKey = process.env.POSTHOG_API_KEY?.trim() || null;
+  if (!apiKey) {
+    return null;
+  }
 
-    return {
-        apiKey,
-        host: process.env.POSTHOG_HOST?.trim() || DEFAULT_POSTHOG_HOST,
-        environment:
-            process.env.DEPLOY_ENV || process.env.NODE_ENV || "unknown",
-    };
+  return {
+    apiKey,
+    host: process.env.POSTHOG_HOST?.trim() || DEFAULT_POSTHOG_HOST,
+    environment: process.env.DEPLOY_ENV || process.env.NODE_ENV || "unknown",
+  };
 }

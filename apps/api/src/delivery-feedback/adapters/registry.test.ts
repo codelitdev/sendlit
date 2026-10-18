@@ -3,13 +3,13 @@ import { feedbackCapableProviders } from "../../config/constants";
 import { getProviderAdapter } from "./registry";
 
 describe("provider adapter registry", () => {
-    it("registers an adapter for every feedback-capable provider", () => {
-        for (const provider of feedbackCapableProviders) {
-            expect(getProviderAdapter(provider)?.provider).toBe(provider);
-        }
-    });
+  it("registers an adapter for every feedback-capable provider", () => {
+    for (const provider of feedbackCapableProviders) {
+      expect(getProviderAdapter(provider)?.provider).toBe(provider);
+    }
+  });
 
-    it("returns null for unsupported providers", () => {
-        expect(getProviderAdapter("smtp")).toBeNull();
-    });
+  it("returns null for unsupported providers", () => {
+    expect(getProviderAdapter("smtp")).toBeNull();
+  });
 });

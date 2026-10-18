@@ -8,13 +8,13 @@ import logger from "./services/log.js";
  * organization API keys supplied through environment configuration.
  */
 createInitialOrganizationOwnerIfMissing()
-    .catch((error) => {
-        logger.error(
-            { error: error instanceof Error ? error.message : String(error) },
-            "Failed to bootstrap the initial organization owner",
-        );
-        process.exitCode = 1;
-    })
-    .finally(async () => {
-        await pool.end();
-    });
+  .catch((error) => {
+    logger.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      "Failed to bootstrap the initial organization owner",
+    );
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await pool.end();
+  });

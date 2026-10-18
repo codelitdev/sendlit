@@ -1,52 +1,52 @@
 {
-    "name": "sendlit-monorepo",
-    "private": true,
-    "version": "1.0.0",
-    "license": "AGPL-3.0-or-later",
-    "type": "module",
-    "packageManager": "bun@1.4.1",
-    "engines": {
-        "bun": ">=1.4.1"
-    },
-    "workspaces": [
-        "apps/*",
-        "packages/*"
-    ],
-    "trustedDependencies": [
-        "esbuild",
-        "msgpackr-extract",
-        "sharp",
-        "unrs-resolver"
-    ],
-    "overrides": {
-        "@types/express": "4.17.25",
-        "@types/node": "22.20.0",
-        "mdast-util-to-markdown": "2.1.2",
-        "next": "16.3.6",
-        "qs": "6.16.0",
-        "react": "19.2.8",
-        "react-dom": "19.2.8"
-    },
-    "scripts": {
-        "dev:api": "bun --filter @sendlit/api dev",
-        "dev:web": "bun --filter @sendlit/web dev",
-        "dev:docs": "bun --filter @sendlit/docs dev",
-        "build:packages": "bun --filter @sendlit/email-editor build && bun --filter @sendlit/email-blocks build",
-        "build": "bun run build:packages && bun --filter sendlit build && bun --filter @sendlit/api build && bun --filter @sendlit/web build",
-        "typecheck": "bun run --workspaces --if-present typecheck",
-        "test": "bun run --workspaces --if-present test",
-        "ci:publish": "bun .github/scripts/resolve-workspace-ranges.mjs && bun run build:packages && bun --filter sendlit build && changeset publish",
-        "changeset": "changeset",
-        "prepare": "husky",
-        "lint": "biome lint .",
-        "format": "biome format --write .",
-        "format:check": "biome ci --linter-enabled=false ."
-    },
-    "devDependencies": {
-        "@biomejs/biome": "2.5.12",
-        "@changesets/cli": "^2.31.0",
-        "@types/bun": "1.4.1",
-        "husky": "^9.1.7",
-        "typescript": "5.9.3"
-    }
+  "name": "sendlit-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "packageManager": "bun@1.4.1",
+  "engines": {
+    "bun": ">=1.4.1"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "trustedDependencies": [
+    "esbuild",
+    "msgpackr-extract",
+    "sharp",
+    "unrs-resolver"
+  ],
+  "overrides": {
+    "@types/express": "4.17.25",
+    "@types/node": "22.20.0",
+    "mdast-util-to-markdown": "2.1.2",
+    "next": "16.3.6",
+    "qs": "6.16.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "scripts": {
+    "dev:api": "bun --filter @sendlit/api dev",
+    "dev:web": "bun --filter @sendlit/web dev",
+    "dev:docs": "bun --filter @sendlit/docs dev",
+    "build:packages": "bun --filter @sendlit/email-editor build && bun --filter @sendlit/email-blocks build",
+    "build": "bun run build:packages && bun --filter sendlit build && bun --filter @sendlit/api build && bun --filter @sendlit/web build",
+    "typecheck": "bun run --workspaces --if-present typecheck",
+    "test": "bun run --workspaces --if-present test",
+    "ci:publish": "bun .github/scripts/resolve-workspace-ranges.mjs && bun run build:packages && bun --filter sendlit build && changeset publish",
+    "changeset": "changeset",
+    "prepare": "husky",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "format:check": "biome ci --linter-enabled=false ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@changesets/cli": "^2.31.0",
+    "@types/bun": "1.4.1",
+    "husky": "^9.1.7",
+    "typescript": "5.9.3"
+  }
 }

@@ -6,30 +6,24 @@ import jwt from "jsonwebtoken";
  * `courselit/packages/common-logic` `jwtUtils.generateToken`.
  */
 export function generatePixelToken(
-    payload: Record<string, unknown>,
-    expiresIn: string = "365d",
+  payload: Record<string, unknown>,
+  expiresIn: string = "365d",
 ): string {
-    const secret = process.env.PIXEL_SIGNING_SECRET;
-    if (!secret) {
-        throw new Error(
-            "PIXEL_SIGNING_SECRET environment variable is not defined",
-        );
-    }
-    return jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
+  const secret = process.env.PIXEL_SIGNING_SECRET;
+  if (!secret) {
+    throw new Error("PIXEL_SIGNING_SECRET environment variable is not defined");
+  }
+  return jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
 }
 
-export function verifyPixelToken<T = Record<string, unknown>>(
-    token: string,
-): T | null {
-    const secret = process.env.PIXEL_SIGNING_SECRET;
-    if (!secret) {
-        throw new Error(
-            "PIXEL_SIGNING_SECRET environment variable is not defined",
-        );
-    }
-    try {
-        return jwt.verify(token, secret) as T;
-    } catch {
-        return null;
-    }
+export function verifyPixelToken<T = Record<string, unknown>>(token: string): T | null {
+  const secret = process.env.PIXEL_SIGNING_SECRET;
+  if (!secret) {
+    throw new Error("PIXEL_SIGNING_SECRET environment variable is not defined");
+  }
+  try {
+    return jwt.verify(token, secret) as T;
+  } catch {
+    return null;
+  }
 }

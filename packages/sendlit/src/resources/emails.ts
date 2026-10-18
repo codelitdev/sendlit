@@ -1,11 +1,5 @@
 import { contract } from "@sendlit/api-contract";
-import {
-    paginate,
-    type Body,
-    type HttpClient,
-    type Ok,
-    type Query,
-} from "../http";
+import { type Body, type HttpClient, type Ok, paginate, type Query } from "../http";
 import { assertId } from "../validate";
 
 const routes = contract.transactional;
@@ -18,33 +12,33 @@ export type ListEmailsQuery = Query<typeof routes.list>;
 
 /** Transactional (single, API-triggered) emails. */
 export class Emails {
-    constructor(private readonly http: HttpClient) {}
+  constructor(private readonly http: HttpClient) {}
 
-    /**
-     * Queues one email and resolves with its id and initial status; poll
-     * `get` for delivery progress. Passing `idempotencyKey` makes the call
-     * safe to retry, so the SDK retries it on 5xx and network errors too.
-     */
-    async send(input: SendEmailInput): Promise<SendEmailResponse> {
-        return this.http.request(routes.send, {
-            body: input,
-            retrySafe: !!input.idempotencyKey,
-        });
-    }
+  /**
+   * Queues one email and resolves with its id and initial status; poll
+   * `get` for delivery progress. Passing `idempotencyKey` makes the call
+   * safe to retry, so the SDK retries it on 5xx and network errors too.
+   */
+  async send(input: SendEmailInput): Promise<SendEmailResponse> {
+    return this.http.request(routes.send, {
+      body: input,
+      retrySafe: !!input.idempotencyKey,
+    });
+  }
 
-    async get(txeId: string): Promise<TransactionalEmailDetail> {
-        return this.http.request(routes.get, {
-            params: { txeId: assertId(txeId, "txeId") },
-        });
-    }
+  async get(txeId: string): Promise<TransactionalEmailDetail> {
+    return this.http.request(routes.get, {
+      params: { txeId: assertId(txeId, "txeId") },
+    });
+  }
 
-    async list(query: ListEmailsQuery = {}): Promise<Ok<typeof routes.list>> {
-        return this.http.request(routes.list, { query });
-    }
+  async list(query: ListEmailsQuery = {}): Promise<Ok<typeof routes.list>> {
+    return this.http.request(routes.list, { query });
+  }
 
-    listAll(
-        query: Omit<ListEmailsQuery, "offset"> = {},
-    ): AsyncGenerator<TransactionalEmail, void, undefined> {
-        return paginate((offset) => this.list({ ...query, offset }));
-    }
+  listAll(
+    query: Omit<ListEmailsQuery, "offset"> = {},
+  ): AsyncGenerator<TransactionalEmail, void, undefined> {
+    return paginate((offset) => this.list({ ...query, offset }));
+  }
 }

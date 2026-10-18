@@ -7,166 +7,166 @@ const captureEventMock = vi.fn();
 const assertMailingAddressConfiguredMock = vi.fn();
 
 vi.mock("./transport", () => ({
-    getTeamTransport: getTeamTransportMock,
+  getTeamTransport: getTeamTransportMock,
 }));
 
 vi.mock("../observability/posthog", () => ({
-    captureError: captureErrorMock,
-    captureEvent: captureEventMock,
+  captureError: captureErrorMock,
+  captureEvent: captureEventMock,
 }));
 
 vi.mock("../services/log", () => ({
-    default: {
-        info: vi.fn(),
-    },
+  default: {
+    info: vi.fn(),
+  },
 }));
 
 vi.mock("../settings/general/queries", () => ({
-    assertMailingAddressConfigured: assertMailingAddressConfiguredMock,
+  assertMailingAddressConfigured: assertMailingAddressConfiguredMock,
 }));
 
 describe("sendMail", () => {
-    beforeEach(() => {
-        vi.resetModules();
-        vi.clearAllMocks();
-        process.env.NODE_ENV = "production";
-        assertMailingAddressConfiguredMock.mockResolvedValue(undefined);
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    process.env.NODE_ENV = "production";
+    assertMailingAddressConfiguredMock.mockResolvedValue(undefined);
+  });
+
+  it("does not send when the team has no mailing address", async () => {
+    assertMailingAddressConfiguredMock.mockRejectedValueOnce(
+      new Error("mailing_address_required"),
+    );
+    getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
+    const { sendMail } = await import("./send.js");
+
+    await expect(
+      sendMail({
+        purpose: "campaign",
+        from: "Sender <sender@example.com>",
+        to: "contact@example.com",
+        subject: "Hello",
+        html: "<p>Hello</p>",
+        teamId: "team-1",
+      }),
+    ).rejects.toThrow("mailing_address_required");
+
+    expect(getTeamTransportMock).not.toHaveBeenCalled();
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it("fails clearly when a team has no ESP configured", async () => {
+    getTeamTransportMock.mockResolvedValue(null);
+    const { sendMail } = await import("./send.js");
+
+    await expect(
+      sendMail({
+        purpose: "campaign",
+        from: "Sender <sender@example.com>",
+        to: "contact@example.com",
+        subject: "Hello",
+        html: "<p>Hello</p>",
+        teamId: "team-1",
+      }),
+    ).rejects.toThrow("Team ESP is not configured.");
+
+    expect(sendMailMock).not.toHaveBeenCalled();
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "mail.send",
+        teamId: "team-1",
+        severity: "critical",
+      }),
+    );
+  });
+
+  it("fails closed without an ESP outside production too", async () => {
+    process.env.NODE_ENV = "test";
+    getTeamTransportMock.mockResolvedValue(null);
+    const { sendMail } = await import("./send.js");
+
+    await expect(
+      sendMail({
+        purpose: "campaign",
+        from: "Sender <sender@example.com>",
+        to: "contact@example.com",
+        subject: "Hello",
+        html: "<p>Hello</p>",
+        teamId: "team-1",
+      }),
+    ).rejects.toThrow("Team ESP is not configured.");
+  });
+
+  it("sends through the team's configured ESP", async () => {
+    getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
+    const { sendMail } = await import("./send.js");
+
+    await sendMail({
+      purpose: "campaign",
+      from: "Sender <sender@example.com>",
+      to: "contact@example.com",
+      subject: "Hello",
+      html: "<p>Hello</p>",
+      headers: { "List-Unsubscribe": "<mailto:unsubscribe@example.com>" },
+      teamId: "team-1",
     });
 
-    it("does not send when the team has no mailing address", async () => {
-        assertMailingAddressConfiguredMock.mockRejectedValueOnce(
-            new Error("mailing_address_required"),
-        );
-        getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
-        const { sendMail } = await import("./send.js");
-
-        await expect(
-            sendMail({
-                purpose: "campaign",
-                from: "Sender <sender@example.com>",
-                to: "contact@example.com",
-                subject: "Hello",
-                html: "<p>Hello</p>",
-                teamId: "team-1",
-            }),
-        ).rejects.toThrow("mailing_address_required");
-
-        expect(getTeamTransportMock).not.toHaveBeenCalled();
-        expect(sendMailMock).not.toHaveBeenCalled();
+    expect(sendMailMock).toHaveBeenCalledWith({
+      from: "Sender <sender@example.com>",
+      to: "contact@example.com",
+      subject: "Hello",
+      html: "<p>Hello</p>",
+      headers: { "List-Unsubscribe": "<mailto:unsubscribe@example.com>" },
     });
+    expect(captureEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "email_sent",
+        source: "mail.send",
+        teamId: "team-1",
+      }),
+    );
+  });
 
-    it("fails clearly when a team has no ESP configured", async () => {
-        getTeamTransportMock.mockResolvedValue(null);
-        const { sendMail } = await import("./send.js");
+  it("sends transactional mail without requiring a mailing address", async () => {
+    assertMailingAddressConfiguredMock.mockRejectedValueOnce(
+      new Error("mailing_address_required"),
+    );
+    getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
+    const { sendMail } = await import("./send.js");
 
-        await expect(
-            sendMail({
-                purpose: "campaign",
-                from: "Sender <sender@example.com>",
-                to: "contact@example.com",
-                subject: "Hello",
-                html: "<p>Hello</p>",
-                teamId: "team-1",
-            }),
-        ).rejects.toThrow("Team ESP is not configured.");
+    await expect(
+      sendMail({
+        purpose: "transactional",
+        from: "Sender <sender@example.com>",
+        to: "contact@example.com",
+        subject: "Your sign-in code",
+        html: "<p>123456</p>",
+        teamId: "team-1",
+      }),
+    ).resolves.toEqual({ messageId: null, providerResponse: null });
 
-        expect(sendMailMock).not.toHaveBeenCalled();
-        expect(captureErrorMock).toHaveBeenCalledWith(
-            expect.objectContaining({
-                source: "mail.send",
-                teamId: "team-1",
-                severity: "critical",
-            }),
-        );
-    });
+    expect(assertMailingAddressConfiguredMock).not.toHaveBeenCalled();
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+  });
 
-    it("fails closed without an ESP outside production too", async () => {
-        process.env.NODE_ENV = "test";
-        getTeamTransportMock.mockResolvedValue(null);
-        const { sendMail } = await import("./send.js");
+  it("does not require a mailing address to test an ESP", async () => {
+    assertMailingAddressConfiguredMock.mockRejectedValueOnce(
+      new Error("mailing_address_required"),
+    );
+    getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
+    const { sendTestMail } = await import("./send.js");
 
-        await expect(
-            sendMail({
-                purpose: "campaign",
-                from: "Sender <sender@example.com>",
-                to: "contact@example.com",
-                subject: "Hello",
-                html: "<p>Hello</p>",
-                teamId: "team-1",
-            }),
-        ).rejects.toThrow("Team ESP is not configured.");
-    });
+    await expect(
+      sendTestMail({
+        from: "Sender <sender@example.com>",
+        to: "owner@example.com",
+        subject: "ESP test",
+        html: "<p>Test</p>",
+        teamId: "team-1",
+      }),
+    ).resolves.toBeUndefined();
 
-    it("sends through the team's configured ESP", async () => {
-        getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
-        const { sendMail } = await import("./send.js");
-
-        await sendMail({
-            purpose: "campaign",
-            from: "Sender <sender@example.com>",
-            to: "contact@example.com",
-            subject: "Hello",
-            html: "<p>Hello</p>",
-            headers: { "List-Unsubscribe": "<mailto:unsubscribe@example.com>" },
-            teamId: "team-1",
-        });
-
-        expect(sendMailMock).toHaveBeenCalledWith({
-            from: "Sender <sender@example.com>",
-            to: "contact@example.com",
-            subject: "Hello",
-            html: "<p>Hello</p>",
-            headers: { "List-Unsubscribe": "<mailto:unsubscribe@example.com>" },
-        });
-        expect(captureEventMock).toHaveBeenCalledWith(
-            expect.objectContaining({
-                event: "email_sent",
-                source: "mail.send",
-                teamId: "team-1",
-            }),
-        );
-    });
-
-    it("sends transactional mail without requiring a mailing address", async () => {
-        assertMailingAddressConfiguredMock.mockRejectedValueOnce(
-            new Error("mailing_address_required"),
-        );
-        getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
-        const { sendMail } = await import("./send.js");
-
-        await expect(
-            sendMail({
-                purpose: "transactional",
-                from: "Sender <sender@example.com>",
-                to: "contact@example.com",
-                subject: "Your sign-in code",
-                html: "<p>123456</p>",
-                teamId: "team-1",
-            }),
-        ).resolves.toEqual({ messageId: null, providerResponse: null });
-
-        expect(assertMailingAddressConfiguredMock).not.toHaveBeenCalled();
-        expect(sendMailMock).toHaveBeenCalledTimes(1);
-    });
-
-    it("does not require a mailing address to test an ESP", async () => {
-        assertMailingAddressConfiguredMock.mockRejectedValueOnce(
-            new Error("mailing_address_required"),
-        );
-        getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
-        const { sendTestMail } = await import("./send.js");
-
-        await expect(
-            sendTestMail({
-                from: "Sender <sender@example.com>",
-                to: "owner@example.com",
-                subject: "ESP test",
-                html: "<p>Test</p>",
-                teamId: "team-1",
-            }),
-        ).resolves.toBeUndefined();
-
-        expect(assertMailingAddressConfiguredMock).not.toHaveBeenCalled();
-        expect(sendMailMock).toHaveBeenCalledTimes(1);
-    });
+    expect(assertMailingAddressConfiguredMock).not.toHaveBeenCalled();
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+  });
 });

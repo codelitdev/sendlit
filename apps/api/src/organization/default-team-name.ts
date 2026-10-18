@@ -4,8 +4,8 @@
  * other flows that need a safe default.
  */
 export function defaultTeamName(organizationName: string): string {
-    const name = organizationName.trim();
-    if (!name) return "Default Team";
-    if (/\bteam$/i.test(name)) return name;
-    return `${name} Team`;
+  const name = organizationName.trim();
+  if (!name) return "Default Team";
+  if (/\bteam$/i.test(name)) return name;
+  return `${name} Team`;
 }

@@ -1,4 +1,4 @@
 export {
-    runBillingProviderContract,
-    createContractFake,
+  createContractFake,
+  runBillingProviderContract,
 } from "@codelitdev/billing/testing";

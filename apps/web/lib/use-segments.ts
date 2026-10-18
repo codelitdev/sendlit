@@ -1,24 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type {
-    ContactFilterSegment,
-    ContactFilterWithAggregator,
+  ContactFilterSegment,
+  ContactFilterWithAggregator,
 } from "@sendlit/email-blocks";
+import { useEffect, useState } from "react";
+import { createSegment, deleteSegment, listSegments, type Segment } from "./api";
 import { ApiError } from "./api-client";
-import {
-    createSegment,
-    deleteSegment,
-    listSegments,
-    type Segment,
-} from "./api";
 
 function toBuilderSegment(segment: Segment): ContactFilterSegment {
-    return {
-        id: segment.segmentId,
-        name: segment.name,
-        filter: segment.filter,
-    };
+  return {
+    id: segment.segmentId,
+    name: segment.name,
+    filter: segment.filter,
+  };
 }
 
 /**
@@ -29,61 +24,46 @@ function toBuilderSegment(segment: Segment): ContactFilterSegment {
  * the segment they diverged from.
  */
 export function useSegments(onError: (message: string) => void) {
-    const [segments, setSegments] = useState<ContactFilterSegment[]>([]);
-    const [selectedSegmentId, setSelectedSegmentId] = useState("");
+  const [segments, setSegments] = useState<ContactFilterSegment[]>([]);
+  const [selectedSegmentId, setSelectedSegmentId] = useState("");
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: onError is typically an inline callback; load segments once on mount
-    useEffect(() => {
-        listSegments()
-            .then((items) => setSegments(items.map(toBuilderSegment)))
-            .catch((err) =>
-                onError(
-                    err instanceof ApiError
-                        ? err.message
-                        : "Failed to load segments",
-                ),
-            );
-    }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onError is typically an inline callback; load segments once on mount
+  useEffect(() => {
+    listSegments()
+      .then((items) => setSegments(items.map(toBuilderSegment)))
+      .catch((err) =>
+        onError(err instanceof ApiError ? err.message : "Failed to load segments"),
+      );
+  }, []);
 
-    async function onSaveSegment(
-        name: string,
-        filter: ContactFilterWithAggregator,
-    ) {
-        try {
-            const created = await createSegment({ name, filter });
-            setSegments((await listSegments()).map(toBuilderSegment));
-            setSelectedSegmentId(created.segmentId);
-        } catch (err) {
-            onError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Failed to save segment",
-            );
-        }
+  async function onSaveSegment(name: string, filter: ContactFilterWithAggregator) {
+    try {
+      const created = await createSegment({ name, filter });
+      setSegments((await listSegments()).map(toBuilderSegment));
+      setSelectedSegmentId(created.segmentId);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Failed to save segment");
     }
+  }
 
-    async function onDeleteSegment(segment: ContactFilterSegment) {
-        try {
-            await deleteSegment(segment.id);
-            setSegments((prev) => prev.filter((s) => s.id !== segment.id));
-        } catch (err) {
-            onError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Failed to delete segment",
-            );
-        }
+  async function onDeleteSegment(segment: ContactFilterSegment) {
+    try {
+      await deleteSegment(segment.id);
+      setSegments((prev) => prev.filter((s) => s.id !== segment.id));
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Failed to delete segment");
     }
+  }
 
-    return {
-        clearSelection: () => setSelectedSegmentId(""),
-        segmentProps: {
-            segments,
-            selectedSegmentId,
-            onSegmentSelect: (segment: ContactFilterSegment) =>
-                setSelectedSegmentId(segment.id),
-            onSaveSegment,
-            onDeleteSegment,
-        },
-    };
+  return {
+    clearSelection: () => setSelectedSegmentId(""),
+    segmentProps: {
+      segments,
+      selectedSegmentId,
+      onSegmentSelect: (segment: ContactFilterSegment) =>
+        setSelectedSegmentId(segment.id),
+      onSaveSegment,
+      onDeleteSegment,
+    },
+  };
 }

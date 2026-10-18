@@ -6,12 +6,12 @@
  * `<domain>_id` convention documented at the top of `db/schema.ts`.
  */
 export function omitInternal<T extends Record<string, unknown>>(
-    row: T,
-    extraKeys: (keyof T)[] = [],
+  row: T,
+  extraKeys: (keyof T)[] = [],
 ): Omit<T, "id" | "teamId"> {
-    const clone: any = { ...row };
-    delete clone.id;
-    delete clone.teamId;
-    for (const key of extraKeys) delete clone[key];
-    return clone;
+  const clone: any = { ...row };
+  delete clone.id;
+  delete clone.teamId;
+  for (const key of extraKeys) delete clone[key];
+  return clone;
 }

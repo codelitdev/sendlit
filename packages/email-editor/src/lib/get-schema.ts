@@ -1,10 +1,10 @@
 import type { BlockComponent } from "@/types/block-registry";
 
 export default function getSchema(blocks: BlockComponent[]) {
-    let specs = "";
+  let specs = "";
 
-    for (const block of blocks) {
-        specs += `
+  for (const block of blocks) {
+    specs += `
 ### ${block.metadata.displayName}
 
 ${block.metadata.description}
@@ -14,11 +14,11 @@ ${block.metadata.description}
 #### Settings
 
 ${Object.entries(block.metadata.docs.settings)
-    .map(([key, description]) => `- **${key}**: ${description}`)
-    .join("\n")}
+  .map(([key, description]) => `- **${key}**: ${description}`)
+  .join("\n")}
 
 `;
-    }
+  }
 
-    return specs;
+  return specs;
 }

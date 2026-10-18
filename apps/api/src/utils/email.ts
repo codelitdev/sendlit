@@ -6,5 +6,5 @@
  * (see docs/bounces-and-complaints.md#8-suppression-model).
  */
 export function normalizeEmail(email: string): string {
-    return email.trim().normalize("NFC").toLowerCase();
+  return email.trim().normalize("NFC").toLowerCase();
 }

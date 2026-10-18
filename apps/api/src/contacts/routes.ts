@@ -1,27 +1,27 @@
-import { Router } from "express";
-import { createExpressEndpoints, initServer } from "@ts-rest/express";
 import {
-    contactFilterSchema,
-    contract,
-    parseContactFilterQueryParam,
+  contactFilterSchema,
+  contract,
+  parseContactFilterQueryParam,
 } from "@sendlit/api-contract";
+import { createExpressEndpoints, initServer } from "@ts-rest/express";
+import { Router } from "express";
 import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
+import { isPlanGateError } from "../billing/errors";
+import { omitInternal } from "../utils/public";
+import { serializeDates } from "../utils/serialize";
 import {
-    addTagToContact,
-    countContacts,
-    createContact,
-    deleteContact,
-    getContactByContactId,
-    getDeliveriesByContact,
-    listContacts,
-    removeTagFromContact,
-    updateContact,
+  addTagToContact,
+  countContacts,
+  createContact,
+  deleteContact,
+  getContactByContactId,
+  getDeliveriesByContact,
+  listContacts,
+  removeTagFromContact,
+  updateContact,
 } from "./queries";
 import { getSegment } from "./segments-queries";
-import { serializeDates } from "../utils/serialize";
-import { omitInternal } from "../utils/public";
-import { isPlanGateError } from "../billing/errors";
 
 const router = Router();
 router.use("/contacts", requireAuth, requireTeam);
@@ -36,131 +36,122 @@ const s = initServer();
  * swapped for something else, only this file (and its siblings) would change.
  */
 const impl = s.router(contract.contacts, {
-    create: async ({ body, req }) => {
-        try {
-            const contact = await createContact({
-                teamId: (req as any).teamId,
-                ...body,
-            });
-            return { status: 201, body: serializeDates(omitInternal(contact)) };
-        } catch (error) {
-            if (isPlanGateError(error)) {
-                return {
-                    status: error.status,
-                    body: { error: error.code, ...error.details },
-                } as any;
-            }
-            throw error;
-        }
-    },
-    list: async ({ query, req }) => {
-        const teamId = (req as any).teamId;
-
-        const filters = [];
-        if (query.segmentId) {
-            const segment = await getSegment(query.segmentId);
-            if (!segment || segment.teamId !== teamId) {
-                return { status: 404, body: { error: "Segment not found" } };
-            }
-            const parsedSegmentFilter = contactFilterSchema.safeParse(
-                segment.filter,
-            );
-            if (!parsedSegmentFilter.success) {
-                return {
-                    status: 400,
-                    body: { error: "Invalid segment filter" },
-                };
-            }
-            filters.push(parsedSegmentFilter.data as any);
-        }
-        if (query.filter) {
-            const parsedFilter = parseContactFilterQueryParam(query.filter);
-            if (!parsedFilter.success) {
-                return { status: 400, body: { error: "Invalid filter" } };
-            }
-            filters.push(parsedFilter.data as any);
-        }
-        const filter = filters.length ? filters : undefined;
-
-        const [items, total] = await Promise.all([
-            listContacts({
-                teamId,
-                searchText: query.q,
-                filter,
-                offset: query.offset,
-                rowsPerPage: query.rowsPerPage,
-            }),
-            countContacts(teamId, { searchText: query.q, filter }),
-        ]);
+  create: async ({ body, req }) => {
+    try {
+      const contact = await createContact({
+        teamId: (req as any).teamId,
+        ...body,
+      });
+      return { status: 201, body: serializeDates(omitInternal(contact)) };
+    } catch (error) {
+      if (isPlanGateError(error)) {
         return {
-            status: 200,
-            body: {
-                items: serializeDates(items.map((item) => omitInternal(item))),
-                total,
-            },
+          status: error.status,
+          body: { error: error.code, ...error.details },
+        } as any;
+      }
+      throw error;
+    }
+  },
+  list: async ({ query, req }) => {
+    const teamId = (req as any).teamId;
+
+    const filters = [];
+    if (query.segmentId) {
+      const segment = await getSegment(query.segmentId);
+      if (!segment || segment.teamId !== teamId) {
+        return { status: 404, body: { error: "Segment not found" } };
+      }
+      const parsedSegmentFilter = contactFilterSchema.safeParse(segment.filter);
+      if (!parsedSegmentFilter.success) {
+        return {
+          status: 400,
+          body: { error: "Invalid segment filter" },
         };
-    },
-    get: async ({ params, req }) => {
-        const contact = await getContactByContactId(params.contactId);
-        if (!contact || contact.teamId !== (req as any).teamId) {
-            return { status: 404, body: { error: "Contact not found" } };
-        }
-        return { status: 200, body: serializeDates(omitInternal(contact)) };
-    },
-    update: async ({ params, body, req }) => {
-        let contact: Awaited<ReturnType<typeof updateContact>>;
-        try {
-            contact = await updateContact(
-                (req as any).teamId,
-                params.contactId,
-                body,
-            );
-        } catch (error) {
-            if (isPlanGateError(error)) {
-                return {
-                    status: error.status,
-                    body: { error: error.code, ...error.details },
-                } as any;
-            }
-            throw error;
-        }
-        if (!contact)
-            return { status: 404, body: { error: "Contact not found" } };
-        return { status: 200, body: serializeDates(omitInternal(contact)) };
-    },
-    addTag: async ({ params, req }) => {
-        const contact = await addTagToContact(
-            (req as any).teamId,
-            params.contactId,
-            params.tag,
-        );
-        if (!contact)
-            return { status: 404, body: { error: "Contact not found" } };
-        return { status: 200, body: serializeDates(omitInternal(contact)) };
-    },
-    removeTag: async ({ params, req }) => {
-        const contact = await removeTagFromContact(
-            (req as any).teamId,
-            params.contactId,
-            params.tag,
-        );
-        if (!contact)
-            return { status: 404, body: { error: "Contact not found" } };
-        return { status: 200, body: serializeDates(omitInternal(contact)) };
-    },
-    deliveries: async ({ params, req }) => {
-        const teamId = (req as any).teamId;
-        const contact = await getContactByContactId(params.contactId);
-        if (!contact || contact.teamId !== teamId) {
-            return { status: 404, body: { error: "Contact not found" } };
-        }
-        const deliveries = await getDeliveriesByContact(teamId, contact.id);
-        return { status: 200, body: serializeDates(deliveries) };
-    },
-    remove: async ({ params, req }) => {
-        await deleteContact((req as any).teamId, params.contactId);
-        return { status: 204, body: undefined };
-    },
+      }
+      filters.push(parsedSegmentFilter.data as any);
+    }
+    if (query.filter) {
+      const parsedFilter = parseContactFilterQueryParam(query.filter);
+      if (!parsedFilter.success) {
+        return { status: 400, body: { error: "Invalid filter" } };
+      }
+      filters.push(parsedFilter.data as any);
+    }
+    const filter = filters.length ? filters : undefined;
+
+    const [items, total] = await Promise.all([
+      listContacts({
+        teamId,
+        searchText: query.q,
+        filter,
+        offset: query.offset,
+        rowsPerPage: query.rowsPerPage,
+      }),
+      countContacts(teamId, { searchText: query.q, filter }),
+    ]);
+    return {
+      status: 200,
+      body: {
+        items: serializeDates(items.map((item) => omitInternal(item))),
+        total,
+      },
+    };
+  },
+  get: async ({ params, req }) => {
+    const contact = await getContactByContactId(params.contactId);
+    if (!contact || contact.teamId !== (req as any).teamId) {
+      return { status: 404, body: { error: "Contact not found" } };
+    }
+    return { status: 200, body: serializeDates(omitInternal(contact)) };
+  },
+  update: async ({ params, body, req }) => {
+    let contact: Awaited<ReturnType<typeof updateContact>>;
+    try {
+      contact = await updateContact((req as any).teamId, params.contactId, body);
+    } catch (error) {
+      if (isPlanGateError(error)) {
+        return {
+          status: error.status,
+          body: { error: error.code, ...error.details },
+        } as any;
+      }
+      throw error;
+    }
+    if (!contact) return { status: 404, body: { error: "Contact not found" } };
+    return { status: 200, body: serializeDates(omitInternal(contact)) };
+  },
+  addTag: async ({ params, req }) => {
+    const contact = await addTagToContact(
+      (req as any).teamId,
+      params.contactId,
+      params.tag,
+    );
+    if (!contact) return { status: 404, body: { error: "Contact not found" } };
+    return { status: 200, body: serializeDates(omitInternal(contact)) };
+  },
+  removeTag: async ({ params, req }) => {
+    const contact = await removeTagFromContact(
+      (req as any).teamId,
+      params.contactId,
+      params.tag,
+    );
+    if (!contact) return { status: 404, body: { error: "Contact not found" } };
+    return { status: 200, body: serializeDates(omitInternal(contact)) };
+  },
+  deliveries: async ({ params, req }) => {
+    const teamId = (req as any).teamId;
+    const contact = await getContactByContactId(params.contactId);
+    if (!contact || contact.teamId !== teamId) {
+      return { status: 404, body: { error: "Contact not found" } };
+    }
+    const deliveries = await getDeliveriesByContact(teamId, contact.id);
+    return { status: 200, body: serializeDates(deliveries) };
+  },
+  remove: async ({ params, req }) => {
+    await deleteContact((req as any).teamId, params.contactId);
+    return { status: 204, body: undefined };
+  },
 });
 
 createExpressEndpoints(contract.contacts, impl, router);

@@ -1,91 +1,85 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function request(fields: Record<string, string>, url?: string) {
-    const body = new URLSearchParams(fields);
-    return new NextRequest(url ?? "http://localhost:3000/api/team/switch", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body,
-    });
+  const body = new URLSearchParams(fields);
+  return new NextRequest(url ?? "http://localhost:3000/api/team/switch", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+  });
 }
 
 describe("team switch", () => {
-    beforeEach(() => {
-        vi.unstubAllEnvs();
-        vi.resetModules();
-    });
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
 
-    it("sets the selected team and redirects within the application", async () => {
-        const { POST } = await import("./route");
-        const response = await POST(
-            request({ teamId: "team_123", redirectTo: "/contacts?from=team" }),
-        );
-
-        expect(response.status).toBe(303);
-        expect(response.headers.get("location")).toBe("/contacts?from=team");
-        expect(response.headers.get("set-cookie")).toContain(
-            "sendlit_team_id=team_123",
-        );
-        expect(response.headers.get("set-cookie")).toContain("SameSite=lax");
-        expect(response.headers.get("set-cookie")).not.toContain("HttpOnly");
-    });
-
-    it("keeps the organization context when switching teams", async () => {
-        const { POST } = await import("./route");
-        const response = await POST(
-            request({
-                teamId: "team_123",
-                organizationId: "org_123",
-                redirectTo: "/",
-            }),
-        );
-
-        expect(response.headers.get("set-cookie")).toContain(
-            "sendlit_organization_id=org_123",
-        );
-    });
-
-    it("uses a relative Location even when req.url is the container bind address", async () => {
-        vi.stubEnv("WEB_CLIENT", "https://app.sendlit.clqa.site");
-        vi.resetModules();
-        const { POST } = await import("./route");
-        const response = await POST(
-            request(
-                { teamId: "team_123", redirectTo: "/team-selection" },
-                "http://0.0.0.0:3000/api/team/switch",
-            ),
-        );
-
-        expect(response.headers.get("location")).toBe("/team-selection");
-    });
-
-    it.each(["https://attacker.example/steal", "//attacker.example/steal"])(
-        "rejects an external redirect target: %s",
-        async (redirectTo) => {
-            const { POST } = await import("./route");
-            const response = await POST(
-                request({ teamId: "team_123", redirectTo }),
-            );
-
-            expect(response.headers.get("location")).toBe("/");
-        },
+  it("sets the selected team and redirects within the application", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(
+      request({ teamId: "team_123", redirectTo: "/contacts?from=team" }),
     );
 
-    it("does not set an empty team selection", async () => {
-        const { POST } = await import("./route");
-        const response = await POST(request({ teamId: "", redirectTo: "/" }));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/contacts?from=team");
+    expect(response.headers.get("set-cookie")).toContain("sendlit_team_id=team_123");
+    expect(response.headers.get("set-cookie")).toContain("SameSite=lax");
+    expect(response.headers.get("set-cookie")).not.toContain("HttpOnly");
+  });
 
-        expect(response.headers.get("set-cookie")).toBeNull();
-    });
+  it("keeps the organization context when switching teams", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(
+      request({
+        teamId: "team_123",
+        organizationId: "org_123",
+        redirectTo: "/",
+      }),
+    );
 
-    it("marks the selection cookie secure in production", async () => {
-        vi.stubEnv("NODE_ENV", "production");
-        const { POST } = await import("./route");
-        const response = await POST(
-            request({ teamId: "team_123", redirectTo: "/" }),
-        );
+    expect(response.headers.get("set-cookie")).toContain(
+      "sendlit_organization_id=org_123",
+    );
+  });
 
-        expect(response.headers.get("set-cookie")).toContain("Secure");
-    });
+  it("uses a relative Location even when req.url is the container bind address", async () => {
+    vi.stubEnv("WEB_CLIENT", "https://app.sendlit.clqa.site");
+    vi.resetModules();
+    const { POST } = await import("./route");
+    const response = await POST(
+      request(
+        { teamId: "team_123", redirectTo: "/team-selection" },
+        "http://0.0.0.0:3000/api/team/switch",
+      ),
+    );
+
+    expect(response.headers.get("location")).toBe("/team-selection");
+  });
+
+  it.each(["https://attacker.example/steal", "//attacker.example/steal"])(
+    "rejects an external redirect target: %s",
+    async (redirectTo) => {
+      const { POST } = await import("./route");
+      const response = await POST(request({ teamId: "team_123", redirectTo }));
+
+      expect(response.headers.get("location")).toBe("/");
+    },
+  );
+
+  it("does not set an empty team selection", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(request({ teamId: "", redirectTo: "/" }));
+
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("marks the selection cookie secure in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const { POST } = await import("./route");
+    const response = await POST(request({ teamId: "team_123", redirectTo: "/" }));
+
+    expect(response.headers.get("set-cookie")).toContain("Secure");
+  });
 });

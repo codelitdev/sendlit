@@ -1,148 +1,144 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../db/client", async () => {
-    const { makeTestDb } = await import("../test/db.js");
-    return { db: await makeTestDb() };
+  const { makeTestDb } = await import("../test/db.js");
+  return { db: await makeTestDb() };
 });
 vi.mock("./service", () => ({
-    deleteMedia: vi.fn(),
+  deleteMedia: vi.fn(),
 }));
 
 import { db } from "../db/client";
 import { media, mediaReferences } from "../db/schema";
-import { seedTeamAndContact, truncateAll, type TestDb } from "../test/db";
-import { deleteMedia as deleteMediaFile } from "./service";
+import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
 import {
-    createUploadedMedia,
-    deleteTeamMediaFiles,
-    deleteUnusedMedia,
-    listMediaReferences,
-    replaceMediaReferencesForResource,
-    updateMediaMetadata,
+  createUploadedMedia,
+  deleteTeamMediaFiles,
+  deleteUnusedMedia,
+  listMediaReferences,
+  replaceMediaReferencesForResource,
+  updateMediaMetadata,
 } from "./queries";
+import { deleteMedia as deleteMediaFile } from "./service";
 
 const tdb = db as unknown as TestDb;
 
 beforeEach(async () => {
-    await truncateAll(tdb);
-    vi.clearAllMocks();
+  await truncateAll(tdb);
+  vi.clearAllMocks();
 });
 
 describe("media queries", () => {
-    it("updates editable media metadata", async () => {
-        const { team } = await seedTeamAndContact(tdb);
-        const row = await createUploadedMedia({
-            teamId: team.id,
-            mediaLitId: "media-lit-1",
-            url: "https://cdn.test/p/media-lit-1/main.webp",
-        });
-
-        const updated = await updateMediaMetadata({
-            teamId: team.id,
-            mediaId: row.mediaId,
-            alt: "Updated alt",
-            caption: "Updated caption",
-        });
-
-        expect(updated).toMatchObject({
-            mediaId: row.mediaId,
-            alt: "Updated alt",
-            caption: "Updated caption",
-        });
+  it("updates editable media metadata", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const row = await createUploadedMedia({
+      teamId: team.id,
+      mediaLitId: "media-lit-1",
+      url: "https://cdn.test/p/media-lit-1/main.webp",
     });
 
-    it("blocks deleting media while references exist", async () => {
-        const { team } = await seedTeamAndContact(tdb);
-        const row = await createUploadedMedia({
-            teamId: team.id,
-            mediaLitId: "media-lit-1",
-            url: "https://cdn.test/p/media-lit-1/main.webp",
-        });
-        await replaceMediaReferencesForResource({
-            teamId: team.id,
-            resource: {
-                resourceType: "TEMPLATE",
-                resourceInternalId: crypto.randomUUID(),
-                resourcePublicId: "tpl_123",
-            },
-            mediaRows: [row],
-        });
-
-        await expect(deleteUnusedMedia(team.id, row.mediaId)).resolves.toBe(
-            "in_use",
-        );
-        expect(deleteMediaFile).not.toHaveBeenCalled();
-        expect(await tdb.select().from(media)).toHaveLength(1);
+    const updated = await updateMediaMetadata({
+      teamId: team.id,
+      mediaId: row.mediaId,
+      alt: "Updated alt",
+      caption: "Updated caption",
     });
 
-    it("deletes unused media from MediaLit and the media table", async () => {
-        const { team } = await seedTeamAndContact(tdb);
-        const row = await createUploadedMedia({
-            teamId: team.id,
-            mediaLitId: "media-lit-unused",
-            url: "https://cdn.test/p/media-lit-unused/main.webp",
-        });
+    expect(updated).toMatchObject({
+      mediaId: row.mediaId,
+      alt: "Updated alt",
+      caption: "Updated caption",
+    });
+  });
 
-        await expect(deleteUnusedMedia(team.id, row.mediaId)).resolves.toBe(
-            "deleted",
-        );
-        expect(deleteMediaFile).toHaveBeenCalledWith("media-lit-unused");
-        expect(await tdb.select().from(media)).toHaveLength(0);
+  it("blocks deleting media while references exist", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const row = await createUploadedMedia({
+      teamId: team.id,
+      mediaLitId: "media-lit-1",
+      url: "https://cdn.test/p/media-lit-1/main.webp",
+    });
+    await replaceMediaReferencesForResource({
+      teamId: team.id,
+      resource: {
+        resourceType: "TEMPLATE",
+        resourceInternalId: crypto.randomUUID(),
+        resourcePublicId: "tpl_123",
+      },
+      mediaRows: [row],
     });
 
-    it("lists public media references", async () => {
-        const { team } = await seedTeamAndContact(tdb);
-        const row = await createUploadedMedia({
-            teamId: team.id,
-            mediaLitId: "media-lit-1",
-            url: "https://cdn.test/p/media-lit-1/main.webp",
-        });
-        await replaceMediaReferencesForResource({
-            teamId: team.id,
-            resource: {
-                resourceType: "SEQUENCE_EMAIL",
-                resourceInternalId: crypto.randomUUID(),
-                resourcePublicId: "email_123",
-                parentResourceInternalId: crypto.randomUUID(),
-                parentResourcePublicId: "seq_123",
-            },
-            mediaRows: [row],
-        });
+    await expect(deleteUnusedMedia(team.id, row.mediaId)).resolves.toBe("in_use");
+    expect(deleteMediaFile).not.toHaveBeenCalled();
+    expect(await tdb.select().from(media)).toHaveLength(1);
+  });
 
-        await expect(
-            listMediaReferences({ teamId: team.id, mediaId: row.mediaId }),
-        ).resolves.toMatchObject([
-            {
-                mediaId: row.id,
-                resourceType: "SEQUENCE_EMAIL",
-                resourcePublicId: "email_123",
-                parentResourcePublicId: "seq_123",
-            },
-        ]);
+  it("deletes unused media from MediaLit and the media table", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const row = await createUploadedMedia({
+      teamId: team.id,
+      mediaLitId: "media-lit-unused",
+      url: "https://cdn.test/p/media-lit-unused/main.webp",
     });
 
-    it("cleans a team's MediaLit files without requiring physical team deletion", async () => {
-        const { team } = await seedTeamAndContact(tdb);
-        const row = await createUploadedMedia({
-            teamId: team.id,
-            mediaLitId: "media-lit-team",
-            url: "https://cdn.test/p/media-lit-team/main.webp",
-        });
-        await replaceMediaReferencesForResource({
-            teamId: team.id,
-            resource: {
-                resourceType: "TEMPLATE",
-                resourceInternalId: crypto.randomUUID(),
-                resourcePublicId: "tpl_123",
-            },
-            mediaRows: [row],
-        });
+    await expect(deleteUnusedMedia(team.id, row.mediaId)).resolves.toBe("deleted");
+    expect(deleteMediaFile).toHaveBeenCalledWith("media-lit-unused");
+    expect(await tdb.select().from(media)).toHaveLength(0);
+  });
 
-        await deleteTeamMediaFiles(team.id);
-
-        expect(deleteMediaFile).toHaveBeenCalledWith("media-lit-team");
-        // Teams are archived in the organization model. Retention/purge is an
-        // explicit later workflow, so this helper must not assume a cascade.
-        expect(await tdb.select().from(mediaReferences)).toHaveLength(1);
+  it("lists public media references", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const row = await createUploadedMedia({
+      teamId: team.id,
+      mediaLitId: "media-lit-1",
+      url: "https://cdn.test/p/media-lit-1/main.webp",
     });
+    await replaceMediaReferencesForResource({
+      teamId: team.id,
+      resource: {
+        resourceType: "SEQUENCE_EMAIL",
+        resourceInternalId: crypto.randomUUID(),
+        resourcePublicId: "email_123",
+        parentResourceInternalId: crypto.randomUUID(),
+        parentResourcePublicId: "seq_123",
+      },
+      mediaRows: [row],
+    });
+
+    await expect(
+      listMediaReferences({ teamId: team.id, mediaId: row.mediaId }),
+    ).resolves.toMatchObject([
+      {
+        mediaId: row.id,
+        resourceType: "SEQUENCE_EMAIL",
+        resourcePublicId: "email_123",
+        parentResourcePublicId: "seq_123",
+      },
+    ]);
+  });
+
+  it("cleans a team's MediaLit files without requiring physical team deletion", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const row = await createUploadedMedia({
+      teamId: team.id,
+      mediaLitId: "media-lit-team",
+      url: "https://cdn.test/p/media-lit-team/main.webp",
+    });
+    await replaceMediaReferencesForResource({
+      teamId: team.id,
+      resource: {
+        resourceType: "TEMPLATE",
+        resourceInternalId: crypto.randomUUID(),
+        resourcePublicId: "tpl_123",
+      },
+      mediaRows: [row],
+    });
+
+    await deleteTeamMediaFiles(team.id);
+
+    expect(deleteMediaFile).toHaveBeenCalledWith("media-lit-team");
+    // Teams are archived in the organization model. Retention/purge is an
+    // explicit later workflow, so this helper must not assume a cascade.
+    expect(await tdb.select().from(mediaReferences)).toHaveLength(1);
+  });
 });

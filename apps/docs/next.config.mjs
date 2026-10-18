@@ -6,19 +6,19 @@ const basePath = rawBasePath === "/" ? "" : rawBasePath;
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
-    reactStrictMode: true,
-    transpilePackages: ["@sendlit/api-contract"],
-    output: "export",
-    trailingSlash: true,
-    images: {
-        unoptimized: true,
-    },
-    ...(basePath
-        ? {
-              basePath,
-              assetPrefix: basePath,
-          }
-        : {}),
+  reactStrictMode: true,
+  transpilePackages: ["@sendlit/api-contract"],
+  output: "export",
+  trailingSlash: true,
+  images: {
+    unoptimized: true,
+  },
+  ...(basePath
+    ? {
+        basePath,
+        assetPrefix: basePath,
+      }
+    : {}),
 };
 
 export default withMDX(nextConfig);

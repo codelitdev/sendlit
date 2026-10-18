@@ -1,40 +1,40 @@
-import express from "express";
+import { toNodeHandler } from "better-auth/node";
 import cors from "cors";
+import express from "express";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
-import { toNodeHandler } from "better-auth/node";
-import logger from "./services/log";
-import { checkDatabaseConnection } from "./db/client";
 import { auth } from "./auth/better-auth";
 import oauthPagesRoutes from "./auth/oauth-pages";
-import mcpRoutes from "./mcp/routes";
+import { createInitialOrganizationOwnerIfMissing } from "./bootstrap";
 import contactsRoutes from "./contacts/routes";
 import segmentsRoutes from "./contacts/segments-routes";
+import { checkDatabaseConnection } from "./db/client";
+import deliveryRoutes from "./delivery/routes";
+import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
+import feedbackRoutes from "./delivery-feedback/feedback-routes";
+import { assertSuppressionHashKeyConfigured } from "./delivery-feedback/suppression-hash";
+import suppressionsRoutes from "./delivery-feedback/suppressions-routes";
+import espWebhookRoutes from "./delivery-feedback/webhook-route";
+import mcpRoutes from "./mcp/routes";
 import mediaRoutes from "./media/routes";
-import templatesRoutes from "./templates/routes";
+import {
+  captureError,
+  getTeamId,
+  setupPosthogExpressErrorHandler,
+} from "./observability/posthog";
+import { openApiDocument } from "./openapi";
+import organizationRoutes from "./organization/routes";
+import overviewRoutes from "./overview/routes";
+import provisioningRoutes from "./provisioning/routes";
 import sequencesRoutes from "./sequences/routes";
-import transactionalRoutes from "./transactional/routes";
+import logger from "./services/log";
 import espRoutes from "./settings/esp/routes";
 import generalSettingsRoutes from "./settings/general/routes";
 import teamRoutes from "./team/routes";
-import organizationRoutes from "./organization/routes";
-import deliveryRoutes from "./delivery/routes";
-import provisioningRoutes from "./provisioning/routes";
+import templatesRoutes from "./templates/routes";
 import trackingRoutes from "./tracking/routes";
-import overviewRoutes from "./overview/routes";
-import feedbackRoutes from "./delivery-feedback/feedback-routes";
-import espWebhookRoutes from "./delivery-feedback/webhook-route";
-import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
-import suppressionsRoutes from "./delivery-feedback/suppressions-routes";
+import transactionalRoutes from "./transactional/routes";
 import { assertEspEncryptionKeyConfigured } from "./utils/secret-crypto";
-import { assertSuppressionHashKeyConfigured } from "./delivery-feedback/suppression-hash";
-import { createInitialOrganizationOwnerIfMissing } from "./bootstrap";
-import { openApiDocument } from "./openapi";
-import {
-    captureError,
-    getTeamId,
-    setupPosthogExpressErrorHandler,
-} from "./observability/posthog";
 
 // Start BullMQ workers
 import "./mail/worker";
@@ -42,19 +42,16 @@ import "./mail/sequence-worker";
 import "./delivery-feedback/feedback-worker";
 
 import { startAutomation } from "./automation/start";
+import { assertBillingProviderConfig, readBillingConfig } from "./billing/catalog";
+import { recordRequestedCatalogRevision } from "./billing/catalog-store";
+import { assertBillingEncryptionKeyConfigured } from "./billing/crypto";
+import { startBillingReconciliation } from "./billing/reconciliation";
+import billingRoutes from "./billing/routes";
+import billingWebhookRoutes from "./billing/webhooks/routes";
+import { startDeliveryLifecycleJobs } from "./delivery/lifecycle-jobs";
 import { startFeedbackReceiptPoller } from "./delivery-feedback/poller";
 import { startRetentionLoop } from "./delivery-feedback/retention-loop";
 import { startMailDispatchOutbox } from "./mail/dispatch-outbox";
-import { startDeliveryLifecycleJobs } from "./delivery/lifecycle-jobs";
-import {
-    assertBillingProviderConfig,
-    readBillingConfig,
-} from "./billing/catalog";
-import { recordRequestedCatalogRevision } from "./billing/catalog-store";
-import billingRoutes from "./billing/routes";
-import billingWebhookRoutes from "./billing/webhooks/routes";
-import { assertBillingEncryptionKeyConfigured } from "./billing/crypto";
-import { startBillingReconciliation } from "./billing/reconciliation";
 
 const app = express();
 startMailDispatchOutbox();
@@ -68,17 +65,17 @@ app.use(cors());
 // bounding anonymous client creation independently from authenticated API
 // traffic. Better Auth still validates the allowed scopes and PKCE below.
 app.use(
-    "/api/auth/oauth2/register",
-    rateLimit({
-        windowMs: 60_000,
-        max: 20,
-        standardHeaders: true,
-        legacyHeaders: false,
-        message: {
-            error: "too_many_requests",
-            error_description: "Too many client registration requests.",
-        },
-    }),
+  "/api/auth/oauth2/register",
+  rateLimit({
+    windowMs: 60_000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: "too_many_requests",
+      error_description: "Too many client registration requests.",
+    },
+  }),
 );
 app.all("/api/auth/*", toNodeHandler(auth));
 app.use(oauthPagesRoutes);
@@ -95,25 +92,25 @@ app.use(express.urlencoded({ extended: false }));
 
 // Status of the server and uptime.
 app.get("/health", (_req, res) => {
-    res.status(200).json({ status: "ok", uptime: process.uptime() });
+  res.status(200).json({ status: "ok", uptime: process.uptime() });
 });
 
 app.get("/openapi.json", (_req, res) => {
-    res.json(openApiDocument);
+  res.json(openApiDocument);
 });
 
 app.use(
-    "/docs",
-    swaggerUi.serve,
-    swaggerUi.setup(openApiDocument, {
-        explorer: true,
-        swaggerOptions: {
-            persistAuthorization: true,
-            displayRequestDuration: true,
-            docExpansion: "none",
-            defaultModelsExpandDepth: -1,
-        },
-    }),
+  "/docs",
+  swaggerUi.serve,
+  swaggerUi.setup(openApiDocument, {
+    explorer: true,
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true,
+      docExpansion: "none",
+      defaultModelsExpandDepth: -1,
+    },
+  }),
 );
 
 // Public routes first: the MCP endpoint authenticates per-request via
@@ -146,91 +143,91 @@ app.use(deliveryEventsRoutes);
 app.use(suppressionsRoutes);
 
 app.use(
-    (
-        err: any,
-        req: express.Request,
-        _res: express.Response,
-        next: express.NextFunction,
-    ) => {
-        captureError({
-            error: err,
-            source: "express.uncaught",
-            teamId: getTeamId((req as any)?.user?.teamId),
-            context: {
-                path: req?.path,
-                method: req?.method,
-            },
-        });
-        next(err);
-    },
+  (
+    err: any,
+    req: express.Request,
+    _res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    captureError({
+      error: err,
+      source: "express.uncaught",
+      teamId: getTeamId((req as any)?.user?.teamId),
+      context: {
+        path: req?.path,
+        method: req?.method,
+      },
+    });
+    next(err);
+  },
 );
 
 setupPosthogExpressErrorHandler(app);
 
 app.use(
-    (
-        err: any,
-        _req: express.Request,
-        res: express.Response,
-        _next: express.NextFunction,
-    ) => {
-        logger.error({ error: err.message }, "Unhandled express error");
-        res.status(500).json({ error: "server_error" });
-    },
+  (
+    err: any,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    logger.error({ error: err.message }, "Unhandled express error");
+    res.status(500).json({ error: "server_error" });
+  },
 );
 
 const port = process.env.PORT || 80;
 
 checkConfig()
-    .then(checkDatabaseConnection)
-    .then(async () => {
-        const billingConfig = readBillingConfig();
-        if (billingConfig.deploymentMode === "cloud") {
-            await recordRequestedCatalogRevision(billingConfig);
-        }
-    })
-    .then(createInitialOrganizationOwnerIfMissing)
-    .then(() => {
-        app.listen(port, () => {
-            logger.info(`SendLit API running at ${port}`);
-        });
-        startAutomation();
-        startBillingReconciliation();
-        startFeedbackReceiptPoller();
-        startRetentionLoop();
-    })
-    .catch((err) => {
-        logger.error({ error: err.message }, "Failed to start SendLit API");
-        captureError({
-            error: err,
-            source: "service.startup",
-            teamId: getTeamId(),
-        });
-        process.exit(1);
-    });
-
-async function checkConfig() {
-    if (!process.env.DB_CONNECTION_STRING) {
-        throw new Error("DB_CONNECTION_STRING is not set");
-    }
-    const authSecret = process.env.BETTER_AUTH_SECRET;
-    if (!authSecret || Buffer.byteLength(authSecret, "utf8") < 32) {
-        throw new Error(
-            "BETTER_AUTH_SECRET is required and must be at least 32 bytes (256 bits). " +
-                "Generate one with: openssl rand -base64 48",
-        );
-    }
-    if (!process.env.PIXEL_SIGNING_SECRET) {
-        throw new Error("PIXEL_SIGNING_SECRET is not set");
-    }
-    assertEspEncryptionKeyConfigured();
-    assertSuppressionHashKeyConfigured();
-    // Billing mode is explicit and fail-closed. Local/self-hosted development
-    // must opt into OSS; cloud deployments must provide a complete, validated
-    // catalog instead of silently inheriting an environment default.
+  .then(checkDatabaseConnection)
+  .then(async () => {
     const billingConfig = readBillingConfig();
     if (billingConfig.deploymentMode === "cloud") {
-        assertBillingProviderConfig(billingConfig);
-        assertBillingEncryptionKeyConfigured();
+      await recordRequestedCatalogRevision(billingConfig);
     }
+  })
+  .then(createInitialOrganizationOwnerIfMissing)
+  .then(() => {
+    app.listen(port, () => {
+      logger.info(`SendLit API running at ${port}`);
+    });
+    startAutomation();
+    startBillingReconciliation();
+    startFeedbackReceiptPoller();
+    startRetentionLoop();
+  })
+  .catch((err) => {
+    logger.error({ error: err.message }, "Failed to start SendLit API");
+    captureError({
+      error: err,
+      source: "service.startup",
+      teamId: getTeamId(),
+    });
+    process.exit(1);
+  });
+
+async function checkConfig() {
+  if (!process.env.DB_CONNECTION_STRING) {
+    throw new Error("DB_CONNECTION_STRING is not set");
+  }
+  const authSecret = process.env.BETTER_AUTH_SECRET;
+  if (!authSecret || Buffer.byteLength(authSecret, "utf8") < 32) {
+    throw new Error(
+      "BETTER_AUTH_SECRET is required and must be at least 32 bytes (256 bits). " +
+        "Generate one with: openssl rand -base64 48",
+    );
+  }
+  if (!process.env.PIXEL_SIGNING_SECRET) {
+    throw new Error("PIXEL_SIGNING_SECRET is not set");
+  }
+  assertEspEncryptionKeyConfigured();
+  assertSuppressionHashKeyConfigured();
+  // Billing mode is explicit and fail-closed. Local/self-hosted development
+  // must opt into OSS; cloud deployments must provide a complete, validated
+  // catalog instead of silently inheriting an environment default.
+  const billingConfig = readBillingConfig();
+  if (billingConfig.deploymentMode === "cloud") {
+    assertBillingProviderConfig(billingConfig);
+    assertBillingEncryptionKeyConfigured();
+  }
 }

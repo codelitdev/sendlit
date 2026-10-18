@@ -1,9 +1,9 @@
 import { and, eq, lte } from "drizzle-orm";
 import { db } from "../db/client";
-import { espConfigTeamGrants, espConfigs } from "../db/schema";
+import { espConfigs, espConfigTeamGrants } from "../db/schema";
+import logger from "../services/log";
 import { transitionEspConfig } from "../settings/esp/queries";
 import { transitionEspGrant } from "./queries";
-import logger from "../services/log";
 
 let timer: NodeJS.Timeout | null = null;
 let running = false;
@@ -12,61 +12,52 @@ let running = false;
  * arrives. Worker-side pin validation independently fails closed at the same
  * timestamp, so this job is cleanup rather than the primary safety boundary. */
 export async function finalizeExpiredDeliveryDrains() {
-    if (running) return;
-    running = true;
-    try {
-        const now = new Date();
-        const grants = await db
-            .select({
-                organizationId: espConfigTeamGrants.organizationId,
-                teamId: espConfigTeamGrants.teamId,
-            })
-            .from(espConfigTeamGrants)
-            .where(
-                and(
-                    eq(espConfigTeamGrants.status, "draining"),
-                    lte(espConfigTeamGrants.drainUntil, now),
-                ),
-            );
-        for (const grant of grants) {
-            await transitionEspGrant(
-                grant.organizationId,
-                grant.teamId,
-                "cancel",
-            );
-        }
-
-        const configs = await db
-            .select()
-            .from(espConfigs)
-            .where(
-                and(
-                    eq(espConfigs.status, "draining"),
-                    lte(espConfigs.drainUntil, now),
-                ),
-            );
-        for (const config of configs) {
-            await transitionEspConfig(config, "retire", { cancel: true });
-        }
-    } finally {
-        running = false;
+  if (running) return;
+  running = true;
+  try {
+    const now = new Date();
+    const grants = await db
+      .select({
+        organizationId: espConfigTeamGrants.organizationId,
+        teamId: espConfigTeamGrants.teamId,
+      })
+      .from(espConfigTeamGrants)
+      .where(
+        and(
+          eq(espConfigTeamGrants.status, "draining"),
+          lte(espConfigTeamGrants.drainUntil, now),
+        ),
+      );
+    for (const grant of grants) {
+      await transitionEspGrant(grant.organizationId, grant.teamId, "cancel");
     }
+
+    const configs = await db
+      .select()
+      .from(espConfigs)
+      .where(and(eq(espConfigs.status, "draining"), lte(espConfigs.drainUntil, now)));
+    for (const config of configs) {
+      await transitionEspConfig(config, "retire", { cancel: true });
+    }
+  } finally {
+    running = false;
+  }
 }
 
 export function startDeliveryLifecycleJobs() {
-    if (timer) return;
+  if (timer) return;
+  void finalizeExpiredDeliveryDrains().catch((error) =>
+    logger.error({ error }, "delivery drain finalization failed"),
+  );
+  timer = setInterval(() => {
     void finalizeExpiredDeliveryDrains().catch((error) =>
-        logger.error({ error }, "delivery drain finalization failed"),
+      logger.error({ error }, "delivery drain finalization failed"),
     );
-    timer = setInterval(() => {
-        void finalizeExpiredDeliveryDrains().catch((error) =>
-            logger.error({ error }, "delivery drain finalization failed"),
-        );
-    }, 60_000);
-    timer.unref();
+  }, 60_000);
+  timer.unref();
 }
 
 export function stopDeliveryLifecycleJobs() {
-    if (timer) clearInterval(timer);
-    timer = null;
+  if (timer) clearInterval(timer);
+  timer = null;
 }

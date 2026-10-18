@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, isNotNull } from "drizzle-orm";
+import { finalSoftBounceWindowDays } from "../config/constants";
 import { db } from "../db/client";
 import { emailDeliveryEvents } from "../db/schema";
-import { finalSoftBounceWindowDays } from "../config/constants";
 
 /**
  * Counts the recipient's current consecutive final-soft-bounce streak —
@@ -13,51 +13,45 @@ import { finalSoftBounceWindowDays } from "../config/constants";
  * `soft_bounce` entries until a `delivered` (or the window edge) is hit.
  */
 export async function computeFinalSoftBounceStreak(
-    teamId: string,
-    normalizedRecipient: string,
+  teamId: string,
+  normalizedRecipient: string,
 ): Promise<number> {
-    const windowStart = new Date(
-        Date.now() - finalSoftBounceWindowDays * 24 * 60 * 60 * 1000,
+  const windowStart = new Date(
+    Date.now() - finalSoftBounceWindowDays * 24 * 60 * 60 * 1000,
+  );
+
+  const perMessage = await db
+    .selectDistinctOn([emailDeliveryEvents.outboundMessageId], {
+      outboundMessageId: emailDeliveryEvents.outboundMessageId,
+      eventType: emailDeliveryEvents.eventType,
+      occurredAt: emailDeliveryEvents.occurredAt,
+    })
+    .from(emailDeliveryEvents)
+    .where(
+      and(
+        eq(emailDeliveryEvents.teamId, teamId),
+        eq(emailDeliveryEvents.normalizedRecipient, normalizedRecipient),
+        inArray(emailDeliveryEvents.eventType, ["delivered", "soft_bounce"]),
+        gte(emailDeliveryEvents.occurredAt, windowStart),
+        isNotNull(emailDeliveryEvents.outboundMessageId),
+      ),
+    )
+    .orderBy(
+      emailDeliveryEvents.outboundMessageId,
+      desc(emailDeliveryEvents.occurredAt),
     );
 
-    const perMessage = await db
-        .selectDistinctOn([emailDeliveryEvents.outboundMessageId], {
-            outboundMessageId: emailDeliveryEvents.outboundMessageId,
-            eventType: emailDeliveryEvents.eventType,
-            occurredAt: emailDeliveryEvents.occurredAt,
-        })
-        .from(emailDeliveryEvents)
-        .where(
-            and(
-                eq(emailDeliveryEvents.teamId, teamId),
-                eq(
-                    emailDeliveryEvents.normalizedRecipient,
-                    normalizedRecipient,
-                ),
-                inArray(emailDeliveryEvents.eventType, [
-                    "delivered",
-                    "soft_bounce",
-                ]),
-                gte(emailDeliveryEvents.occurredAt, windowStart),
-                isNotNull(emailDeliveryEvents.outboundMessageId),
-            ),
-        )
-        .orderBy(
-            emailDeliveryEvents.outboundMessageId,
-            desc(emailDeliveryEvents.occurredAt),
-        );
+  const chronological = [...perMessage].sort(
+    (a, b) => b.occurredAt.getTime() - a.occurredAt.getTime(),
+  );
 
-    const chronological = [...perMessage].sort(
-        (a, b) => b.occurredAt.getTime() - a.occurredAt.getTime(),
-    );
-
-    let streak = 0;
-    for (const event of chronological) {
-        if (event.eventType === "soft_bounce") {
-            streak += 1;
-        } else {
-            break;
-        }
+  let streak = 0;
+  for (const event of chronological) {
+    if (event.eventType === "soft_bounce") {
+      streak += 1;
+    } else {
+      break;
     }
-    return streak;
+  }
+  return streak;
 }

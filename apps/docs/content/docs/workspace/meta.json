@@ -1,13 +1,13 @@
 {
-    "title": "Workspace",
-    "icon": "Settings",
-    "pages": [
-        "organizations",
-        "pricing",
-        "acceptable-use",
-        "teams",
-        "media",
-        "settings",
-        "account"
-    ]
+  "title": "Workspace",
+  "icon": "Settings",
+  "pages": [
+    "organizations",
+    "pricing",
+    "acceptable-use",
+    "teams",
+    "media",
+    "settings",
+    "account"
+  ]
 }

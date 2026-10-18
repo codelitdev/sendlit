@@ -1,24 +1,24 @@
-import { betterAuth } from "better-auth";
-import { APIError, createAuthMiddleware } from "better-auth/api";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { emailOTP } from "better-auth/plugins/email-otp";
-import { jwt } from "better-auth/plugins/jwt";
+import { cimd } from "@better-auth/cimd";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
-import { cimd } from "@better-auth/cimd";
 import { createOAuthProviderOptions } from "@codelitdev/oauth-server-kit/better-auth";
 import type { HostedLoginMethod } from "@codelitdev/oauth-server-kit/express";
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
+import { emailOTP } from "better-auth/plugins/email-otp";
+import { jwt } from "better-auth/plugins/jwt";
 import { createTransport } from "nodemailer";
 import { db } from "../db/client";
 import * as schema from "../db/schema";
-import logger from "../services/log";
-import { ensureDefaultOrganization } from "../organization/queries";
-import {
-    createSendLitOAuthTeamSelectionHooks,
-    oauthTeamSelectionAdapter,
-} from "./oauth-team-selection";
 import { MCP_SCOPES_SUPPORTED } from "../mcp/policy";
+import { ensureDefaultOrganization } from "../organization/queries";
+import logger from "../services/log";
 import { fetchClientMetadataResource } from "./cimd-fetch";
+import {
+  createSendLitOAuthTeamSelectionHooks,
+  oauthTeamSelectionAdapter,
+} from "./oauth-team-selection";
 
 export const webClientUrl = process.env.WEB_CLIENT || "http://localhost:3000";
 const apiUrl = process.env.API_PUBLIC_URL || process.env.BETTER_AUTH_URL;
@@ -53,18 +53,14 @@ export const mcpResourceUrl = `${authBaseUrl}/mcp`;
  * single source of truth shared between `oauthProvider({ validAudiences })`
  * below and `resolve-auth.ts`'s bearer verification. */
 export const validOAuthAudiences = [authBaseUrl, mcpResourceUrl];
-export const OAUTH_CLIENT_DEFAULT_SCOPES = [
-    "openid",
-    "profile",
-    "email",
-] as const;
+export const OAUTH_CLIENT_DEFAULT_SCOPES = ["openid", "profile", "email"] as const;
 export const OAUTH_CLIENT_REQUESTABLE_SCOPES = [
-    "offline_access",
-    ...MCP_SCOPES_SUPPORTED,
+  "offline_access",
+  ...MCP_SCOPES_SUPPORTED,
 ] as const;
 const supportedOAuthScopes = [
-    ...OAUTH_CLIENT_DEFAULT_SCOPES,
-    ...OAUTH_CLIENT_REQUESTABLE_SCOPES,
+  ...OAUTH_CLIENT_DEFAULT_SCOPES,
+  ...OAUTH_CLIENT_REQUESTABLE_SCOPES,
 ] as const;
 
 /** Where an MCP client should discover `mcpResourceUrl`'s protected-resource
@@ -80,193 +76,189 @@ const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
 async function sendOtpEmail(email: string, otp: string) {
-    if (process.env.NODE_ENV !== "production") {
-        logger.info({ email, otp }, "[Dev] Better Auth OTP generated");
-        return;
-    }
+  if (process.env.NODE_ENV !== "production") {
+    logger.info({ email, otp }, "[Dev] Better Auth OTP generated");
+    return;
+  }
 
-    // Platform SMTP for login OTPs. Host is required; user/pass are optional so
-    // auth-less sinks (Mailpit, local smtp4dev) work without dummy credentials.
-    if (!process.env.EMAIL_HOST) {
-        logger.error(
-            { email },
-            "Cannot send OTP email: SMTP is not configured",
-        );
-        return;
-    }
+  // Platform SMTP for login OTPs. Host is required; user/pass are optional so
+  // auth-less sinks (Mailpit, local smtp4dev) work without dummy credentials.
+  if (!process.env.EMAIL_HOST) {
+    logger.error({ email }, "Cannot send OTP email: SMTP is not configured");
+    return;
+  }
 
-    const transporter = createTransport({
-        host: process.env.EMAIL_HOST,
-        port: Number(process.env.EMAIL_PORT) || 587,
-        auth: process.env.EMAIL_USER
-            ? {
-                  user: process.env.EMAIL_USER,
-                  pass: process.env.EMAIL_PASS || "",
-              }
-            : undefined,
-    });
+  const transporter = createTransport({
+    host: process.env.EMAIL_HOST,
+    port: Number(process.env.EMAIL_PORT) || 587,
+    auth: process.env.EMAIL_USER
+      ? {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS || "",
+        }
+      : undefined,
+  });
 
-    await transporter.sendMail({
-        from: process.env.EMAIL_FROM,
-        to: email,
-        subject: "Your SendLit verification code",
-        text: `Enter this code to sign in to SendLit: ${otp}`,
-        html: `<p>Enter this code to sign in to SendLit:</p><h2>${otp}</h2>`,
-    });
+  await transporter.sendMail({
+    from: process.env.EMAIL_FROM,
+    to: email,
+    subject: "Your SendLit verification code",
+    text: `Enter this code to sign in to SendLit: ${otp}`,
+    html: `<p>Enter this code to sign in to SendLit:</p><h2>${otp}</h2>`,
+  });
 }
 
 export { oauthTeamSelectionAdapter };
 
 export const hostedLoginMethods: HostedLoginMethod[] = [
-    { type: "email-otp" },
-    ...(googleClientId && googleClientSecret
-        ? [
-              {
-                  type: "social" as const,
-                  providerId: "google",
-                  label: "Continue with Google",
-              },
-          ]
-        : []),
+  { type: "email-otp" },
+  ...(googleClientId && googleClientSecret
+    ? [
+        {
+          type: "social" as const,
+          providerId: "google",
+          label: "Continue with Google",
+        },
+      ]
+    : []),
 ];
 
 export const auth = betterAuth({
-    appName: "SendLit",
-    baseURL: authBaseUrl,
-    basePath: authBasePath,
-    secret: process.env.BETTER_AUTH_SECRET,
-    database: drizzleAdapter(db, {
-        provider: "pg",
-        schema,
-    }),
-    trustedOrigins: [webClientUrl, authBaseUrl],
-    advanced: {
-        cookiePrefix: "sendlit",
-        ...(authCookieDomain
-            ? {
-                  crossSubDomainCookies: {
-                      enabled: true,
-                      domain: authCookieDomain,
-                  },
-              }
-            : {}),
+  appName: "SendLit",
+  baseURL: authBaseUrl,
+  basePath: authBasePath,
+  secret: process.env.BETTER_AUTH_SECRET,
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema,
+  }),
+  trustedOrigins: [webClientUrl, authBaseUrl],
+  advanced: {
+    cookiePrefix: "sendlit",
+    ...(authCookieDomain
+      ? {
+          crossSubDomainCookies: {
+            enabled: true,
+            domain: authCookieDomain,
+          },
+        }
+      : {}),
+  },
+  user: {
+    additionalFields: {
+      defaultOrganizationId: {
+        type: "string",
+        required: false,
+        input: false,
+      },
     },
+  },
+  session: {
+    expiresIn: 60 * 60 * 24 * 30,
+    updateAge: 60 * 60 * 24,
+  },
+  socialProviders:
+    googleClientId && googleClientSecret
+      ? {
+          google: {
+            clientId: googleClientId,
+            clientSecret: googleClientSecret,
+          },
+        }
+      : undefined,
+  databaseHooks: {
     user: {
-        additionalFields: {
-            defaultOrganizationId: {
-                type: "string",
-                required: false,
-                input: false,
-            },
+      create: {
+        async after(user) {
+          await ensureDefaultOrganization(user.id);
         },
+      },
     },
-    session: {
-        expiresIn: 60 * 60 * 24 * 30,
-        updateAge: 60 * 60 * 24,
-    },
-    socialProviders:
-        googleClientId && googleClientSecret
-            ? {
-                  google: {
-                      clientId: googleClientId,
-                      clientSecret: googleClientSecret,
-                  },
-              }
-            : undefined,
-    databaseHooks: {
-        user: {
-            create: {
-                async after(user) {
-                    await ensureDefaultOrganization(user.id);
-                },
-            },
+  },
+  hooks: {
+    before: createAuthMiddleware(async (context) => {
+      if (context.path !== "/oauth2/authorize") return;
+
+      const scope = context.query?.scope;
+      if (typeof scope === "string" && scope.trim().length > 0) return;
+
+      // Better Auth persists the union of registration defaults and
+      // allowed scopes as the client's capability set, then treats that
+      // complete set as requested when `scope` is omitted. Require an
+      // explicit choice so a scope-less request can never become a
+      // full-access MCP grant.
+      throw new APIError("BAD_REQUEST", {
+        error: "invalid_scope",
+        error_description:
+          "OAuth authorization requests must include an explicit scope.",
+      });
+    }),
+  },
+  plugins: [
+    emailOTP({
+      async sendVerificationOTP({ email, otp }) {
+        await sendOtpEmail(email, otp);
+      },
+      storeOTP: "hashed",
+      expiresIn: 5 * 60,
+      allowedAttempts: 5,
+      rateLimit: {
+        window: 60,
+        max: 3,
+      },
+    }),
+    jwt(),
+    oauthProvider({
+      ...createOAuthProviderOptions({
+        loginPage: `${authBaseUrl}/oauth/login`,
+        consentPage: `${authBaseUrl}/oauth/consent`,
+        // Prefer CIMD for modern clients, while retaining public DCR
+        // for existing MCP clients such as Inspector. Registration
+        // creates only a public OAuth client; user authentication,
+        // consent, resource binding, PKCE, and scope enforcement still
+        // apply before any access token is issued.
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedDynamicClientRegistration: true,
+        scopes: supportedOAuthScopes,
+        validAudiences: validOAuthAudiences,
+        // Registration establishes capabilities, not grants. Keep the
+        // default set identity-only and allow clients to explicitly
+        // request the narrower MCP scope set they present at consent.
+        clientRegistrationDefaultScopes: OAUTH_CLIENT_DEFAULT_SCOPES,
+        clientRegistrationAllowedScopes: OAUTH_CLIENT_REQUESTABLE_SCOPES,
+      }),
+      // The authorization request's RFC 8707 `resource` value must
+      // resolve to a persisted provider resource. Seed the sole current
+      // remote-MCP resource and link it to CIMD clients at registration.
+      resources: [
+        {
+          identifier: mcpResourceUrl,
+          name: "SendLit MCP",
+          allowedScopes: [...MCP_SCOPES_SUPPORTED],
         },
-    },
-    hooks: {
-        before: createAuthMiddleware(async (context) => {
-            if (context.path !== "/oauth2/authorize") return;
-
-            const scope = context.query?.scope;
-            if (typeof scope === "string" && scope.trim().length > 0) return;
-
-            // Better Auth persists the union of registration defaults and
-            // allowed scopes as the client's capability set, then treats that
-            // complete set as requested when `scope` is omitted. Require an
-            // explicit choice so a scope-less request can never become a
-            // full-access MCP grant.
-            throw new APIError("BAD_REQUEST", {
-                error: "invalid_scope",
-                error_description:
-                    "OAuth authorization requests must include an explicit scope.",
-            });
-        }),
-    },
-    plugins: [
-        emailOTP({
-            async sendVerificationOTP({ email, otp }) {
-                await sendOtpEmail(email, otp);
-            },
-            storeOTP: "hashed",
-            expiresIn: 5 * 60,
-            allowedAttempts: 5,
-            rateLimit: {
-                window: 60,
-                max: 3,
-            },
-        }),
-        jwt(),
-        oauthProvider({
-            ...createOAuthProviderOptions({
-                loginPage: `${authBaseUrl}/oauth/login`,
-                consentPage: `${authBaseUrl}/oauth/consent`,
-                // Prefer CIMD for modern clients, while retaining public DCR
-                // for existing MCP clients such as Inspector. Registration
-                // creates only a public OAuth client; user authentication,
-                // consent, resource binding, PKCE, and scope enforcement still
-                // apply before any access token is issued.
-                allowDynamicClientRegistration: true,
-                allowUnauthenticatedDynamicClientRegistration: true,
-                scopes: supportedOAuthScopes,
-                validAudiences: validOAuthAudiences,
-                // Registration establishes capabilities, not grants. Keep the
-                // default set identity-only and allow clients to explicitly
-                // request the narrower MCP scope set they present at consent.
-                clientRegistrationDefaultScopes: OAUTH_CLIENT_DEFAULT_SCOPES,
-                clientRegistrationAllowedScopes:
-                    OAUTH_CLIENT_REQUESTABLE_SCOPES,
-            }),
-            // The authorization request's RFC 8707 `resource` value must
-            // resolve to a persisted provider resource. Seed the sole current
-            // remote-MCP resource and link it to CIMD clients at registration.
-            resources: [
-                {
-                    identifier: mcpResourceUrl,
-                    name: "SendLit MCP",
-                    allowedScopes: [...MCP_SCOPES_SUPPORTED],
-                },
-            ],
-            clientRegistrationDefaultResources: [mcpResourceUrl],
-            ...createSendLitOAuthTeamSelectionHooks({
-                page: `${authBaseUrl}/oauth/select-team`,
-                adapter: oauthTeamSelectionAdapter,
-            }),
-        }),
-        cimd({
-            fetchClientMetadataResource,
-            metadataProfile: "mcp-2026-07-28",
-            metadataRevalidationInterval: "60m",
-            // VS Code serves its canonical CIMD document with `no-store`.
-            // OAuth must then fetch it once for authorization and again
-            // immediately for the authorization-code token exchange. Better
-            // Auth's one-second default rejects that required second fetch as
-            // temporarily_unavailable; retain its concurrency/rate budgets
-            // but allow the same flow to revalidate without a delay.
-            metadataFetchPolicy: {
-                minimumFetchInterval: 0,
-            },
-            originBoundFields: ["post_logout_redirect_uris", "client_uri"],
-        }),
-    ],
+      ],
+      clientRegistrationDefaultResources: [mcpResourceUrl],
+      ...createSendLitOAuthTeamSelectionHooks({
+        page: `${authBaseUrl}/oauth/select-team`,
+        adapter: oauthTeamSelectionAdapter,
+      }),
+    }),
+    cimd({
+      fetchClientMetadataResource,
+      metadataProfile: "mcp-2026-07-28",
+      metadataRevalidationInterval: "60m",
+      // VS Code serves its canonical CIMD document with `no-store`.
+      // OAuth must then fetch it once for authorization and again
+      // immediately for the authorization-code token exchange. Better
+      // Auth's one-second default rejects that required second fetch as
+      // temporarily_unavailable; retain its concurrency/rate budgets
+      // but allow the same flow to revalidate without a delay.
+      metadataFetchPolicy: {
+        minimumFetchInterval: 0,
+      },
+      originBoundFields: ["post_logout_redirect_uris", "client_uri"],
+    }),
+  ],
 });
 
 export const oauthResourceClient = oauthProviderResourceClient(auth);

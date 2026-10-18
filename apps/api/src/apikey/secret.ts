@@ -12,18 +12,16 @@ const DISPLAY_PREFIX_LENGTH = 12;
 /** 32 CSPRNG bytes = 256 bits of entropy, base64url so the key stays
  * copy-paste/URL safe. */
 export function generateApiKeySecret(): string {
-    return `${API_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
+  return `${API_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
 }
 
 export function generateOrganizationApiKeySecret(): string {
-    return `${ORGANIZATION_API_KEY_PREFIX}${randomBytes(32).toString(
-        "base64url",
-    )}`;
+  return `${ORGANIZATION_API_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
 }
 
 /** Accept only the 256-bit, base64url organization key format generated here. */
 export function isOrganizationApiKeySecret(secret: string): boolean {
-    return ORGANIZATION_API_KEY_SECRET_PATTERN.test(secret);
+  return ORGANIZATION_API_KEY_SECRET_PATTERN.test(secret);
 }
 
 /** Keys are stored hashed, like passwords — but as a plain SHA-256, not
@@ -31,9 +29,9 @@ export function isOrganizationApiKeySecret(secret: string): boolean {
  * brute-forcing the hash is infeasible and a slow KDF would only tax every
  * authenticated request. */
 export function hashApiKeySecret(secret: string): string {
-    return createHash("sha256").update(secret).digest("hex");
+  return createHash("sha256").update(secret).digest("hex");
 }
 
 export function displayPrefix(secret: string): string {
-    return secret.slice(0, DISPLAY_PREFIX_LENGTH);
+  return secret.slice(0, DISPLAY_PREFIX_LENGTH);
 }

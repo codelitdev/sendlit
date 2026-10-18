@@ -1,8 +1,8 @@
 import type {
-    McpServer,
-    ServerContext,
-    StandardSchemaWithJSON,
-    ToolAnnotations,
+  McpServer,
+  ServerContext,
+  StandardSchemaWithJSON,
+  ToolAnnotations,
 } from "@modelcontextprotocol/server";
 import type { ZodRawShape, ZodTypeAny } from "zod";
 import logger from "../services/log";
@@ -10,29 +10,25 @@ import { authorizeMcpTool, getRequiredScope, type McpToolName } from "./policy";
 import { toMcpObjectSchema, toMcpSchema } from "./schema";
 
 export type McpToolConfig = {
-    title?: string;
-    description?: string;
-    inputSchema?: ZodRawShape;
-    outputSchema: ZodTypeAny;
-    annotations?: ToolAnnotations;
+  title?: string;
+  description?: string;
+  inputSchema?: ZodRawShape;
+  outputSchema: ZodTypeAny;
+  annotations?: ToolAnnotations;
 };
 
 export type McpToolHandler = (
-    argsOrContext: any,
-    context?: ServerContext,
+  argsOrContext: any,
+  context?: ServerContext,
 ) => Promise<any> | any;
 
 export interface McpToolRegistrar {
-    registerTool(
-        name: McpToolName,
-        config: McpToolConfig,
-        handler: McpToolHandler,
-    ): void;
+  registerTool(name: McpToolName, config: McpToolConfig, handler: McpToolHandler): void;
 }
 
 type CompiledToolSchemas = {
-    inputSchema: StandardSchemaWithJSON;
-    outputSchema: StandardSchemaWithJSON;
+  inputSchema: StandardSchemaWithJSON;
+  outputSchema: StandardSchemaWithJSON;
 };
 
 // SDK 2 creates a fresh server for every stateless request, but SendLit's tool
@@ -42,18 +38,18 @@ type CompiledToolSchemas = {
 const compiledSchemas = new Map<McpToolName, CompiledToolSchemas>();
 
 function getCompiledSchemas(
-    name: McpToolName,
-    config: McpToolConfig,
+  name: McpToolName,
+  config: McpToolConfig,
 ): CompiledToolSchemas {
-    const cached = compiledSchemas.get(name);
-    if (cached) return cached;
+  const cached = compiledSchemas.get(name);
+  if (cached) return cached;
 
-    const schemas = {
-        inputSchema: toMcpObjectSchema(config.inputSchema),
-        outputSchema: toMcpSchema(config.outputSchema),
-    };
-    compiledSchemas.set(name, schemas);
-    return schemas;
+  const schemas = {
+    inputSchema: toMcpObjectSchema(config.inputSchema),
+    outputSchema: toMcpSchema(config.outputSchema),
+  };
+  compiledSchemas.set(name, schemas);
+  return schemas;
 }
 
 /**
@@ -62,79 +58,68 @@ function getCompiledSchemas(
  * looking up the required scope throws if policy is missing.
  */
 export function createMcpToolRegistrar(server: McpServer): McpToolRegistrar {
-    return {
-        registerTool(name, config, handler) {
-            const requiredScope = getRequiredScope(name);
-            const hasDeclaredInput = config.inputSchema !== undefined;
-            const schemas = getCompiledSchemas(name, config);
+  return {
+    registerTool(name, config, handler) {
+      const requiredScope = getRequiredScope(name);
+      const hasDeclaredInput = config.inputSchema !== undefined;
+      const schemas = getCompiledSchemas(name, config);
 
-            server.registerTool(
-                name,
-                {
-                    title: config.title,
-                    description: config.description,
-                    ...schemas,
-                    annotations: config.annotations,
-                },
-                async (args, ctx) => {
-                    const startedAt = performance.now();
-                    const authKind = ctx.http?.authInfo?.extra?.authKind;
-                    const denied = authorizeMcpTool(name, ctx);
-                    if (denied) {
-                        logger.warn(
-                            {
-                                tool: name,
-                                requiredScope,
-                                authKind,
-                                scopeDecision: "denied",
-                            },
-                            "MCP tool authorization denied",
-                        );
-                        return denied;
-                    }
-
-                    try {
-                        const result = await (hasDeclaredInput
-                            ? handler(args, ctx)
-                            : handler(ctx));
-                        logger.info(
-                            {
-                                tool: name,
-                                requiredScope,
-                                authKind,
-                                scopeDecision: "allowed",
-                                outcome: result?.isError
-                                    ? "tool_error"
-                                    : "success",
-                                durationMs: Math.round(
-                                    performance.now() - startedAt,
-                                ),
-                            },
-                            "MCP tool completed",
-                        );
-                        return result;
-                    } catch (error) {
-                        logger.error(
-                            {
-                                tool: name,
-                                requiredScope,
-                                authKind,
-                                scopeDecision: "allowed",
-                                outcome: "exception",
-                                durationMs: Math.round(
-                                    performance.now() - startedAt,
-                                ),
-                                errorType:
-                                    error instanceof Error
-                                        ? error.name
-                                        : typeof error,
-                            },
-                            "MCP tool failed",
-                        );
-                        throw error;
-                    }
-                },
-            );
+      server.registerTool(
+        name,
+        {
+          title: config.title,
+          description: config.description,
+          ...schemas,
+          annotations: config.annotations,
         },
-    };
+        async (args, ctx) => {
+          const startedAt = performance.now();
+          const authKind = ctx.http?.authInfo?.extra?.authKind;
+          const denied = authorizeMcpTool(name, ctx);
+          if (denied) {
+            logger.warn(
+              {
+                tool: name,
+                requiredScope,
+                authKind,
+                scopeDecision: "denied",
+              },
+              "MCP tool authorization denied",
+            );
+            return denied;
+          }
+
+          try {
+            const result = await (hasDeclaredInput ? handler(args, ctx) : handler(ctx));
+            logger.info(
+              {
+                tool: name,
+                requiredScope,
+                authKind,
+                scopeDecision: "allowed",
+                outcome: result?.isError ? "tool_error" : "success",
+                durationMs: Math.round(performance.now() - startedAt),
+              },
+              "MCP tool completed",
+            );
+            return result;
+          } catch (error) {
+            logger.error(
+              {
+                tool: name,
+                requiredScope,
+                authKind,
+                scopeDecision: "allowed",
+                outcome: "exception",
+                durationMs: Math.round(performance.now() - startedAt),
+                errorType: error instanceof Error ? error.name : typeof error,
+              },
+              "MCP tool failed",
+            );
+            throw error;
+          }
+        },
+      );
+    },
+  };
 }

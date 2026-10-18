@@ -1,6 +1,6 @@
-import logger from "../services/log";
-import { captureError } from "../observability/posthog";
 import sequenceQueue from "../mail/sequence-queue";
+import { captureError } from "../observability/posthog";
+import logger from "../services/log";
 import { getDueOngoingSequences } from "./queries";
 
 /**
@@ -8,33 +8,33 @@ import { getDueOngoingSequences } from "./queries";
  * `sequence` BullMQ queue. Extracted from the polling loop so it can be tested.
  */
 export async function enqueueDueOngoingSequences(): Promise<void> {
-    const due = await getDueOngoingSequences();
-    for (const ongoingSequence of due) {
-        try {
-            // jobId dedups against jobs already waiting/active, so a
-            // row that stays due across polls (worker backlog) isn't
-            // queued twice. See docs/automation-scale-review.md #1.
-            await sequenceQueue.add(
-                "sequence",
-                { ongoingSequenceId: ongoingSequence.id },
-                { jobId: ongoingSequence.id },
-            );
-        } catch (err: any) {
-            logger.error(
-                { error: err.message, ongoing_sequence_id: ongoingSequence.id },
-                "processOngoingSequences enqueue failed",
-            );
-            captureError({
-                error: err,
-                source: "automation.enqueue_due_sequences",
-                teamId: ongoingSequence.teamId,
-                context: {
-                    ongoing_sequence_id: ongoingSequence.id,
-                    queue_name: "sequence",
-                },
-            });
-        }
+  const due = await getDueOngoingSequences();
+  for (const ongoingSequence of due) {
+    try {
+      // jobId dedups against jobs already waiting/active, so a
+      // row that stays due across polls (worker backlog) isn't
+      // queued twice. See docs/automation-scale-review.md #1.
+      await sequenceQueue.add(
+        "sequence",
+        { ongoingSequenceId: ongoingSequence.id },
+        { jobId: ongoingSequence.id },
+      );
+    } catch (err: any) {
+      logger.error(
+        { error: err.message, ongoing_sequence_id: ongoingSequence.id },
+        "processOngoingSequences enqueue failed",
+      );
+      captureError({
+        error: err,
+        source: "automation.enqueue_due_sequences",
+        teamId: ongoingSequence.teamId,
+        context: {
+          ongoing_sequence_id: ongoingSequence.id,
+          queue_name: "sequence",
+        },
+      });
     }
+  }
 }
 
 /**
@@ -43,27 +43,22 @@ export async function enqueueDueOngoingSequences(): Promise<void> {
  * `mail/sequence-worker.ts` → `process-ongoing-sequence.ts`).
  */
 export async function processOngoingSequences(): Promise<void> {
-    if (!process.env.PIXEL_SIGNING_SECRET) {
-        throw new Error(
-            "PIXEL_SIGNING_SECRET environment variable is not defined",
-        );
+  if (!process.env.PIXEL_SIGNING_SECRET) {
+    throw new Error("PIXEL_SIGNING_SECRET environment variable is not defined");
+  }
+
+  while (true) {
+    try {
+      await enqueueDueOngoingSequences();
+    } catch (err: any) {
+      logger.error({ error: err.message }, "processOngoingSequences loop failed");
+      captureError({
+        error: err,
+        source: "automation.process_ongoing_sequences.loop",
+        severity: "critical",
+      });
     }
 
-    while (true) {
-        try {
-            await enqueueDueOngoingSequences();
-        } catch (err: any) {
-            logger.error(
-                { error: err.message },
-                "processOngoingSequences loop failed",
-            );
-            captureError({
-                error: err,
-                source: "automation.process_ongoing_sequences.loop",
-                severity: "critical",
-            });
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
-    }
+    await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
+  }
 }

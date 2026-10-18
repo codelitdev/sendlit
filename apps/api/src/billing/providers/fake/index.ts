@@ -1,4 +1,4 @@
 export {
-    FakeBillingProvider,
-    FAKE_BILLING_WEBHOOK_KEY,
+  FAKE_BILLING_WEBHOOK_KEY,
+  FakeBillingProvider,
 } from "@codelitdev/billing/providers";

@@ -1,24 +1,24 @@
-export { EmailEditor } from "./email-editor";
 export type {
-    BlockCapabilities,
-    BlockComponent,
-    BlockPlacement,
-    BlockRegistry,
+  ImageBlockConfig,
+  UploadedImage,
+  Uploader,
+  UploaderProps,
+} from "./blocks/image/types";
+export { EmailEditor } from "./email-editor";
+export { defaultEmail } from "./lib/default-email";
+export { renderEmailToHtml } from "./lib/email-renderer";
+export { normalizeEmail } from "./lib/normalize-email";
+export type {
+  BlockCapabilities,
+  BlockComponent,
+  BlockPlacement,
+  BlockRegistry,
 } from "./types/block-registry";
 export type {
-    BlockRenderProps,
-    BlockSettingsProps,
-    Email,
-    EmailBlock,
-    EmailMeta,
-    EmailStyle,
+  BlockRenderProps,
+  BlockSettingsProps,
+  Email,
+  EmailBlock,
+  EmailMeta,
+  EmailStyle,
 } from "./types/email-editor";
-export type {
-    ImageBlockConfig,
-    Uploader,
-    UploaderProps,
-    UploadedImage,
-} from "./blocks/image/types";
-export { renderEmailToHtml } from "./lib/email-renderer";
-export { defaultEmail } from "./lib/default-email";
-export { normalizeEmail } from "./lib/normalize-email";
