@@ -4,6 +4,11 @@
     "description": "Email Editor by SendLit",
     "author": "SendLit",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/codelitdev/sendlit.git",
+        "directory": "packages/email-editor"
+    },
     "main": "dist/index.mjs",
     "types": "dist/index.d.ts",
     "files": [
