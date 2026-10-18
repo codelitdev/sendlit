@@ -4,46 +4,24 @@ import { contract } from "@sendlit/api-contract";
 import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { getEspConfigByEspId } from "../settings/esp/queries";
-import { getSiteUrl } from "../utils/mail";
 import { feedbackCapableProviders } from "../config/constants";
 import {
-    decryptFeedbackCredentials,
     disableFeedbackConnection,
+    feedbackConnectionReadinessError,
     getFeedbackConnectionForTeamEsp,
     recordFeedbackConnectionVerified,
     upsertFeedbackConnection,
-    type FeedbackConnection,
 } from "./feedback-connection-queries";
+import {
+    feedbackConnectionInputError,
+    toPublicFeedbackConnection,
+} from "./feedback-connection-shape";
 import { captureEvent } from "../observability/posthog";
 
 const router = Router();
 router.use("/settings/esps/:espId/feedback", requireAuth, requireTeam);
 
 const s = initServer();
-
-function webhookUrlFor(connection: {
-    provider: string;
-    connectionId: string;
-}): string {
-    return `${getSiteUrl()}/webhooks/esp/${connection.provider}/${connection.connectionId}`;
-}
-
-function toPublicShape(espId: string, connection: FeedbackConnection) {
-    return {
-        connectionId: connection.connectionId,
-        espId,
-        provider: connection.provider,
-        webhookUrl: webhookUrlFor(connection),
-        hasCredential: Boolean(connection.encryptedCredentials),
-        status: connection.status as
-            "pending" | "healthy" | "stale" | "error" | "retiring" | "disabled",
-        lastReceivedAt: connection.lastReceivedAt?.toISOString() ?? null,
-        lastVerifiedAt: connection.lastVerifiedAt?.toISOString() ?? null,
-        lastErrorCode: connection.lastErrorCode,
-        createdAt: connection.createdAt?.toISOString(),
-        updatedAt: connection.updatedAt?.toISOString(),
-    };
-}
 
 const impl = s.router(contract.feedback, {
     get: async ({ params, req }) => {
@@ -57,7 +35,9 @@ const impl = s.router(contract.feedback, {
         );
         return {
             status: 200,
-            body: connection ? toPublicShape(esp.espId, connection) : null,
+            body: connection
+                ? toPublicFeedbackConnection(esp.espId, connection)
+                : null,
         };
     },
     upsert: async ({ params, body, req }) => {
@@ -74,6 +54,8 @@ const impl = s.router(contract.feedback, {
                 body: { error: "feedback_not_supported" },
             };
         }
+        const inputError = feedbackConnectionInputError(esp.provider, body);
+        if (inputError) return { status: 400, body: { error: inputError } };
 
         const connection = await upsertFeedbackConnection({
             teamId,
@@ -92,7 +74,10 @@ const impl = s.router(contract.feedback, {
                 status: connection.status,
             },
         });
-        return { status: 200, body: toPublicShape(esp.espId, connection) };
+        return {
+            status: 200,
+            body: toPublicFeedbackConnection(esp.espId, connection),
+        };
     },
     rotate: async ({ params, body, req }) => {
         const teamId = (req as any).teamId;
@@ -106,6 +91,8 @@ const impl = s.router(contract.feedback, {
                 body: { error: "feedback_not_configured" },
             };
         }
+        const inputError = feedbackConnectionInputError(esp.provider, body);
+        if (inputError) return { status: 400, body: { error: inputError } };
 
         const connection = await upsertFeedbackConnection({
             teamId,
@@ -120,7 +107,10 @@ const impl = s.router(contract.feedback, {
             teamId,
             properties: { esp_id: esp.espId, provider: connection.provider },
         });
-        return { status: 200, body: toPublicShape(esp.espId, connection) };
+        return {
+            status: 200,
+            body: toPublicFeedbackConnection(esp.espId, connection),
+        };
     },
     test: async ({ params, req }) => {
         const teamId = (req as any).teamId;
@@ -138,11 +128,11 @@ const impl = s.router(contract.feedback, {
             };
         }
 
-        const decrypted = decryptFeedbackCredentials(connection);
-        if (!decrypted) {
+        const readinessError = feedbackConnectionReadinessError(connection);
+        if (readinessError) {
             return {
                 status: 200,
-                body: { success: false, error: "feedback_invalid_credentials" },
+                body: { success: false, error: readinessError },
             };
         }
 

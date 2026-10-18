@@ -37,14 +37,17 @@ import {
     requiresFeedbackForOrganization,
 } from "../settings/esp/provider-capabilities";
 import {
-    decryptFeedbackCredentials,
     disableOrganizationFeedbackConnection,
+    feedbackConnectionReadinessError,
     getActiveFeedbackConnectionForEspConfig,
     getFeedbackConnectionForOrganizationEsp,
     recordFeedbackConnectionVerified,
     upsertOrganizationFeedbackConnection,
-    type FeedbackConnection,
 } from "../delivery-feedback/feedback-connection-queries";
+import {
+    feedbackConnectionInputError,
+    toPublicFeedbackConnection,
+} from "../delivery-feedback/feedback-connection-shape";
 import {
     getEspGrantView,
     getOrganizationDeliveryPolicyView,
@@ -64,7 +67,6 @@ import {
     renameTeam,
 } from "../team/queries";
 import { feedbackCapableProviders } from "../config/constants";
-import { getSiteUrl } from "../utils/mail";
 import { listOrganizationAuditEvents } from "./audit";
 import { recordOrganizationAuditEvent } from "./audit";
 import { db } from "../db/client";
@@ -211,26 +213,6 @@ function serializeOrganizationEsp(config: EspConfig) {
         drainUntil: config.drainUntil?.toISOString() ?? null,
         retiredAt: config.retiredAt?.toISOString() ?? null,
         updatedAt: config.updatedAt.toISOString(),
-    };
-}
-
-function serializeOrganizationFeedback(
-    espId: string,
-    connection: FeedbackConnection,
-) {
-    return {
-        connectionId: connection.connectionId,
-        espId,
-        provider: connection.provider,
-        webhookUrl: `${getSiteUrl()}/webhooks/esp/${connection.provider}/${connection.connectionId}`,
-        hasCredential: Boolean(connection.encryptedCredentials),
-        status: connection.status as
-            "pending" | "healthy" | "stale" | "error" | "retiring" | "disabled",
-        lastReceivedAt: connection.lastReceivedAt?.toISOString() ?? null,
-        lastVerifiedAt: connection.lastVerifiedAt?.toISOString() ?? null,
-        lastErrorCode: connection.lastErrorCode,
-        createdAt: connection.createdAt?.toISOString(),
-        updatedAt: connection.updatedAt?.toISOString(),
     };
 }
 
@@ -1216,7 +1198,7 @@ const impl = s.router(contract.organizations, {
         return {
             status: 200,
             body: connection
-                ? serializeOrganizationFeedback(esp.espId, connection)
+                ? toPublicFeedbackConnection(esp.espId, connection)
                 : null,
         };
     },
@@ -1246,6 +1228,8 @@ const impl = s.router(contract.organizations, {
                 status: 400,
                 body: { error: "feedback_not_supported" },
             };
+        const inputError = feedbackConnectionInputError(esp.provider, body);
+        if (inputError) return { status: 400, body: { error: inputError } };
         const connection = await upsertOrganizationFeedbackConnection({
             organizationId: authorization.organization.id,
             espConfigId: esp.id,
@@ -1255,7 +1239,7 @@ const impl = s.router(contract.organizations, {
         });
         return {
             status: 200,
-            body: serializeOrganizationFeedback(esp.espId, connection),
+            body: toPublicFeedbackConnection(esp.espId, connection),
         };
     },
     rotateEspFeedback: async ({ req, params, body }) => {
@@ -1284,6 +1268,8 @@ const impl = s.router(contract.organizations, {
                 status: 404,
                 body: { error: "feedback_not_configured" },
             };
+        const inputError = feedbackConnectionInputError(esp.provider, body);
+        if (inputError) return { status: 400, body: { error: inputError } };
         const connection = await upsertOrganizationFeedbackConnection({
             organizationId: authorization.organization.id,
             espConfigId: esp.id,
@@ -1293,7 +1279,7 @@ const impl = s.router(contract.organizations, {
         });
         return {
             status: 200,
-            body: serializeOrganizationFeedback(esp.espId, connection),
+            body: toPublicFeedbackConnection(esp.espId, connection),
         };
     },
     testEspFeedback: async ({ req, params }) => {
@@ -1322,13 +1308,11 @@ const impl = s.router(contract.organizations, {
                 status: 404,
                 body: { error: "feedback_not_configured" },
             };
-        if (!decryptFeedbackCredentials(connection))
+        const readinessError = feedbackConnectionReadinessError(connection);
+        if (readinessError)
             return {
                 status: 200,
-                body: {
-                    success: false,
-                    error: "feedback_invalid_credentials",
-                },
+                body: { success: false, error: readinessError },
             };
         await recordFeedbackConnectionVerified(connection.id);
         return { status: 200, body: { success: true } };

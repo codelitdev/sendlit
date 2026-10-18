@@ -1,0 +1,175 @@
+---
+title: Amazon SES bounces and complaints
+description: Send SES bounce and complaint events to a self-hosted SendLit through Amazon SNS.
+---
+
+When you send through Amazon SES, SendLit learns about bounces and spam complaints from SES's event notifications. A hard bounce or a complaint adds the address to your [suppression list](/activity/suppressions), so SendLit stops mailing it before it hurts your sender reputation. Repeated soft bounces suppress the address too.
+
+SES doesn't call webhooks directly. It publishes events to an **Amazon SNS topic**, and SNS delivers them to SendLit over HTTPS:
+
+```
+SES → SNS topic → POST https://<your-domain>/webhooks/esp/ses/<connection-id>
+```
+
+There is no shared secret to copy around. SendLit checks every message's Amazon signature and accepts only messages from the one topic you configure. It also confirms the SNS subscription for you.
+
+## Before you start
+
+- **An SES ESP in SendLit.** Add Amazon SES under **Settings → Email service providers (ESP)** using your SES SMTP credentials, and send a test email.
+- **A public HTTPS URL.** SNS has to reach your SendLit API from the internet. The webhook URL is built from the `PROTOCOL` and `DOMAIN` environment variables, so set `PROTOCOL=https` and point `DOMAIN` at a host whose reverse proxy forwards `/webhooks/*` to the API container. SNS can't reach `localhost`.
+- **Outbound HTTPS to SNS.** To check signatures, SendLit downloads Amazon's signing certificate from `https://sns.<region>.amazonaws.com`. If your server limits outbound traffic, allow HTTPS to that host.
+- **The AWS CLI**, for the commands below. The AWS console works as well.
+
+<Callout type="info">
+    SendLit needs no AWS credentials for feedback. The SMTP user only needs
+    permission to send (`ses:SendRawEmail`), and SNS pushes events to SendLit.
+</Callout>
+
+## 1. Create an SNS topic
+
+Create a **standard** topic (not FIFO) in the **same region** as your SES identity, and switch it to SHA-256 signatures (signature version 2):
+
+```sh
+aws sns create-topic --name sendlit-ses-feedback --region us-east-1
+
+aws sns set-topic-attributes \
+  --topic-arn arn:aws:sns:us-east-1:123456789012:sendlit-ses-feedback \
+  --attribute-name SignatureVersion \
+  --attribute-value 2
+```
+
+SendLit also accepts version 1 (SHA-1) signatures, but version 2 is recommended.
+
+In the AWS console, create a **Standard** topic and leave the other settings at their defaults. The create page doesn't offer the signature version. New topics use version 1, which works. To switch to version 2, run the `set-topic-attributes` command above.
+
+Note the topic ARN. You need it in the next step.
+
+## 2. Add the topic ARN in SendLit
+
+Do this **before** subscribing. SendLit rejects messages from topics it doesn't know, and that includes the subscription confirmation.
+
+1. Open **Settings → Email service providers (ESP)**, and click the **Delivery feedback (bounces & complaints)** button on your Amazon SES row.
+2. Paste the topic ARN into **SNS topic ARN** and save.
+3. Copy the **Webhook URL** the dialog shows. It looks like `https://mail.example.com/webhooks/esp/ses/whc_…`.
+
+You can also do this through the API (`PUT /settings/esps/{espId}/feedback` with `{"expectedTopicArn": "arn:aws:sns:…"}`) or the `upsert_esp_feedback_connection` MCP tool.
+
+## 3. Subscribe the webhook URL to the topic
+
+```sh
+aws sns subscribe \
+  --topic-arn arn:aws:sns:us-east-1:123456789012:sendlit-ses-feedback \
+  --protocol https \
+  --notification-endpoint "https://mail.example.com/webhooks/esp/ses/whc_…"
+```
+
+Leave **raw message delivery** off. SendLit needs the signed SNS envelope.
+
+SNS immediately sends a subscription confirmation, and SendLit confirms it automatically. Reopen the delivery feedback dialog: it should show **SNS subscription confirmed**, and **Test** should succeed. If the subscription stays pending, see [Troubleshooting](#troubleshooting).
+
+## 4. Send SES events to the topic
+
+Pick **one** of the two options below. If you set up both for the same identity, SES publishes each event twice. SendLit counts each event only once, but that doubles your SNS traffic for nothing.
+
+### Option A: configuration set (recommended)
+
+A configuration set can publish every event type SendLit uses. It also includes the message tag SendLit adds to each email, which lets SendLit match an event to its email even if the event arrives before the send has been recorded.
+
+```sh
+aws sesv2 create-configuration-set --configuration-set-name sendlit
+
+aws sesv2 create-configuration-set-event-destination \
+  --configuration-set-name sendlit \
+  --event-destination-name sendlit-feedback \
+  --event-destination '{
+    "Enabled": true,
+    "MatchingEventTypes": ["BOUNCE", "COMPLAINT", "DELIVERY", "DELIVERY_DELAY", "REJECT", "RENDERING_FAILURE"],
+    "SnsDestination": { "TopicArn": "arn:aws:sns:us-east-1:123456789012:sendlit-ses-feedback" }
+  }'
+```
+
+SendLit sends over SMTP and doesn't name a configuration set itself, so make this set the identity's **default configuration set**:
+
+```sh
+aws sesv2 put-email-identity-configuration-set-attributes \
+  --email-identity example.com \
+  --configuration-set-name sendlit
+```
+
+Don't enable the `SEND`, `OPEN`, or `CLICK` event types. SendLit already tracks opens and clicks itself and ignores those events.
+
+### Option B: identity notifications
+
+In the SES console, open your verified identity, go to **Notifications → Feedback notifications**, and set the **Bounce**, **Complaint**, and (optionally) **Delivery** topics to your SNS topic. Leave **Include original email headers** off.
+
+With identity notifications, SendLit matches events to emails by SES message ID and recipient, because these notifications don't include message tags.
+
+### Topic access policy
+
+If SES reports that it can't publish to the topic, add this statement to the topic's access policy:
+
+```json
+{
+    "Effect": "Allow",
+    "Principal": { "Service": "ses.amazonaws.com" },
+    "Action": "SNS:Publish",
+    "Resource": "arn:aws:sns:us-east-1:123456789012:sendlit-ses-feedback",
+    "Condition": {
+        "StringEquals": { "AWS:SourceAccount": "123456789012" }
+    }
+}
+```
+
+## 5. Test with the SES mailbox simulator
+
+Send an email from SendLit (for example, a transactional email) to these simulator addresses. They don't affect your sending reputation.
+
+| Recipient                           | Expected result in SendLit                |
+| ----------------------------------- | ----------------------------------------- |
+| `success@simulator.amazonses.com`   | A delivered event                         |
+| `bounce@simulator.amazonses.com`    | A hard bounce, and the address suppressed |
+| `complaint@simulator.amazonses.com` | A complaint, and the address suppressed   |
+
+After a minute, the delivery feedback dialog should show **Healthy** with a recent event, and the bounce and complaint addresses should appear under **Suppressions**.
+
+## What SendLit does with each event
+
+| SES event                                  | SendLit event        | Effect                                                     |
+| ------------------------------------------ | -------------------- | ---------------------------------------------------------- |
+| Bounce, `Permanent`                        | Hard bounce          | Suppresses the address                                     |
+| Bounce, `Permanent` + SES suppression list | Provider suppression | Suppresses the address                                     |
+| Bounce, `Transient` / `Undetermined`       | Soft bounce          | Suppresses the address after repeated soft bounces         |
+| Complaint                                  | Complaint            | Suppresses the address. `not-spam` feedback is ignored     |
+| Delivery                                   | Delivered            | Marks the email delivered and resets the soft-bounce count |
+| DeliveryDelay                              | Delayed              | Recorded only                                              |
+| Reject                                     | Rejected             | Marks the email as not delivered                           |
+| Rendering failure                          | Failed               | Marks the email as failed                                  |
+
+Before SendLit stores an event, it removes the original email headers (`mail.headers`). It discards the raw payload of a Delivery event as soon as the event is processed. For other events, it keeps the raw payload for 30 days for debugging.
+
+## Troubleshooting
+
+**The subscription stays "Waiting for SNS subscription".**
+Check, in order:
+
+1. The topic ARN in SendLit exactly matches the topic you subscribed to.
+2. The webhook URL is reachable from the internet over HTTPS with a valid certificate.
+3. Your reverse proxy forwards `/webhooks/*` to the API without rewriting the request body.
+
+Then, in the SNS console, select the pending subscription and choose **Request confirmation**.
+
+**SNS logs `401` responses.**
+The message came from a topic other than the one saved in SendLit, or its signature didn't verify. Check the topic ARN, and make sure raw message delivery is off.
+
+**SNS logs `503` responses.**
+SendLit couldn't download the SNS signing certificate. Allow outbound HTTPS from the API to `sns.<region>.amazonaws.com`. SNS retries these deliveries, so nothing is lost while you fix it.
+
+**The connection shows `sns_unsubscribed`.**
+The subscription was deleted on the AWS side. SendLit never resubscribes on its own, so subscribe the webhook URL again (step 3).
+
+**Events arrive but aren't linked to an email.**
+With identity notifications, SendLit matches by SES message ID and recipient. Use a configuration set (option A) so events also carry SendLit's message tag.
+
+<Callout type="warn">
+    AWS China regions (`amazonaws.com.cn`) aren't supported yet.
+</Callout>

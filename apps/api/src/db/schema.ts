@@ -1480,6 +1480,12 @@ export const espFeedbackConnections = pgTable(
         ),
         // SES: the SNS TopicArn this connection expects notifications from.
         expectedTopicArn: text("expected_topic_arn"),
+        // SES: when SendLit last confirmed the SNS HTTPS subscription for
+        // `expectedTopicArn`. Distinct from health — no event has to have
+        // arrived yet. Cleared when the topic changes.
+        subscriptionConfirmedAt: timestamp("subscription_confirmed_at", {
+            withTimezone: true,
+        }),
         status: text("status").notNull().default("pending"),
         lastReceivedAt: timestamp("last_received_at", { withTimezone: true }),
         lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),

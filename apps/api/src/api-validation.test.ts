@@ -478,6 +478,11 @@ describe("bounce/complaint feedback and suppression schemas", () => {
         expect(upsertFeedbackConnectionBodySchema.safeParse({}).success).toBe(
             false,
         );
+        expect(
+            upsertFeedbackConnectionBodySchema.safeParse({
+                expectedTopicArn: "arn:aws:sns:us-east-1:123456789012:t",
+            }).success,
+        ).toBe(true);
     });
 
     it("validates delivery-event list query filters", () => {

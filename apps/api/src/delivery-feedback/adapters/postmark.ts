@@ -1,6 +1,6 @@
 import type { BounceClass, DeliveryEventType } from "../../config/constants";
 import { constantTimeEqual, headerString } from "./header-utils";
-import type { NormalizedCanonicalEvent, ProviderAdapter } from "./types";
+import type { NormalizedCanonicalEvent, SyncProviderAdapter } from "./types";
 
 /**
  * Postmark does not sign these webhooks with HMAC — per
@@ -45,7 +45,7 @@ function parsePayload(rawBody: Buffer): any {
     return JSON.parse(rawBody.toString("utf8"));
 }
 
-export const postmarkAdapter: ProviderAdapter = {
+export const postmarkAdapter: SyncProviderAdapter = {
     provider: "postmark",
     verify({ headers, credential, previousCredential }) {
         const presented =

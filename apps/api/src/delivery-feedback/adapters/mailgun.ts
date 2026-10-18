@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import type { BounceClass, DeliveryEventType } from "../../config/constants";
 import { constantTimeEqual } from "./header-utils";
-import type { NormalizedCanonicalEvent, ProviderAdapter } from "./types";
+import type { NormalizedCanonicalEvent, SyncProviderAdapter } from "./types";
 
 /**
  * Mailgun signs its webhooks by HMAC-SHA256 over `timestamp + token` (both
@@ -72,7 +72,7 @@ function classifyFailed(event: any): {
     return { eventType: "soft_bounce", bounceClass: "undetermined" };
 }
 
-export const mailgunAdapter: ProviderAdapter = {
+export const mailgunAdapter: SyncProviderAdapter = {
     provider: "mailgun",
     verify({ rawBody, credential, previousCredential }) {
         let parsed: any;

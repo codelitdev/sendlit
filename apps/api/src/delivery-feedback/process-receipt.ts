@@ -102,7 +102,10 @@ export async function processWebhookReceipt(receiptId: string): Promise<void> {
     if (anyFailed) {
         await markReceiptPartial(receiptId);
     } else {
-        await markReceiptProcessed(receiptId);
+        await markReceiptProcessed(receiptId, {
+            dropPayload:
+                adapter.retainPayloadAfterProcessing?.(rawBody) === false,
+        });
         // A fully-processed authenticated receipt is the PRD's definition
         // of a healthy connection — not just the manual "test" action.
         await recordFeedbackConnectionVerified(receipt.connectionId);
@@ -142,6 +145,7 @@ async function processOneEvent(
 
     const outbound = await correlateOutboundMessage({
         connectionId: receipt.connectionId,
+        sendlitMessageId: event.sendlitMessageId,
         providerMessageId: event.providerMessageId,
         recipientEmail: event.recipientEmail,
     });
