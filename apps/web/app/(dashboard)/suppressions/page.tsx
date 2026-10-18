@@ -144,9 +144,9 @@ export default function SuppressionsPage() {
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load reads reason/activeOnly from state; reset the list only when those filters change
     useEffect(() => {
         void load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reason, activeOnly]);
 
     function handleRelease(suppression: Suppression) {

@@ -19,6 +19,7 @@ function getCookie(name: string): string | null {
 
 function setCookie(name: string, value: string): void {
     if (typeof document === "undefined") return;
+    // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API lacks cross-browser support (e.g. Safari/Firefox); synchronous write is intended
     document.cookie = `${name}=${encodeURIComponent(value)}; path=/; SameSite=Lax`;
 }
 
@@ -38,6 +39,7 @@ export function setOrganizationIdCookie(organizationId: string): void {
 
 export function clearOrganizationIdCookie(): void {
     if (typeof document === "undefined") return;
+    // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API lacks cross-browser support (e.g. Safari/Firefox); synchronous clear is intended
     document.cookie = `${ORGANIZATION_ID_COOKIE}=; Max-Age=0; path=/`;
 }
 
@@ -50,6 +52,7 @@ export function setTeamIdCookie(teamId: string): void {
  * instead of repeatedly failing against a team this browser can't use. */
 export function clearTeamIdCookie(): void {
     if (typeof document === "undefined") return;
+    // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API lacks cross-browser support (e.g. Safari/Firefox); synchronous clear is intended
     document.cookie = `${TEAM_ID_COOKIE}=; Max-Age=0; path=/`;
 }
 

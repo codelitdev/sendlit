@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 
@@ -32,14 +31,14 @@ describe("SwitchTeamForm", () => {
         expect(form?.getAttribute("action")).toBe("/api/team/switch");
         expect(form?.getAttribute("method")).toBe("POST");
         expect(
-            (form?.querySelector('[name="teamId"]') as HTMLInputElement).value,
+            (form!.querySelector('[name="teamId"]') as HTMLInputElement).value,
         ).toBe("team_123");
         expect(
-            (form?.querySelector('[name="organizationId"]') as HTMLInputElement)
+            (form!.querySelector('[name="organizationId"]') as HTMLInputElement)
                 .value,
         ).toBe("org_123");
         expect(
-            (form?.querySelector('[name="redirectTo"]') as HTMLInputElement)
+            (form!.querySelector('[name="redirectTo"]') as HTMLInputElement)
                 .value,
         ).toBe("/");
 
@@ -60,10 +59,10 @@ describe("SwitchTeamForm", () => {
         expect(submit).toHaveBeenCalled();
         const form = document.querySelector('form[action="/api/team/switch"]');
         expect(
-            (form?.querySelector('[name="teamId"]') as HTMLInputElement).value,
+            (form!.querySelector('[name="teamId"]') as HTMLInputElement).value,
         ).toBe("team_new");
         expect(
-            (form?.querySelector('[name="organizationId"]') as HTMLInputElement)
+            (form!.querySelector('[name="organizationId"]') as HTMLInputElement)
                 .value,
         ).toBe("org_new");
     });

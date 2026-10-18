@@ -108,7 +108,7 @@ const impl = s.router(contract.contacts, {
         return { status: 200, body: serializeDates(omitInternal(contact)) };
     },
     update: async ({ params, body, req }) => {
-        let contact;
+        let contact: Awaited<ReturnType<typeof updateContact>>;
         try {
             contact = await updateContact(
                 (req as any).teamId,

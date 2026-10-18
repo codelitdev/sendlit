@@ -232,7 +232,7 @@ export async function createTransactionalEmail({
     if (
         templateId &&
         ["address", "unsubscribe_link", "subscriber"].some((key) =>
-            Object.prototype.hasOwnProperty.call(variables, key),
+            Object.hasOwn(variables, key),
         )
     ) {
         throw new Error("marketing_variables_not_allowed");

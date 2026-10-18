@@ -117,7 +117,7 @@ const toolPolicies = {
 export type McpToolName = keyof typeof toolPolicies;
 
 export function isMcpToolName(name: string): name is McpToolName {
-    return Object.prototype.hasOwnProperty.call(toolPolicies, name);
+    return  Object.hasOwn(toolPolicies, name);
 }
 
 export function getRequiredScope(name: string): McpScope {

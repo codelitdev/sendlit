@@ -12,7 +12,7 @@ import {
     getActiveCatalog,
     verifyCatalogAgainstProvider,
 } from "./catalog-store";
-import { FakeBillingProvider } from "./providers/fake";
+import type { FakeBillingProvider } from "./providers/fake";
 import {
     getBillingProvider,
     resetBillingProviderInstances,

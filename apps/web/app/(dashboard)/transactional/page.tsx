@@ -84,9 +84,9 @@ export default function TransactionalPage() {
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reset to page 1 only when the status filter changes
     useEffect(() => {
         void load(1, status);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status]);
 
     return (

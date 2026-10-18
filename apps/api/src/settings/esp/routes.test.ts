@@ -143,7 +143,7 @@ describe("ESP settings routes", () => {
             port: 587,
             secure: false,
         });
-        const { sequenceRow } = await seedSequence(tdb, {
+        await seedSequence(tdb, {
             teamId: owner.team.id,
             outboxId: config.id,
             emails: [{ emailId: "email_1" }],

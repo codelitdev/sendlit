@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { BlockRenderProps, BlockSettingsProps } from "./email-editor";
+import type { BlockRenderProps, BlockSettingsProps } from "./email-editor";
 
 export type BlockPlacement = "any" | "first" | "last";
 

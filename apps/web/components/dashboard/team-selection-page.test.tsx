@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { BreadcrumbProvider } from "@/components/dashboard/breadcrumb-context";
@@ -74,10 +73,10 @@ describe("TeamSelectionPage", () => {
         const form = button.closest("form");
         expect(form?.getAttribute("action")).toBe("/api/team/switch");
         expect(
-            (form?.querySelector('[name="teamId"]') as HTMLInputElement).value,
+            (form!.querySelector('[name="teamId"]') as HTMLInputElement).value,
         ).toBe("team_other");
         expect(
-            (form?.querySelector('[name="organizationId"]') as HTMLInputElement)
+            (form!.querySelector('[name="organizationId"]') as HTMLInputElement)
                 .value,
         ).toBe("org_b");
     });

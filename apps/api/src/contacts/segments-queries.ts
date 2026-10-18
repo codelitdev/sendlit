@@ -1,7 +1,7 @@
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "../db/client";
 import { segments } from "../db/schema";
-import { type ContactFilterWithAggregator } from "./segment";
+import type { ContactFilterWithAggregator } from "./segment";
 
 export type Segment = typeof segments.$inferSelect;
 

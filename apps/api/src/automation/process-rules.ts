@@ -24,7 +24,6 @@ import type { ContactFilterWithAggregator } from "../contacts/segment";
  * otherwise stay `active` forever.
  */
 export async function processRules() {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         try {
             await processDueRulesOnce();

@@ -63,7 +63,7 @@ export class SendLit {
 
     constructor(options: SendLitOptions = {}) {
         const g = globalThis as { window?: { document?: unknown } };
-        if (typeof g.window !== "undefined" && g.window.document) {
+        if (g.window?.document) {
             throw configError(
                 "The SendLit SDK is server-only. Never expose your API key in browser code.",
             );

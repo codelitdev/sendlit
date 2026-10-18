@@ -280,11 +280,11 @@ export function EmailImageUploadDialog({
         resetState();
     };
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: loadMedia is recreated every render; load only when the dialog opens or the media tab is selected
     useEffect(() => {
         if (open && activeTab === "media") {
             void loadMedia();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, activeTab]);
 
     const acceptAttribute =
@@ -467,6 +467,7 @@ export function EmailImageUploadDialog({
                             <div className="grid grid-cols-3 gap-3">
                                 {Array.from({ length: 6 }).map((_, index) => (
                                     <div
+                                        // biome-ignore lint/suspicious/noArrayIndexKey: static loading-skeleton placeholders with no data identity
                                         key={index}
                                         className="aspect-square rounded-md bg-muted"
                                     />
@@ -482,6 +483,7 @@ export function EmailImageUploadDialog({
                                         onClick={() => selectMedia(item)}
                                     >
                                         <div className="aspect-square bg-muted">
+                                            {/* biome-ignore lint/performance/noImgElement: MediaLit thumbnail URLs from arbitrary hosts; next/image would need remotePatterns/loader config */}
                                             <img
                                                 src={
                                                     item.thumbnailUrl ||
@@ -542,6 +544,7 @@ export function EmailImageUploadDialog({
                                         {Array.from({ length: 6 }).map(
                                             (_, index) => (
                                                 <div
+                                                    // biome-ignore lint/suspicious/noArrayIndexKey: static loading-skeleton placeholders with no data identity
                                                     key={index}
                                                     className="aspect-square rounded-md bg-muted"
                                                 />
@@ -560,6 +563,7 @@ export function EmailImageUploadDialog({
                                                 }
                                             >
                                                 <div className="aspect-square bg-muted">
+                                                    {/* biome-ignore lint/performance/noImgElement: Unsplash thumbnails shown in a picker; next/image would need remotePatterns/loader config */}
                                                     <img
                                                         src={photo.urls.small}
                                                         alt={

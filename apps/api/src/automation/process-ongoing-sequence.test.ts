@@ -77,7 +77,7 @@ describe("getNextPublishedEmail", () => {
 
 describe("processOngoingSequence", () => {
     it("does nothing when the row is not yet due (duplicate-job guard)", async () => {
-        const { account, team, contact } = await seedTeamAndContact(tdb);
+        const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow } = await seedSequence(tdb, {
             teamId: team.id,
             emails: [{ emailId: "email_e1" }],
@@ -100,7 +100,7 @@ describe("processOngoingSequence", () => {
     });
 
     it("sends the next email, records the delivery, and schedules the follow-up", async () => {
-        const { account, team, contact } = await seedTeamAndContact(tdb);
+        const { team, contact } = await seedTeamAndContact(tdb);
         const { sequenceRow, emailRows } = await seedSequence(tdb, {
             teamId: team.id,
             emails: [

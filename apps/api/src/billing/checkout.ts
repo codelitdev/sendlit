@@ -220,7 +220,7 @@ export async function createOrganizationCheckout(input: {
             throw new BillingCheckoutError("billing_provider_unavailable", 503);
         }
     })();
-    let catalog;
+    let catalog: Awaited<ReturnType<typeof requireActiveCatalog>>;
     try {
         catalog = await requireActiveCatalog(config, provider);
         await verifyCheckoutOffer(config, provider, offer);
@@ -383,7 +383,7 @@ export async function resumeOrganizationCheckoutAttempt(
 ): Promise<boolean> {
     const billing = getBillingEngine();
     const attempt = await billing.store.findCheckoutById(attemptId);
-    if (!attempt || attempt.status !== "creating" || attempt.expiresAt <= now) {
+    if (attempt?.status !== "creating" || attempt.expiresAt <= now) {
         return false;
     }
     await billing.enqueueJob({
@@ -422,7 +422,7 @@ export async function createPaidOrganizationCheckout(input: {
             errorDetails(config),
         );
     }
-    let organization;
+    let organization: Awaited<ReturnType<typeof createOrganization>>;
     try {
         organization = await createOrganization(
             input.payerId,
@@ -450,18 +450,14 @@ export async function createPaidOrganizationCheckout(input: {
             throw error;
         }
     }
-    try {
-        const checkout = await createOrganizationCheckout({
-            organizationId: organization.id,
-            payerId: input.payerId,
-            plan: input.plan,
-            interval: input.interval,
-            catalogRevision: input.catalogRevision,
-            pendingTeamName: input.teamName,
-            grant: input.grant,
-        });
-        return { ...checkout, organizationId: organization.organizationId };
-    } catch (error) {
-        throw error;
-    }
+    const checkout = await createOrganizationCheckout({
+        organizationId: organization.id,
+        payerId: input.payerId,
+        plan: input.plan,
+        interval: input.interval,
+        catalogRevision: input.catalogRevision,
+        pendingTeamName: input.teamName,
+        grant: input.grant,
+    });
+    return { ...checkout, organizationId: organization.organizationId };
 }

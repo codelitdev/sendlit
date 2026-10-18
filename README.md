@@ -131,8 +131,8 @@ Re-run `bun run build:packages` (or use the packages' `dev` scripts) after chang
 ```bash
 bun run test       # API, web and package unit tests
 bun run typecheck  # TypeScript in every workspace
-bun run lint       # ESLint
-bun run prettier   # Format the codebase
+bun run lint       # Biome lint
+bun run format     # Biome format (bun run format:check in CI)
 ```
 
 ## Operator billing CLI
@@ -169,7 +169,7 @@ Contributions are welcome. For anything larger than a small fix, please open an 
 1. Fork the repository and create a branch.
 2. Make your change, with tests. If you change a published package, add a changeset with `bun run changeset`.
 3. If you change `apps/api`, update the REST API documentation and the MCP server too.
-4. Run `bun run lint`, `bun run prettier`, `bun run typecheck` and `bun run test`.
+4. Run `bun run lint`, `bun run format`, `bun run typecheck` and `bun run test`.
 5. Open a pull request.
 
 Questions and ideas are welcome in [GitHub issues](https://github.com/codelitdev/sendlit/issues).

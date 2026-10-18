@@ -44,6 +44,7 @@ export function FooterBlock({
         >
             <div>
                 {addressLines.map((line, index) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: address lines are static rendered text derived from a string, never reordered
                     <Fragment key={index}>
                         {index > 0 ? <br /> : null}
                         {line}

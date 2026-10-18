@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { API_URL } from "@/lib/config";
 import { appRedirect } from "@/lib/safe-app-redirect";
 

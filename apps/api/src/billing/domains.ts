@@ -24,7 +24,7 @@ function verificationKey(): string {
 
 export function normalizeSendingDomain(input: string): string {
     const value = input.trim().toLowerCase().replace(/\.$/, "");
-    if (!value || value.includes("*") || /[:\/\s]/.test(value) || isIP(value))
+    if (!value || value.includes("*") || /[:/\s]/.test(value) || isIP(value))
         throw new Error("domain_invalid");
     let ascii: string;
     try {

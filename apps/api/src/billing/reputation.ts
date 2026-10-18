@@ -322,7 +322,7 @@ export async function releaseTeamSendingControl(
             .where(eq(teamSendingControls.teamId, teamId))
             .limit(1)
             .for("update");
-        if (!control || control.status !== "all_paused") return false;
+        if (control?.status !== "all_paused") return false;
         const now = new Date();
         await tx
             .update(teamSendingControls)

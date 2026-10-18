@@ -48,6 +48,7 @@ export function TeamSelectionPage() {
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: initial load on mount only; load is recreated every render
     useEffect(() => {
         void load();
     }, []);

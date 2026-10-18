@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 
 /**
  * Do-not-send fingerprint over a normalized recipient address — HMAC-SHA256,

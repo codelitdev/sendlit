@@ -23,7 +23,6 @@ coverage
 **/coverage
 .turbo
 **/.turbo
-.eslintcache
 *.tsbuildinfo
 **/*.tsbuildinfo
 

@@ -142,6 +142,7 @@ export function BlockWrapper({
                     >
                         {canDelete && (
                             <button
+                                type="button"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     deleteBlock(block.id);
@@ -155,6 +156,7 @@ export function BlockWrapper({
 
                         {canDuplicate && (
                             <button
+                                type="button"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     duplicateBlock(block.id);
@@ -168,6 +170,7 @@ export function BlockWrapper({
 
                         {canMoveUp && (
                             <button
+                                type="button"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     moveBlock(block.id, "up");
@@ -182,6 +185,7 @@ export function BlockWrapper({
 
                         {canMoveDown && (
                             <button
+                                type="button"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     moveBlock(block.id, "down");

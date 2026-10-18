@@ -66,6 +66,7 @@ export function SubscriberList({
                         {Array.from({ length: skeletonRowCount }).map(
                             (_, index) => (
                                 <li
+                                    // biome-ignore lint/suspicious/noArrayIndexKey: static loading-skeleton rows with no data identity
                                     key={index}
                                     className="flex items-center gap-3 px-5 py-2.5"
                                 >

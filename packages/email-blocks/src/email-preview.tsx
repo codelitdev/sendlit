@@ -93,6 +93,7 @@ export function EmailPreview({
         }
     }, [blocks, content, fallbackErrorMessage, renderContext]);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: renderedHTML is a re-run trigger: the wrapper only mounts after HTML renders, so the observer must attach then
     useEffect(() => {
         if (!wrapperRef.current) return;
 

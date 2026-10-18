@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
     return (
         <nav
+            // biome-ignore lint/a11y/noRedundantRoles: shadcn/ui upstream markup, kept identical to the generated component
             role="navigation"
             aria-label="pagination"
             data-slot="pagination"

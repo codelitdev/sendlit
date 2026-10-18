@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import React from "react";
+import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
     cleanup,
@@ -30,7 +30,10 @@ vi.mock("@sendlit/email-blocks", () => ({
     EmailEditor: (props: { onChange: (content: any) => void }) => {
         mocks.editorProps = props;
         return (
-            <button onClick={() => props.onChange(mocks.changedContent)}>
+            <button
+                type="button"
+                onClick={() => props.onChange(mocks.changedContent)}
+            >
                 Change document
             </button>
         );

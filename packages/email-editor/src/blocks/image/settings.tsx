@@ -163,11 +163,13 @@ export function ImageSettings({
 
             {/* Sample Images */}
             <div>
+                {/* biome-ignore lint/a11y/noLabelWithoutControl: caption for a group of sample-image buttons, not a form field */}
                 <label className="text-sm font-medium">Sample Images</label>
                 <div className="grid grid-cols-3 gap-2 mt-2">
                     {sampleImages.map((url, index) => (
                         <button
-                            key={index}
+                            key={url}
+                            type="button"
                             onClick={(e) => {
                                 e.preventDefault();
                                 handleSettingChange("src", url);

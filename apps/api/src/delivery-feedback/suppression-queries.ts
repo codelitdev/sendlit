@@ -198,7 +198,7 @@ export async function releaseSuppression({
             )
             .limit(1)
             .for("update");
-        if (!existing || !existing.active) {
+        if (!existing?.active) {
             throw new Error("suppression_not_found");
         }
 

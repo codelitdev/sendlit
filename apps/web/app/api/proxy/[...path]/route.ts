@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { API_URL } from "@/lib/config";
 import { TEAM_ID_COOKIE } from "@/lib/tokens";

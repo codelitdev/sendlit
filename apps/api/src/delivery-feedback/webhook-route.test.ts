@@ -1,6 +1,6 @@
 import express from "express";
-import { IncomingMessage, ServerResponse } from "http";
-import { Socket } from "net";
+import { IncomingMessage, ServerResponse } from "node:http";
+import { Socket } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 

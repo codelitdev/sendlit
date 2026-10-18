@@ -69,37 +69,37 @@ export function TextBlock({ block, style, selectedBlockId }: TextBlockProps) {
                     markdownCustomStyles={{
                         h1: {
                             fontWeight: "bold",
-                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16") * 2, 32)}px`,
+                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16", 10) * 2, 32)}px`,
                             fontFamily: headerFontFamily,
                             margin: "16px 0 8px",
                         },
                         h2: {
                             fontWeight: "bold",
-                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16") * 1.5, 24)}px`,
+                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16", 10) * 1.5, 24)}px`,
                             fontFamily: headerFontFamily,
                             margin: "16px 0 8px",
                         },
                         h3: {
                             fontWeight: "bold",
-                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16") * 1.25, 20)}px`,
+                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16", 10) * 1.25, 20)}px`,
                             fontFamily: headerFontFamily,
                             margin: "16px 0 8px",
                         },
                         h4: {
                             fontWeight: "bold",
-                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16") * 1.125, 18)}px`,
+                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16", 10) * 1.125, 18)}px`,
                             fontFamily: headerFontFamily,
                             margin: "16px 0 8px",
                         },
                         h5: {
                             fontWeight: "bold",
-                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16") * 1.0625, 16)}px`,
+                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16", 10) * 1.0625, 16)}px`,
                             fontFamily: headerFontFamily,
                             margin: "16px 0 8px",
                         },
                         h6: {
                             fontWeight: "bold",
-                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16") * 1.03125, 14)}px`,
+                            fontSize: `${Math.max(parseInt(block.settings.fontSize || "16", 10) * 1.03125, 14)}px`,
                             fontFamily: headerFontFamily,
                             margin: "16px 0 8px",
                         },

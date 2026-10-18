@@ -428,8 +428,7 @@ export async function expireCancelledSubscriptionEntitlements(
                 .limit(1)
                 .for("update");
             if (
-                !subscription ||
-                subscription.status !== "cancelled" ||
+                subscription?.status !== "cancelled" ||
                 !subscription.isEntitlementSource ||
                 !subscription.paidThroughAt ||
                 subscription.paidThroughAt > now

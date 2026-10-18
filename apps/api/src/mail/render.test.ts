@@ -14,7 +14,7 @@ import {
     appendTrackingPixelToHtml,
     findMissingTemplateVariables,
     mailingAddressAppearsInText,
-    MissingTemplateVariablesError,
+    type MissingTemplateVariablesError,
     renderEmailContent,
     transformLinksForClickTracking,
 } from "./render";

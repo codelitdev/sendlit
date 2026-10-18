@@ -17,7 +17,6 @@ const POLL_INTERVAL_MS = 30 * 1000;
  * -process one.
  */
 export async function startFeedbackReceiptPoller(): Promise<void> {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         try {
             await pollFeedbackReceiptsOnce();

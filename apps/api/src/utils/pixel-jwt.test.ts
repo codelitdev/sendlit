@@ -20,7 +20,7 @@ describe("pixel JWT", () => {
 
     it("returns null for a tampered or wrong-secret token", () => {
         const token = generatePixelToken({ d: "x" });
-        expect(verifyPixelToken(token + "x")).toBeNull();
+        expect(verifyPixelToken(`${token}x`)).toBeNull();
 
         process.env.PIXEL_SIGNING_SECRET = "other-secret";
         expect(verifyPixelToken(token)).toBeNull();

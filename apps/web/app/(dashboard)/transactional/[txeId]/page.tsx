@@ -54,9 +54,9 @@ export default function TransactionalDetailPage({
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when txeId changes
     useEffect(() => {
         load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [txeId]);
 
     if (error) return <Banner>{error}</Banner>;

@@ -22,7 +22,6 @@ export function SettingsSwitch({
     label,
     checked,
     onCheckedChange,
-    defaultChecked = false,
     tooltip,
     className = "",
 }: SettingsSwitchProps) {

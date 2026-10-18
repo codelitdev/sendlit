@@ -1,8 +1,8 @@
-import { SQL, and, eq, gte, gt, ilike, lt, not, sql, or } from "drizzle-orm";
+import { type SQL, and, eq, gte, gt, ilike, lt, not, sql, or } from "drizzle-orm";
 import { contactCustomFieldValues, contacts } from "../db/schema";
 import {
     UserFilter,
-    userFilterAggregationOperators,
+    type userFilterAggregationOperators,
 } from "../config/constants";
 
 export interface ContactFilterCondition {
@@ -27,7 +27,7 @@ export interface ContactFilterWithAggregator {
 export function buildContactFilterCondition(
     filter: ContactFilterWithAggregator | null | undefined,
 ): SQL | undefined {
-    if (!filter || !filter.filters || filter.filters.length === 0) {
+    if (!filter?.filters || filter.filters.length === 0) {
         return undefined;
     }
 

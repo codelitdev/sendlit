@@ -381,6 +381,7 @@ export function ContactFilterBuilder({
         ...defaultSegment,
         name: defaultSegmentLabel,
     };
+    // biome-ignore lint/correctness/useExhaustiveDependencies: resolvedDefaultSegment is rebuilt every render; defaultSegmentLabel is the value that changes it
     const allSegments = useMemo(
         () => [resolvedDefaultSegment, ...(segments ?? [])],
         [segments, defaultSegmentLabel],
@@ -728,6 +729,7 @@ export function ContactFilterBuilder({
 
                     {filters.map((filter, index) => (
                         <div
+                            // biome-ignore lint/suspicious/noArrayIndexKey: filter conditions have no id and identical conditions may repeat; index disambiguates
                             key={`${filter.name}-${filter.condition}-${filter.value}-${index}`}
                             className="inline-flex max-w-full items-center gap-2 rounded-full bg-muted px-3 py-2 text-sm"
                         >

@@ -11,7 +11,7 @@ import { assertMarketingAllowedForContactUsage } from "../billing/entitlements";
 import { EventType, sequenceBounceLimit } from "../config/constants";
 import {
     buildContactFilterCondition,
-    ContactFilterWithAggregator,
+    type ContactFilterWithAggregator,
 } from "../contacts/segment";
 
 export async function getDueDateRules() {

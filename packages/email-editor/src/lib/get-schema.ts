@@ -1,4 +1,4 @@
-import { BlockComponent } from "@/types/block-registry";
+import type { BlockComponent } from "@/types/block-registry";
 
 export default function getSchema(blocks: BlockComponent[]) {
     let specs = "";

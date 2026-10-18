@@ -257,7 +257,7 @@ export async function updateContact(
             .returning();
         return updated ?? null;
     });
-    if (row && Object.prototype.hasOwnProperty.call(patch, "customFields")) {
+    if (row && Object.hasOwn(patch, "customFields")) {
         await syncContactCustomFieldValues({
             teamId,
             contactId: row.id,

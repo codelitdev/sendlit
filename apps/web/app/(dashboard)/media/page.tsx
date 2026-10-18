@@ -120,9 +120,9 @@ export default function MediaPage() {
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: initial load on mount only; load is recreated every render
     useEffect(() => {
         void load("");
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const selectedItem = useMemo(
@@ -262,6 +262,7 @@ function MediaTile({
             className="group block w-full overflow-hidden rounded-lg border text-left transition-colors hover:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
         >
             <div className="relative bg-muted">
+                {/* biome-ignore lint/performance/noImgElement: user-uploaded MediaLit URLs from arbitrary hosts; next/image would need remotePatterns/loader config */}
                 <img
                     src={item.thumbnailUrl || item.url}
                     alt={item.alt || item.fileName || "Media"}
@@ -333,6 +334,7 @@ function MediaDetailsDialog({
                         </DialogHeader>
 
                         <div className="flex max-h-[60vh] items-center justify-center overflow-hidden rounded-md bg-muted">
+                            {/* biome-ignore lint/performance/noImgElement: user-uploaded MediaLit URLs from arbitrary hosts; next/image would need remotePatterns/loader config */}
                             <img
                                 src={item.thumbnailUrl || item.url}
                                 alt={item.alt || item.fileName || "Media"}

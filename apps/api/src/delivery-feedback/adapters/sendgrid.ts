@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import type { BounceClass, DeliveryEventType } from "../../config/constants";
 import { headerString } from "./header-utils";
 import type { NormalizedCanonicalEvent, SyncProviderAdapter } from "./types";

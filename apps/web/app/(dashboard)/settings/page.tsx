@@ -18,7 +18,6 @@ import { IconButton } from "@/components/ui/codelit/icon-button";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import { Textarea } from "@/components/ui/codelit/textarea";
-import { Switch } from "@/components/ui/codelit/switch";
 import { Badge } from "@/components/ui/badge";
 import {
     Card,
@@ -27,20 +26,6 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
-import {
-    Dialog,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/codelit/dialog";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/codelit/select";
 import {
     Tabs,
     TabsContent,
@@ -169,6 +154,7 @@ export default function SettingsPage() {
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: initial load on mount only; load is recreated every render
     useEffect(() => {
         load();
     }, []);
@@ -191,6 +177,7 @@ export default function SettingsPage() {
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: loadApiKeys reads currentTeamId via its default param; reload only when the team changes
     useEffect(() => {
         void loadApiKeys();
     }, [currentTeamId]);
@@ -873,285 +860,5 @@ export default function SettingsPage() {
                 </Tabs>
             </div>
         </ScrollablePage>
-    );
-}
-
-interface EspFormState {
-    name: string;
-    provider: EspProvider;
-    host: string;
-    port: string;
-    secure: boolean;
-    username: string;
-    password: string;
-    fromName: string;
-    fromEmail: string;
-}
-
-const emptyEspForm: EspFormState = {
-    name: "",
-    provider: "smtp",
-    host: "",
-    port: "587",
-    secure: false,
-    username: "",
-    password: "",
-    fromName: "",
-    fromEmail: "",
-};
-
-function toEspFormState(esp: EspConfig): EspFormState {
-    return {
-        name: esp.name,
-        provider: esp.provider,
-        host: esp.host,
-        port: String(esp.port),
-        secure: esp.secure,
-        username: esp.username ?? "",
-        password: "",
-        fromName: esp.fromName ?? "",
-        fromEmail: esp.fromEmail ?? "",
-    };
-}
-
-function EspFormDialog({
-    open,
-    onOpenChange,
-    esp,
-    onSaved,
-}: {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    /** `null` creates a new ESP; otherwise edits this one. */
-    esp: EspConfig | null;
-    onSaved: () => void;
-}) {
-    const isEdit = Boolean(esp);
-    const [form, setForm] = useState<EspFormState>(emptyEspForm);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!open) return;
-        setError(null);
-        setForm(esp ? toEspFormState(esp) : emptyEspForm);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, esp?.espId]);
-
-    async function submit() {
-        setSaving(true);
-        setError(null);
-        try {
-            const input = {
-                name: form.name,
-                provider: form.provider,
-                host: form.host,
-                port: Number(form.port),
-                secure: form.secure,
-                username: form.username || undefined,
-                password: form.password === "" ? undefined : form.password,
-                fromName: form.fromName || undefined,
-                fromEmail: form.fromEmail || undefined,
-            };
-            if (esp) {
-                await updateEsp(esp.espId, input);
-            } else {
-                await createEsp(input);
-            }
-            onOpenChange(false);
-            onSaved();
-        } catch (err) {
-            setError(
-                err instanceof ApiError ? err.message : "Failed to save ESP",
-            );
-        } finally {
-            setSaving(false);
-        }
-    }
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>{isEdit ? "Edit ESP" : "New ESP"}</DialogTitle>
-                </DialogHeader>
-
-                {error && <Banner>{error}</Banner>}
-
-                <div className="space-y-4">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="esp-name">Name</Label>
-                        <Input
-                            id="esp-name"
-                            value={form.name}
-                            onChange={(e) =>
-                                setForm({ ...form, name: e.target.value })
-                            }
-                            placeholder="e.g. Marketing SMTP"
-                        />
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label>Provider</Label>
-                            <Select
-                                value={form.provider}
-                                onValueChange={(provider) =>
-                                    setForm({
-                                        ...form,
-                                        provider: provider as EspProvider,
-                                    })
-                                }
-                            >
-                                <SelectTrigger className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {PROVIDERS.map((p) => (
-                                        <SelectItem
-                                            key={p.value}
-                                            value={p.value}
-                                        >
-                                            {p.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="flex items-end justify-between gap-3 pb-1.5 sm:justify-start">
-                            <Label htmlFor="esp-secure">
-                                Use TLS (port 465)
-                            </Label>
-                            <Switch
-                                id="esp-secure"
-                                checked={form.secure}
-                                onCheckedChange={(secure) =>
-                                    setForm({ ...form, secure })
-                                }
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-host">SMTP host</Label>
-                            <Input
-                                id="esp-host"
-                                value={form.host}
-                                onChange={(e) =>
-                                    setForm({
-                                        ...form,
-                                        host: e.target.value,
-                                    })
-                                }
-                                placeholder="smtp.sendgrid.net"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-port">Port</Label>
-                            <Input
-                                id="esp-port"
-                                type="number"
-                                value={form.port}
-                                onChange={(e) =>
-                                    setForm({
-                                        ...form,
-                                        port: e.target.value,
-                                    })
-                                }
-                                placeholder="587"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-username">Username</Label>
-                            <Input
-                                id="esp-username"
-                                value={form.username}
-                                onChange={(e) =>
-                                    setForm({
-                                        ...form,
-                                        username: e.target.value,
-                                    })
-                                }
-                                autoComplete="off"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-password">
-                                Password / API key
-                            </Label>
-                            <Input
-                                id="esp-password"
-                                type="password"
-                                value={form.password}
-                                onChange={(e) =>
-                                    setForm({
-                                        ...form,
-                                        password: e.target.value,
-                                    })
-                                }
-                                placeholder={
-                                    esp?.hasPassword
-                                        ? "•••••••• (saved — leave blank to keep)"
-                                        : ""
-                                }
-                                autoComplete="new-password"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-from-name">From name</Label>
-                            <Input
-                                id="esp-from-name"
-                                value={form.fromName}
-                                onChange={(e) =>
-                                    setForm({
-                                        ...form,
-                                        fromName: e.target.value,
-                                    })
-                                }
-                                placeholder="Your name or company"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="esp-from-email">From email</Label>
-                            <Input
-                                id="esp-from-email"
-                                type="email"
-                                value={form.fromEmail}
-                                onChange={(e) =>
-                                    setForm({
-                                        ...form,
-                                        fromEmail: e.target.value,
-                                    })
-                                }
-                                placeholder="you@yourdomain.com"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <DialogFooter>
-                    <Button
-                        variant="outline"
-                        onClick={() => onOpenChange(false)}
-                        disabled={saving}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={submit}
-                        disabled={saving || !form.name || !form.host}
-                    >
-                        {saving ? "Saving…" : "Save"}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     );
 }

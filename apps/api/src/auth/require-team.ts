@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import {
     getTeamByTeamId,
     getTeamMembership,
@@ -47,7 +47,7 @@ export async function requireTeam(
             });
             return;
         }
-        let membership;
+        let membership: Awaited<ReturnType<typeof getTeamMembership>>;
         try {
             membership = await getTeamMembership(team.id, anyReq.userId);
         } catch {

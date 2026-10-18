@@ -40,7 +40,7 @@ export function SizeSlider({
 
         const numericValue = Number.parseInt(inputValue, 10);
         if (
-            !isNaN(numericValue) &&
+            !Number.isNaN(numericValue) &&
             numericValue >= min &&
             numericValue <= max
         ) {
@@ -50,7 +50,7 @@ export function SizeSlider({
 
     const handleInputBlur = () => {
         const numericValue = Number.parseInt(localValue, 10);
-        if (isNaN(numericValue) || numericValue < min) {
+        if (Number.isNaN(numericValue) || numericValue < min) {
             setLocalValue(min.toString());
             onChange(min);
         } else if (numericValue > max) {
@@ -87,7 +87,7 @@ export function SizeSlider({
             </div>
             <Slider
                 id={`slider-${label.replace(/\s+/g, "-").toLowerCase()}`}
-                value={[Number.parseInt(localValue) || 0]}
+                value={[Number.parseInt(localValue, 10) || 0]}
                 min={min}
                 max={max}
                 step={step}

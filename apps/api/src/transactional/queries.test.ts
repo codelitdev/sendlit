@@ -36,7 +36,7 @@ import {
     markTransactionalEmailSent,
     toPublicTransactionalEmail,
 } from "./queries";
-import { MissingTemplateVariablesError } from "../mail/render";
+import type { MissingTemplateVariablesError } from "../mail/render";
 
 const tdb = db as unknown as TestDb;
 

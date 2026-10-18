@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 
 /**
  * Amazon SNS HTTPS-subscription message verification, per AWS's "Verifying
@@ -103,7 +103,7 @@ export function buildSigningString(message: SnsMessage): string | null {
 
     let signingString = "";
     for (const key of keys) {
-        const value = Object.prototype.hasOwnProperty.call(message, key)
+        const value = Object.hasOwn(message, key)
             ? message[key]
             : undefined;
         if (value == null && OPTIONAL_SIGNED_KEYS.has(key)) continue;

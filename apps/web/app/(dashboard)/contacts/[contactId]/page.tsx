@@ -78,9 +78,9 @@ export default function ContactDetailPage({
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when contactId changes
     useEffect(() => {
         load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [contactId]);
 
     const isDirty =
@@ -243,6 +243,7 @@ export default function ContactDetailPage({
                                 <ul className="space-y-2">
                                     {deliveries.map((delivery, index) => (
                                         <li
+                                            // biome-ignore lint/suspicious/noArrayIndexKey: deliveries have no unique id; index disambiguates repeat sends of the same email in this read-only list
                                             key={`${delivery.sequenceId}-${delivery.emailId}-${index}`}
                                             className="flex items-center gap-3 rounded-lg border p-3 text-sm"
                                         >

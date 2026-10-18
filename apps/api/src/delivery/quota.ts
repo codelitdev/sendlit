@@ -89,7 +89,7 @@ export async function reserveOrganizationQuota(
         .where(eq(espConfigTeamGrants.id, input.grantId))
         .limit(1)
         .for("update");
-    if (!context || context.grant.status !== "active") {
+    if (context?.grant.status !== "active") {
         throw new Error("organization_delivery_disabled");
     }
 
@@ -236,7 +236,7 @@ async function transitionReservationInTransaction(
         .where(eq(organizationEspQuotaReservations.id, reservationId))
         .limit(1)
         .for("update");
-    if (!reservation || reservation.state !== "reserved") return;
+    if (reservation?.state !== "reserved") return;
     const buckets = await tx
         .select()
         .from(organizationEspUsageBuckets)

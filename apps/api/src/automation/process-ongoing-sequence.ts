@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { type Email as EmailType } from "@sendlit/email-editor";
+import type { Email as EmailType } from "@sendlit/email-editor";
 import { db } from "../db/client";
 import {
     emailDeliveries,

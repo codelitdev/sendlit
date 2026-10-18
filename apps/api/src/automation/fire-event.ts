@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { rules, sequences } from "../db/schema";
 import { enrollContactsInOngoingSequence } from "./queries";
-import { Event, EventType } from "../config/constants";
+import { type Event, EventType } from "../config/constants";
 import logger from "../services/log";
 import { captureError, captureEvent } from "../observability/posthog";
 
@@ -48,7 +48,7 @@ export async function fireEvent({
                 ),
             )
             .limit(1);
-        if (!sequenceRow || sequenceRow.status !== "active") continue;
+        if (sequenceRow?.status !== "active") continue;
 
         try {
             await enrollContactsInOngoingSequence({

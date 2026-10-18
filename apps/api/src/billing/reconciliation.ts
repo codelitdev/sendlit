@@ -78,7 +78,7 @@ export async function settleExpiredSendReservationsOnce(
 }
 
 export async function reconcileBillingOnce(now = new Date()): Promise<void> {
-    let config;
+    let config: ReturnType<typeof readBillingConfig>;
     try {
         config = readBillingConfig();
     } catch {

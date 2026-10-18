@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { createExpressEndpoints, initServer } from "@ts-rest/express";
 import { contract } from "@sendlit/api-contract";
 import { requireAuth } from "../auth/middleware";

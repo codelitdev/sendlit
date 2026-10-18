@@ -66,9 +66,9 @@ export default function ContactsPage() {
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when the filter changes
     useEffect(() => {
         load(filter);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filter]);
 
     return (
@@ -316,6 +316,7 @@ function NewContactDialog({
                         <Label>Custom fields</Label>
                         {customFields.map((field, index) => (
                             <div
+                                // biome-ignore lint/suspicious/noArrayIndexKey: custom field rows have no id and their key text is user-editable; inputs are fully controlled
                                 key={index}
                                 className="flex items-center gap-2"
                             >

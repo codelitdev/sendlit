@@ -8,7 +8,6 @@ const RUN_INTERVAL_MS = 60 * 60 * 1000; // hourly — retention is not latency-s
  * purges on an hourly loop, draining each in bounded batches until a call
  * returns 0 so a large backlog never holds one long-running transaction. */
 export async function startRetentionLoop(): Promise<void> {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         try {
             await drainBatches(purgeExpiredRawReceipts, "raw webhook receipts");
@@ -31,7 +30,6 @@ async function drainBatches(
     label: string,
 ): Promise<void> {
     let total = 0;
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         const count = await purge();
         total += count;

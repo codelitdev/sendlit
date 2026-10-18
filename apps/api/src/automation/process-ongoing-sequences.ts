@@ -49,7 +49,6 @@ export async function processOngoingSequences(): Promise<void> {
         );
     }
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         try {
             await enqueueDueOngoingSequences();

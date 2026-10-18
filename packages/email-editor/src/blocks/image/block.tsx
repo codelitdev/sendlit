@@ -1,4 +1,4 @@
-import { EmailBlock } from "@/types/email-editor";
+import type { EmailBlock } from "@/types/email-editor";
 import type { ImageBlockSettings } from "./types";
 import { Img, Section } from "@react-email/components";
 import { ImageIcon } from "lucide-react";

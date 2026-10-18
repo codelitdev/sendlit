@@ -69,9 +69,9 @@ export function SequenceListPage({
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render and reads type; reload only when type changes
     useEffect(() => {
         load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [type]);
 
     async function toggle(sequence: Sequence) {

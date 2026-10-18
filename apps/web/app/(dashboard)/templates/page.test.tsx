@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import React from "react";
+import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
     cleanup,
@@ -79,7 +79,11 @@ vi.mock("@/components/ui/codelit/tabs", async () => {
         }) => {
             const onValueChange = ReactModule.useContext(ChangeContext);
             return (
-                <button role="tab" onClick={() => onValueChange(value)}>
+                <button
+                    type="button"
+                    role="tab"
+                    onClick={() => onValueChange(value)}
+                >
                     {children}
                 </button>
             );

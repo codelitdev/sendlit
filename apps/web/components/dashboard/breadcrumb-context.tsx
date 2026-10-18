@@ -51,9 +51,9 @@ export function useSetBreadcrumb(items: BreadcrumbItem[]) {
     }
     const { setItems } = ctx;
     const key = JSON.stringify(items);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: items is a new array each render; key is its serialized content so the effect runs only when the trail changes
     useEffect(() => {
         setItems(items);
         return () => setItems([]);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [key, setItems]);
 }

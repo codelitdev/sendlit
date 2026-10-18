@@ -116,7 +116,7 @@ describe("REST bearer token authentication", () => {
     });
 
     it("accepts a Better Auth OAuth access token on REST routes", async () => {
-        const { account, team, contact } = await seedTeamAndContact(tdb, {
+        const { account, contact } = await seedTeamAndContact(tdb, {
             account: { email: "owner@example.com" },
             contact: { email: "reader@example.com" },
         });

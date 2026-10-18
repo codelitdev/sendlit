@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, type Request, type Response } from "express";
 import { db } from "../db/client";
 import { emailEvents } from "../db/schema";
 import { verifyPixelToken } from "../utils/pixel-jwt";

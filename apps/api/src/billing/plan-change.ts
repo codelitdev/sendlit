@@ -177,8 +177,8 @@ export async function createOrganizationPlanChange(input: {
     if (!offer)
         throw new BillingPlanChangeError("billing_catalog_unavailable", 503);
 
-    let provider;
-    let catalog;
+    let provider: ReturnType<typeof getBillingProvider>;
+    let catalog: Awaited<ReturnType<typeof requireActiveCatalog>>;
     try {
         provider = getBillingProvider(config.checkoutProvider ?? undefined);
         catalog = await requireActiveCatalog(config, provider);
@@ -231,7 +231,7 @@ export async function createOrganizationPlanChange(input: {
         .from(organizations)
         .where(eq(organizations.id, input.organizationId))
         .limit(1);
-    if (!organization || organization.status !== "active") {
+    if (organization?.status !== "active") {
         throw new BillingPlanChangeError(
             "billing_subscription_not_changeable",
             409,

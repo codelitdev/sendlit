@@ -149,9 +149,9 @@ export default function BroadcastEditorPage({
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when sequenceId changes
     useEffect(() => {
         load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sequenceId]);
 
     // Live "how many contacts match this audience" count, matching what the
@@ -160,6 +160,7 @@ export default function BroadcastEditorPage({
     // Undefined until the broadcast loads so the effect re-fires even when the
     // loaded filter serializes the same as "no meta yet".
     const filterKey = meta ? JSON.stringify(meta.filter ?? null) : undefined;
+    // biome-ignore lint/correctness/useExhaustiveDependencies: re-run only when the serialized filter (filterKey) changes, not on every meta edit
     useEffect(() => {
         if (!meta) return;
         let stale = false;
@@ -176,7 +177,6 @@ export default function BroadcastEditorPage({
         return () => {
             stale = true;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterKey]);
 
     /** Persists the meta + email forms; `sendAtMillis` also stamps the

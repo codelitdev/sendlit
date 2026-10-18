@@ -2,7 +2,7 @@ import { z } from "zod";
 import { initContract } from "@ts-rest/core";
 import { errorSchema, itemsList, paginated } from "./schemas/common";
 import {
-    contactDeliverySchema,
+    type contactDeliverySchema,
     contactSchema,
     createContactBodySchema,
     listContactsQuerySchema,
@@ -288,6 +288,7 @@ const mediaContract = c.router(
             responses: { 200: mediaUploadSignatureSchema, 500: errorSchema },
             summary: "Generate a MediaLit upload signature",
             description:
+                // biome-ignore lint/suspicious/noTemplateCurlyInString: literal placeholder in user-facing API docs, not a template
                 "Returns a short-lived MediaLit signature and endpoint. Upload image files directly to `${endpoint}/media/create/resumable` with the signature in the `x-medialit-signature` header.",
         },
         get: {

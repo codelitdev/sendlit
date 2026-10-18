@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 import { Slot } from "radix-ui";
 
 import { cn } from "@/lib/utils";
@@ -58,6 +58,8 @@ function BreadcrumbLink({
 
 function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
     return (
+        // biome-ignore lint/a11y/useFocusableInteractive: shadcn/ui markup; the current page is a disabled, non-focusable link by design
+        // biome-ignore lint/a11y/useSemanticElements: shadcn/ui markup; the current page is intentionally a span, not an <a>
         <span
             data-slot="breadcrumb-page"
             role="link"

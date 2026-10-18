@@ -1,4 +1,4 @@
-import { createHmac } from "crypto";
+import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import {
     assertSuppressionHashKeyConfigured,

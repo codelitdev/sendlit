@@ -17,10 +17,10 @@ import {
     verifyMandatoryTags,
 } from "./helpers";
 import {
-    EmailActionType,
+    type EmailActionType,
     EmailEventAction,
     EventType,
-    MailType,
+    type MailType,
     itemsPerPage,
     maxItemsPerPage,
     sequenceDelayBetweenMailsInMillis,

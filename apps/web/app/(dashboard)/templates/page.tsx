@@ -78,6 +78,7 @@ export default function TemplatesPage() {
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: initial load on mount only; load is recreated every render
     useEffect(() => {
         load();
     }, []);
@@ -360,6 +361,7 @@ function NewTemplateDialog({
     const [creating, setCreating] = useState(false);
     const [purpose, setPurpose] = useState<TemplatePurpose | null>(null);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: onError is an inline parent callback; fetch only when open/purpose change
     useEffect(() => {
         if (!open || !purpose) return;
         listSystemTemplates(purpose)
@@ -371,7 +373,6 @@ function NewTemplateDialog({
                 ),
             )
             .then((items) => items && setSystemTemplates(items));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, purpose]);
 
     useEffect(() => {

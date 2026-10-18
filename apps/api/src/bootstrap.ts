@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
 import { registerConfiguredOrganizationApiKey } from "./apikey/queries";
 import { db } from "./db/client";
 import { user } from "./db/schema";

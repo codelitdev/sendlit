@@ -131,6 +131,7 @@ export function useMediaLit({
         setIsUploading(false);
     };
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: abort any in-flight upload on unmount only; cancelUpload is recreated every render but only touches a ref and a state setter
     useEffect(() => cancelUpload, []);
 
     return {

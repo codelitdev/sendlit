@@ -154,7 +154,6 @@ import {
     upsertOrganizationEspGrant,
     type CreatedOrganizationApiKey,
     type EspConfig,
-    type EspConnectionInput,
     type EspProvider,
     type Organization,
     type OrganizationAuditEvent,
@@ -670,12 +669,13 @@ export default function OrganizationsPage() {
         }
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load once on mount; later changes are driven by the selector
     useEffect(() => {
         void loadOrganizations(searchParams.get("organization") ?? undefined);
         // Load once on mount; subsequent changes are driven by the selector.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: loadDetails is recreated every render; reload only when selectedId changes
     useEffect(() => {
         if (!selectedId) {
             setTeams([]);
@@ -694,9 +694,9 @@ export default function OrganizationsPage() {
             return;
         }
         void loadDetails(selectedId);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedId]);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: searchParams is captured once for the checkout return-flow poll; router.replace removes the billing param
     useEffect(() => {
         if (!confirmingCheckout || !selectedId) return;
         const organizationId = selectedId;
@@ -738,9 +738,6 @@ export default function OrganizationsPage() {
         return () => {
             cancelled = true;
         };
-        // searchParams is intentionally omitted: its value is captured for
-        // the one return-flow poll and router.replace removes billing.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [confirmingCheckout, selectedId, router]);
 
     useEffect(() => {
@@ -2229,236 +2226,6 @@ function SharedEspsSection({
     );
 }
 
-function OrganizationEspFormDialog({
-    organizationId,
-    esp,
-    onOpenChange,
-    onChanged,
-}: {
-    organizationId: string;
-    esp: EspConfig | null | undefined;
-    onOpenChange: (open: boolean) => void;
-    onChanged: () => Promise<void>;
-}) {
-    const open = esp !== undefined;
-    const editing = esp ?? null;
-    const [name, setName] = useState("");
-    const [provider, setProvider] = useState<EspProvider>("smtp");
-    const [host, setHost] = useState("");
-    const [port, setPort] = useState("587");
-    const [secure, setSecure] = useState(false);
-    const [username, setUsername] = useState("");
-    const [password, setPassword] = useState("");
-    const [fromName, setFromName] = useState("");
-    const [fromEmail, setFromEmail] = useState("");
-    const [fromEmailError, setFromEmailError] = useState<string | null>(null);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!open) return;
-        setName(editing?.name ?? "");
-        setProvider(editing?.provider ?? "smtp");
-        setHost(editing?.host ?? "");
-        setPort(String(editing?.port ?? 587));
-        setSecure(editing?.secure ?? false);
-        setUsername(editing?.username ?? "");
-        setPassword("");
-        setFromName(editing?.fromName ?? "");
-        setFromEmail(editing?.fromEmail ?? "");
-        setFromEmailError(null);
-        setError(null);
-    }, [editing, open]);
-
-    async function submit() {
-        const parsedPort = Number(port);
-        const normalizedFromEmail = fromEmail.trim();
-        if (
-            !name.trim() ||
-            !host.trim() ||
-            !normalizedFromEmail ||
-            !Number.isInteger(parsedPort)
-        )
-            return;
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedFromEmail)) {
-            setFromEmailError("Enter a valid sender email address.");
-            return;
-        }
-        setSaving(true);
-        setError(null);
-        const input: EspConnectionInput & { name: string } = {
-            name: name.trim(),
-            provider,
-            host: host.trim(),
-            port: parsedPort,
-            secure,
-            username: username.trim() || undefined,
-            ...(password ? { password } : {}),
-            fromName: fromName.trim() || undefined,
-            fromEmail: normalizedFromEmail,
-        };
-        try {
-            if (editing)
-                await updateOrganizationEsp(
-                    organizationId,
-                    editing.espId,
-                    input,
-                );
-            else await createOrganizationEsp(organizationId, input);
-            onOpenChange(false);
-            await onChanged();
-        } catch (err) {
-            setError(errorMessage(err, "Failed to save shared ESP"));
-        } finally {
-            setSaving(false);
-        }
-    }
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>
-                        {editing ? `Edit ${editing.name}` : "New shared ESP"}
-                    </DialogTitle>
-                </DialogHeader>
-                {error && <Banner>{error}</Banner>}
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Name">
-                        <Input
-                            value={name}
-                            onChange={(event) => setName(event.target.value)}
-                            placeholder="CourseLit delivery"
-                        />
-                    </Field>
-                    <Field label="Provider">
-                        <Select
-                            value={provider}
-                            onValueChange={(value) =>
-                                setProvider(value as EspProvider)
-                            }
-                        >
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {PROVIDERS.map((item) => (
-                                    <SelectItem
-                                        key={item.value}
-                                        value={item.value}
-                                    >
-                                        {item.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </Field>
-                    <Field label="SMTP host">
-                        <Input
-                            value={host}
-                            onChange={(event) => setHost(event.target.value)}
-                            placeholder="smtp.example.com"
-                        />
-                    </Field>
-                    <Field label="Port">
-                        <Input
-                            inputMode="numeric"
-                            value={port}
-                            onChange={(event) => setPort(event.target.value)}
-                        />
-                    </Field>
-                    <Field label="Username">
-                        <Input
-                            value={username}
-                            onChange={(event) =>
-                                setUsername(event.target.value)
-                            }
-                            autoComplete="username"
-                        />
-                    </Field>
-                    <Field
-                        label={
-                            editing
-                                ? "Password (leave blank to keep)"
-                                : "Password"
-                        }
-                    >
-                        <Input
-                            type="password"
-                            value={password}
-                            onChange={(event) =>
-                                setPassword(event.target.value)
-                            }
-                            autoComplete="new-password"
-                        />
-                    </Field>
-                    <Field label="From name">
-                        <Input
-                            value={fromName}
-                            onChange={(event) =>
-                                setFromName(event.target.value)
-                            }
-                            placeholder="CourseLit"
-                        />
-                    </Field>
-                    <Field label="From email">
-                        <Input
-                            id="shared-esp-from-email"
-                            type="email"
-                            value={fromEmail}
-                            onChange={(event) => {
-                                setFromEmail(event.target.value);
-                                setFromEmailError(null);
-                            }}
-                            placeholder="no-reply@example.com"
-                            aria-invalid={Boolean(fromEmailError)}
-                            aria-describedby={
-                                fromEmailError
-                                    ? "shared-esp-from-email-error"
-                                    : undefined
-                            }
-                        />
-                    </Field>
-                    {fromEmailError && (
-                        <p
-                            id="shared-esp-from-email-error"
-                            className="-mt-2 text-sm text-destructive"
-                        >
-                            {fromEmailError}
-                        </p>
-                    )}
-                    <label className="col-span-full flex items-center gap-2 text-sm">
-                        <Checkbox
-                            checked={secure}
-                            onCheckedChange={(checked) =>
-                                setSecure(checked === true)
-                            }
-                        />
-                        Use TLS from connection start
-                    </label>
-                </div>
-                <DialogFooter>
-                    <Button
-                        onClick={() => void submit()}
-                        disabled={
-                            saving ||
-                            !name.trim() ||
-                            !host.trim() ||
-                            !fromEmail.trim()
-                        }
-                    >
-                        {saving
-                            ? "Saving…"
-                            : editing
-                              ? "Save ESP"
-                              : "Create ESP"}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
 function Field({
     label,
     children,
@@ -2677,6 +2444,7 @@ function DeliveryPolicySection({
                             </div>
                         </div>
                         <div className="space-y-2 text-sm">
+                            {/* biome-ignore lint/a11y/noLabelWithoutControl: wraps a shadcn Checkbox (a labelable <button>), so the label is associated by nesting */}
                             <label className="flex items-center gap-2">
                                 <Checkbox
                                     checked={autoGrant}
@@ -2687,6 +2455,7 @@ function DeliveryPolicySection({
                                 Automatically grant this mailbox and make it the
                                 delivery default for new teams
                             </label>
+                            {/* biome-ignore lint/a11y/noLabelWithoutControl: wraps a shadcn Checkbox (a labelable <button>), so the label is associated by nesting */}
                             <label className="flex items-center gap-2">
                                 <Checkbox
                                     checked={teamEspEnabled}
@@ -2697,6 +2466,7 @@ function DeliveryPolicySection({
                                 Allow newly provisioned teams to add their own
                                 ESPs later
                             </label>
+                            {/* biome-ignore lint/a11y/noLabelWithoutControl: wraps a shadcn Checkbox (a labelable <button>), so the label is associated by nesting */}
                             <label className="flex items-center gap-2">
                                 <Checkbox
                                     checked={teamCanChangeDefault}
@@ -2991,17 +2761,13 @@ function TeamsAndGrantsSection({
             <OrganizationSectionHeader
                 title="Teams and mailbox sharing"
                 description="Each team can receive one active shared ESP grant. Members see a sending option, never mailbox credentials."
-                action={
-                    <>
-                        <Button
+                action={<Button
                             onClick={() => setNewTeamOpen(true)}
                             disabled={teamLimitReached}
                         >
                             <Plus className="size-4" />
                             New team
-                        </Button>
-                    </>
-                }
+                        </Button>}
             />
             <CardContent>
                 {billing?.pendingPlanChange ? (
@@ -3127,7 +2893,6 @@ function CreateOrganizationTeamDialog({
 
 function OrganizationBillingDialog({
     organizationId,
-    billing,
     open,
     onOpenChange,
 }: {
@@ -4041,6 +3806,7 @@ function MailboxGrantDialog({
                             />
                         </div>
                     </div>
+                    {/* biome-ignore lint/a11y/noLabelWithoutControl: wraps a shadcn Checkbox (a labelable <button>), so the label is associated by nesting */}
                     <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                             checked={makeDefault}
@@ -4460,6 +4226,7 @@ function OrganizationOperationsSection({
                             <div className="max-h-64 space-y-3 overflow-y-auto">
                                 {events.map((event, index) => (
                                     <div
+                                        // biome-ignore lint/suspicious/noArrayIndexKey: audit events have no unique id; index disambiguates same-timestamp events in this read-only list
                                         key={`${event.createdAt}-${event.action}-${index}`}
                                         className="border-b pb-3 last:border-0"
                                     >
@@ -4903,6 +4670,7 @@ function CreateOrganizationKeyDialog({
                         <div className="space-y-2">
                             <Label>Scopes</Label>
                             {KEY_SCOPES.map((scope) => (
+                                // biome-ignore lint/a11y/noLabelWithoutControl: wraps a shadcn Checkbox (a labelable <button>), so the label is associated by nesting
                                 <label
                                     key={scope.value}
                                     className="flex items-center gap-2 text-sm"

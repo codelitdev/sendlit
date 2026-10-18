@@ -1,8 +1,8 @@
-import {
-    type McpServer,
-    type ServerContext,
-    type StandardSchemaWithJSON,
-    type ToolAnnotations,
+import type {
+    McpServer,
+    ServerContext,
+    StandardSchemaWithJSON,
+    ToolAnnotations,
 } from "@modelcontextprotocol/server";
 import type { ZodRawShape, ZodTypeAny } from "zod";
 import logger from "../services/log";

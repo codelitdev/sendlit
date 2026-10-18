@@ -163,9 +163,9 @@ export default function SequenceEditorPage({
         );
     }
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when sequenceId changes
     useEffect(() => {
         load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sequenceId]);
 
     useEffect(() => {

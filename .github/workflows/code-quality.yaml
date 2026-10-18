@@ -20,6 +20,6 @@ jobs:
                   bun-version: 1.4.1
             - run: bun install --frozen-lockfile
             - run: bun run lint
-            - run: bun run prettier
+            - run: bun run format:check
             - run: bun run build:packages
             - run: bun run typecheck

@@ -32,6 +32,7 @@ export function SequenceAnalytics({
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {metrics.map((metric, index) => (
                     <div
+                        // biome-ignore lint/suspicious/noArrayIndexKey: metrics have no id and labels may repeat; list is display-only and not reordered
                         key={`${metric.label}-${index}`}
                         className="min-w-0 text-center"
                     >

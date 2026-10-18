@@ -22,6 +22,7 @@ export function DashboardBreadcrumb() {
                 {items.map((item, index) => {
                     const isLast = index === items.length - 1;
                     return (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: breadcrumb trail is positional and replaced wholesale; labels may repeat
                         <Fragment key={`${item.label}-${index}`}>
                             <BreadcrumbItem
                                 className={

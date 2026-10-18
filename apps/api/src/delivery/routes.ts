@@ -48,7 +48,7 @@ const impl = s.router(contract.delivery, {
                 authReq.teamId,
                 authReq.userId,
             );
-            if (!membership || membership.role !== "admin") {
+            if (membership?.role !== "admin") {
                 return {
                     status: 403,
                     body: { error: "team_admin_required" },

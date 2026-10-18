@@ -162,7 +162,7 @@ const impl = s.router(contract.billing, {
                     };
                 }
             }
-            const etag = `W/\"billing-${activeRevision ?? "oss"}\"`;
+            const etag = `W/"billing-${activeRevision ?? "oss"}"`;
             req.res?.setHeader?.("Cache-Control", "public, max-age=300");
             req.res?.setHeader?.("ETag", etag);
             if (req.headers?.["if-none-match"] === etag)

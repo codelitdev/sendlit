@@ -73,7 +73,7 @@ router.post(
         }
 
         // 4. Verify signature/credential.
-        let verifyResult;
+        let verifyResult: Awaited<ReturnType<typeof adapter.verify>>;
         try {
             verifyResult = await adapter.verify({
                 rawBody,
@@ -133,7 +133,9 @@ router.post(
         // Authenticated control message (e.g. an SNS subscription
         // handshake) — acted on here, never stored as a receipt.
         if (adapter.handleControl) {
-            let outcome;
+            let outcome: Awaited<
+                ReturnType<NonNullable<typeof adapter.handleControl>>
+            >;
             try {
                 outcome = await adapter.handleControl(rawBody);
                 if (outcome) {
@@ -176,7 +178,7 @@ router.post(
         }
 
         // 6. Insert the authenticated raw receipt durably.
-        let receipt;
+        let receipt: Awaited<ReturnType<typeof createWebhookReceipt>>;
         try {
             receipt = await createWebhookReceipt({
                 connectionId: connection.id,

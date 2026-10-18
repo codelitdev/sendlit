@@ -38,24 +38,15 @@
         "ci:publish": "bun .github/scripts/resolve-workspace-ranges.mjs && bun run build:packages && bun --filter sendlit build && changeset publish",
         "changeset": "changeset",
         "prepare": "husky",
-        "lint": "eslint packages apps --quiet",
-        "prettier": "prettier --write packages apps *.md"
+        "lint": "biome lint .",
+        "format": "biome format --write .",
+        "format:check": "biome ci --linter-enabled=false ."
     },
     "devDependencies": {
+        "@biomejs/biome": "2.5.12",
         "@changesets/cli": "^2.31.0",
         "@types/bun": "1.4.1",
-        "eslint": "^9.39.4",
-        "eslint-config-next": "16.0.3",
-        "eslint-config-prettier": "^8.10.2",
-        "eslint-plugin-import": "^2.32.0",
-        "eslint-plugin-react": "^7.37.5",
-        "eslint-plugin-react-hooks": "^7.1.1",
-        "eslint-plugin-unused-imports": "^4.4.1",
-        "globals": "^15.15.0",
         "husky": "^9.1.7",
-        "lint-staged": "^15.5.2",
-        "prettier": "^3.9.4",
-        "typescript": "5.9.3",
-        "typescript-eslint": "^8.62.1"
+        "typescript": "5.9.3"
     }
 }

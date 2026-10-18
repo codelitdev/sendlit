@@ -159,7 +159,7 @@ export async function reserveTeamSlot(
         .from(organizations)
         .where(eq(organizations.id, organizationId))
         .limit(1);
-    if (!organization || organization.status !== "active") {
+    if (organization?.status !== "active") {
         throw new PlanGateError("payment_required", {
             reason: "organization_not_active",
             organizationId,
@@ -790,7 +790,7 @@ export async function commitSendReservation(
             )
             .limit(1)
             .for("update");
-        if (!reservation || reservation.state !== "reserved") return;
+        if (reservation?.state !== "reserved") return;
         const [bucket] = await tx
             .select()
             .from(planSendUsageBuckets)
@@ -829,7 +829,7 @@ export async function releaseSendReservation(
             )
             .limit(1)
             .for("update");
-        if (!reservation || reservation.state !== "reserved") return;
+        if (reservation?.state !== "reserved") return;
         const [bucket] = await tx
             .select()
             .from(planSendUsageBuckets)
@@ -879,8 +879,7 @@ export async function settleExpiredSendReservation(
             .limit(1)
             .for("update");
         if (
-            !reservation ||
-            reservation.state !== "reserved" ||
+            reservation?.state !== "reserved" ||
             reservation.expiresAt > now
         ) {
             return;

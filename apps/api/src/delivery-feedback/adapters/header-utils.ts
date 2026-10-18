@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 
 export function headerString(
     headers: Record<string, string | string[] | undefined>,

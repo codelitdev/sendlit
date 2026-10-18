@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash } from "node:crypto";
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { createExpressEndpoints, initServer } from "@ts-rest/express";

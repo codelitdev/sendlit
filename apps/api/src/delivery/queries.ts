@@ -63,7 +63,7 @@ export async function resolveDeliverySource(
         )
         .where(eq(teams.id, teamId))
         .limit(1);
-    if (!context || context.team.status !== "active") {
+    if (context?.team.status !== "active") {
         throw new Error("team_sending_suspended");
     }
     if (context.organizationStatus !== "active") {
@@ -790,7 +790,7 @@ export async function updateTeamDeliverySource(
     }
     if (source.type === "organization") {
         const grant = await getActiveEspGrantForTeam(teamId);
-        if (!grant || grant.status !== "active") {
+        if (grant?.status !== "active") {
             throw new Error("organization_delivery_disabled");
         }
         const [esp] = await db

@@ -1180,7 +1180,7 @@ const impl = s.router(contract.organizations, {
             const feedback = await getActiveFeedbackConnectionForEspConfig(
                 config.id,
             );
-            if (!feedback || feedback.status !== "healthy") {
+            if (feedback?.status !== "healthy") {
                 return {
                     status: 422,
                     body: { error: "feedback_verification_required" },

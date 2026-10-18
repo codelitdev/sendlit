@@ -9,15 +9,15 @@ export {
     type SubscriptionSnapshot,
     type VerifiedWebhookEnvelope,
 } from "@codelitdev/billing/core";
-export {
-    type BillingProviderAdapter,
-    type BillingProductSnapshot,
-    type BillingCustomer,
-    type Checkout,
-    type PortalSession,
-    type RawWebhookRequest,
-    type SubscriptionPlanChangeInput,
-    type SubscriptionPlanChangeResult,
+export type {
+    BillingProviderAdapter,
+    BillingProductSnapshot,
+    BillingCustomer,
+    Checkout,
+    PortalSession,
+    RawWebhookRequest,
+    SubscriptionPlanChangeInput,
+    SubscriptionPlanChangeResult,
 } from "@codelitdev/billing/providers";
 
 export type BillingProviderId = "dodo" | "fake" | (string & {});

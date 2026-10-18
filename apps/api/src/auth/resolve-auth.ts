@@ -1,7 +1,7 @@
 import { fromNodeHeaders } from "better-auth/node";
-import {
-    type AuthenticatedIdentity,
-    type AuthenticationResult,
+import type {
+    AuthenticatedIdentity,
+    AuthenticationResult,
 } from "@codelitdev/oauth-server-kit";
 import { resolveBetterAuthSession } from "@codelitdev/oauth-server-kit/better-auth";
 import {

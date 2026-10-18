@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { appRedirect } from "@/lib/safe-app-redirect";
 import { ORGANIZATION_ID_COOKIE, TEAM_ID_COOKIE } from "@/lib/tokens";
 

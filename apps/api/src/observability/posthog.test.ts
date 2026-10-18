@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
 const captureExceptionMock = vi.fn();
 const captureMock = vi.fn();
 const setupExpressErrorHandlerMock = vi.fn();
+// biome-ignore lint/complexity/useArrowFunction: this mock is invoked with `new PostHog(...)`; arrow functions are not constructible
 const posthogConstructorMock = vi.fn(function () {
     return {
         captureException: captureExceptionMock,

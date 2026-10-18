@@ -16,7 +16,6 @@ interface AddBlockButtonProps {
 }
 
 export function AddBlockButton({
-    position,
     index,
     addBlock,
     blockRegistry,
@@ -38,7 +37,10 @@ export function AddBlockButton({
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <button className="bg-background border border-border rounded-full p-1 shadow-sm hover:border-primary/50 transition-colors">
+                <button
+                    type="button"
+                    className="bg-background border border-border rounded-full p-1 shadow-sm hover:border-primary/50 transition-colors"
+                >
                     <Plus className="h-3 w-3 text-muted-foreground" />
                 </button>
             </PopoverTrigger>
@@ -54,6 +56,7 @@ export function AddBlockButton({
                     {blockTypes.map((blockType) => (
                         <button
                             key={blockType.type}
+                            type="button"
                             onClick={() => handleAddBlock(blockType.type)}
                             className="flex flex-col items-center p-3 hover:bg-accent rounded transition-colors border border-transparent hover:border-primary/40"
                         >

@@ -32,6 +32,7 @@ export function useSegments(onError: (message: string) => void) {
     const [segments, setSegments] = useState<ContactFilterSegment[]>([]);
     const [selectedSegmentId, setSelectedSegmentId] = useState("");
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: onError is typically an inline callback; load segments once on mount
     useEffect(() => {
         listSegments()
             .then((items) => setSegments(items.map(toBuilderSegment)))
@@ -42,7 +43,6 @@ export function useSegments(onError: (message: string) => void) {
                         : "Failed to load segments",
                 ),
             );
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     async function onSaveSegment(

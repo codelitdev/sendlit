@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 /** Stripe-style prefix: identifies leaked SendLit keys in secret scanners and
  * makes the credential type obvious at a glance without exposing the secret. */

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultEmail, type Email } from "@sendlit/email-editor";
 import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
 import {
-    TemplateValidationError,
+    type TemplateValidationError,
     getRequiredTemplateVariables,
     validateTemplateContent,
     validateTemplateInputContent,

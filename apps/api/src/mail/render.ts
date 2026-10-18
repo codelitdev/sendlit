@@ -72,7 +72,7 @@ function isPresent(variables: Record<string, unknown>, path: VariablePath) {
         if (
             value === null ||
             typeof value !== "object" ||
-            !Object.prototype.hasOwnProperty.call(value, part)
+            !Object.hasOwn(value, part)
         ) {
             return false;
         }
