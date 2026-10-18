@@ -29,14 +29,6 @@ jobs:
               run: |
                   git config --global user.name 'CodeLit'
                   git config --global user.email 'hi@codelit.dev'
-                  git remote set-url origin https://x-access-token:${{ secrets.PAT }}@github.com/${{ github.repository }}
-              env:
-                  GITHUB_PAT: ${{ secrets.PAT }}
-
-            - name: Checkout and pull branch
-              run: |
-                  git checkout ${{ github.ref_name }}
-                  git pull origin ${{ github.ref_name }}
 
             - name: Setup pnpm
               uses: pnpm/action-setup@v4
@@ -59,7 +51,7 @@ jobs:
                   title: "chore: update versions"
                   publish: pnpm ci:publish
               env:
-                  GITHUB_TOKEN: ${{ secrets.PAT }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Echo changeset output
               run: echo "${{ steps.changesets.outputs.hasChangesets }}"

@@ -4,6 +4,11 @@
     "description": "Headless, ready-to-use blocks for composing your own email workflows powered by SendLit",
     "author": "SendLit",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/codelitdev/sendlit.git",
+        "directory": "packages/email-blocks"
+    },
     "main": "dist/index.mjs",
     "types": "dist/index.d.ts",
     "files": [
