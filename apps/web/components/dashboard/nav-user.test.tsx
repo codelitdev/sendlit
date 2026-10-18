@@ -1,19 +1,19 @@
-// @vitest-environment jsdom
-
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { registerDom } from "@sendlit/test-utils/dom";
 import type React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  resetPosthogUser: vi.fn(),
-  useSidebar: vi.fn(() => ({ isMobile: false })),
-}));
+registerDom();
 
-vi.mock("@/lib/posthog-browser", () => ({
+const mocks = {
+  resetPosthogUser: mock(),
+  useSidebar: mock(() => ({ isMobile: false })),
+};
+
+mock.module("@/lib/posthog-browser", () => ({
   resetPosthogUser: mocks.resetPosthogUser,
 }));
 
-vi.mock("@/components/ui/sidebar", () => ({
+mock.module("@/components/ui/sidebar", () => ({
   SidebarMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SidebarMenuItem: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -24,7 +24,7 @@ vi.mock("@/components/ui/sidebar", () => ({
   useSidebar: mocks.useSidebar,
 }));
 
-vi.mock("@/components/ui/codelit/dropdown-menu", () => ({
+mock.module("@/components/ui/codelit/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -44,7 +44,8 @@ vi.mock("@/components/ui/codelit/dropdown-menu", () => ({
   DropdownMenuSeparator: () => <hr />,
 }));
 
-import { NavUser } from "./nav-user";
+const { cleanup, fireEvent, render } = await import("@testing-library/react");
+const { NavUser } = await import("./nav-user");
 
 describe("NavUser", () => {
   afterEach(() => {

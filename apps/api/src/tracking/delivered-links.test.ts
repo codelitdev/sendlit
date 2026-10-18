@@ -1,23 +1,27 @@
+import { beforeEach, describe, expect, it, type Mock, mock, vi } from "bun:test";
+import { waitFor } from "@sendlit/test-utils";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../mail/send", () => ({
+mock.module("../mail/send", () => ({
   sendMail: vi.fn().mockResolvedValue({ messageId: null, providerResponse: null }),
 }));
 
-import { processOngoingSequence } from "../automation/process-ongoing-sequence";
-import { db } from "../db/client";
-import { contacts, emailEvents } from "../db/schema";
-import { sendMail } from "../mail/send";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { seedOngoingSequence, seedSequence } from "../test/fixtures";
-import { requestApp } from "../test/http";
-import trackingRoutes from "./routes";
+const { processOngoingSequence } = await import(
+  "../automation/process-ongoing-sequence"
+);
+const { db } = await import("../db/client");
+const { contacts, emailEvents } = await import("../db/schema");
+const { sendMail } = await import("../mail/send");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { seedOngoingSequence, seedSequence } = await import("../test/fixtures");
+const { requestApp } = await import("../test/http");
+const { default: trackingRoutes } = await import("./routes");
 
 /**
  * End-to-end over the real database: send a sequence email, pull the pixel,
@@ -26,7 +30,7 @@ import trackingRoutes from "./routes";
  */
 
 const tdb = db as unknown as TestDb;
-const mockedSendMail = vi.mocked(sendMail);
+const mockedSendMail = sendMail as unknown as Mock<typeof sendMail>;
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
@@ -101,7 +105,7 @@ describe("tracking links in delivered mail", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toContain("image/gif");
-    await vi.waitFor(async () =>
+    await waitFor(async () =>
       expect(await eventsFor(contact.id)).toEqual([
         expect.objectContaining({ action: "open" }),
       ]),

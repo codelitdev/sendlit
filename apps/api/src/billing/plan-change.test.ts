@@ -1,37 +1,39 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const catalogMocks = vi.hoisted(() => ({
+import { eq } from "drizzle-orm";
+
+const catalogMocks = {
   requireActiveCatalog: vi.fn(),
   verifyCheckoutOffer: vi.fn(),
   getBillingProvider: vi.fn(),
-}));
+};
 
-vi.mock("../db/client", async () => {
+mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
 
-vi.mock("./catalog-store", () => ({
+mock.module("./catalog-store", () => ({
   requireActiveCatalog: catalogMocks.requireActiveCatalog,
   verifyCheckoutOffer: catalogMocks.verifyCheckoutOffer,
 }));
 
-vi.mock("./provider-registry", () => ({
+mock.module("./provider-registry", () => ({
   getBillingProvider: catalogMocks.getBillingProvider,
 }));
 
-import { eq } from "drizzle-orm";
-import { db } from "../db/client";
-import {
+const { db } = await import("../db/client");
+const {
   billingCatalogRevisionItems,
   billingCatalogRevisions,
   billingPlanStates,
   billingPriceEntries,
   billingProviderCustomers,
   billingSubscriptions,
-} from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { createOrganizationPlanChange } from "./plan-change";
+} = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { createOrganizationPlanChange } = await import("./plan-change");
 
 const tdb = db as unknown as TestDb;
 

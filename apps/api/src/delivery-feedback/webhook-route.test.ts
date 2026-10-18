@@ -1,43 +1,65 @@
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
+import path from "node:path";
+import { resetModules, stubGlobal, unstubAllGlobals } from "@sendlit/test-utils";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../mail/queue", () => ({ addTransactionalMailJob: vi.fn() }));
+mock.module("../mail/queue", () => ({ addTransactionalMailJob: mock() }));
 // The route enqueues onto BullMQ/Redis after responding — not available in
 // this DB-backed test, and irrelevant to what's being asserted (the HTTP
 // response and the durably-committed receipt).
-vi.mock("./feedback-queue", () => ({
-  enqueueReceiptForProcessing: vi.fn().mockResolvedValue(undefined),
+mock.module("./feedback-queue", () => ({
+  enqueueReceiptForProcessing: mock().mockResolvedValue(undefined),
 }));
 
-import { db } from "../db/client";
-import { espConfigs, espFeedbackConnections, espWebhookReceipts } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import {
+const { db } = await import("../db/client");
+const { espConfigs, espFeedbackConnections, espWebhookReceipts } = await import(
+  "../db/schema"
+);
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const {
   signSnsMessage,
   snsNotification,
   TEST_SNS_CERT_URL,
   TEST_SNS_PUBLIC_KEY_PEM,
   TEST_TOPIC_ARN,
-} from "../test/sns";
-import { upsertFeedbackConnection } from "./feedback-connection-queries";
-import { decryptReceiptPayload } from "./webhook-receipt-queries";
+} = await import("../test/sns");
+const { upsertFeedbackConnection } = await import("./feedback-connection-queries");
+const { decryptReceiptPayload } = await import("./webhook-receipt-queries");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
+
+const SRC_DIR = path.resolve(import.meta.dir, "..");
+const MOCKED_MODULES = new Set(
+  ["../db/client", "../mail/queue", "./feedback-queue"].map(
+    (specifier) => `${path.resolve(import.meta.dir, specifier)}.ts`,
+  ),
+);
+
+/** Evict the app modules (but not the mocks or test helpers) so each test
+ * re-evaluates them with fresh module state, such as the SNS signing-certificate
+ * cache. */
+function resetAppModules() {
+  resetModules(SRC_DIR, {
+    keep: (key) =>
+      key.startsWith(path.join(SRC_DIR, "test")) || MOCKED_MODULES.has(key),
+  });
+}
 
 describe("POST /webhooks/esp/:provider/:connectionId (integration)", () => {
   let app: express.Express;
 
   beforeEach(async () => {
     await truncateAll(tdb);
-    vi.resetModules();
-    const webhookRoutes = ((await import("./webhook-route.js")) as any).default;
+    resetAppModules();
+    const webhookRoutes = ((await import("./webhook-route")) as any).default;
     app = express();
     app.use(webhookRoutes);
   });
@@ -196,7 +218,7 @@ describe("POST /webhooks/esp/:provider/:connectionId (integration)", () => {
   });
 
   describe("Amazon SES over SNS", () => {
-    const fetchMock = vi.fn();
+    const fetchMock = mock();
     const subscribeUrl = `https://sns.us-east-1.amazonaws.com/?Action=ConfirmSubscription&TopicArn=${encodeURIComponent(TEST_TOPIC_ARN)}&Token=tok`;
 
     beforeEach(() => {
@@ -206,10 +228,10 @@ describe("POST /webhooks/esp/:provider/:connectionId (integration)", () => {
           ? new Response(TEST_SNS_PUBLIC_KEY_PEM)
           : new Response("<ConfirmSubscriptionResponse/>"),
       );
-      vi.stubGlobal("fetch", fetchMock);
+      stubGlobal("fetch", fetchMock);
     });
     afterEach(() => {
-      vi.unstubAllGlobals();
+      unstubAllGlobals();
     });
 
     async function seedSesConnection() {

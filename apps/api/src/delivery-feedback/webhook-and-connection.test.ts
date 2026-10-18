@@ -1,15 +1,15 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { db } from "../db/client";
-import { espConfigs, espWebhookReceipts } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import {
+const { db } = await import("../db/client");
+const { espConfigs, espWebhookReceipts } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const {
   decryptFeedbackCredentials,
   disableFeedbackConnection,
   feedbackConnectionReadinessError,
@@ -18,9 +18,9 @@ import {
   recordFeedbackControlOutcome,
   retireActiveFeedbackConnection,
   upsertFeedbackConnection,
-} from "./feedback-connection-queries";
-import { feedbackConnectionInputError } from "./feedback-connection-shape";
-import {
+} = await import("./feedback-connection-queries");
+const { feedbackConnectionInputError } = await import("./feedback-connection-shape");
+const {
   claimReceiptForProcessing,
   createWebhookReceipt,
   decryptReceiptPayload,
@@ -31,7 +31,8 @@ import {
   markReceiptFailedForRetry,
   markReceiptProcessed,
   sanitizeHeaders,
-} from "./webhook-receipt-queries";
+} = await import("./webhook-receipt-queries");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 

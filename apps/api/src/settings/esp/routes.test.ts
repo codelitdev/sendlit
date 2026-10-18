@@ -1,46 +1,47 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const requestContext = vi.hoisted(() => ({ teamId: "", userId: "" }));
-const transportMocks = vi.hoisted(() => ({
+const requestContext = { teamId: "", userId: "" };
+const transportMocks = {
   invalidateEsp: vi.fn(),
   invalidateTeam: vi.fn(),
-}));
+};
 
-vi.mock("../../db/client", async () => {
-  const { makeTestDb } = await import("../../test/db.js");
+mock.module("../../db/client", async () => {
+  const { makeTestDb } = await import("../../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../../auth/middleware", () => ({
+mock.module("../../auth/middleware", () => ({
   requireAuth: (req: any, _res: any, next: () => void) => {
     req.authKind = "session";
     req.userId = requestContext.userId;
     next();
   },
 }));
-vi.mock("../../auth/require-team", () => ({
+mock.module("../../auth/require-team", () => ({
   requireTeam: (req: any, _res: any, next: () => void) => {
     req.teamId = requestContext.teamId;
     next();
   },
 }));
-vi.mock("../../mail/transport", () => ({
+mock.module("../../mail/transport", () => ({
   invalidateEspTransport: transportMocks.invalidateEsp,
   invalidateTeamTransport: transportMocks.invalidateTeam,
 }));
-vi.mock("./test", () => ({
+mock.module("./test", () => ({
   testEspConfig: vi.fn().mockResolvedValue({ success: true }),
 }));
-vi.mock("../../observability/posthog", () => ({ captureEvent: vi.fn() }));
+mock.module("../../observability/posthog", () => ({ captureEvent: vi.fn() }));
 
-import { db } from "../../db/client";
-import { espConfigs, outboundMessages } from "../../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../../test/db";
-import { seedSequence } from "../../test/fixtures";
-import { requestApp } from "../../test/http";
-import { createEspConfig, getEspConfigByEspId } from "./queries";
-import espRoutes from "./routes";
+const { db } = await import("../../db/client");
+const { espConfigs, outboundMessages } = await import("../../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../../test/db");
+type TestDb = import("../../test/db").TestDb;
+const { seedSequence } = await import("../../test/fixtures");
+const { requestApp } = await import("../../test/http");
+const { createEspConfig, getEspConfigByEspId } = await import("./queries");
+const { default: espRoutes } = await import("./routes");
 
 const tdb = db as unknown as TestDb;
 

@@ -1,19 +1,20 @@
-// @vitest-environment jsdom
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { registerDom } from "@sendlit/test-utils/dom";
 
-import { cleanup, render, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+registerDom();
 
-const mocks = vi.hoisted(() => ({
-  initPosthogBrowser: vi.fn().mockResolvedValue(null),
-  identifyPosthogUserFromSession: vi.fn().mockResolvedValue(undefined),
-}));
+const mocks = {
+  initPosthogBrowser: mock().mockResolvedValue(null),
+  identifyPosthogUserFromSession: mock().mockResolvedValue(undefined),
+};
 
-vi.mock("@/lib/posthog-browser", () => ({
+mock.module("@/lib/posthog-browser", () => ({
   initPosthogBrowser: mocks.initPosthogBrowser,
   identifyPosthogUserFromSession: mocks.identifyPosthogUserFromSession,
 }));
 
-import { PostHogProvider } from "./posthog-provider";
+const { cleanup, render, waitFor } = await import("@testing-library/react");
+const { PostHogProvider } = await import("./posthog-provider");
 
 describe("PostHogProvider", () => {
   afterEach(() => {

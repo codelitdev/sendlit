@@ -1,9 +1,10 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
+import { waitFor } from "@sendlit/test-utils";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   verifyPixelToken: vi.fn(),
   insertValues: vi.fn(),
   getContactByContactId: vi.fn(),
@@ -15,38 +16,38 @@ const mocks = vi.hoisted(() => ({
   incrementClick: vi.fn(),
   captureEvent: vi.fn(),
   captureError: vi.fn(),
-}));
+};
 
-vi.mock("../db/client", () => ({
+mock.module("../db/client", () => ({
   db: { insert: vi.fn(() => ({ values: mocks.insertValues })) },
 }));
-vi.mock("../utils/pixel-jwt", () => ({
+mock.module("../utils/pixel-jwt", () => ({
   verifyPixelToken: mocks.verifyPixelToken,
 }));
-vi.mock("../contacts/queries", () => ({
+mock.module("../contacts/queries", () => ({
   getContactByContactId: mocks.getContactByContactId,
   getContactByUnsubscribeToken: mocks.getContactByUnsubscribeToken,
   updateContact: mocks.updateContact,
 }));
-vi.mock("../sequences/queries", () => ({
+mock.module("../sequences/queries", () => ({
   getSequenceEmailByEmailId: mocks.getSequenceEmailByEmailId,
 }));
-vi.mock("../automation/queries", () => ({
+mock.module("../automation/queries", () => ({
   getSequenceRowBySequenceId: mocks.getSequenceRowBySequenceId,
 }));
-vi.mock("../transactional/queries", () => ({
+mock.module("../transactional/queries", () => ({
   incrementTransactionalEmailOpenCount: mocks.incrementOpen,
   incrementTransactionalEmailClickCount: mocks.incrementClick,
 }));
-vi.mock("../observability/posthog", () => ({
+mock.module("../observability/posthog", () => ({
   captureEvent: mocks.captureEvent,
   captureError: mocks.captureError,
 }));
-vi.mock("../services/log", () => ({
+mock.module("../services/log", () => ({
   default: { error: vi.fn() },
 }));
 
-import trackingRoutes from "./routes";
+const { default: trackingRoutes } = await import("./routes");
 
 type TestResponse = {
   status: number;
@@ -143,7 +144,7 @@ describe("tracking and unsubscribe routes", () => {
     mocks.verifyPixelToken.mockReturnValue(campaignPayload());
 
     const response = await get("/track/open?d=valid");
-    await vi.waitFor(() => expect(mocks.insertValues).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.insertValues).toHaveBeenCalled());
 
     expect(response.status).toBe(200);
     expect(mocks.getSequenceRowBySequenceId).toHaveBeenCalledWith(
@@ -165,7 +166,7 @@ describe("tracking and unsubscribe routes", () => {
     mocks.verifyPixelToken.mockReturnValue({ type: "txe", txeId: "txe_1" });
 
     await get("/track/open?d=valid");
-    await vi.waitFor(() => expect(mocks.incrementOpen).toHaveBeenCalledWith("txe_1"));
+    await waitFor(() => expect(mocks.incrementOpen).toHaveBeenCalledWith("txe_1"));
 
     expect(mocks.getContactByContactId).not.toHaveBeenCalled();
     expect(mocks.insertValues).not.toHaveBeenCalled();
@@ -176,7 +177,7 @@ describe("tracking and unsubscribe routes", () => {
     mocks.getContactByContactId.mockResolvedValue(null);
 
     const response = await get("/track/open?d=valid");
-    await vi.waitFor(() => expect(mocks.getContactByContactId).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.getContactByContactId).toHaveBeenCalled());
 
     expect(response.status).toBe(200);
     expect(mocks.insertValues).not.toHaveBeenCalled();
@@ -187,7 +188,7 @@ describe("tracking and unsubscribe routes", () => {
     mocks.insertValues.mockRejectedValue(new Error("database unavailable"));
 
     const response = await get("/track/open?d=valid");
-    await vi.waitFor(() => expect(mocks.captureError).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.captureError).toHaveBeenCalled());
 
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toContain("image/gif");

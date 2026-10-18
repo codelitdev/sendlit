@@ -1,20 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const authMocks = vi.hoisted(() => ({ getSession: vi.fn() }));
+const authMocks = { getSession: vi.fn() };
 
-vi.mock("../auth/better-auth", () => ({
+mock.module("../auth/better-auth", () => ({
   auth: { api: { getSession: authMocks.getSession } },
 }));
 
-vi.mock("../db/client", async () => {
+mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
 
-import { db } from "../db/client";
-import { organizations } from "../db/schema";
-import { type TestDb, truncateAll } from "../test/db";
-import { issueBillingActionToken, requireBillingAction } from "./security";
+const { db } = await import("../db/client");
+const { organizations } = await import("../db/schema");
+const { truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { issueBillingActionToken, requireBillingAction } = await import("./security");
 
 const tdb = db as unknown as TestDb;
 

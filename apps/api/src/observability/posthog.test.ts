@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
 const captureExceptionMock = vi.fn();
 const captureMock = vi.fn();
@@ -11,14 +11,17 @@ const posthogConstructorMock = vi.fn(function () {
   };
 });
 
-vi.mock("posthog-node", () => ({
+mock.module("posthog-node", () => ({
   PostHog: posthogConstructorMock,
   setupExpressErrorHandler: setupExpressErrorHandlerMock,
 }));
 
-const loadModule = async () => {
-  vi.resetModules();
-  return await import("./posthog.js");
+// Bun has no `vi.resetModules`; a unique query string gives a fresh module
+// instance so `posthog.ts` re-reads the env and rebuilds its client.
+let loadCount = 0;
+const loadModule = async (): Promise<typeof import("./posthog")> => {
+  loadCount += 1;
+  return await import(`./posthog?load=${loadCount}`);
 };
 
 describe("posthog wrapper", () => {

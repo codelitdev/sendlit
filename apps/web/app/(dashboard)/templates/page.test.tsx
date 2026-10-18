@@ -1,28 +1,29 @@
-// @vitest-environment jsdom
-
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { registerDom } from "@sendlit/test-utils/dom";
 import type React from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  push: vi.fn(),
-  listTemplates: vi.fn(),
-  listSystemTemplates: vi.fn(),
-  duplicateTemplate: vi.fn(),
-  deleteTemplate: vi.fn(),
+registerDom();
+
+const mocks = {
+  push: mock(),
+  listTemplates: mock(),
+  listSystemTemplates: mock(),
+  duplicateTemplate: mock(),
+  deleteTemplate: mock(),
   previewProps: [] as any[],
-}));
+};
 
-vi.mock("next/navigation", () => ({
+mock.module("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push }),
 }));
-vi.mock("@/lib/api", () => ({
+mock.module("@/lib/api", () => ({
   listTemplates: mocks.listTemplates,
   listSystemTemplates: mocks.listSystemTemplates,
   duplicateTemplate: mocks.duplicateTemplate,
   deleteTemplate: mocks.deleteTemplate,
+  getGeneralSettings: mock(),
 }));
-vi.mock("@sendlit/email-blocks", () => ({
+mock.module("@sendlit/email-blocks", () => ({
   EmailPreview: (props: any) => {
     mocks.previewProps.push(props);
     return <div data-testid="email-preview" />;
@@ -30,21 +31,21 @@ vi.mock("@sendlit/email-blocks", () => ({
   TemplateChooser: () => <div data-testid="template-chooser" />,
   EmailEditor: () => null,
 }));
-vi.mock("@sendlit/email-editor/blocks", () => ({
+mock.module("@sendlit/email-editor/blocks", () => ({
   Text: {},
   Separator: {},
   Link: {},
   ImageBlock: { configure: () => ({}) },
 }));
-vi.mock("@/components/dashboard/email-image-upload-dialog", () => ({
+mock.module("@/components/dashboard/email-image-upload-dialog", () => ({
   EmailImageUploadDialog: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
 }));
-vi.mock("@/components/dashboard/delete-confirmation-dialog", () => ({
+mock.module("@/components/dashboard/delete-confirmation-dialog", () => ({
   DeleteConfirmationDialog: () => null,
 }));
-vi.mock("@/components/ui/codelit/tabs", async () => {
+mock.module("@/components/ui/codelit/tabs", async () => {
   const ReactModule = await import("react");
   const ChangeContext = ReactModule.createContext<(value: string) => void>(
     () => undefined,
@@ -81,9 +82,14 @@ vi.mock("@/components/ui/codelit/tabs", async () => {
   };
 });
 
-import { BreadcrumbProvider } from "@/components/dashboard/breadcrumb-context";
-import { TooltipProvider } from "@/components/ui/codelit/tooltip";
-import TemplatesPage from "./page";
+const { cleanup, fireEvent, render, screen, waitFor } = await import(
+  "@testing-library/react"
+);
+const { BreadcrumbProvider } = await import(
+  "@/components/dashboard/breadcrumb-context"
+);
+const { TooltipProvider } = await import("@/components/ui/codelit/tooltip");
+const { default: TemplatesPage } = await import("./page");
 
 const content = { style: {}, meta: {}, content: [] };
 const templates = [
@@ -108,7 +114,7 @@ const templates = [
 ];
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  mock.clearAllMocks();
   mocks.previewProps = [];
   mocks.listTemplates.mockResolvedValue(templates);
   mocks.listSystemTemplates.mockResolvedValue([]);

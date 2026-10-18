@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   getEspConfigByEspId: vi.fn(),
   listEspConfigs: vi.fn(),
   getFeedbackConnectionForTeamEsp: vi.fn(),
@@ -16,36 +16,36 @@ const mocks = vi.hoisted(() => ({
   countSuppressions: vi.fn(),
   getSuppressionBySuppressionId: vi.fn(),
   releaseSuppression: vi.fn(),
-}));
+};
 
-vi.mock("../../settings/esp/queries", () => ({
+mock.module("../../settings/esp/queries", () => ({
   getEspConfigByEspId: mocks.getEspConfigByEspId,
   listEspConfigs: mocks.listEspConfigs,
 }));
-vi.mock("../../delivery-feedback/feedback-connection-queries", () => ({
+mock.module("../../delivery-feedback/feedback-connection-queries", () => ({
   getFeedbackConnectionForTeamEsp: mocks.getFeedbackConnectionForTeamEsp,
   upsertFeedbackConnection: mocks.upsertFeedbackConnection,
   feedbackConnectionReadinessError: mocks.feedbackConnectionReadinessError,
   recordFeedbackConnectionVerified: mocks.recordFeedbackConnectionVerified,
   disableFeedbackConnection: mocks.disableFeedbackConnection,
 }));
-vi.mock("../../delivery-feedback/delivery-event-queries", () => ({
+mock.module("../../delivery-feedback/delivery-event-queries", () => ({
   listDeliveryEvents: mocks.listDeliveryEvents,
   countDeliveryEvents: mocks.countDeliveryEvents,
   getDeliveryEventByEventId: mocks.getDeliveryEventByEventId,
 }));
-vi.mock("../../delivery-feedback/outbound-queries", () => ({
+mock.module("../../delivery-feedback/outbound-queries", () => ({
   getOutboundMessagesByIds: mocks.getOutboundMessagesByIds,
 }));
-vi.mock("../../delivery-feedback/suppression-queries", () => ({
+mock.module("../../delivery-feedback/suppression-queries", () => ({
   listSuppressions: mocks.listSuppressions,
   countSuppressions: mocks.countSuppressions,
   getSuppressionBySuppressionId: mocks.getSuppressionBySuppressionId,
   releaseSuppression: mocks.releaseSuppression,
 }));
 
-import { registerDeliveryFeedbackTools } from "./delivery-feedback";
-import { AUTH_ERROR, NOT_FOUND } from "./responses";
+const { registerDeliveryFeedbackTools } = await import("./delivery-feedback");
+const { AUTH_ERROR, NOT_FOUND } = await import("./responses");
 
 type Tool = { handler: (args: any, extra?: any) => Promise<any> };
 

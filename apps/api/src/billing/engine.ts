@@ -72,7 +72,7 @@ const sensitiveValues = {
 let engine: ReturnType<typeof createBilling> | undefined;
 
 export function getBillingEngine() {
-  if (engine && !process.env.VITEST) return engine;
+  if (engine && process.env.NODE_ENV !== "test") return engine;
   const config = readBillingConfig();
   const cloud = config.deploymentMode === "cloud";
   const store = createDrizzleBillingStore(db as never, {

@@ -1,17 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   getOAuthTeamSelection: vi.fn(),
   listTeamsForUser: vi.fn(),
   setOAuthTeamSelection: vi.fn(),
-}));
+};
 
-vi.mock("../team/queries", () => mocks);
+mock.module("../team/queries", () => mocks);
 
-import {
-  createSendLitOAuthTeamSelectionHooks,
-  oauthTeamSelectionAdapter,
-} from "./oauth-team-selection";
+const { createSendLitOAuthTeamSelectionHooks, oauthTeamSelectionAdapter } =
+  await import("./oauth-team-selection");
 
 describe("SendLit OAuth team selection", () => {
   beforeEach(() => {

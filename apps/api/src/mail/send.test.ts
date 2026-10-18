@@ -1,33 +1,42 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const sendMailMock = vi.fn();
-const getTeamTransportMock = vi.fn();
-const captureErrorMock = vi.fn();
-const captureEventMock = vi.fn();
-const assertMailingAddressConfiguredMock = vi.fn();
+const sendMailMock = mock();
+const getTeamTransportMock = mock();
+const captureErrorMock = mock();
+const captureEventMock = mock();
+const assertMailingAddressConfiguredMock = mock();
 
-vi.mock("./transport", () => ({
+// `send.ts` also imports `getEspTransport`; Bun requires every imported
+// name to exist on the mock, so stub it (no test here exercises it).
+mock.module("./transport", () => ({
+  getEspTransport: mock(),
   getTeamTransport: getTeamTransportMock,
 }));
 
-vi.mock("../observability/posthog", () => ({
+mock.module("../observability/posthog", () => ({
   captureError: captureErrorMock,
   captureEvent: captureEventMock,
 }));
 
-vi.mock("../services/log", () => ({
+mock.module("../services/log", () => ({
   default: {
-    info: vi.fn(),
+    info: mock(),
   },
 }));
 
-vi.mock("../settings/general/queries", () => ({
+mock.module("../settings/general/queries", () => ({
   assertMailingAddressConfigured: assertMailingAddressConfiguredMock,
 }));
 
+// Bun stand-in for `vi.resetModules()`: a fresh specifier per test gives a
+// fresh instance of the module under test (its dependencies are all mocked).
+let moduleCase = 0;
+const loadSend = async () =>
+  (await import(`./send?case=${moduleCase}`)) as typeof import("./send");
+
 describe("sendMail", () => {
   beforeEach(() => {
-    vi.resetModules();
+    moduleCase++;
     vi.clearAllMocks();
     process.env.NODE_ENV = "production";
     assertMailingAddressConfiguredMock.mockResolvedValue(undefined);
@@ -38,7 +47,7 @@ describe("sendMail", () => {
       new Error("mailing_address_required"),
     );
     getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
-    const { sendMail } = await import("./send.js");
+    const { sendMail } = await loadSend();
 
     await expect(
       sendMail({
@@ -57,7 +66,7 @@ describe("sendMail", () => {
 
   it("fails clearly when a team has no ESP configured", async () => {
     getTeamTransportMock.mockResolvedValue(null);
-    const { sendMail } = await import("./send.js");
+    const { sendMail } = await loadSend();
 
     await expect(
       sendMail({
@@ -83,7 +92,7 @@ describe("sendMail", () => {
   it("fails closed without an ESP outside production too", async () => {
     process.env.NODE_ENV = "test";
     getTeamTransportMock.mockResolvedValue(null);
-    const { sendMail } = await import("./send.js");
+    const { sendMail } = await loadSend();
 
     await expect(
       sendMail({
@@ -99,7 +108,7 @@ describe("sendMail", () => {
 
   it("sends through the team's configured ESP", async () => {
     getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
-    const { sendMail } = await import("./send.js");
+    const { sendMail } = await loadSend();
 
     await sendMail({
       purpose: "campaign",
@@ -132,7 +141,7 @@ describe("sendMail", () => {
       new Error("mailing_address_required"),
     );
     getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
-    const { sendMail } = await import("./send.js");
+    const { sendMail } = await loadSend();
 
     await expect(
       sendMail({
@@ -154,7 +163,7 @@ describe("sendMail", () => {
       new Error("mailing_address_required"),
     );
     getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
-    const { sendTestMail } = await import("./send.js");
+    const { sendTestMail } = await loadSend();
 
     await expect(
       sendTestMail({

@@ -1,21 +1,16 @@
+import { afterAll, beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import express from "express";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import contactsRoutes from "../contacts/routes";
-import { db } from "../db/client";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
 
-vi.mock("../db/client", async () => {
+mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb(), pool: { end: vi.fn() } };
 });
 
-const tdb = db as unknown as TestDb;
-
-const mocks = vi.hoisted(() => ({
+const mocks = {
   verifyBearerToken: vi.fn(),
-}));
+};
 
-vi.mock("./better-auth", () => ({
+mock.module("./better-auth", () => ({
   auth: {
     api: {
       getSession: vi.fn(async () => null),
@@ -31,9 +26,16 @@ vi.mock("./better-auth", () => ({
   },
 }));
 
-vi.mock("better-auth/node", () => ({
+mock.module("better-auth/node", () => ({
   fromNodeHeaders: vi.fn((headers) => headers),
 }));
+
+const { default: contactsRoutes } = await import("../contacts/routes");
+const { db } = await import("../db/client");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+
+const tdb = db as unknown as TestDb;
 
 async function request(router: express.Router, path: string, init?: RequestInit) {
   const bodyChunks: Buffer[] = [];

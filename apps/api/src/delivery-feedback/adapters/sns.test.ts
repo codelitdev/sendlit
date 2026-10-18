@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import {
   TEST_SNS_CERT_URL as CERT_URL,
   TEST_SNS_PUBLIC_KEY_PEM as PUBLIC_KEY_PEM,

@@ -1,19 +1,20 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { db } from "../db/client";
-import { emailSuppressionActions } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import {
+const { db } = await import("../db/client");
+const { emailSuppressionActions } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const {
   addOrStrengthenSuppression,
   getActiveSuppression,
   isRecipientSuppressed,
   releaseSuppression,
-} from "./suppression-queries";
+} = await import("./suppression-queries");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 

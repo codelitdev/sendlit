@@ -1,5 +1,5 @@
+import { describe, expect, it } from "bun:test";
 import { defaultEmail, type Email, renderEmailToHtml } from "@sendlit/email-editor";
-import { describe, expect, it } from "vitest";
 import { createFooterBlock, createFooterEmailBlock } from ".";
 
 const footer = createFooterBlock({

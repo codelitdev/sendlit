@@ -1,7 +1,7 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
-import { MCP_SCOPES_SUPPORTED } from "../mcp/policy";
+import { beforeAll, describe, expect, it, mock, vi } from "bun:test";
+import { stubEnv } from "@sendlit/test-utils";
 
-const dbMock = vi.hoisted(() => ({
+const dbMock = {
   select: vi.fn(() => ({
     from: vi.fn(() => ({
       where: vi.fn(() => ({ limit: vi.fn(async () => []) })),
@@ -10,12 +10,14 @@ const dbMock = vi.hoisted(() => ({
   insert: vi.fn(() => ({
     values: vi.fn(() => ({ returning: vi.fn(async () => [{}]) })),
   })),
-}));
+};
 
-vi.mock("../db/client", () => ({ db: dbMock }));
-vi.mock("../organization/queries", () => ({
+mock.module("../db/client", () => ({ db: dbMock }));
+mock.module("../organization/queries", () => ({
   ensureDefaultOrganization: vi.fn(),
 }));
+
+const { MCP_SCOPES_SUPPORTED } = await import("../mcp/policy");
 
 describe("Better Auth MCP authorization metadata", () => {
   let auth: typeof import("./better-auth.js")["auth"];
@@ -23,11 +25,11 @@ describe("Better Auth MCP authorization metadata", () => {
   let requestableScopes: typeof import("./better-auth.js")["OAUTH_CLIENT_REQUESTABLE_SCOPES"];
 
   beforeAll(async () => {
-    vi.stubEnv(
+    stubEnv(
       "BETTER_AUTH_SECRET",
       "test-only-secret-with-at-least-thirty-two-characters",
     );
-    vi.stubEnv("API_PUBLIC_URL", "https://sendlit.test");
+    stubEnv("API_PUBLIC_URL", "https://sendlit.test");
     const betterAuthModule = await import("./better-auth.js");
     auth = betterAuthModule.auth;
     defaultScopes = betterAuthModule.OAUTH_CLIENT_DEFAULT_SCOPES;

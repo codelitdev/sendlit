@@ -1,14 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
+import { stubEnv, unstubAllEnvs } from "@sendlit/test-utils";
+import { resetAppModules } from "./test/reset-modules";
 
 describe("safeAppRedirect", () => {
   afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.resetModules();
+    unstubAllEnvs();
+    resetAppModules();
   });
 
   async function loadWithWebClient(webClient: string) {
-    vi.stubEnv("WEB_CLIENT", webClient);
-    vi.resetModules();
+    stubEnv("WEB_CLIENT", webClient);
+    resetAppModules();
     return import("./safe-app-redirect");
   }
 

@@ -1,13 +1,13 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
 import { type Email, defaultEmail as editorDefaultEmail } from "@sendlit/email-editor";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../media/service", () => ({
+mock.module("../media/service", () => ({
   sealMedia: vi.fn((mediaId: string) =>
     Promise.resolve({
       mediaId,
@@ -17,11 +17,12 @@ vi.mock("../media/service", () => ({
   deleteMedia: vi.fn(),
 }));
 
-import { db } from "../db/client";
-import { emailTemplates, media, mediaReferences } from "../db/schema";
-import { deleteMedia, sealMedia } from "../media/service";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import {
+const { db } = await import("../db/client");
+const { emailTemplates, media, mediaReferences } = await import("../db/schema");
+const { deleteMedia, sealMedia } = await import("../media/service");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const {
   createTemplate,
   deleteTemplate,
   duplicateTemplate,
@@ -29,7 +30,7 @@ import {
   listTemplates,
   resolveStartingTemplate,
   updateTemplate,
-} from "./queries";
+} = await import("./queries");
 
 const tdb = db as unknown as TestDb;
 const defaultEmail: Email = {
@@ -124,13 +125,17 @@ describe("template queries", () => {
   it("rejects invalid purpose values at the database boundary", async () => {
     const { team } = await seedTeamAndContact(tdb);
 
+    // Drizzle builders are thenables, not Promises; bun:test's `.rejects`
+    // needs a real Promise, so adopt the builder with Promise.resolve.
     await expect(
-      db.insert(emailTemplates).values({
-        teamId: team.id,
-        title: "Invalid",
-        purpose: "bulk" as any,
-        content: defaultEmail,
-      }),
+      Promise.resolve(
+        db.insert(emailTemplates).values({
+          teamId: team.id,
+          title: "Invalid",
+          purpose: "bulk" as any,
+          content: defaultEmail,
+        }),
+      ),
     ).rejects.toThrow();
   });
 
@@ -232,9 +237,11 @@ describe("template queries", () => {
       .where(eq(mediaReferences.resourceType, "TEMPLATE"));
     expect(references).toHaveLength(2);
     expect(new Set(references.map((reference) => reference.mediaId)).size).toBe(1);
-    expect(new Set(references.map((reference) => reference.resourcePublicId))).toEqual(
-      new Set([source.templateId, duplicate?.templateId]),
-    );
+    expect(
+      new Set<string | undefined>(
+        references.map((reference) => reference.resourcePublicId),
+      ),
+    ).toEqual(new Set([source.templateId, duplicate?.templateId]));
   });
 
   it("blocks duplicate renames and scopes updates/deletes by team", async () => {

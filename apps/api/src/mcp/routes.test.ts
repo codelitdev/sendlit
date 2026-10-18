@@ -1,25 +1,34 @@
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  mock,
+  vi,
+} from "bun:test";
 import type { AddressInfo } from "node:net";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { McpServer } from "@modelcontextprotocol/server";
 import express, { Router } from "express";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   createDiscoveryRoutes: vi.fn(),
   buildServer: vi.fn(),
-}));
+};
 
-vi.mock("../auth/better-auth", () => ({
+mock.module("../auth/better-auth", () => ({
   auth: {
     options: { baseURL: "http://localhost:5000", basePath: "/api/auth" },
   },
   mcpResourceUrl: "http://localhost:5000/mcp",
   oauthResourceClient: {},
 }));
-vi.mock("@codelitdev/oauth-server-kit/mcp", () => ({
+mock.module("@codelitdev/oauth-server-kit/mcp", () => ({
   createMcpOAuthDiscoveryRoutes: mocks.createDiscoveryRoutes,
 }));
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   mcpAuth: vi.fn((req: any, _res: any, next: any) => {
     req.authKind = "team_key";
     req.apiKeyId = "tak_test";
@@ -27,10 +36,10 @@ vi.mock("../auth/middleware", () => ({
     next();
   }),
 }));
-vi.mock("../auth/require-team", () => ({
+mock.module("../auth/require-team", () => ({
   requireTeam: vi.fn((_req, _res, next) => next()),
 }));
-vi.mock("./server.js", () => ({
+mock.module("./server.js", () => ({
   buildMcpServer: () => mocks.buildServer(),
 }));
 
@@ -75,7 +84,7 @@ describe("MCP Streamable HTTP route", () => {
       );
       return router;
     });
-    routes = ((await import("./routes.js")) as any).default;
+    routes = ((await import("./routes")) as any).default;
   });
 
   beforeEach(() => {

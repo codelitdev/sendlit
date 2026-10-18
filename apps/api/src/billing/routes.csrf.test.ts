@@ -1,12 +1,11 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { requestApp } from "../test/http";
 
-vi.mock("../auth/better-auth", () => ({
+mock.module("../auth/better-auth", () => ({
   auth: { api: { getSession: vi.fn() } },
 }));
 
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (req: any, _res: any, next: () => void) => {
     req.authKind = "session";
     req.userId = "user-1";
@@ -14,9 +13,10 @@ vi.mock("../auth/middleware", () => ({
   },
 }));
 
-vi.mock("../db/client", () => ({ db: {} }));
+mock.module("../db/client", () => ({ db: {} }));
 
-import billingRoutes from "./routes";
+const { requestApp } = await import("../test/http");
+const { default: billingRoutes } = await import("./routes");
 
 function probeApp() {
   const app = express();
@@ -59,7 +59,7 @@ describe("billing origin CSRF boundary", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(response.json()).toEqual({ error: "csrf_origin_invalid" });
+    expect(response.json<unknown>()).toEqual({ error: "csrf_origin_invalid" });
   });
 
   it("protects billing action-token issuance with the same origin boundary", async () => {
@@ -70,7 +70,7 @@ describe("billing origin CSRF boundary", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(response.json()).toEqual({ error: "csrf_origin_invalid" });
+    expect(response.json<unknown>()).toEqual({ error: "csrf_origin_invalid" });
   });
 
   it("rejects billing mutations from a foreign Origin", async () => {
@@ -88,7 +88,7 @@ describe("billing origin CSRF boundary", () => {
     );
 
     expect(response.status).toBe(403);
-    expect(response.json()).toEqual({ error: "csrf_origin_invalid" });
+    expect(response.json<unknown>()).toEqual({ error: "csrf_origin_invalid" });
   });
 
   it("does not origin-gate billing reads", async () => {

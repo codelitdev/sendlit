@@ -1,23 +1,23 @@
+import { describe, expect, it, mock } from "bun:test";
 import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
 import { defaultEmail } from "@sendlit/email-editor";
-import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../observability/posthog", () => ({
-  captureError: vi.fn(),
+mock.module("../observability/posthog", () => ({
+  captureError: mock(),
 }));
-vi.mock("../services/log", () => ({
-  default: { error: vi.fn(), info: vi.fn() },
+mock.module("../services/log", () => ({
+  default: { error: mock(), info: mock() },
 }));
 
-import {
+const {
   appendTrackingPixel,
   appendTrackingPixelToHtml,
   findMissingTemplateVariables,
-  type MissingTemplateVariablesError,
   mailingAddressAppearsInText,
   renderEmailContent,
   transformLinksForClickTracking,
-} from "./render";
+} = await import("./render");
+type MissingTemplateVariablesError = import("./render").MissingTemplateVariablesError;
 
 describe("mail render helpers", () => {
   it("renders Liquid merge tags over email-editor content", async () => {

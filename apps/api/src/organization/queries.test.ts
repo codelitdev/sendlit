@@ -1,13 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { eq } from "drizzle-orm";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { eq } from "drizzle-orm";
-import { db } from "../db/client";
-import {
+const { db } = await import("../db/client");
+const {
   billingCheckoutAttempts,
   billingPlanStates,
   billingPriceEntries,
@@ -22,28 +22,28 @@ import {
   sequences,
   teams,
   user,
-} from "../db/schema";
-import {
+} = await import("../db/schema");
+const {
   getTeamDeliverySettingView,
   resolveDeliverySource,
   transitionEspGrant,
   upsertEspGrant,
-} from "../delivery/queries";
-import {
-  getOrganizationQuotaUsage,
-  reserveOrganizationQuotaForOutbound,
-} from "../delivery/quota";
-import { createOrganizationEspConfig } from "../settings/esp/queries";
-import { createTeam } from "../team/queries";
-import { type TestDb, truncateAll } from "../test/db";
-import { listOrganizationAuditEvents } from "./audit";
-import {
+} = await import("../delivery/queries");
+const { getOrganizationQuotaUsage, reserveOrganizationQuotaForOutbound } = await import(
+  "../delivery/quota"
+);
+const { createOrganizationEspConfig } = await import("../settings/esp/queries");
+const { createTeam } = await import("../team/queries");
+const { truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { listOrganizationAuditEvents } = await import("./audit");
+const {
   addOrganizationMemberByEmail,
   closeOrganization,
   createOrganization,
   getOrganizationMembership,
   listOrganizationsForUser,
-} from "./queries";
+} = await import("./queries");
 
 const tdb = db as unknown as TestDb;
 

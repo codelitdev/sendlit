@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { SYSTEM_TEMPLATES } from "./system-templates";
 import { getRequiredTemplateVariables, validateTemplateContent } from "./validation";
 

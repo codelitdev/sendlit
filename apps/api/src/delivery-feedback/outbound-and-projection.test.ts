@@ -1,35 +1,35 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { db } from "../db/client";
-import {
+const { db } = await import("../db/client");
+const {
   emailDeliveryEvents,
   espConfigs,
   espFeedbackConnections,
   espWebhookReceipts,
   outboundMessages,
-} from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { encryptSecret } from "../utils/secret-crypto";
-import { correlateOutboundMessage } from "./correlation";
-import {
-  insertCanonicalEventIfNew,
-  linkEventToOutboundMessage,
-} from "./delivery-event-queries";
-import {
+} = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { encryptSecret } = await import("../utils/secret-crypto");
+const { correlateOutboundMessage } = await import("./correlation");
+const { insertCanonicalEventIfNew, linkEventToOutboundMessage } = await import(
+  "./delivery-event-queries"
+);
+const {
   createOutboundMessage,
   getOutboundMessageById,
   markOutboundAccepted,
   markOutboundBounced,
   markOutboundFailed,
-} from "./outbound-queries";
-import { applyEventToProjection } from "./projection";
-import { computeFinalSoftBounceStreak } from "./soft-bounce-streak";
+} = await import("./outbound-queries");
+const { applyEventToProjection } = await import("./projection");
+const { computeFinalSoftBounceStreak } = await import("./soft-bounce-streak");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 

@@ -1,58 +1,51 @@
-// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { registerDom } from "@sendlit/test-utils/dom";
 
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+registerDom();
 
-const mocks = vi.hoisted(() => ({
-  listOrganizations: vi.fn(),
-  listOrganizationTeams: vi.fn(),
-  listOrganizationEsps: vi.fn(),
-  listOrganizationKeys: vi.fn(),
-  getOrganizationDeliveryPolicy: vi.fn(),
-  listOrganizationMembers: vi.fn(),
-  listOrganizationSendingDomains: vi.fn(),
-  createOrganizationSendingDomain: vi.fn(),
-  verifyOrganizationSendingDomain: vi.fn(),
-  revokeOrganizationSendingDomain: vi.fn(),
-  getOrganizationUsage: vi.fn(),
-  getOrganizationMailActivity: vi.fn(),
-  enterOrganizationTeam: vi.fn(),
-  listOrganizationAuditEvents: vi.fn(),
-  getOrganizationEspGrant: vi.fn(),
-  getOrganizationBilling: vi.fn(),
-  getBillingCatalog: vi.fn(),
-  createOrganizationBillingCheckout: vi.fn(),
-  createOrganizationBillingPlanChange: vi.fn(),
-  createPaidOrganizationBillingCheckout: vi.fn(),
-  createOrganizationBillingPortal: vi.fn(),
-  createOrganization: vi.fn(),
-  abandonPendingOrganization: vi.fn(),
-  createOrganizationKey: vi.fn(),
-  revokeOrganizationKey: vi.fn(),
-  getOrganizationIdFromCookie: vi.fn(),
-  selectOrganizationContext: vi.fn(),
-  notifyTeamsChanged: vi.fn(),
-  setTeamIdCookie: vi.fn(),
-  routerPush: vi.fn(),
-  routerReplace: vi.fn(),
-  reloadPage: vi.fn(),
-}));
+const mocks = {
+  listOrganizations: mock(),
+  listOrganizationTeams: mock(),
+  listOrganizationEsps: mock(),
+  listOrganizationKeys: mock(),
+  getOrganizationDeliveryPolicy: mock(),
+  listOrganizationMembers: mock(),
+  listOrganizationSendingDomains: mock(),
+  createOrganizationSendingDomain: mock(),
+  verifyOrganizationSendingDomain: mock(),
+  revokeOrganizationSendingDomain: mock(),
+  getOrganizationUsage: mock(),
+  getOrganizationMailActivity: mock(),
+  enterOrganizationTeam: mock(),
+  listOrganizationAuditEvents: mock(),
+  getOrganizationEspGrant: mock(),
+  getOrganizationBilling: mock(),
+  getBillingCatalog: mock(),
+  createOrganizationBillingCheckout: mock(),
+  createOrganizationBillingPlanChange: mock(),
+  createPaidOrganizationBillingCheckout: mock(),
+  createOrganizationBillingPortal: mock(),
+  createOrganization: mock(),
+  abandonPendingOrganization: mock(),
+  createOrganizationKey: mock(),
+  revokeOrganizationKey: mock(),
+  getOrganizationIdFromCookie: mock(),
+  selectOrganizationContext: mock(),
+  notifyTeamsChanged: mock(),
+  setTeamIdCookie: mock(),
+  routerPush: mock(),
+  routerReplace: mock(),
+  reloadPage: mock(),
+};
 
-vi.mock("@/lib/tokens", () => ({
+mock.module("@/lib/tokens", () => ({
   getOrganizationIdFromCookie: mocks.getOrganizationIdFromCookie,
   selectOrganizationContext: mocks.selectOrganizationContext,
   notifyTeamsChanged: mocks.notifyTeamsChanged,
   setTeamIdCookie: mocks.setTeamIdCookie,
 }));
 
-vi.mock("@/lib/api", () => ({
+mock.module("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
     status: number;
     constructor(status: number, message: string) {
@@ -85,28 +78,36 @@ vi.mock("@/lib/api", () => ({
   createOrganizationKey: mocks.createOrganizationKey,
   revokeOrganizationKey: mocks.revokeOrganizationKey,
   createOrganization: mocks.createOrganization,
-  updateOrganization: vi.fn(),
-  addOrganizationMember: vi.fn(),
-  updateOrganizationMember: vi.fn(),
-  removeOrganizationMember: vi.fn(),
-  createOrganizationTeam: vi.fn(),
-  renameOrganizationTeam: vi.fn(),
-  archiveOrganizationTeam: vi.fn(),
-  createOrganizationEsp: vi.fn(),
-  updateOrganizationEsp: vi.fn(),
-  deleteOrganizationEsp: vi.fn(),
-  testOrganizationEsp: vi.fn(),
-  activateOrganizationEsp: vi.fn(),
-  suspendOrganizationEsp: vi.fn(),
-  resumeOrganizationEsp: vi.fn(),
-  retireOrganizationEsp: vi.fn(),
-  updateOrganizationDeliveryPolicy: vi.fn(),
-  upsertOrganizationEspGrant: vi.fn(),
-  transitionOrganizationEspGrant: vi.fn(),
+  updateOrganization: mock(),
+  addOrganizationMember: mock(),
+  updateOrganizationMember: mock(),
+  removeOrganizationMember: mock(),
+  createOrganizationTeam: mock(),
+  renameOrganizationTeam: mock(),
+  archiveOrganizationTeam: mock(),
+  createOrganizationEsp: mock(),
+  updateOrganizationEsp: mock(),
+  deleteOrganizationEsp: mock(),
+  testOrganizationEsp: mock(),
+  activateOrganizationEsp: mock(),
+  suspendOrganizationEsp: mock(),
+  resumeOrganizationEsp: mock(),
+  retireOrganizationEsp: mock(),
+  updateOrganizationDeliveryPolicy: mock(),
+  upsertOrganizationEspGrant: mock(),
+  transitionOrganizationEspGrant: mock(),
   feedbackCapableProviders: [],
+  deleteEspFeedback: mock(),
+  deleteOrganizationEspFeedback: mock(),
+  getEspFeedback: mock(),
+  getOrganizationEspFeedback: mock(),
+  testEspFeedback: mock(),
+  testOrganizationEspFeedback: mock(),
+  upsertEspFeedback: mock(),
+  upsertOrganizationEspFeedback: mock(),
 }));
 
-vi.mock("next/navigation", () => ({
+mock.module("next/navigation", () => ({
   useRouter: () => ({
     push: mocks.routerPush,
     replace: mocks.routerReplace,
@@ -114,7 +115,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock("@/lib/api-client", () => ({
+mock.module("@/lib/api-client", () => ({
   ApiError: class ApiError extends Error {
     status: number;
     constructor(status: number, message: string) {
@@ -124,13 +125,18 @@ vi.mock("@/lib/api-client", () => ({
   },
 }));
 
-vi.mock("@/lib/navigation", () => ({
+mock.module("@/lib/navigation", () => ({
   reloadPage: mocks.reloadPage,
 }));
 
-import { BreadcrumbProvider } from "@/components/dashboard/breadcrumb-context";
-import { ApiError as ClientApiError } from "@/lib/api-client";
-import OrganizationsPage from "./page";
+const { cleanup, fireEvent, render, screen, waitFor, within } = await import(
+  "@testing-library/react"
+);
+const { BreadcrumbProvider } = await import(
+  "@/components/dashboard/breadcrumb-context"
+);
+const { ApiError: ClientApiError } = await import("@/lib/api-client");
+const { default: OrganizationsPage } = await import("./page");
 
 const organization = {
   organizationId: "org_1",
@@ -160,7 +166,7 @@ const usageWindow = {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  mock.clearAllMocks();
   mocks.getOrganizationIdFromCookie.mockReturnValue("org_1");
   mocks.listOrganizations.mockResolvedValue({
     items: [organization],

@@ -1,5 +1,7 @@
+import { beforeEach, describe, expect, it } from "bun:test";
+import { stubEnv, unstubAllEnvs } from "@sendlit/test-utils";
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAppModules } from "@/lib/test/reset-modules";
 
 function request(fields: Record<string, string>, url?: string) {
   const body = new URLSearchParams(fields);
@@ -12,8 +14,8 @@ function request(fields: Record<string, string>, url?: string) {
 
 describe("team switch", () => {
   beforeEach(() => {
-    vi.unstubAllEnvs();
-    vi.resetModules();
+    unstubAllEnvs();
+    resetAppModules();
   });
 
   it("sets the selected team and redirects within the application", async () => {
@@ -45,8 +47,8 @@ describe("team switch", () => {
   });
 
   it("uses a relative Location even when req.url is the container bind address", async () => {
-    vi.stubEnv("WEB_CLIENT", "https://app.sendlit.clqa.site");
-    vi.resetModules();
+    stubEnv("WEB_CLIENT", "https://app.sendlit.clqa.site");
+    resetAppModules();
     const { POST } = await import("./route");
     const response = await POST(
       request(
@@ -76,7 +78,7 @@ describe("team switch", () => {
   });
 
   it("marks the selection cookie secure in production", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    stubEnv("NODE_ENV", "production");
     const { POST } = await import("./route");
     const response = await POST(request({ teamId: "team_123", redirectTo: "/" }));
 

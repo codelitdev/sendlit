@@ -1,25 +1,24 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { db } from "../db/client";
-import {
-  emailDeliveryEvents,
-  espConfigs,
-  espWebhookReceipts,
-  outboundMessages,
-} from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { snsNotification, TEST_TOPIC_ARN } from "../test/sns";
-import { upsertFeedbackConnection } from "./feedback-connection-queries";
-import { createOutboundMessage, getOutboundMessageById } from "./outbound-queries";
-import { processWebhookReceipt } from "./process-receipt";
-import { isRecipientSuppressed } from "./suppression-queries";
-import { createWebhookReceipt } from "./webhook-receipt-queries";
+const { db } = await import("../db/client");
+const { emailDeliveryEvents, espConfigs, espWebhookReceipts, outboundMessages } =
+  await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { snsNotification, TEST_TOPIC_ARN } = await import("../test/sns");
+const { upsertFeedbackConnection } = await import("./feedback-connection-queries");
+const { createOutboundMessage, getOutboundMessageById } = await import(
+  "./outbound-queries"
+);
+const { processWebhookReceipt } = await import("./process-receipt");
+const { isRecipientSuppressed } = await import("./suppression-queries");
+const { createWebhookReceipt } = await import("./webhook-receipt-queries");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 

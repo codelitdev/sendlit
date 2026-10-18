@@ -1,19 +1,20 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { db } from "../db/client";
-import {
+const { db } = await import("../db/client");
+const {
   createEspConfig,
   getEspConfigByEspId,
   recordEspTestResult,
   transitionEspConfig,
-} from "../settings/esp/queries";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { updateTeamDeliverySource } from "./queries";
+} = await import("../settings/esp/queries");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { updateTeamDeliverySource } = await import("./queries");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 

@@ -1,5 +1,5 @@
+import { describe, expect, it } from "bun:test";
 import { defaultEmail } from "@sendlit/email-editor";
-import { describe, expect, it } from "vitest";
 import {
   createContactBodySchema,
   listContactsQuerySchema,

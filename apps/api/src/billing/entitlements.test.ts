@@ -1,13 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-vi.mock("../db/client", async () => {
+import { eq } from "drizzle-orm";
+
+mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
 
-import { eq } from "drizzle-orm";
-import { db } from "../db/client";
-import {
+const { db } = await import("../db/client");
+const {
   billingPlanStates,
   billingPriceEntries,
   billingProviderCustomers,
@@ -15,14 +16,14 @@ import {
   outboundMessages,
   planSendReservations,
   planSendUsageBuckets,
-} from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import {
-  commitSendReservation,
-  reserveSend,
-  settleExpiredSendReservation,
-} from "./entitlements";
-import { expireCancelledSubscriptionEntitlements } from "./webhooks/processor";
+} = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { commitSendReservation, reserveSend, settleExpiredSendReservation } =
+  await import("./entitlements");
+const { expireCancelledSubscriptionEntitlements } = await import(
+  "./webhooks/processor"
+);
 
 const tdb = db as unknown as TestDb;
 

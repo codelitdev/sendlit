@@ -1,22 +1,23 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, mock, vi } from "bun:test";
 
-vi.mock("../db/client", async () => {
+mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
-vi.mock("../mail/sequence-queue", () => ({
+mock.module("../mail/sequence-queue", () => ({
   default: { add: vi.fn().mockResolvedValue(undefined) },
 }));
 
-import { db } from "../db/client";
-import { contacts, ongoingSequences } from "../db/schema";
-import sequenceQueue from "../mail/sequence-queue";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { seedSequence } from "../test/fixtures";
-import { enqueueDueOngoingSequences } from "./process-ongoing-sequences";
+const { db } = await import("../db/client");
+const { contacts, ongoingSequences } = await import("../db/schema");
+const { default: sequenceQueue } = await import("../mail/sequence-queue");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { seedSequence } = await import("../test/fixtures");
+const { enqueueDueOngoingSequences } = await import("./process-ongoing-sequences");
 
 const tdb = db as unknown as TestDb;
-const mockedAdd = vi.mocked(sequenceQueue.add);
+const mockedAdd = sequenceQueue.add as unknown as Mock<typeof sequenceQueue.add>;
 
 beforeEach(async () => {
   await truncateAll(tdb);

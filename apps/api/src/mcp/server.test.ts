@@ -1,3 +1,4 @@
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import {
   type AuthInfo,
@@ -5,11 +6,11 @@ import {
   type McpHttpHandler,
   type ServerContext,
 } from "@modelcontextprotocol/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { authorizeMcpTool, listMcpToolPolicies, MCP_SCOPES } from "./policy";
-import { buildMcpServer } from "./server";
 
-vi.mock("../db/client", () => ({ db: {}, pool: {} }));
+mock.module("../db/client", () => ({ db: {}, pool: {} }));
+
+const { authorizeMcpTool, listMcpToolPolicies, MCP_SCOPES } = await import("./policy");
+const { buildMcpServer } = await import("./server");
 
 const endpoint = new URL("http://sendlit.test/mcp");
 const teamKeyAuth: AuthInfo = {

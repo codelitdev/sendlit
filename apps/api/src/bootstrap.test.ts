@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
+import { stubEnv, unstubAllEnvs } from "@sendlit/test-utils";
 
-const bootstrapMocks = vi.hoisted(() => ({
+const bootstrapMocks = {
   findUserByEmail: vi.fn(),
   registerConfiguredOrganizationApiKey: vi.fn(),
   ensureDefaultOrganization: vi.fn(),
@@ -8,26 +9,26 @@ const bootstrapMocks = vi.hoisted(() => ({
   insert: vi.fn(),
   info: vi.fn(),
   error: vi.fn(),
-}));
+};
 
-vi.mock("./apikey/queries", () => ({
+mock.module("./apikey/queries", () => ({
   registerConfiguredOrganizationApiKey:
     bootstrapMocks.registerConfiguredOrganizationApiKey,
 }));
-vi.mock("./db/client", () => ({ db: { insert: bootstrapMocks.insert } }));
-vi.mock("./db/schema", () => ({ user: {} }));
-vi.mock("./organization/queries", () => ({
+mock.module("./db/client", () => ({ db: { insert: bootstrapMocks.insert } }));
+mock.module("./db/schema", () => ({ user: {} }));
+mock.module("./organization/queries", () => ({
   ensureDefaultOrganization: bootstrapMocks.ensureDefaultOrganization,
   getOrganizationMembership: bootstrapMocks.getOrganizationMembership,
 }));
-vi.mock("./services/log", () => ({
+mock.module("./services/log", () => ({
   default: { info: bootstrapMocks.info, error: bootstrapMocks.error },
 }));
-vi.mock("./user/queries", () => ({
+mock.module("./user/queries", () => ({
   findUserByEmail: bootstrapMocks.findUserByEmail,
 }));
 
-import { createInitialOrganizationOwnerIfMissing } from "./bootstrap";
+const { createInitialOrganizationOwnerIfMissing } = await import("./bootstrap");
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -56,13 +57,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
+  unstubAllEnvs();
 });
 
 describe("initial organization owner bootstrap", () => {
   it("does not use the old SUPER_ADMIN_EMAIL setting", async () => {
-    vi.stubEnv("SUPER_ADMIN_EMAIL", "legacy@example.com");
-    vi.stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "");
+    stubEnv("SUPER_ADMIN_EMAIL", "legacy@example.com");
+    stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "");
 
     await createInitialOrganizationOwnerIfMissing();
 
@@ -71,7 +72,7 @@ describe("initial organization owner bootstrap", () => {
   });
 
   it("ensures the organization for an existing owner on every bootstrap run", async () => {
-    vi.stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "Owner@Example.com");
+    stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "Owner@Example.com");
     bootstrapMocks.findUserByEmail.mockResolvedValue({ id: "existing" });
 
     await createInitialOrganizationOwnerIfMissing();
@@ -84,9 +85,9 @@ describe("initial organization owner bootstrap", () => {
   it("registers both environment keys without logging their secrets", async () => {
     const setupSecret = `sl_org_live_${"a".repeat(43)}`;
     const runtimeSecret = `sl_org_live_${"b".repeat(43)}`;
-    vi.stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "owner@example.com");
-    vi.stubEnv("BOOTSTRAP_DELIVERY_SETUP_API_KEY", setupSecret);
-    vi.stubEnv("BOOTSTRAP_TEAM_PROVISIONING_API_KEY", runtimeSecret);
+    stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "owner@example.com");
+    stubEnv("BOOTSTRAP_DELIVERY_SETUP_API_KEY", setupSecret);
+    stubEnv("BOOTSTRAP_TEAM_PROVISIONING_API_KEY", runtimeSecret);
     bootstrapMocks.findUserByEmail.mockResolvedValue({ id: "existing" });
 
     await createInitialOrganizationOwnerIfMissing();
@@ -119,8 +120,8 @@ describe("initial organization owner bootstrap", () => {
   });
 
   it("fails closed instead of registering keys for a non-owner membership", async () => {
-    vi.stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "owner@example.com");
-    vi.stubEnv("BOOTSTRAP_TEAM_PROVISIONING_API_KEY", `sl_org_live_${"b".repeat(43)}`);
+    stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "owner@example.com");
+    stubEnv("BOOTSTRAP_TEAM_PROVISIONING_API_KEY", `sl_org_live_${"b".repeat(43)}`);
     bootstrapMocks.findUserByEmail.mockResolvedValue({ id: "existing" });
     bootstrapMocks.getOrganizationMembership.mockResolvedValue({
       role: "member",
@@ -133,7 +134,7 @@ describe("initial organization owner bootstrap", () => {
   });
 
   it("creates a missing initial owner before ensuring the organization", async () => {
-    vi.stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "Owner@Example.com");
+    stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "Owner@Example.com");
     bootstrapMocks.findUserByEmail.mockResolvedValue(null);
 
     await createInitialOrganizationOwnerIfMissing();
@@ -143,9 +144,9 @@ describe("initial organization owner bootstrap", () => {
   });
 
   it("requires an initial owner email when configured keys are supplied", async () => {
-    vi.stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "");
-    vi.stubEnv("BOOTSTRAP_DELIVERY_SETUP_API_KEY", `sl_org_live_${"a".repeat(43)}`);
-    vi.stubEnv("BOOTSTRAP_TEAM_PROVISIONING_API_KEY", `sl_org_live_${"b".repeat(43)}`);
+    stubEnv("BOOTSTRAP_ORGANIZATION_OWNER_EMAIL", "");
+    stubEnv("BOOTSTRAP_DELIVERY_SETUP_API_KEY", `sl_org_live_${"a".repeat(43)}`);
+    stubEnv("BOOTSTRAP_TEAM_PROVISIONING_API_KEY", `sl_org_live_${"b".repeat(43)}`);
 
     await expect(createInitialOrganizationOwnerIfMissing()).rejects.toThrow(
       "initial_organization_owner_email_required",

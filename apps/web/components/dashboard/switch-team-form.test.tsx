@@ -1,17 +1,18 @@
-// @vitest-environment jsdom
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { registerDom } from "@sendlit/test-utils/dom";
 
-import { cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+registerDom();
 
-const mocks = vi.hoisted(() => ({
-  selectOrganizationContext: vi.fn(),
-}));
+const mocks = {
+  selectOrganizationContext: mock(),
+};
 
-vi.mock("@/lib/tokens", () => ({
+mock.module("@/lib/tokens", () => ({
   selectOrganizationContext: mocks.selectOrganizationContext,
 }));
 
-import { SwitchTeamForm, submitTeamSwitch } from "./switch-team-form";
+const { cleanup, fireEvent, render } = await import("@testing-library/react");
+const { SwitchTeamForm, submitTeamSwitch } = await import("./switch-team-form");
 
 describe("SwitchTeamForm", () => {
   afterEach(() => {
@@ -45,7 +46,7 @@ describe("SwitchTeamForm", () => {
   });
 
   it("submits a switch after creating a team, including organization", () => {
-    const submit = vi.fn();
+    const submit = mock();
     HTMLFormElement.prototype.submit = submit;
 
     submitTeamSwitch({

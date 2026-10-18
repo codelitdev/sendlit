@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { constantTimeEqual, headerString } from "./header-utils";
 
 describe("header-utils", () => {

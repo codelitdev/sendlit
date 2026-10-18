@@ -1,16 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const providerMocks = vi.hoisted(() => ({
+import { eq } from "drizzle-orm";
+
+const providerMocks = {
   retrieveSubscription: vi.fn(),
   parseWebhook: vi.fn(),
-}));
+};
 
-vi.mock("../../db/client", async () => {
+mock.module("../../db/client", async () => {
   const { makeTestDb } = await import("../../test/db.js");
   return { db: await makeTestDb() };
 });
 
-vi.mock("../provider-registry", () => ({
+mock.module("../provider-registry", () => ({
   getBillingProvider: () => ({
     provider: "dodo",
     retrieveSubscription: providerMocks.retrieveSubscription,
@@ -18,13 +20,15 @@ vi.mock("../provider-registry", () => ({
   }),
 }));
 
-import { eq } from "drizzle-orm";
-import { db } from "../../db/client";
-import { billingWebhookEvents } from "../../db/schema";
-import { type TestDb, truncateAll } from "../../test/db";
-import { encryptBillingValue } from "../crypto";
-import { BillingProviderError } from "../provider";
-import { claimBillingWebhookEvent, processBillingWebhookInboxEvent } from "./processor";
+const { db } = await import("../../db/client");
+const { billingWebhookEvents } = await import("../../db/schema");
+const { truncateAll } = await import("../../test/db");
+type TestDb = import("../../test/db").TestDb;
+const { encryptBillingValue } = await import("../crypto");
+const { BillingProviderError } = await import("../provider");
+const { claimBillingWebhookEvent, processBillingWebhookInboxEvent } = await import(
+  "./processor"
+);
 
 const tdb = db as unknown as TestDb;
 const originalEncryptionKey = process.env.BILLING_DATA_ENCRYPTION_KEY;

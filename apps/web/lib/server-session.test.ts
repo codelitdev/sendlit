@@ -1,19 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { stubGlobal } from "@sendlit/test-utils";
+import { resetAppModules } from "./test/reset-modules";
 
-const mocks = vi.hoisted(() => ({
-  cookies: vi.fn(),
-  fetch: vi.fn(),
-}));
+const mocks = {
+  cookies: mock(),
+  fetch: mock(),
+};
 
-vi.mock("next/headers", () => ({
+mock.module("next/headers", () => ({
   cookies: mocks.cookies,
 }));
 
-vi.stubGlobal("fetch", mocks.fetch);
+stubGlobal("fetch", mocks.fetch);
 
 describe("server session validation", () => {
   beforeEach(() => {
-    vi.resetModules();
+    resetAppModules();
     mocks.cookies.mockReset();
     mocks.fetch.mockReset();
   });

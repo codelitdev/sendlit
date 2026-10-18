@@ -1,26 +1,25 @@
-// @vitest-environment jsdom
-
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { registerDom } from "@sendlit/test-utils/dom";
 import type React from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api-client";
 
-const mocks = vi.hoisted(() => ({
-  back: vi.fn(),
-  push: vi.fn(),
+registerDom();
+
+const mocks = {
+  back: mock(),
+  push: mock(),
   changedContent: {
     content: [{ blockType: "text", settings: { content: "Edited" } }],
     style: { marker: "edited" },
     meta: {},
   },
   editorProps: null as any,
-  getGeneralSettings: vi.fn(),
-}));
+  getGeneralSettings: mock(),
+};
 
-vi.mock("next/navigation", () => ({
+mock.module("next/navigation", () => ({
   useRouter: () => ({ back: mocks.back, push: mocks.push }),
 }));
-vi.mock("@sendlit/email-blocks", () => ({
+mock.module("@sendlit/email-blocks", () => ({
   EmailEditor: (props: { onChange: (content: any) => void }) => {
     mocks.editorProps = props;
     return (
@@ -30,22 +29,26 @@ vi.mock("@sendlit/email-blocks", () => ({
     );
   },
 }));
-vi.mock("@sendlit/email-editor/blocks", () => ({
+mock.module("@sendlit/email-editor/blocks", () => ({
   Text: {},
   Separator: {},
   Link: {},
   ImageBlock: { configure: () => ({}) },
 }));
-vi.mock("@/components/dashboard/email-image-upload-dialog", () => ({
+mock.module("@/components/dashboard/email-image-upload-dialog", () => ({
   EmailImageUploadDialog: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
 }));
-vi.mock("@/lib/api", () => ({
+mock.module("@/lib/api", () => ({
   getGeneralSettings: mocks.getGeneralSettings,
 }));
 
-import { EmailEditorScreen } from "./email-editor-screen";
+const { cleanup, fireEvent, render, screen, waitFor } = await import(
+  "@testing-library/react"
+);
+const { ApiError } = await import("@/lib/api-client");
+const { EmailEditorScreen } = await import("./email-editor-screen");
 
 const initialContent = {
   content: [],
@@ -54,7 +57,7 @@ const initialContent = {
 } as any;
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  mock.clearAllMocks();
   mocks.editorProps = null;
   mocks.getGeneralSettings.mockResolvedValue({
     mailingAddress: "123 Main Street",
@@ -65,7 +68,7 @@ afterEach(() => cleanup());
 
 describe("EmailEditorScreen", () => {
   it("saves the latest editor document rather than the initial prop", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onSave = mock().mockResolvedValue(undefined);
     render(
       <EmailEditorScreen
         exitFallbackHref="/templates"
@@ -84,7 +87,7 @@ describe("EmailEditorScreen", () => {
 
   it("disables duplicate saves while persistence is in flight", async () => {
     let finish!: () => void;
-    const onSave = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    const onSave = mock(() => new Promise<void>((resolve) => (finish = resolve)));
     render(
       <EmailEditorScreen
         exitFallbackHref="/templates"
@@ -103,13 +106,13 @@ describe("EmailEditorScreen", () => {
     }) as HTMLButtonElement;
     expect(savingButton.disabled).toBe(true);
     fireEvent.click(savingButton);
-    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave).toHaveBeenCalledTimes(1);
     finish();
     await screen.findByText("Saved");
   });
 
   it("shows API errors and re-enables saving", async () => {
-    const onSave = vi.fn().mockRejectedValue(new ApiError(409, "Conflict"));
+    const onSave = mock().mockRejectedValue(new ApiError(409, "Conflict"));
     render(
       <EmailEditorScreen
         exitFallbackHref="/templates"
@@ -137,7 +140,7 @@ describe("EmailEditorScreen", () => {
         exitFallbackHref="/templates"
         purpose="transactional"
         initialContent={initialContent}
-        onSave={vi.fn()}
+        onSave={mock()}
       />,
     );
 
@@ -153,7 +156,7 @@ describe("EmailEditorScreen", () => {
         exitFallbackHref="/templates"
         purpose="marketing"
         initialContent={initialContent}
-        onSave={vi.fn()}
+        onSave={mock()}
       />,
     );
 
@@ -186,7 +189,7 @@ describe("EmailEditorScreen", () => {
         purpose="transactional"
         requiredVariables={["customer.name", "otp"]}
         initialContent={initialContent}
-        onSave={vi.fn()}
+        onSave={mock()}
       />,
     );
 
@@ -205,7 +208,7 @@ describe("EmailEditorScreen", () => {
         exitFallbackHref="/templates"
         purpose="transactional"
         initialContent={initialContent}
-        onSave={vi.fn()}
+        onSave={mock()}
       />,
     );
 

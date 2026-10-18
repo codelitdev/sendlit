@@ -1,25 +1,26 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("./service", () => ({
+mock.module("./service", () => ({
   deleteMedia: vi.fn(),
 }));
 
-import { db } from "../db/client";
-import { media, mediaReferences } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import {
+const { db } = await import("../db/client");
+const { media, mediaReferences } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const {
   createUploadedMedia,
   deleteTeamMediaFiles,
   deleteUnusedMedia,
   listMediaReferences,
   replaceMediaReferencesForResource,
   updateMediaMetadata,
-} from "./queries";
-import { deleteMedia as deleteMediaFile } from "./service";
+} = await import("./queries");
+const { deleteMedia: deleteMediaFile } = await import("./service");
 
 const tdb = db as unknown as TestDb;
 

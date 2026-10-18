@@ -1,16 +1,16 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   lookup: vi.fn(),
   request: vi.fn(),
-}));
+};
 
-vi.mock("node:dns/promises", () => ({ lookup: mocks.lookup }));
-vi.mock("node:https", () => ({ request: mocks.request }));
+mock.module("node:dns/promises", () => ({ lookup: mocks.lookup }));
+mock.module("node:https", () => ({ request: mocks.request }));
 
-import { fetchClientMetadataResource } from "./cimd-fetch";
+const { fetchClientMetadataResource } = await import("./cimd-fetch");
 
 describe("CIMD Node fetcher", () => {
   beforeEach(() => {

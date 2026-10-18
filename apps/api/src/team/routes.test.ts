@@ -1,17 +1,17 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const authState = vi.hoisted(() => ({
+const authState = {
   userId: "",
   authKind: "session",
-}));
+};
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (req: any, _res: any, next: () => void) => {
     req.userId = authState.userId;
     req.authKind = authState.authKind;
@@ -19,12 +19,13 @@ vi.mock("../auth/middleware", () => ({
   },
 }));
 
-import { createApiKey } from "../apikey/queries";
-import { db } from "../db/client";
-import { teamApiKeys, teamMembers, teams } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { requestApp } from "../test/http";
-import teamRoutes from "./routes";
+const { createApiKey } = await import("../apikey/queries");
+const { db } = await import("../db/client");
+const { teamApiKeys, teamMembers, teams } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { requestApp } = await import("../test/http");
+const { default: teamRoutes } = await import("./routes");
 
 const tdb = db as unknown as TestDb;
 

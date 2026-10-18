@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@sendlit/test-utils";
 import {
   signSnsMessage,
   snsNotification,
@@ -224,10 +225,10 @@ describe("sesAdapter", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     fetchMock.mockImplementation(async () => new Response(TEST_SNS_PUBLIC_KEY_PEM));
-    vi.stubGlobal("fetch", fetchMock);
+    stubGlobal("fetch", fetchMock);
   });
   afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
   });
 
   const bounceEvent = {

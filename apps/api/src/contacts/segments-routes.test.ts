@@ -1,29 +1,30 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const requestTeam = vi.hoisted(() => ({ id: "" }));
+const requestTeam = { id: "" };
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (_req: any, _res: any, next: () => void) => next(),
 }));
-vi.mock("../auth/require-team", () => ({
+mock.module("../auth/require-team", () => ({
   requireTeam: (req: any, _res: any, next: () => void) => {
     req.teamId = requestTeam.id;
     next();
   },
 }));
 
-import { db } from "../db/client";
-import { segments } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { requestApp } from "../test/http";
-import { createSegment } from "./segments-queries";
-import segmentRoutes from "./segments-routes";
+const { db } = await import("../db/client");
+const { segments } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { requestApp } = await import("../test/http");
+const { createSegment } = await import("./segments-queries");
+const { default: segmentRoutes } = await import("./segments-routes");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 const emptyFilter = { aggregator: "and" as const, filters: [] };

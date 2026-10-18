@@ -1,11 +1,17 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
+import {
+  stubEnv,
+  stubGlobal,
+  unstubAllEnvs,
+  unstubAllGlobals,
+} from "@sendlit/test-utils";
 import { DEFAULT_ENDPOINT, SendLit } from "./client";
 import { SendLitError } from "./errors";
 import { mockSendLit } from "./test-utils";
 
 afterEach(() => {
-  vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
+  unstubAllEnvs();
+  unstubAllGlobals();
 });
 
 describe("SendLit configuration", () => {
@@ -38,9 +44,9 @@ describe("SendLit configuration", () => {
   });
 
   it("falls back to environment variables", async () => {
-    vi.stubEnv("SENDLIT_API_KEY", "sl_live_env");
-    vi.stubEnv("SENDLIT_ENDPOINT", "https://self-hosted.test/");
-    vi.stubEnv("SENDLIT_TEAM_ID", "team_env");
+    stubEnv("SENDLIT_API_KEY", "sl_live_env");
+    stubEnv("SENDLIT_ENDPOINT", "https://self-hosted.test/");
+    stubEnv("SENDLIT_TEAM_ID", "team_env");
     const { sendlit, requests } = mockSendLit(undefined, {
       apiKey: undefined,
       endpoint: undefined,
@@ -52,7 +58,7 @@ describe("SendLit configuration", () => {
   });
 
   it("defaults to the hosted endpoint", async () => {
-    vi.stubEnv("SENDLIT_ENDPOINT", "");
+    stubEnv("SENDLIT_ENDPOINT", "");
     const { sendlit, requests } = mockSendLit(undefined, {
       endpoint: undefined,
     });
@@ -61,7 +67,7 @@ describe("SendLit configuration", () => {
   });
 
   it("requires credentials", () => {
-    vi.stubEnv("SENDLIT_API_KEY", "");
+    stubEnv("SENDLIT_API_KEY", "");
     expect(() => new SendLit()).toThrow(/Missing credentials/);
   });
 
@@ -72,7 +78,7 @@ describe("SendLit configuration", () => {
   });
 
   it("refuses to run in a browser", () => {
-    vi.stubGlobal("window", { document: {} });
+    stubGlobal("window", { document: {} });
     expect(() => new SendLit({ apiKey: "sl_live_x" })).toThrow(/server-only/);
   });
 });
@@ -175,7 +181,7 @@ describe("errors", () => {
     const fetch = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
     const sendlit = new SendLit({
       apiKey: "sl_live_x",
-      fetch,
+      fetch: fetch as unknown as typeof globalThis.fetch,
       maxRetries: 0,
     });
     await expect(sendlit.contacts.get("con_1")).rejects.toMatchObject({
@@ -191,7 +197,7 @@ describe("retries", () => {
       { status: 503, body: { error: "unavailable" } },
       { status: 200, body: { contactId: "con_1" } },
     ]);
-    await expect(sendlit.contacts.get("con_1")).resolves.toEqual({
+    await expect(sendlit.contacts.get("con_1") as Promise<unknown>).resolves.toEqual({
       contactId: "con_1",
     });
     expect(fetch).toHaveBeenCalledTimes(2);

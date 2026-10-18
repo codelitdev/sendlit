@@ -15,11 +15,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": [
-    "src",
-    "scripts",
-    "billing.config.ts",
-    "drizzle.config.ts",
-    "vitest.config.ts"
-  ]
+  "include": ["src", "scripts", "billing.config.ts", "drizzle.config.ts"]
 }

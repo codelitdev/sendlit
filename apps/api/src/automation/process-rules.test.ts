@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   deleteRule: vi.fn(),
   enrollContacts: vi.fn(),
   getDueRules: vi.fn(),
@@ -11,9 +11,9 @@ const mocks = vi.hoisted(() => ({
   markBroadcastSent: vi.fn(),
   captureError: vi.fn(),
   captureEvent: vi.fn(),
-}));
+};
 
-vi.mock("./queries", () => ({
+mock.module("./queries", () => ({
   deleteRule: mocks.deleteRule,
   enrollContactsInOngoingSequence: mocks.enrollContacts,
   getDueDateRules: mocks.getDueRules,
@@ -23,15 +23,15 @@ vi.mock("./queries", () => ({
   lockBroadcast: mocks.lockBroadcast,
   markBroadcastSent: mocks.markBroadcastSent,
 }));
-vi.mock("../observability/posthog", () => ({
+mock.module("../observability/posthog", () => ({
   captureError: mocks.captureError,
   captureEvent: mocks.captureEvent,
 }));
-vi.mock("../services/log", () => ({
+mock.module("../services/log", () => ({
   default: { error: vi.fn(), info: vi.fn() },
 }));
 
-import { processDueRulesOnce, processRule } from "./process-rules";
+const { processDueRulesOnce, processRule } = await import("./process-rules");
 
 const rule = {
   ruleId: "rule_1",

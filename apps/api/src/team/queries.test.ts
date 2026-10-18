@@ -1,20 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { getApiKeysByTeamId } from "../apikey/queries";
-import { db } from "../db/client";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import {
+const { getApiKeysByTeamId } = await import("../apikey/queries");
+const { db } = await import("../db/client");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const {
   archiveTeam,
   createTeam,
   findOrCreateTeamByExternalId,
   getTeamMembership,
   listTeamsForUser,
-} from "./queries";
+} = await import("./queries");
 
 const tdb = db as unknown as TestDb;
 

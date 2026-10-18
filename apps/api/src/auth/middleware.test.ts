@@ -1,15 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock, vi } from "bun:test";
 
-vi.mock("./better-auth", () => ({
+mock.module("./better-auth", () => ({
   mcpProtectedResourceMetadataUrl:
     "https://sendlit.test/.well-known/oauth-protected-resource/mcp",
 }));
-vi.mock("./resolve-auth", () => ({
+mock.module("./resolve-auth", () => ({
   resolveAuth: vi.fn(),
   sendAuthError: vi.fn(() => false),
 }));
 
-import { createAuthMiddleware } from "./middleware";
+const { createAuthMiddleware } = await import("./middleware");
 
 function responseDouble() {
   const response: any = {
@@ -76,7 +76,7 @@ describe("MCP auth middleware", () => {
 
     await middleware(req, res, next);
 
-    expect(next).toHaveBeenCalledOnce();
+    expect(next).toHaveBeenCalledTimes(1);
     expect(req).toMatchObject({
       authKind: "team_key",
       apiKeyId: "tak_public",

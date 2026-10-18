@@ -1,21 +1,21 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const authState = vi.hoisted(() => ({
+const authState = {
   userId: "",
   authKind: "organization_key" as string,
   organizationId: "",
   organizationApiKeyId: "org-key-test",
   organizationScopes: [] as string[],
-}));
-const espTestMock = vi.hoisted(() => ({ testEspConfig: vi.fn() }));
+};
+const espTestMock = { testEspConfig: vi.fn() };
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (req: any, _res: any, next: () => void) => {
     req.userId = authState.userId;
     req.authKind = authState.authKind;
@@ -25,12 +25,12 @@ vi.mock("../auth/middleware", () => ({
     next();
   },
 }));
-vi.mock("../settings/esp/test", () => ({
+mock.module("../settings/esp/test", () => ({
   testEspConfig: espTestMock.testEspConfig,
 }));
 
-import { db } from "../db/client";
-import {
+const { db } = await import("../db/client");
+const {
   espConfigs,
   espConfigTeamGrants,
   organizationApiKeys,
@@ -40,13 +40,14 @@ import {
   teamDeliverySettings,
   teams,
   user,
-} from "../db/schema";
-import { createOrganization } from "../organization/queries";
-import organizationRoutes from "../organization/routes";
-import { createOrganizationEspConfig } from "../settings/esp/queries";
-import { type TestDb, truncateAll } from "../test/db";
-import { requestApp } from "../test/http";
-import provisioningRoutes from "./routes";
+} = await import("../db/schema");
+const { createOrganization } = await import("../organization/queries");
+const { default: organizationRoutes } = await import("../organization/routes");
+const { createOrganizationEspConfig } = await import("../settings/esp/queries");
+const { truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { requestApp } = await import("../test/http");
+const { default: provisioningRoutes } = await import("./routes");
 
 const tdb = db as unknown as TestDb;
 

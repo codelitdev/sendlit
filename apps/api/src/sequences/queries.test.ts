@@ -1,12 +1,12 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import type { Email } from "@sendlit/email-editor";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../media/service", () => ({
+mock.module("../media/service", () => ({
   sealMedia: vi.fn((mediaId: string) =>
     Promise.resolve({
       mediaId,
@@ -16,10 +16,10 @@ vi.mock("../media/service", () => ({
   deleteMedia: vi.fn(),
 }));
 
-import { EmailEventAction, EventType } from "../config/constants";
-import { responses } from "../config/strings";
-import { db } from "../db/client";
-import {
+const { EmailEventAction, EventType } = await import("../config/constants");
+const { responses } = await import("../config/strings");
+const { db } = await import("../db/client");
+const {
   contacts,
   emailDeliveries,
   emailEvents,
@@ -31,13 +31,14 @@ import {
   sequenceEmails,
   sequences,
   teamDeliverySettings,
-} from "../db/schema";
-import { deleteMedia, sealMedia } from "../media/service";
-import { createEspConfig } from "../settings/esp/queries";
-import { createTemplate } from "../templates/queries";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { defaultEmailContent } from "./helpers";
-import {
+} = await import("../db/schema");
+const { deleteMedia, sealMedia } = await import("../media/service");
+const { createEspConfig } = await import("../settings/esp/queries");
+const { createTemplate } = await import("../templates/queries");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { defaultEmailContent } = await import("./helpers");
+const {
   addMailToSequence,
   createSequence,
   deleteMailFromSequence,
@@ -52,7 +53,7 @@ import {
   startSequence,
   updateMailInSequence,
   updateSequence,
-} from "./queries";
+} = await import("./queries");
 
 const tdb = db as unknown as TestDb;
 

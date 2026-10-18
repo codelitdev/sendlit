@@ -1,29 +1,32 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
+import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
+import { defaultEmail } from "@sendlit/email-editor";
+import { eq } from "drizzle-orm";
+import type { MissingTemplateVariablesError } from "../mail/render";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
 // `createTransactionalEmail` enqueues a BullMQ job on every successful
 // insert; the real queue would try to open a connection to Redis, which
 // isn't available (or wanted) in this DB-backed query test.
-const queue = vi.hoisted(() => ({ addTransactionalMailJob: vi.fn() }));
+const queue = { addTransactionalMailJob: vi.fn() };
 
-vi.mock("../mail/queue", () => queue);
+mock.module("../mail/queue", () => queue);
 
-import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
-import { defaultEmail } from "@sendlit/email-editor";
-import { eq } from "drizzle-orm";
-import { db } from "../db/client";
-import * as schema from "../db/schema";
-import { addOrStrengthenSuppression } from "../delivery-feedback/suppression-queries";
-import type { MissingTemplateVariablesError } from "../mail/render";
-import { createEspConfig } from "../settings/esp/queries";
-import { createTemplate } from "../templates/queries";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { emailContent } from "../test/fixtures";
-import {
+const { db } = await import("../db/client");
+const schema = await import("../db/schema");
+const { addOrStrengthenSuppression } = await import(
+  "../delivery-feedback/suppression-queries"
+);
+const { createEspConfig } = await import("../settings/esp/queries");
+const { createTemplate } = await import("../templates/queries");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { emailContent } = await import("../test/fixtures");
+const {
   countTransactionalEmails,
   createTransactionalEmail,
   findTransactionalEmailByIdempotencyKey,
@@ -36,7 +39,7 @@ import {
   markTransactionalEmailFailed,
   markTransactionalEmailSent,
   toPublicTransactionalEmail,
-} from "./queries";
+} = await import("./queries");
 
 const tdb = db as unknown as TestDb;
 

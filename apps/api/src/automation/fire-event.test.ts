@@ -1,17 +1,18 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
+mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
 
-import { EventType } from "../config/constants";
-import { db } from "../db/client";
-import { ongoingSequences, rules } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { seedSequence } from "../test/fixtures";
-import { fireEvent } from "./fire-event";
+const { EventType } = await import("../config/constants");
+const { db } = await import("../db/client");
+const { ongoingSequences, rules } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { seedSequence } = await import("../test/fixtures");
+const { fireEvent } = await import("./fire-event");
 
 const tdb = db as unknown as TestDb;
 

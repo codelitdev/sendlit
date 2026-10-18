@@ -1,20 +1,20 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   createTransactionalEmail: vi.fn(),
-}));
+};
 
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (_req: any, _res: any, next: () => void) => next(),
 }));
-vi.mock("../auth/require-team", () => ({
+mock.module("../auth/require-team", () => ({
   requireTeam: (req: any, _res: any, next: () => void) => {
     req.teamId = "team-1";
     next();
   },
 }));
-vi.mock("./queries", () => ({
+mock.module("./queries", () => ({
   createTransactionalEmail: mocks.createTransactionalEmail,
   getTransactionalEmailByTxeId: vi.fn(),
   listTransactionalEmails: vi.fn(),
@@ -22,9 +22,9 @@ vi.mock("./queries", () => ({
   toPublicTransactionalEmail: vi.fn(),
 }));
 
-import { MissingTemplateVariablesError } from "../mail/render";
-import { requestApp } from "../test/http";
-import transactionalRoutes from "./routes";
+const { MissingTemplateVariablesError } = await import("../mail/render");
+const { requestApp } = await import("../test/http");
+const { default: transactionalRoutes } = await import("./routes");
 
 function app() {
   const instance = express();
@@ -54,7 +54,7 @@ describe("transactional template route errors", () => {
     });
 
     expect(response.status).toBe(422);
-    expect(response.json()).toEqual({
+    expect(response.json<unknown>()).toEqual({
       error: "template_not_transactional",
     });
   });
@@ -75,7 +75,7 @@ describe("transactional template route errors", () => {
     });
 
     expect(response.status).toBe(422);
-    expect(response.json()).toEqual({
+    expect(response.json<unknown>()).toEqual({
       error: "missing_template_variables",
       missingVariables: ["customer.name", "otp"],
     });
@@ -98,7 +98,7 @@ describe("transactional template route errors", () => {
     });
 
     expect(response.status).toBe(422);
-    expect(response.json()).toEqual({
+    expect(response.json<unknown>()).toEqual({
       error: "marketing_variables_not_allowed",
     });
   });

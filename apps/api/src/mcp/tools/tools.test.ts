@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   countContacts: vi.fn(),
   createContact: vi.fn(),
   getContactByContactId: vi.fn(),
@@ -71,9 +71,9 @@ const mocks = vi.hoisted(() => ({
   listTransactionalEmails: vi.fn(),
   countTransactionalEmails: vi.fn(),
   toPublicTransactionalEmail: vi.fn(),
-}));
+};
 
-vi.mock("../../contacts/queries", () => ({
+mock.module("../../contacts/queries", () => ({
   countContacts: mocks.countContacts,
   createContact: mocks.createContact,
   getContactByContactId: mocks.getContactByContactId,
@@ -85,7 +85,7 @@ vi.mock("../../contacts/queries", () => ({
   deleteContact: mocks.deleteContact,
 }));
 
-vi.mock("../../contacts/segments-queries", () => ({
+mock.module("../../contacts/segments-queries", () => ({
   createSegment: vi.fn(),
   deleteSegment: vi.fn(),
   getSegment: vi.fn(),
@@ -93,7 +93,7 @@ vi.mock("../../contacts/segments-queries", () => ({
   updateSegment: vi.fn(),
 }));
 
-vi.mock("../../sequences/queries", () => ({
+mock.module("../../sequences/queries", () => ({
   createSequence: mocks.createSequence,
   getSequenceBySequenceId: mocks.getSequenceBySequenceId,
   getEmailSentCount: mocks.getEmailSentCount,
@@ -111,7 +111,8 @@ vi.mock("../../sequences/queries", () => ({
   pauseSequence: mocks.pauseSequence,
 }));
 
-vi.mock("../../settings/esp/queries", () => ({
+mock.module("../../settings/esp/queries", () => ({
+  decryptEspCredentials: vi.fn(),
   getEspConfig: mocks.getEspConfig,
   upsertEspConfig: mocks.upsertEspConfig,
   deleteEspConfig: mocks.deleteEspConfig,
@@ -123,16 +124,16 @@ vi.mock("../../settings/esp/queries", () => ({
   updateEspConfig: mocks.updateEspConfig,
 }));
 
-vi.mock("../../mail/transport", () => ({
+mock.module("../../mail/transport", () => ({
   invalidateTeamTransport: mocks.invalidateTeamTransport,
   invalidateEspTransport: mocks.invalidateEspTransport,
 }));
 
-vi.mock("../../mail/send", () => ({
+mock.module("../../mail/send", () => ({
   sendTestMail: mocks.sendTestMail,
 }));
 
-vi.mock("../../team/queries", () => ({
+mock.module("../../team/queries", () => ({
   getTeam: mocks.getTeam,
   getTeamByTeamId: mocks.getTeamByTeamId,
   getTeamMembership: mocks.getTeamMembership,
@@ -142,17 +143,17 @@ vi.mock("../../team/queries", () => ({
   renameTeam: mocks.renameTeam,
 }));
 
-vi.mock("../../organization/queries", () => ({
+mock.module("../../organization/queries", () => ({
   getOrganizationMembership: mocks.getOrganizationMembership,
 }));
 
-vi.mock("../../apikey/queries", () => ({
+mock.module("../../apikey/queries", () => ({
   createApiKey: mocks.createApiKey,
   deleteApiKey: mocks.deleteApiKey,
   getApiKeysByTeamId: mocks.getApiKeysByTeamId,
 }));
 
-vi.mock("../../templates/queries", () => ({
+mock.module("../../templates/queries", () => ({
   createTemplate: mocks.createTemplate,
   deleteTemplate: mocks.deleteTemplate,
   duplicateTemplate: mocks.duplicateTemplate,
@@ -161,7 +162,7 @@ vi.mock("../../templates/queries", () => ({
   updateTemplate: mocks.updateTemplate,
 }));
 
-vi.mock("../../media/queries", () => ({
+mock.module("../../media/queries", () => ({
   countMedia: mocks.countMedia,
   deleteUnusedMedia: mocks.deleteUnusedMedia,
   getMediaByMediaId: mocks.getMediaByMediaId,
@@ -170,7 +171,7 @@ vi.mock("../../media/queries", () => ({
   updateMediaMetadata: mocks.updateMediaMetadata,
 }));
 
-vi.mock("../../transactional/queries", () => ({
+mock.module("../../transactional/queries", () => ({
   createTransactionalEmail: mocks.createTransactionalEmail,
   getTransactionalEmailByTxeId: mocks.getTransactionalEmailByTxeId,
   listTransactionalEmails: mocks.listTransactionalEmails,
@@ -178,15 +179,15 @@ vi.mock("../../transactional/queries", () => ({
   toPublicTransactionalEmail: mocks.toPublicTransactionalEmail,
 }));
 
-import { getAuthUser, getTeamId } from "./auth";
-import { registerContactTools } from "./contacts";
-import { registerEspTools } from "./esp";
-import { registerMediaTools } from "./media";
-import { AUTH_ERROR, jsonResult, NOT_FOUND } from "./responses";
-import { registerSequenceTools } from "./sequences";
-import { registerTeamTools } from "./teams";
-import { registerTemplateTools } from "./templates";
-import { registerTransactionalTools } from "./transactional";
+const { getAuthUser, getTeamId } = await import("./auth");
+const { registerContactTools } = await import("./contacts");
+const { registerEspTools } = await import("./esp");
+const { registerMediaTools } = await import("./media");
+const { AUTH_ERROR, jsonResult, NOT_FOUND } = await import("./responses");
+const { registerSequenceTools } = await import("./sequences");
+const { registerTeamTools } = await import("./teams");
+const { registerTemplateTools } = await import("./templates");
+const { registerTransactionalTools } = await import("./transactional");
 
 type Tool = {
   config: any;

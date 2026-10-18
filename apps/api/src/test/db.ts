@@ -10,12 +10,14 @@ import * as schema from "../db/schema";
  * tests exercise actual query semantics — unique indexes, `onConflictDoNothing`,
  * `jsonb_set`, FK cascades — instead of mocked query builders.
  *
- * Use it from a test file by mocking the app's db client module:
+ * Use it from a test file by mocking the app's db client module before
+ * loading anything that imports it:
  *
- *   vi.mock("../db/client", async () => {
- *       const { makeTestDb } = await import("../test/db");
- *       return { db: await makeTestDb() };
+ *   mock.module("../db/client", async () => {
+ *     const { makeTestDb } = await import("../test/db");
+ *     return { db: await makeTestDb() };
  *   });
+ *   const { db } = await import("../db/client");
  *
  * Every module that imports `db` from `db/client` (queries, team/contacts
  * helpers, the code under test, and the test itself) then shares this instance.
@@ -26,10 +28,7 @@ export async function makeTestDb() {
   const client = new PGlite();
   const db = drizzle(client, { schema });
   await migrate(db, {
-    // Resolved from cwd: tests always run via vitest, whose root (and
-    // worker cwd) is this package (`apps/api`). `import.meta` is not
-    // available here because tsc typechecks this package as CJS.
-    migrationsFolder: path.resolve(process.cwd(), "drizzle"),
+    migrationsFolder: path.resolve(import.meta.dir, "../../drizzle"),
   });
   return db;
 }

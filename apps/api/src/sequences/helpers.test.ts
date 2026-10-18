@@ -1,21 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { EventType } from "../config/constants";
-import { db } from "../db/client";
-import { rules } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { seedSequence } from "../test/fixtures";
-import {
-  addRule,
-  defaultEmailContent,
-  removeRule,
-  verifyMandatoryTags,
-} from "./helpers";
+const { EventType } = await import("../config/constants");
+const { db } = await import("../db/client");
+const { rules } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { seedSequence } = await import("../test/fixtures");
+const { addRule, defaultEmailContent, removeRule, verifyMandatoryTags } = await import(
+  "./helpers"
+);
 
 const tdb = db as unknown as TestDb;
 

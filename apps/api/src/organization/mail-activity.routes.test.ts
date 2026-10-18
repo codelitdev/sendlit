@@ -1,19 +1,19 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const authState = vi.hoisted(() => ({
+const authState = {
   userId: "",
   authKind: "session" as string,
   organizationId: "",
   organizationApiKeyId: "",
   organizationScopes: [] as string[],
-}));
+};
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (req: any, _res: any, next: () => void) => {
     req.userId = authState.userId;
     req.authKind = authState.authKind;
@@ -24,13 +24,14 @@ vi.mock("../auth/middleware", () => ({
   },
 }));
 
-import { db } from "../db/client";
-import { espConfigs, transactionalEmails, user } from "../db/schema";
-import { createTeam } from "../team/queries";
-import { type TestDb, truncateAll } from "../test/db";
-import { requestApp } from "../test/http";
-import { addOrganizationMemberByEmail, createOrganization } from "./queries";
-import organizationRoutes from "./routes";
+const { db } = await import("../db/client");
+const { espConfigs, transactionalEmails, user } = await import("../db/schema");
+const { createTeam } = await import("../team/queries");
+const { truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { requestApp } = await import("../test/http");
+const { addOrganizationMemberByEmail, createOrganization } = await import("./queries");
+const { default: organizationRoutes } = await import("./routes");
 
 const tdb = db as unknown as TestDb;
 
@@ -279,7 +280,7 @@ describe("GET /organizations/:organizationId/mail-activity", () => {
       `/organizations/${organization.organizationId}/usage`,
     );
     expect(usage.status).toBe(200);
-    expect(usage.json()).toEqual(
+    expect(usage.json<unknown>()).toEqual(
       expect.objectContaining({
         day: expect.objectContaining({
           accepted: expect.any(Number),

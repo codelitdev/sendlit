@@ -1,16 +1,17 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { and, eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { UserFilter } from "../config/constants";
-import { db } from "../db/client";
-import { contacts } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { buildContactFilterCondition } from "./segment";
+const { UserFilter } = await import("../config/constants");
+const { db } = await import("../db/client");
+const { contacts } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { buildContactFilterCondition } = await import("./segment");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { feedbackCapableProviders } from "../../config/constants";
 import { getProviderAdapter } from "./registry";
 

@@ -1,4 +1,4 @@
-// Runs before each test file (see vitest.config.ts `setupFiles`).
+// Runs before each test file (bunfig.toml `[test] preload`).
 // `src/config/constants.ts` and `src/utils/pixel-jwt.ts` read these at
 // import/call time, so they must exist before any app module loads.
 process.env.SENDLIT_DEPLOYMENT_MODE ||= "oss";

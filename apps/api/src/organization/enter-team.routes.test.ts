@@ -1,20 +1,20 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const authState = vi.hoisted(() => ({
+const authState = {
   userId: "",
   authKind: "session" as string,
   organizationId: "",
   organizationApiKeyId: "",
   organizationScopes: [] as string[],
-}));
+};
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (req: any, _res: any, next: () => void) => {
     req.userId = authState.userId;
     req.authKind = authState.authKind;
@@ -25,19 +25,20 @@ vi.mock("../auth/middleware", () => ({
   },
 }));
 
-import { db } from "../db/client";
-import { teamMembers, user } from "../db/schema";
-import {
+const { db } = await import("../db/client");
+const { teamMembers, user } = await import("../db/schema");
+const {
   archiveTeam,
   findOrCreateTeamByExternalId,
   listTeamsForUser,
   setTeamSendingStatus,
-} from "../team/queries";
-import { type TestDb, truncateAll } from "../test/db";
-import { requestApp } from "../test/http";
-import { listOrganizationAuditEvents } from "./audit";
-import { addOrganizationMemberByEmail, createOrganization } from "./queries";
-import organizationRoutes from "./routes";
+} = await import("../team/queries");
+const { truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { requestApp } = await import("../test/http");
+const { listOrganizationAuditEvents } = await import("./audit");
+const { addOrganizationMemberByEmail, createOrganization } = await import("./queries");
+const { default: organizationRoutes } = await import("./routes");
 
 const tdb = db as unknown as TestDb;
 
@@ -116,7 +117,7 @@ describe("POST /organizations/:organizationId/teams/:teamId/enter", () => {
       },
     );
     expect(created.status).toBe(200);
-    expect(created.json()).toEqual({
+    expect(created.json<unknown>()).toEqual({
       teamId: provisioned.teamId,
       role: "admin",
       created: true,
@@ -141,7 +142,7 @@ describe("POST /organizations/:organizationId/teams/:teamId/enter", () => {
       },
     );
     expect(again.status).toBe(200);
-    expect(again.json()).toEqual({
+    expect(again.json<unknown>()).toEqual({
       teamId: provisioned.teamId,
       role: "admin",
       created: false,
@@ -300,7 +301,7 @@ describe("POST /organizations", () => {
       body: JSON.stringify({ name: " acME " }),
     });
     expect(duplicate.status).toBe(409);
-    expect(duplicate.json()).toEqual({
+    expect(duplicate.json<unknown>()).toEqual({
       error: "organization_name_already_exists",
     });
   });

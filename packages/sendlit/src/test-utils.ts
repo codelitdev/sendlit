@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { vi } from "bun:test";
 import { SendLit, type SendLitOptions } from "./client";
 
 export interface RecordedRequest {

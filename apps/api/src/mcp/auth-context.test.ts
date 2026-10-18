@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { createSendLitMcpAuthInfo } from "./auth-context";
 
 describe("SendLit MCP auth context", () => {

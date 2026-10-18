@@ -1,44 +1,53 @@
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  mock,
+  vi,
+} from "bun:test";
+import { waitFor } from "@sendlit/test-utils";
+import type { Job } from "bullmq";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const workerOnMock = vi.hoisted(() => vi.fn());
+const workerOnMock = mock();
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("./send", () => ({ sendMail: vi.fn() }));
-vi.mock("bullmq", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("bullmq")>();
-  return {
-    ...actual,
-    Worker: vi.fn().mockImplementation(function (
-      this: any,
-      name: string,
-      processor: any,
-    ) {
-      this.name = name;
-      this.processor = processor;
-      this.on = workerOnMock;
-    }),
-  };
-});
+mock.module("./send", () => ({ sendMail: mock() }));
+const actualBullmq = await import("bullmq");
+mock.module("bullmq", () => ({
+  ...actualBullmq,
+  // Bun binds `this` to the mock itself under `new`, so return the instance.
+  Worker: mock((name: string, processor: any) => ({
+    name,
+    processor,
+    on: workerOnMock,
+  })),
+}));
 
-import { type Job, UnrecoverableError, Worker } from "bullmq";
-import { db } from "../db/client";
-import * as schema from "../db/schema";
-import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { requestApp } from "../test/http";
-import trackingRoutes from "../tracking/routes";
-import { getTransactionalEmailById } from "../transactional/queries";
-import { sendMail } from "./send";
-import "./worker";
+const { UnrecoverableError, Worker } = await import("bullmq");
+const { db } = await import("../db/client");
+const schema = await import("../db/schema");
+const { isRecipientSuppressed } = await import(
+  "../delivery-feedback/suppression-queries"
+);
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { requestApp } = await import("../test/http");
+const { default: trackingRoutes } = await import("../tracking/routes");
+const { getTransactionalEmailById } = await import("../transactional/queries");
+const { sendMail } = await import("./send");
+await import("./worker");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
-const sendMailMock = vi.mocked(sendMail);
-const WorkerMock = vi.mocked(Worker);
+const sendMailMock = sendMail as unknown as Mock<typeof sendMail>;
+const WorkerMock = Worker as unknown as Mock<(...args: unknown[]) => void>;
 
 let processor: (job: Job) => Promise<void>;
 let workerQueueName: string | undefined;
@@ -172,7 +181,7 @@ describe("mail worker transactional processing", () => {
     expect(opened.status).toBe(200);
     expect(clicked.status).toBe(302);
     expect(clicked.headers.location).toBe("https://example.com/receipt");
-    await vi.waitFor(async () =>
+    await waitFor(async () =>
       expect(await getTransactionalEmailById(row.id)).toMatchObject({
         openCount: 1,
         clickCount: 1,

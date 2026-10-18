@@ -1,5 +1,5 @@
+import { afterEach, describe, expect, it } from "bun:test";
 import { createHmac } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
 import {
   assertSuppressionHashKeyConfigured,
   currentHashKeyVersion,

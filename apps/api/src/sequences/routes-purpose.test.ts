@@ -1,22 +1,22 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   createSequence: vi.fn(),
   addMailToSequence: vi.fn(),
   updateMailInSequence: vi.fn(),
-}));
+};
 
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (_req: any, _res: any, next: () => void) => next(),
 }));
-vi.mock("../auth/require-team", () => ({
+mock.module("../auth/require-team", () => ({
   requireTeam: (req: any, _res: any, next: () => void) => {
     req.teamId = "team-1";
     next();
   },
 }));
-vi.mock("./queries", () => ({
+mock.module("./queries", () => ({
   createSequence: mocks.createSequence,
   addMailToSequence: mocks.addMailToSequence,
   countSequences: vi.fn(),
@@ -35,8 +35,8 @@ vi.mock("./queries", () => ({
   updateSequence: vi.fn(),
 }));
 
-import { requestApp } from "../test/http";
-import sequenceRoutes from "./routes";
+const { requestApp } = await import("../test/http");
+const { default: sequenceRoutes } = await import("./routes");
 
 function app() {
   const instance = express();
@@ -63,7 +63,7 @@ describe("marketing template route boundary", () => {
     });
 
     expect(response.status).toBe(422);
-    expect(response.json()).toEqual({ error: "template_not_marketing" });
+    expect(response.json<unknown>()).toEqual({ error: "template_not_marketing" });
   });
 
   it("rejects a transactional template when adding a sequence email", async () => {
@@ -76,7 +76,7 @@ describe("marketing template route boundary", () => {
     });
 
     expect(response.status).toBe(422);
-    expect(response.json()).toEqual({ error: "template_not_marketing" });
+    expect(response.json<unknown>()).toEqual({ error: "template_not_marketing" });
   });
 
   it("rejects a transactional template when changing a sequence email template", async () => {
@@ -89,6 +89,6 @@ describe("marketing template route boundary", () => {
     });
 
     expect(response.status).toBe(422);
-    expect(response.json()).toEqual({ error: "template_not_marketing" });
+    expect(response.json<unknown>()).toEqual({ error: "template_not_marketing" });
   });
 });

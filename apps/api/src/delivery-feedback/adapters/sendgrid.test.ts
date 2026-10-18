@@ -1,5 +1,5 @@
+import { describe, expect, it } from "bun:test";
 import crypto from "node:crypto";
-import { describe, expect, it } from "vitest";
 import { sendgridAdapter } from "./sendgrid";
 
 // A throwaway P-256 keypair standing in for SendGrid's signing key; the public

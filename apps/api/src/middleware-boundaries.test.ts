@@ -1,13 +1,12 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import express, { type Router } from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { requestApp } from "./test/http";
 
-const middlewareCalls = vi.hoisted(() => ({
+const middlewareCalls = {
   auth: vi.fn(),
   team: vi.fn(),
-}));
+};
 
-vi.mock("./auth/middleware", () => ({
+mock.module("./auth/middleware", () => ({
   requireAuth: (req: any, _res: any, next: () => void) => {
     middlewareCalls.auth(req.path);
     req.authKind = "session";
@@ -16,7 +15,7 @@ vi.mock("./auth/middleware", () => ({
   },
 }));
 
-vi.mock("./auth/require-team", () => ({
+mock.module("./auth/require-team", () => ({
   requireTeam: (req: any, _res: any, next: () => void) => {
     middlewareCalls.team(req.path);
     next();
@@ -26,28 +25,34 @@ vi.mock("./auth/require-team", () => ({
 // Route modules import their query layers, but these boundary tests never
 // execute a handler. Keep infrastructure clients inert so this suite tests
 // Express middleware composition without requiring Postgres or Redis.
-vi.mock("./db/client", () => ({ db: {} }));
-vi.mock("./mail/queue", () => ({
+mock.module("./db/client", () => ({ db: {} }));
+mock.module("./mail/queue", () => ({
   default: {},
   addMailJob: vi.fn(),
   addTransactionalMailJob: vi.fn(),
 }));
-vi.mock("./services/redis", () => ({ default: {} }));
+mock.module("./services/redis", () => ({ default: {} }));
 
-import contactsRoutes from "./contacts/routes";
-import segmentsRoutes from "./contacts/segments-routes";
-import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
-import feedbackRoutes from "./delivery-feedback/feedback-routes";
-import suppressionsRoutes from "./delivery-feedback/suppressions-routes";
-import mediaRoutes from "./media/routes";
-import overviewRoutes from "./overview/routes";
-import provisioningRoutes from "./provisioning/routes";
-import sequencesRoutes from "./sequences/routes";
-import espRoutes from "./settings/esp/routes";
-import generalSettingsRoutes from "./settings/general/routes";
-import teamRoutes from "./team/routes";
-import templatesRoutes from "./templates/routes";
-import transactionalRoutes from "./transactional/routes";
+const { requestApp } = await import("./test/http");
+
+const { default: contactsRoutes } = await import("./contacts/routes");
+const { default: segmentsRoutes } = await import("./contacts/segments-routes");
+const { default: deliveryEventsRoutes } = await import(
+  "./delivery-feedback/delivery-events-routes"
+);
+const { default: feedbackRoutes } = await import("./delivery-feedback/feedback-routes");
+const { default: suppressionsRoutes } = await import(
+  "./delivery-feedback/suppressions-routes"
+);
+const { default: mediaRoutes } = await import("./media/routes");
+const { default: overviewRoutes } = await import("./overview/routes");
+const { default: provisioningRoutes } = await import("./provisioning/routes");
+const { default: sequencesRoutes } = await import("./sequences/routes");
+const { default: espRoutes } = await import("./settings/esp/routes");
+const { default: generalSettingsRoutes } = await import("./settings/general/routes");
+const { default: teamRoutes } = await import("./team/routes");
+const { default: templatesRoutes } = await import("./templates/routes");
+const { default: transactionalRoutes } = await import("./transactional/routes");
 
 type BoundaryCase = {
   name: string;

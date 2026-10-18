@@ -1,16 +1,17 @@
+import { beforeEach, describe, expect, it, type Mock, mock, vi } from "bun:test";
+import { waitFor } from "@sendlit/test-utils";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
+mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
-vi.mock("../mail/send", () => ({
+mock.module("../mail/send", () => ({
   sendMail: vi.fn().mockResolvedValue({ messageId: null, providerResponse: null }),
 }));
 
-import { db } from "../db/client";
-import {
+const { db } = await import("../db/client");
+const {
   contacts,
   emailDeliveries,
   espConfigs,
@@ -18,19 +19,21 @@ import {
   outboundMessages,
   sequenceEmails,
   sequences,
-} from "../db/schema";
-import { addOrStrengthenSuppression } from "../delivery-feedback/suppression-queries";
-import { sendMail } from "../mail/send";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { seedOngoingSequence, seedSequence } from "../test/fixtures";
-import { getUnsubLink } from "../utils/mail";
-import {
-  getNextPublishedEmail,
-  processOngoingSequence,
-} from "./process-ongoing-sequence";
+} = await import("../db/schema");
+const { addOrStrengthenSuppression } = await import(
+  "../delivery-feedback/suppression-queries"
+);
+const { sendMail } = await import("../mail/send");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { seedOngoingSequence, seedSequence } = await import("../test/fixtures");
+const { getUnsubLink } = await import("../utils/mail");
+const { getNextPublishedEmail, processOngoingSequence } = await import(
+  "./process-ongoing-sequence"
+);
 
 const tdb = db as unknown as TestDb;
-const mockedSendMail = vi.mocked(sendMail);
+const mockedSendMail = sendMail as unknown as Mock<typeof sendMail>;
 
 beforeEach(async () => {
   await truncateAll(tdb);
@@ -346,14 +349,14 @@ describe("processOngoingSequence", () => {
     );
 
     const first = processOngoingSequence(row.id);
-    await vi.waitFor(() => expect(mockedSendMail).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mockedSendMail).toHaveBeenCalledTimes(1));
     const concurrent = processOngoingSequence(row.id);
     await concurrent;
 
-    expect(mockedSendMail).toHaveBeenCalledOnce();
+    expect(mockedSendMail).toHaveBeenCalledTimes(1);
     releaseSend();
     await first;
-    expect(mockedSendMail).toHaveBeenCalledOnce();
+    expect(mockedSendMail).toHaveBeenCalledTimes(1);
   });
 
   it("recovers an expired worker claim but leaves a live claim alone", async () => {
@@ -380,7 +383,7 @@ describe("processOngoingSequence", () => {
       .set({ processingStartedAt: new Date(Date.now() - 11 * 60_000) })
       .where(eq(ongoingSequences.id, row.id));
     await processOngoingSequence(row.id);
-    expect(mockedSendMail).toHaveBeenCalledOnce();
+    expect(mockedSendMail).toHaveBeenCalledTimes(1);
   });
 
   it("completes a broadcast: deletes the row and marks the sequence sent", async () => {
@@ -426,7 +429,7 @@ describe("processOngoingSequence", () => {
 
     await processOngoingSequence(row.id);
 
-    expect(mockedSendMail).toHaveBeenCalledOnce();
+    expect(mockedSendMail).toHaveBeenCalledTimes(1);
     const remaining = await tdb
       .select()
       .from(ongoingSequences)

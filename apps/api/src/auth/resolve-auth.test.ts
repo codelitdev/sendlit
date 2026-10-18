@@ -1,23 +1,23 @@
+import { describe, expect, it, mock, vi } from "bun:test";
 import type {
   AuthenticatedIdentity,
   AuthenticationResult,
 } from "@codelitdev/oauth-server-kit";
-import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../apikey/queries", () => ({
+mock.module("../apikey/queries", () => ({
   getApiKeyBySecret: vi.fn(),
   getOrganizationApiKeyBySecret: vi.fn(),
 }));
-vi.mock("../team/queries", () => ({
+mock.module("../team/queries", () => ({
   getTeamMembership: vi.fn(),
 }));
-vi.mock("../organization/queries", () => ({
+mock.module("../organization/queries", () => ({
   ensureDefaultOrganization: vi.fn(),
 }));
-vi.mock("../user/queries", () => ({
+mock.module("../user/queries", () => ({
   getUser: vi.fn(),
 }));
-vi.mock("./better-auth", () => ({
+mock.module("./better-auth", () => ({
   auth: { api: { getSession: vi.fn(async () => null) } },
   authIssuer: "https://sendlit.test/api/auth",
   mcpResourceUrl: "https://sendlit.test/mcp",
@@ -25,7 +25,9 @@ vi.mock("./better-auth", () => ({
   oauthResourceClient: { getActions: vi.fn(() => ({})) },
 }));
 
-import { type AuthDependencies, resolveAuth, sendAuthError } from "./resolve-auth";
+import type { AuthDependencies } from "./resolve-auth";
+
+const { resolveAuth, sendAuthError } = await import("./resolve-auth");
 
 const user = {
   id: "user-1",

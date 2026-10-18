@@ -1,14 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { stubGlobal } from "@sendlit/test-utils";
+import { resetAppModules } from "./test/reset-modules";
 
-const mocks = vi.hoisted(() => ({
-  init: vi.fn(),
-  identify: vi.fn(),
-  reset: vi.fn(),
-  register: vi.fn(),
-  fetch: vi.fn(),
-}));
+const mocks = {
+  init: mock(),
+  identify: mock(),
+  reset: mock(),
+  register: mock(),
+  fetch: mock(),
+};
 
-vi.mock("posthog-js", () => ({
+mock.module("posthog-js", () => ({
   default: {
     init: mocks.init,
     identify: mocks.identify,
@@ -16,10 +18,10 @@ vi.mock("posthog-js", () => ({
   },
 }));
 
-vi.stubGlobal("fetch", mocks.fetch);
+stubGlobal("fetch", mocks.fetch);
 
 const loadModule = async () => {
-  vi.resetModules();
+  resetAppModules();
   return await import("./posthog-browser");
 };
 

@@ -1,6 +1,6 @@
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
 
 // Secrets `checkConfig` in `index.ts` refuses to boot without. The Compose
 // self-host path builds `DB_CONNECTION_STRING` itself, so it is not listed.

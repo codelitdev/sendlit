@@ -1,5 +1,5 @@
+import { describe, expect, it } from "bun:test";
 import crypto from "node:crypto";
-import { describe, expect, it } from "vitest";
 import { mailgunAdapter } from "./mailgun";
 
 const signingKey = "mailgun-webhook-signing-key";

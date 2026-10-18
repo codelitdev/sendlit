@@ -1,17 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { requireTeam } from "./require-team";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   getTeamByTeamId: vi.fn(),
   getTeamMembership: vi.fn(),
   listTeamsForUser: vi.fn(),
-}));
+};
 
-vi.mock("../team/queries", () => ({
+mock.module("../team/queries", () => ({
   getTeamByTeamId: mocks.getTeamByTeamId,
   getTeamMembership: mocks.getTeamMembership,
   listTeamsForUser: mocks.listTeamsForUser,
 }));
+
+const { requireTeam } = await import("./require-team");
 
 function res() {
   return {

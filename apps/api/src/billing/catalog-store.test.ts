@@ -1,16 +1,22 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-vi.mock("../db/client", async () => {
+import type { FakeBillingProvider } from "./providers/fake";
+
+mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
 
-import { db } from "../db/client";
-import { type TestDb, truncateAll } from "../test/db";
-import { readBillingConfig } from "./catalog";
-import { getActiveCatalog, verifyCatalogAgainstProvider } from "./catalog-store";
-import { getBillingProvider, resetBillingProviderInstances } from "./provider-registry";
-import type { FakeBillingProvider } from "./providers/fake";
+const { db } = await import("../db/client");
+const { truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { readBillingConfig } = await import("./catalog");
+const { getActiveCatalog, verifyCatalogAgainstProvider } = await import(
+  "./catalog-store"
+);
+const { getBillingProvider, resetBillingProviderInstances } = await import(
+  "./provider-registry"
+);
 
 const tdb = db as unknown as TestDb;
 

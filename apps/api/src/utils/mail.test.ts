@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { getEmailFrom, getSiteUrl, getUnsubLink } from "./mail";
 
 const ORIGINAL = {

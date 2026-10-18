@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { mockSendLit } from "./test-utils";
 
 type Case = [
@@ -322,7 +322,7 @@ describe("resources", () => {
     const contact = { contactId: "con_1", email: "ada@example.com" };
     const { sendlit } = mockSendLit({ status: 201, body: contact });
     await expect(
-      sendlit.contacts.create({ email: "ada@example.com" }),
+      sendlit.contacts.create({ email: "ada@example.com" }) as Promise<unknown>,
     ).resolves.toEqual(contact);
   });
 });

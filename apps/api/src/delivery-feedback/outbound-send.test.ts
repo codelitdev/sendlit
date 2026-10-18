@@ -1,19 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
 import { eq } from "drizzle-orm";
-import { db } from "../db/client";
-import { espConfigs, outboundMessages } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import {
+
+const { db } = await import("../db/client");
+const { espConfigs, outboundMessages } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const {
   createPinnedOutboundMessage,
   extractProviderMessageId,
   withCorrelationHeaders,
-} from "./outbound-send";
+} = await import("./outbound-send");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 

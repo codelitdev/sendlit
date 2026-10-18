@@ -1,16 +1,19 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { eq, inArray } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../db/client", async () => {
-  const { makeTestDb } = await import("../../test/db.js");
+mock.module("../../db/client", async () => {
+  const { makeTestDb } = await import("../../test/db");
   return { db: await makeTestDb() };
 });
 
-import { db } from "../../db/client";
-import { outboundMessages, sequences, teamDeliverySettings } from "../../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../../test/db";
-import { seedSequence } from "../../test/fixtures";
-import {
+const { db } = await import("../../db/client");
+const { outboundMessages, sequences, teamDeliverySettings } = await import(
+  "../../db/schema"
+);
+const { seedTeamAndContact, truncateAll } = await import("../../test/db");
+type TestDb = import("../../test/db").TestDb;
+const { seedSequence } = await import("../../test/fixtures");
+const {
   createEspConfig,
   deleteEspConfig,
   getDecryptedEspCredentials,
@@ -18,7 +21,7 @@ import {
   listEspConfigs,
   recordEspTestResult,
   upsertEspConfig,
-} from "./queries";
+} = await import("./queries");
 
 const tdb = db as unknown as TestDb;
 

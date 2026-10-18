@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { resendAdapter } from "./resend";
 
 function body(payload: Record<string, unknown>) {

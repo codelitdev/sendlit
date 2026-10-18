@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { generatePixelToken, verifyPixelToken } from "./pixel-jwt";
 
 const ORIGINAL = process.env.PIXEL_SIGNING_SECRET;

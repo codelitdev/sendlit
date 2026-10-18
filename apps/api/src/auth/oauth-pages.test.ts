@@ -1,16 +1,13 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getSession, listTeamsForUser, getSelectedTeamId, setSelectedTeamId } =
-  vi.hoisted(() => ({
-    getSession: vi.fn(async () => null as any),
-    listTeamsForUser: vi.fn(async () => [] as any[]),
-    getSelectedTeamId: vi.fn(async () => null as string | null),
-    setSelectedTeamId: vi.fn(async () => {}),
-  }));
+const getSession = vi.fn(async () => null as any);
+const listTeamsForUser = vi.fn(async () => [] as any[]);
+const getSelectedTeamId = vi.fn(async () => null as string | null);
+const setSelectedTeamId = vi.fn(async () => {});
 
-vi.mock("./better-auth", () => ({
+mock.module("./better-auth", () => ({
   webClientUrl: "http://localhost:3000",
   authBasePath: "/api/auth",
   hostedLoginMethods: [{ type: "email-otp" }],
@@ -21,11 +18,11 @@ vi.mock("./better-auth", () => ({
     setSelectedTeamId,
   },
 }));
-vi.mock("better-auth/node", () => ({
+mock.module("better-auth/node", () => ({
   fromNodeHeaders: (headers: unknown) => headers,
 }));
 
-import oauthPagesRoutes from "./oauth-pages.js";
+const { default: oauthPagesRoutes } = await import("./oauth-pages.js");
 
 describe("SendLit OAuth pages", () => {
   let app: express.Express;

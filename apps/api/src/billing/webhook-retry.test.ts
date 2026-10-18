@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { BILLING_WEBHOOK_MAX_ATTEMPTS, billingWebhookRetry } from "./webhook-retry";
 
 describe("billing webhook retry schedule", () => {

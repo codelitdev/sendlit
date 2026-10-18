@@ -1,11 +1,12 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { stubGlobal } from "@sendlit/test-utils";
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  fetch: vi.fn(),
-}));
+const mocks = {
+  fetch: mock(),
+};
 
-vi.stubGlobal("fetch", mocks.fetch);
+stubGlobal("fetch", mocks.fetch);
 
 describe("auth proxy sign-out", () => {
   beforeEach(() => {

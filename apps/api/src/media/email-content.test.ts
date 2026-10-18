@@ -1,13 +1,13 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import type { Email } from "@sendlit/email-editor";
 import { defaultEmail } from "@sendlit/email-editor";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("./service", () => ({
+mock.module("./service", () => ({
   sealMedia: vi.fn((mediaLitId: string) =>
     Promise.resolve({
       mediaLitId,
@@ -19,14 +19,13 @@ vi.mock("./service", () => ({
   deleteMedia: vi.fn(),
 }));
 
-import { db } from "../db/client";
-import { media, mediaReferences } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import {
-  extractMediaLitImagesFromEmailContent,
-  syncEmailContentMediaReferences,
-} from "./email-content";
-import { deleteMedia, sealMedia } from "./service";
+const { db } = await import("../db/client");
+const { media, mediaReferences } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { extractMediaLitImagesFromEmailContent, syncEmailContentMediaReferences } =
+  await import("./email-content");
+const { deleteMedia, sealMedia } = await import("./service");
 
 const tdb = db as unknown as TestDb;
 

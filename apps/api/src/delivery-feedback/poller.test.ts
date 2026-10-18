@@ -1,29 +1,29 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
-const mocks = vi.hoisted(() => ({
-  getDue: vi.fn(),
-  recoverStale: vi.fn(),
-  processReceipt: vi.fn(),
-  captureError: vi.fn(),
-  info: vi.fn(),
-  error: vi.fn(),
-}));
+const mocks = {
+  getDue: mock(),
+  recoverStale: mock(),
+  processReceipt: mock(),
+  captureError: mock(),
+  info: mock(),
+  error: mock(),
+};
 
-vi.mock("./webhook-receipt-queries", () => ({
+mock.module("./webhook-receipt-queries", () => ({
   getReceiptsDueForProcessing: mocks.getDue,
   recoverStaleProcessingReceipts: mocks.recoverStale,
 }));
-vi.mock("./process-receipt", () => ({
+mock.module("./process-receipt", () => ({
   processWebhookReceipt: mocks.processReceipt,
 }));
-vi.mock("../observability/posthog", () => ({
+mock.module("../observability/posthog", () => ({
   captureError: mocks.captureError,
 }));
-vi.mock("../services/log", () => ({
+mock.module("../services/log", () => ({
   default: { info: mocks.info, error: mocks.error },
 }));
 
-import { pollFeedbackReceiptsOnce } from "./poller";
+const { pollFeedbackReceiptsOnce } = await import("./poller");
 
 beforeEach(() => {
   vi.clearAllMocks();

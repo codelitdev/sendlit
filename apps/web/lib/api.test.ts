@@ -1,11 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@sendlit/test-utils";
+import { resetAppModules } from "./test/reset-modules";
 
-const mocks = vi.hoisted(() => ({
-  contactsList: vi.fn(),
-}));
+const mocks = {
+  contactsList: mock(),
+};
 
-vi.mock("@ts-rest/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@ts-rest/core")>();
+const actual = await import("@ts-rest/core");
+mock.module("@ts-rest/core", () => {
   return {
     ...actual,
     initClient: () => ({
@@ -18,18 +20,18 @@ vi.mock("@ts-rest/core", async (importOriginal) => {
 
 function installWindow(pathname = "/sequences") {
   const location = { href: pathname, pathname };
-  vi.stubGlobal("window", { location });
+  stubGlobal("window", { location });
   return location;
 }
 
 describe("dashboard API client auth handling", () => {
   beforeEach(() => {
-    vi.resetModules();
+    resetAppModules();
     mocks.contactsList.mockReset();
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
   });
 
   it("redirects to login on any 401 response", async () => {
@@ -48,7 +50,7 @@ describe("dashboard API client auth handling", () => {
 
   it("does not sign out on billing recent-authentication 401", async () => {
     const location = installWindow("/organizations");
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = mock(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/api/auth/sign-out")) {
         return new Response(null, { status: 204 });
@@ -58,8 +60,8 @@ describe("dashboard API client auth handling", () => {
         headers: { "content-type": "application/json" },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("document", { cookie: "" });
+    stubGlobal("fetch", fetchMock);
+    stubGlobal("document", { cookie: "" });
 
     const { createOrganizationBillingCheckout } = await import("./api");
     await expect(

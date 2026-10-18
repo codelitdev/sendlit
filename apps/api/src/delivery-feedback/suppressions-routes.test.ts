@@ -1,34 +1,34 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const requestContext = vi.hoisted(() => ({ teamId: "", accountId: "" }));
+const requestContext = { teamId: "", accountId: "" };
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (req: any, _res: any, next: () => void) => {
     req.accountId = requestContext.accountId;
     next();
   },
 }));
-vi.mock("../auth/require-team", () => ({
+mock.module("../auth/require-team", () => ({
   requireTeam: (req: any, _res: any, next: () => void) => {
     req.teamId = requestContext.teamId;
     next();
   },
 }));
-vi.mock("../observability/posthog", () => ({ captureEvent: vi.fn() }));
+mock.module("../observability/posthog", () => ({ captureEvent: mock() }));
 
-import { db } from "../db/client";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { requestApp } from "../test/http";
-import {
-  addOrStrengthenSuppression,
-  getSuppressionBySuppressionId,
-} from "./suppression-queries";
-import suppressionRoutes from "./suppressions-routes";
+const { db } = await import("../db/client");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { requestApp } = await import("../test/http");
+const { addOrStrengthenSuppression, getSuppressionBySuppressionId } = await import(
+  "./suppression-queries"
+);
+const { default: suppressionRoutes } = await import("./suppressions-routes");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 

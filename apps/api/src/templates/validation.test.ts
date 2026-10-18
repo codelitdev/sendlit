@@ -1,6 +1,6 @@
+import { describe, expect, it } from "bun:test";
 import { createFooterEmailBlock } from "@sendlit/email-blocks/footer";
 import { defaultEmail, type Email } from "@sendlit/email-editor";
-import { describe, expect, it } from "vitest";
 import {
   getRequiredTemplateVariables,
   type TemplateValidationError,

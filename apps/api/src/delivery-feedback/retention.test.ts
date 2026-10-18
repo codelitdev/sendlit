@@ -1,29 +1,30 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-import { db } from "../db/client";
-import {
+const { db } = await import("../db/client");
+const {
   emailDeliveryEvents,
   emailSuppressions,
   espConfigs,
   espWebhookReceipts,
   outboundMessages,
-} from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { upsertFeedbackConnection } from "./feedback-connection-queries";
-import { createOutboundMessage } from "./outbound-queries";
-import {
+} = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { upsertFeedbackConnection } = await import("./feedback-connection-queries");
+const { createOutboundMessage } = await import("./outbound-queries");
+const {
   anonymizeRecipientForPrivacyDeletion,
   purgeExpiredRawReceipts,
   purgeOldDeliveryEvents,
-} from "./retention";
-import { addOrStrengthenSuppression } from "./suppression-queries";
-import { createWebhookReceipt } from "./webhook-receipt-queries";
+} = await import("./retention");
+const { addOrStrengthenSuppression } = await import("./suppression-queries");
+const { createWebhookReceipt } = await import("./webhook-receipt-queries");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 

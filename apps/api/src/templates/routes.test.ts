@@ -1,31 +1,35 @@
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import { defaultEmail } from "@sendlit/email-editor";
 import express from "express";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const requestTeam = vi.hoisted(() => ({ id: "" }));
+const requestTeam = { id: "" };
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
-vi.mock("../auth/middleware", () => ({
+mock.module("../auth/middleware", () => ({
   requireAuth: (_req: any, _res: any, next: () => void) => next(),
 }));
-vi.mock("../auth/require-team", () => ({
+mock.module("../auth/require-team", () => ({
   requireTeam: (req: any, _res: any, next: () => void) => {
     req.teamId = requestTeam.id;
     next();
   },
 }));
-vi.mock("../observability/posthog", () => ({ captureEvent: vi.fn() }));
+mock.module("../observability/posthog", () => ({
+  captureEvent: vi.fn(),
+  captureError: vi.fn(),
+}));
 
-import { db } from "../db/client";
-import { emailTemplates } from "../db/schema";
-import { defaultEmailContent } from "../sequences/helpers";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { requestApp } from "../test/http";
-import { createTemplate } from "./queries";
-import templateRoutes from "./routes";
+const { db } = await import("../db/client");
+const { emailTemplates } = await import("../db/schema");
+const { defaultEmailContent } = await import("../sequences/helpers");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+type TestDb = import("../test/db").TestDb;
+const { requestApp } = await import("../test/http");
+const { createTemplate } = await import("./queries");
+const { default: templateRoutes } = await import("./routes");
 
 const tdb = db as unknown as TestDb;
 
@@ -102,7 +106,7 @@ describe("template purpose routes", () => {
       }),
     });
     expect(invalid.status).toBe(422);
-    expect(invalid.json()).toEqual({ error: "footer_required" });
+    expect(invalid.json<unknown>()).toEqual({ error: "footer_required" });
 
     const template = await createTemplate({
       teamId: team.id,
@@ -161,7 +165,7 @@ describe("template purpose routes", () => {
     const response = await requestApp(app(), "/templates");
 
     expect(response.status).toBe(200);
-    expect(response.json()).toEqual([
+    expect(response.json<unknown>()).toEqual([
       expect.objectContaining({
         title: "Legacy campaign",
         validationError: "footer_required",
@@ -185,7 +189,7 @@ describe("template purpose routes", () => {
     const response = await requestApp(app(), `/templates/${legacy.templateId}`);
 
     expect(response.status).toBe(422);
-    expect(response.json()).toEqual({ error: "footer_required" });
+    expect(response.json<unknown>()).toEqual({ error: "footer_required" });
   });
 
   it("filters built-in starters by purpose", async () => {

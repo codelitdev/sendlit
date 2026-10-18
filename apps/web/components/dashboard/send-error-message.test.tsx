@@ -1,8 +1,11 @@
-// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from "bun:test";
+import { registerDom } from "@sendlit/test-utils/dom";
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
-import { MAILING_ADDRESS_REQUIRED_ERROR, SendErrorMessage } from "./send-error-message";
+registerDom();
+const { cleanup, render, screen } = await import("@testing-library/react");
+const { MAILING_ADDRESS_REQUIRED_ERROR, SendErrorMessage } = await import(
+  "./send-error-message"
+);
 
 describe("SendErrorMessage", () => {
   afterEach(cleanup);

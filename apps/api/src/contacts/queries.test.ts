@@ -1,21 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-vi.mock("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
 });
 
-const mocks = vi.hoisted(() => ({
-  fireEvent: vi.fn(async () => undefined),
-}));
-vi.mock("../automation/fire-event", () => ({ fireEvent: mocks.fireEvent }));
+const mocks = {
+  fireEvent: mock(async () => undefined),
+};
+mock.module("../automation/fire-event", () => ({ fireEvent: mocks.fireEvent }));
 
-import { EventType } from "../config/constants";
-import { db } from "../db/client";
-import { contacts, emailDeliveries } from "../db/schema";
-import { seedTeamAndContact, type TestDb, truncateAll } from "../test/db";
-import { seedSequence } from "../test/fixtures";
-import {
+const { EventType } = await import("../config/constants");
+const { db } = await import("../db/client");
+const { contacts, emailDeliveries } = await import("../db/schema");
+const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { seedSequence } = await import("../test/fixtures");
+const {
   addTagToContact,
   createContact,
   findContactByEmail,
@@ -23,7 +23,8 @@ import {
   listContacts,
   removeTagFromContact,
   updateContact,
-} from "./queries";
+} = await import("./queries");
+type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
 
