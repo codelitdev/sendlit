@@ -1,4 +1,4 @@
-import { BillingWorkflowError, retainsPaidEntitlement } from "@codelitdev/billing/core";
+import { BillingWorkflowError } from "@codelitdev/billing/core";
 import type { BillingActionGrant } from "@codelitdev/billing/workflows";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
@@ -10,9 +10,8 @@ import {
   readBillingConfig,
   trialHmacSecrets,
 } from "./catalog";
-import { requireActiveCatalog, verifyCheckoutOffer } from "./catalog-store";
-import { getBillingEngine, preconsumedGrant } from "./engine";
-import { getBillingProvider } from "./provider-registry";
+import { requirePublicCatalog } from "./catalog-store";
+import { getBillingEngine, getPendingCheckoutResumeGrants } from "./engine";
 
 export class BillingCheckoutError extends Error {
   constructor(
@@ -26,7 +25,9 @@ export class BillingCheckoutError extends Error {
       | "billing_checkout_pending"
       | "organization_name_already_exists"
       | "pending_organization_exists"
-      | "payment_required",
+      | "payment_required"
+      | "billing_subscription_required"
+      | "operation_conflicted",
     public readonly status: 400 | 401 | 402 | 403 | 409 | 503,
     public readonly details: Record<string, unknown> = {},
   ) {
@@ -57,6 +58,10 @@ function mapCheckoutWorkflowError(
       return new BillingCheckoutError("billing_owner_required", 403);
     case "subscription_required":
       return new BillingCheckoutError("payment_required", 402);
+    case "operation_conflicted":
+      return new BillingCheckoutError("operation_conflicted", 409, {
+        retryable: true,
+      });
     default:
       return new BillingCheckoutError("billing_provider_unavailable", 503);
   }
@@ -171,7 +176,7 @@ export async function createOrganizationCheckout(input: {
   interval: "month" | "year";
   catalogRevision: number;
   pendingTeamName?: string;
-  grant?: BillingActionGrant;
+  grant: BillingActionGrant;
 }) {
   let config: ReturnType<typeof readBillingConfig>;
   try {
@@ -192,17 +197,10 @@ export async function createOrganizationCheckout(input: {
   const offer = getBillingOffer(config, input.plan, input.interval);
   if (!offer) throw new BillingCheckoutError("billing_catalog_unavailable", 503);
 
-  const provider = (() => {
-    try {
-      return getBillingProvider(config.checkoutProvider ?? undefined);
-    } catch {
-      throw new BillingCheckoutError("billing_provider_unavailable", 503);
-    }
-  })();
-  let catalog: Awaited<ReturnType<typeof requireActiveCatalog>>;
+  // The engine re-checks the revision and the provider product before it
+  // creates the checkout; this only answers SendLit's error shape early.
   try {
-    catalog = await requireActiveCatalog(config, provider);
-    await verifyCheckoutOffer(config, provider, offer);
+    await requirePublicCatalog(config, offer.catalogKey);
   } catch (error) {
     if (error instanceof Error && error.message === "billing_catalog_changed") {
       throw new BillingCheckoutError(
@@ -213,8 +211,6 @@ export async function createOrganizationCheckout(input: {
     }
     throw new BillingCheckoutError("billing_catalog_unavailable", 503);
   }
-  const price = catalog.items.find((row) => row.offerKey === offer.catalogKey)?.price;
-  if (!price) throw new BillingCheckoutError("billing_catalog_unavailable", 503);
 
   const [identity] = await db
     .select({
@@ -251,18 +247,9 @@ export async function createOrganizationCheckout(input: {
     throw new BillingCheckoutError("billing_owner_required", 403);
   }
 
+  // startCheckout releases a lapsed entitlement itself, with audit and the
+  // afterProjection hook, before it opens a new checkout.
   const billing = getBillingEngine();
-  const now = new Date();
-  const existingSub = await billing.store.findEntitlementSubscription(
-    input.organizationId,
-  );
-  if (existingSub && !retainsPaidEntitlement(existingSub, now)) {
-    existingSub.isEntitlementSource = false;
-    await billing.store.upsertSubscription(existingSub);
-    const planState = await billing.store.ensurePlanState(input.organizationId);
-    planState.activeSubscriptionId = null;
-    await billing.store.savePlanState(planState);
-  }
 
   let trialDays = 0;
   if (offer.trialDays > 0) {
@@ -300,9 +287,7 @@ export async function createOrganizationCheckout(input: {
 
   try {
     const result = await billing.startCheckout({
-      grant:
-        input.grant ??
-        preconsumedGrant("checkout", input.organizationId, input.payerId),
+      grant: input.grant,
       entity: { kind: "organization", id: input.organizationId },
       payer: {
         id: identity.id,
@@ -337,30 +322,6 @@ export async function createOrganizationCheckout(input: {
   }
 }
 
-/** Resume a durable `creating` checkout after an API/provider timeout. The
- * original attempt and provider idempotency key are reused; no new checkout
- * row is created and an ambiguous provider response cannot create a second
- * subscription. */
-export async function resumeOrganizationCheckoutAttempt(
-  attemptId: string,
-  now = new Date(),
-): Promise<boolean> {
-  const billing = getBillingEngine();
-  const attempt = await billing.store.findCheckoutById(attemptId);
-  if (attempt?.status !== "creating" || attempt.expiresAt <= now) {
-    return false;
-  }
-  await billing.enqueueJob({
-    provider: attempt.provider,
-    checkoutAttemptId: attempt.id,
-  });
-  await billing.runReconciliationBatch({
-    workerId: `checkout-resume:${attempt.id}`,
-  });
-  const latest = await billing.store.findCheckoutById(attemptId);
-  return latest?.status === "open";
-}
-
 export async function createPaidOrganizationCheckout(input: {
   payerId: string;
   organizationName: string;
@@ -368,7 +329,8 @@ export async function createPaidOrganizationCheckout(input: {
   plan: "pro" | "business";
   interval: "month" | "year";
   catalogRevision: number;
-  grant?: BillingActionGrant;
+  /** The session that presented the consumed `organization_checkout` token. */
+  session: { id: string; createdAt: Date };
 }) {
   let config: ReturnType<typeof readBillingConfig>;
   try {
@@ -404,6 +366,22 @@ export async function createPaidOrganizationCheckout(input: {
       throw error;
     }
   }
+  // The route consumed the `organization_checkout` token. The checkout for
+  // the new (pending) organization gets its own single-use grant, issued to
+  // the same session; pending organizations are exempt from the recent-auth
+  // age, so a session that aged during this request still finishes.
+  const target = { kind: "organization", id: organization.id };
+  const grants = getPendingCheckoutResumeGrants();
+  const issued = await grants.issue({
+    actorId: input.payerId,
+    sessionId: input.session.id,
+    sessionCreatedAt: input.session.createdAt,
+    action: "checkout",
+    target,
+  });
+  if (!issued.ok) {
+    throw new BillingCheckoutError("recent_authentication_required", 401);
+  }
   const checkout = await createOrganizationCheckout({
     organizationId: organization.id,
     payerId: input.payerId,
@@ -411,7 +389,13 @@ export async function createPaidOrganizationCheckout(input: {
     interval: input.interval,
     catalogRevision: input.catalogRevision,
     pendingTeamName: input.teamName,
-    grant: input.grant,
+    grant: grants.grant({
+      token: issued.token,
+      actorId: input.payerId,
+      sessionId: input.session.id,
+      action: "checkout",
+      target,
+    }),
   });
   return { ...checkout, organizationId: organization.organizationId };
 }

@@ -1,7 +1,7 @@
+import type { BillingEngine } from "@codelitdev/billing/workflows";
 import { and, count, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
-  billingCheckoutAttempts,
   billingPlanStates,
   billingSubscriptions,
   contacts,
@@ -12,13 +12,14 @@ import {
   teamSendingControls,
   teams,
 } from "../db/schema";
+import { getBillingEngine } from "./engine";
 import { PlanGateError } from "./errors";
+import { lockOrganizationSubscriptions } from "./locks";
 import {
   marketingRampDailyLimit,
   type OrganizationEntitlements,
   type PlanStateLike,
   resolveEntitlements,
-  type SubscriptionLike,
 } from "./policies";
 import { readReputationConfig } from "./reputation-config";
 
@@ -66,89 +67,94 @@ export async function ensureOrganizationPlanState(
   return raced;
 }
 
-export async function getOrganizationEntitlements(
+type CommercialState = Awaited<ReturnType<BillingEngine["commercialState"]>>;
+
+/** The past-due grace deadline of the organization's entitlement
+ * subscription. A narrow read of SendLit's own policy column; the engine's
+ * `commercialState` does not expose the subscription ID. */
+async function readGraceEndsAt(
+  client: Pick<typeof db, "select">,
   organizationId: string,
-  now = new Date(),
-): Promise<OrganizationEntitlements> {
-  const [state] = await db
-    .select()
+): Promise<Date | null> {
+  const [row] = await client
+    .select({ graceEndsAt: billingSubscriptions.graceEndsAt })
     .from(billingPlanStates)
+    .innerJoin(
+      billingSubscriptions,
+      eq(billingSubscriptions.id, billingPlanStates.activeSubscriptionId),
+    )
     .where(eq(billingPlanStates.billableEntityId, organizationId))
     .limit(1);
+  return row?.graceEndsAt ?? null;
+}
 
-  let subscription: SubscriptionLike | null = null;
-  if (state?.activeSubscriptionId) {
-    const [row] = await db
-      .select()
-      .from(billingSubscriptions)
-      .where(eq(billingSubscriptions.id, state.activeSubscriptionId))
-      .limit(1);
-    subscription = row
-      ? {
-          plan: row.plan as "pro" | "business",
-          billingInterval: row.billingInterval as "month" | "year",
-          status: row.status as SubscriptionLike["status"],
-          currentPeriodEndsAt: row.currentPeriodEndsAt,
-          paidThroughAt: row.paidThroughAt,
-          trialEndsAt: row.trialEndsAt,
-          graceEndsAt: row.graceEndsAt,
-          cancelAtPeriodEnd: row.cancelAtPeriodEnd,
-        }
-      : null;
-  }
-
-  const [pending] = await db
-    .select({ id: billingCheckoutAttempts.id })
-    .from(billingCheckoutAttempts)
-    .where(
-      and(
-        eq(billingCheckoutAttempts.billableEntityId, organizationId),
-        inArray(billingCheckoutAttempts.status, ["creating", "open"]),
-      ),
-    )
-    .limit(1);
-
+async function resolveCloudEntitlements(
+  client: Pick<typeof db, "select">,
+  organizationId: string,
+  planState: PlanStateLike | null,
+  commercial: CommercialState,
+  now: Date,
+): Promise<OrganizationEntitlements> {
   return resolveEntitlements({
     organizationId,
-    deploymentMode: deploymentMode(),
-    planState: (state as PlanStateLike | undefined) ?? null,
-    subscription,
-    checkoutPending: Boolean(pending),
+    deploymentMode: "cloud",
+    planState,
+    commercial,
+    graceEndsAt:
+      commercial.subscriptionStatus === "past_due"
+        ? await readGraceEndsAt(client, organizationId)
+        : null,
     now,
   });
 }
 
+function ossEntitlements(organizationId: string): OrganizationEntitlements {
+  return resolveEntitlements({
+    organizationId,
+    deploymentMode: "oss",
+    planState: null,
+  });
+}
+
+/** Read-only entitlements. Paid state comes from the billing engine's
+ * `commercialState`; SendLit adds plan policy and operator overrides. */
+export async function getOrganizationEntitlements(
+  organizationId: string,
+  now = new Date(),
+): Promise<OrganizationEntitlements> {
+  if (deploymentMode() === "oss") return ossEntitlements(organizationId);
+  const [state] = await db
+    .select({
+      teamsLimitOverride: billingPlanStates.teamsLimitOverride,
+      contactsLimitOverride: billingPlanStates.contactsLimitOverride,
+    })
+    .from(billingPlanStates)
+    .where(eq(billingPlanStates.billableEntityId, organizationId))
+    .limit(1);
+  const commercial = await getBillingEngine().commercialState(organizationId);
+  return resolveCloudEntitlements(db, organizationId, state ?? null, commercial, now);
+}
+
+/**
+ * Entitlements for a quota decision inside the caller's transaction. The
+ * rows read stay locked until the transaction ends, so concurrent
+ * reservations and webhook projections serialise. Lock order matters: the
+ * engine's projection locks subscription then plan state, so this locks the
+ * organization's subscriptions first, then the plan state, then reads
+ * `commercialState` in the same transaction.
+ */
 export async function getOrganizationEntitlementsInTransaction(
   tx: Transaction,
   organizationId: string,
   now = new Date(),
 ): Promise<OrganizationEntitlements> {
+  if (deploymentMode() === "oss") return ossEntitlements(organizationId);
+  await lockOrganizationSubscriptions(tx, organizationId);
   const state = await ensureOrganizationPlanState(tx, organizationId);
-  const [row] = state.activeSubscriptionId
-    ? await tx
-        .select()
-        .from(billingSubscriptions)
-        .where(eq(billingSubscriptions.id, state.activeSubscriptionId))
-        .limit(1)
-    : [];
-  const [pending] = await tx
-    .select({ id: billingCheckoutAttempts.id })
-    .from(billingCheckoutAttempts)
-    .where(
-      and(
-        eq(billingCheckoutAttempts.billableEntityId, organizationId),
-        inArray(billingCheckoutAttempts.status, ["creating", "open"]),
-      ),
-    )
-    .limit(1);
-  return resolveEntitlements({
-    organizationId,
-    deploymentMode: deploymentMode(),
-    planState: state as PlanStateLike,
-    subscription: (row as SubscriptionLike | undefined) ?? null,
-    checkoutPending: Boolean(pending),
-    now,
+  const commercial = await getBillingEngine().commercialState(organizationId, {
+    transaction: tx,
   });
+  return resolveCloudEntitlements(tx, organizationId, state, commercial, now);
 }
 
 export async function reserveTeamSlot(

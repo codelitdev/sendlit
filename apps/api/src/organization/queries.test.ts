@@ -35,6 +35,9 @@ const { getOrganizationQuotaUsage, reserveOrganizationQuotaForOutbound } = await
 const { createOrganizationEspConfig } = await import("../settings/esp/queries");
 const { createTeam } = await import("../team/queries");
 const { truncateAll } = await import("../test/db");
+const { clearCloudFakeBillingEnv, useCloudFakeBillingEnv } = await import(
+  "../test/billing"
+);
 type TestDb = import("../test/db").TestDb;
 const { listOrganizationAuditEvents } = await import("./audit");
 const {
@@ -402,10 +405,11 @@ describe("organizations", () => {
 });
 
 describe("one owned Free organization", () => {
-  const originalMode = process.env.SENDLIT_DEPLOYMENT_MODE;
+  beforeEach(() => {
+    useCloudFakeBillingEnv();
+  });
   afterEach(() => {
-    if (originalMode === undefined) delete process.env.SENDLIT_DEPLOYMENT_MODE;
-    else process.env.SENDLIT_DEPLOYMENT_MODE = originalMode;
+    clearCloudFakeBillingEnv();
   });
 
   async function seedOwner() {
@@ -485,7 +489,6 @@ describe("one owned Free organization", () => {
   }
 
   it("treats an elapsed scheduled cancellation as Free even if the plan projection is stale", async () => {
-    process.env.SENDLIT_DEPLOYMENT_MODE = "cloud";
     const owner = await seedOwner();
     const paid = await createOrganization(owner.id, "Paid");
     await attachSubscription(paid.id, owner.id, {
@@ -499,8 +502,21 @@ describe("one owned Free organization", () => {
     );
   });
 
+  it("treats an elapsed cancellation as Free even while the provider still says active", async () => {
+    const owner = await seedOwner();
+    const paid = await createOrganization(owner.id, "Paid");
+    await attachSubscription(paid.id, owner.id, {
+      status: "active",
+      cancelAtPeriodEnd: true,
+      paidThroughAt: new Date(Date.now() - 60_000),
+    });
+
+    await expect(createOrganization(owner.id, "Second")).rejects.toThrow(
+      "free_organization_already_owned",
+    );
+  });
+
   it("allows another Free organization while scheduled cancellation still has paid access", async () => {
-    process.env.SENDLIT_DEPLOYMENT_MODE = "cloud";
     const owner = await seedOwner();
     const paid = await createOrganization(owner.id, "Paid");
     await attachSubscription(paid.id, owner.id, {

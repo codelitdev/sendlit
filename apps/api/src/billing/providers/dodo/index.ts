@@ -36,6 +36,11 @@ export function dodoOptionsFromEnv(
       });
     }
   }
+  // Dodo delivers every brand's events to every endpoint. When set, events
+  // for other brands are recorded as `ignored`. Confirm the ID from a real
+  // SendLit event first (billing webhook-inspect): a wrong ID makes SendLit's
+  // own events ignored.
+  const brandId = env.DODO_BRAND_ID?.trim() || undefined;
   return {
     apiKey,
     environment:
@@ -43,6 +48,7 @@ export function dodoOptionsFromEnv(
         ? environment
         : "test_mode",
     webhookSecrets,
+    ...(brandId ? { brandId } : {}),
     clock,
   };
 }

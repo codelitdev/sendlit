@@ -8,7 +8,7 @@ import {
   billingSubscriptions,
   billingWebhookEvents,
 } from "../db/schema";
-import { captureError, captureEvent } from "../observability/posthog";
+import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import { recordBillingMetric } from "./metrics";
 

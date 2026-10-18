@@ -91,6 +91,20 @@ describe("billing origin CSRF boundary", () => {
     expect(response.json<unknown>()).toEqual({ error: "csrf_origin_invalid" });
   });
 
+  it("origin-gates cancel and resume like the other billing writes", async () => {
+    for (const path of [
+      "/organizations/org_1/billing/cancel",
+      "/organizations/org_1/billing/resume",
+    ]) {
+      const response = await requestApp(probeApp(), path, {
+        method: "POST",
+        headers: { origin: "https://evil.example" },
+      });
+      expect(response.status).toBe(403);
+      expect(response.json<unknown>()).toEqual({ error: "csrf_origin_invalid" });
+    }
+  });
+
   it("does not origin-gate billing reads", async () => {
     const response = await requestApp(
       probeApp(),

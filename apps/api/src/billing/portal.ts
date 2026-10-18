@@ -1,15 +1,16 @@
+import { BillingWorkflowError } from "@codelitdev/billing/core";
 import type { BillingActionGrant } from "@codelitdev/billing/workflows";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { organizations, user } from "../db/schema";
 import { readBillingConfig } from "./catalog";
 import { BillingCheckoutError } from "./checkout";
-import { getBillingEngine, preconsumedGrant } from "./engine";
+import { getBillingEngine } from "./engine";
 
 export async function createOrganizationPortal(input: {
   organizationId: string;
   userId: string;
-  grant?: BillingActionGrant;
+  grant: BillingActionGrant;
 }) {
   let config: ReturnType<typeof readBillingConfig>;
   try {
@@ -35,12 +36,15 @@ export async function createOrganizationPortal(input: {
   const webClient = process.env.WEB_CLIENT;
   if (!webClient) throw new BillingCheckoutError("billing_provider_unavailable", 503);
   const billing = getBillingEngine();
-  const sub = await billing.store.findEntitlementSubscription(input.organizationId);
-  if (!sub) throw new BillingCheckoutError("payment_required", 402);
+  // Check before startPortal so the single-use grant is not spent when there
+  // is no paid subscription to manage.
+  const commercial = await billing.commercialState(input.organizationId);
+  if (!commercial.activePaidPlan) {
+    throw new BillingCheckoutError("payment_required", 402);
+  }
   try {
     const session = await billing.startPortal({
-      grant:
-        input.grant ?? preconsumedGrant("portal", input.organizationId, input.userId),
+      grant: input.grant,
       entity: { kind: "organization", id: input.organizationId },
       payer: {
         id: payer.id,
@@ -52,10 +56,7 @@ export async function createOrganizationPortal(input: {
     return { portalUrl: session.portalUrl };
   } catch (error) {
     if (error instanceof BillingCheckoutError) throw error;
-    const code =
-      error && typeof error === "object" && "code" in error
-        ? String((error as { code: string }).code)
-        : "";
+    const code = error instanceof BillingWorkflowError ? error.code : "";
     if (code === "payer_mismatch" || code === "grant_invalid") {
       throw new BillingCheckoutError("billing_owner_required", 403);
     }

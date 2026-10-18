@@ -88,4 +88,50 @@ describe("dashboard API client auth handling", () => {
       ),
     ).toBe(false);
   });
+
+  it.each([
+    ["cancelOrganizationSubscription", "cancel"],
+    ["resumeOrganizationSubscription", "resume"],
+  ] as const)("%s posts with a cancellation action token", async (helper, path) => {
+    installWindow("/organizations");
+    const fetchMock = mock(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      const body = url.endsWith("/billing/action-token")
+        ? { token: "bat_1", expiresAt: "2099-01-01T00:00:00.000Z" }
+        : { accepted: true, subscriptionId: "sub_1" };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    stubGlobal("fetch", fetchMock);
+    stubGlobal("document", { cookie: "sendlit_csrf=csrf_1" });
+
+    const api = await import("./api");
+    const organizationId = "org_cB2kKmowUP3UeOHPYpzcp8S6";
+    await expect(api[helper](organizationId)).resolves.toEqual({
+      accepted: true,
+      subscriptionId: "sub_1",
+    });
+
+    expect(fetchMock.mock.calls).toHaveLength(2);
+    const [tokenUrl, tokenInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(tokenUrl).toBe("/api/proxy/billing/action-token");
+    expect(tokenInit.method).toBe("POST");
+    expect(JSON.parse(String(tokenInit.body))).toEqual({
+      action: "cancellation",
+      target: organizationId,
+    });
+
+    const [actionUrl, actionInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(actionUrl).toBe(
+      `/api/proxy/organizations/${organizationId}/billing/${path}`,
+    );
+    expect(actionInit.method).toBe("POST");
+    expect(actionInit.body).toBeUndefined();
+    expect(actionInit.headers).toMatchObject({
+      "X-Sendlit-CSRF": "csrf_1",
+      "X-Sendlit-Billing-Action-Token": "bat_1",
+    });
+  });
 });

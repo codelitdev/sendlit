@@ -1,10 +1,11 @@
-import { and, asc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { retainsPaidEntitlement } from "@codelitdev/billing/core";
+import { and, asc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { ensureOrganizationPlanState } from "../billing/entitlements";
-import { resolveEntitlements } from "../billing/policies";
+import { lockOrganizationSubscriptions } from "../billing/locks";
+import { releaseTrialClaimsForAbandonedCheckouts } from "../billing/trial-claims";
 import { db } from "../db/client";
 import {
   billingCheckoutAttempts,
-  billingPlanStates,
   billingSubscriptions,
   espConfigTeamGrants,
   organizationApiKeys,
@@ -27,82 +28,62 @@ export type OrganizationMember = typeof organizationMembers.$inferSelect;
 export type OrganizationRole = "owner" | "admin" | "member";
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-/** Billing mutations lock live subscription rows before the organization so
- * they cannot deadlock with checkout, plan-change, or webhook projection. */
-async function lockOrganizationSubscriptions(tx: Transaction, organizationId: string) {
-  return tx
-    .select({ id: billingSubscriptions.id })
-    .from(billingSubscriptions)
-    .where(eq(billingSubscriptions.billableEntityId, organizationId))
-    .orderBy(asc(billingSubscriptions.id))
-    .for("update");
-}
-
 export async function userOwnsFreeOrganization(userId: string): Promise<boolean> {
-  return db.transaction((tx) => ownsEffectiveFreeOrganization(tx, userId));
+  return ownsEffectiveFreeOrganization(null, userId);
 }
 
+/** Whether the user owns an active organization without paid access (the
+ * one-free-organization rule). Paid access is the engine's `commercialState`.
+ * With a transaction, each organization's subscriptions are locked before its
+ * plan state (the engine's lock order) and the rows stay locked. */
 async function ownsEffectiveFreeOrganization(
-  tx: Transaction,
+  tx: Transaction | null,
   userId: string,
-  now = new Date(),
 ): Promise<boolean> {
-  const owned = await tx
-    .select({
-      planState: billingPlanStates,
-      subscription: billingSubscriptions,
-    })
+  if (process.env.SENDLIT_DEPLOYMENT_MODE !== "cloud") return false;
+  const client = tx ?? db;
+  const owned = await client
+    .select({ id: organizations.id })
     .from(organizationMembers)
     .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
-    .innerJoin(
-      billingPlanStates,
-      eq(billingPlanStates.billableEntityId, organizations.id),
-    )
-    .leftJoin(
-      billingSubscriptions,
-      and(
-        eq(billingSubscriptions.billableEntityId, organizations.id),
-        eq(billingSubscriptions.id, billingPlanStates.activeSubscriptionId),
-      ),
-    )
     .where(
       and(
         eq(organizationMembers.userId, userId),
         eq(organizationMembers.role, "owner"),
         eq(organizations.status, "active"),
       ),
+    )
+    .orderBy(asc(organizations.id));
+  if (owned.length === 0) return false;
+  const { getBillingEngine } = await import("../billing/engine.js");
+  const billing = getBillingEngine();
+  for (const organization of owned) {
+    if (tx) await lockOrganizationSubscriptions(tx, organization.id);
+    const commercial = await billing.commercialState(
+      organization.id,
+      tx ? { transaction: tx } : {},
     );
-  return owned.some(({ planState, subscription }) => {
-    const entitlements = resolveEntitlements({
-      organizationId: planState.billableEntityId,
-      deploymentMode: process.env.SENDLIT_DEPLOYMENT_MODE === "cloud" ? "cloud" : "oss",
-      planState: {
-        plan: planState.plan as "free" | "pro" | "business",
-        teamsLimitOverride: planState.teamsLimitOverride,
-        contactsLimitOverride: planState.contactsLimitOverride,
-      },
-      subscription: subscription
-        ? {
-            plan: subscription.plan as "pro" | "business",
-            billingInterval: subscription.billingInterval as "month" | "year",
-            status: subscription.status as
-              | "pending"
-              | "trialing"
-              | "active"
-              | "past_due"
-              | "cancelled"
-              | "expired",
-            currentPeriodEndsAt: subscription.currentPeriodEndsAt,
-            paidThroughAt: subscription.paidThroughAt,
-            trialEndsAt: subscription.trialEndsAt,
-            graceEndsAt: subscription.graceEndsAt,
-            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
-          }
-        : null,
-      now,
-    });
-    return entitlements.plan === "free";
-  });
+    if (!commercial.activePaidPlan) return true;
+  }
+  return false;
+}
+
+/** The engine's rule for billing rows that keep an organization (or its
+ * billing manager) in place: a nonterminal subscription, or one that still
+ * grants paid access. Mirrors getBillableEntityBillingBlockers, evaluated on
+ * rows locked in the caller's transaction. */
+function blocksBillingChange(row: {
+  status: string;
+  cancelAtPeriodEnd: boolean;
+  paidThroughAt: Date | null;
+}): boolean {
+  return (
+    !["cancelled", "expired"].includes(row.status) ||
+    retainsPaidEntitlement(
+      row as Parameters<typeof retainsPaidEntitlement>[0],
+      new Date(),
+    )
+  );
 }
 
 export async function getOrganization(id: string): Promise<Organization | null> {
@@ -345,7 +326,10 @@ export async function abandonPendingOrganization(
     if (membership?.role !== "owner") {
       throw new Error("organization_owner_required");
     }
-    await tx
+    // A direct write: the engine has no public API to abandon a checkout
+    // (upstream gap). Compatible with the engine, which marks a late payment
+    // for an abandoned attempt `conflicted`.
+    const abandoned = await tx
       .update(billingCheckoutAttempts)
       .set({
         status: "abandoned",
@@ -358,7 +342,12 @@ export async function abandonPendingOrganization(
           eq(billingCheckoutAttempts.billableEntityId, organizationId),
           inArray(billingCheckoutAttempts.status, ["creating", "open"]),
         ),
-      );
+      )
+      .returning({ id: billingCheckoutAttempts.id });
+    await releaseTrialClaimsForAbandonedCheckouts(
+      tx,
+      abandoned.map((row) => row.id),
+    );
     await tx
       .update(organizations)
       .set({ status: "abandoned", updatedAt: new Date() })
@@ -396,30 +385,20 @@ export async function closeOrganization(
     throw new Error("billing_checkout_pending");
   }
   await db.transaction(async (tx) => {
-    const liveSubscriptions = await tx
-      .select({ id: billingSubscriptions.id })
+    // Re-check on locked rows so a projection cannot slip in between the
+    // blocker check above and the close.
+    const subscriptions = await tx
+      .select({
+        id: billingSubscriptions.id,
+        status: billingSubscriptions.status,
+        cancelAtPeriodEnd: billingSubscriptions.cancelAtPeriodEnd,
+        paidThroughAt: billingSubscriptions.paidThroughAt,
+      })
       .from(billingSubscriptions)
-      .where(
-        and(
-          eq(billingSubscriptions.billableEntityId, organizationId),
-          or(
-            inArray(billingSubscriptions.status, [
-              "pending",
-              "trialing",
-              "active",
-              "past_due",
-            ]),
-            and(
-              eq(billingSubscriptions.status, "cancelled"),
-              eq(billingSubscriptions.cancelAtPeriodEnd, true),
-              gt(billingSubscriptions.paidThroughAt, new Date()),
-            ),
-          ),
-        ),
-      )
+      .where(eq(billingSubscriptions.billableEntityId, organizationId))
       .orderBy(asc(billingSubscriptions.id))
       .for("update");
-    if (liveSubscriptions.length > 0) {
+    if (subscriptions.some(blocksBillingChange)) {
       throw new Error("active_subscription_exists");
     }
     const openCheckouts = await tx
@@ -579,31 +558,25 @@ async function assertBillingManagerRetained(
   organizationId: string,
   userId: string,
 ): Promise<void> {
-  const [subscription] = await tx
-    .select({ id: billingSubscriptions.id })
+  const subscriptions = await tx
+    .select({
+      id: billingSubscriptions.id,
+      status: billingSubscriptions.status,
+      cancelAtPeriodEnd: billingSubscriptions.cancelAtPeriodEnd,
+      paidThroughAt: billingSubscriptions.paidThroughAt,
+    })
     .from(billingSubscriptions)
     .where(
       and(
         eq(billingSubscriptions.billableEntityId, organizationId),
         eq(billingSubscriptions.payerId, userId),
-        or(
-          inArray(billingSubscriptions.status, [
-            "pending",
-            "trialing",
-            "active",
-            "past_due",
-          ]),
-          and(
-            eq(billingSubscriptions.status, "cancelled"),
-            eq(billingSubscriptions.cancelAtPeriodEnd, true),
-            gt(billingSubscriptions.paidThroughAt, new Date()),
-          ),
-        ),
       ),
     )
-    .limit(1)
+    .orderBy(asc(billingSubscriptions.id))
     .for("update");
-  if (subscription) throw new Error("billing_manager_required");
+  if (subscriptions.some(blocksBillingChange)) {
+    throw new Error("billing_manager_required");
+  }
 }
 
 export async function updateOrganizationMemberRole(

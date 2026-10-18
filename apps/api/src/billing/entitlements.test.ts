@@ -7,28 +7,32 @@ mock.module("../db/client", async () => {
   return { db: await makeTestDb() };
 });
 
+const { getTableName } = await import("drizzle-orm");
 const { db } = await import("../db/client");
 const {
   billingPlanStates,
-  billingPriceEntries,
-  billingProviderCustomers,
   billingSubscriptions,
   outboundMessages,
   planSendReservations,
   planSendUsageBuckets,
 } = await import("../db/schema");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { activateFakeCatalog, seedPaidSubscription, useCloudFakeBillingEnv } =
+  await import("../test/billing");
 type TestDb = import("../test/db").TestDb;
-const { commitSendReservation, reserveSend, settleExpiredSendReservation } =
-  await import("./entitlements");
-const { expireCancelledSubscriptionEntitlements } = await import(
-  "./webhooks/processor"
-);
+const {
+  commitSendReservation,
+  getOrganizationEntitlements,
+  getOrganizationEntitlementsInTransaction,
+  reserveSend,
+  settleExpiredSendReservation,
+} = await import("./entitlements");
+const { getBillingEngine } = await import("./engine");
 
 const tdb = db as unknown as TestDb;
 
 beforeEach(async () => {
-  process.env.SENDLIT_DEPLOYMENT_MODE = "cloud";
+  useCloudFakeBillingEnv();
   await truncateAll(tdb);
 });
 
@@ -145,87 +149,159 @@ describe("send usage reservations", () => {
   });
 });
 
-describe("scheduled cancellation expiry", () => {
-  async function seedSubscription(status: {
-    cancelAtPeriodEnd: boolean;
-    paidThroughAt: Date;
-    isEntitlementSource?: boolean;
-  }) {
+/** Wraps a transaction so every `SELECT ... FOR UPDATE` records its table,
+ * in order. Everything else passes through unchanged. */
+function recordLocks(tx: any, locks: string[]) {
+  const wrap = (builder: any, state: { table?: string }): any =>
+    new Proxy(builder, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== "function" || prop === "then") {
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return (...args: unknown[]) => {
+          if (prop === "from") state.table = getTableName(args[0] as never);
+          if (prop === "for" && args[0] === "update" && state.table) {
+            locks.push(state.table);
+          }
+          const result = value.apply(target, args);
+          if (result === target) return receiver;
+          return result && typeof result === "object" && !(result instanceof Promise)
+            ? wrap(result, state)
+            : result;
+        };
+      },
+    });
+  return new Proxy(tx, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (prop === "select") {
+        return (...args: unknown[]) => wrap(value.apply(target, args), {});
+      }
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+describe("entitlements from the engine's commercial state", () => {
+  beforeEach(async () => {
+    await activateFakeCatalog();
+  });
+
+  it("reads paid access, a scheduled cancellation and its paid-through date", async () => {
     const { account, organization } = await seedTeamAndContact(tdb);
-    const [price] = await tdb
-      .insert(billingPriceEntries)
-      .values({
-        offerKey: "pro_month",
-        plan: "pro",
-        billingInterval: "month",
-        currency: "USD",
-        amountMinor: 4900,
-        provider: "dodo",
-        providerProductId: `pdt_${crypto.randomUUID()}`,
-      })
-      .returning();
-    const [customer] = await tdb
-      .insert(billingProviderCustomers)
-      .values({
-        provider: "dodo",
-        payerId: account.id,
-        providerCustomerId: `cus_${crypto.randomUUID()}`,
-        idempotencyKey: `customer:dodo:${account.id}`,
-        status: "active",
-      })
-      .returning();
-    const [subscription] = await tdb
-      .insert(billingSubscriptions)
-      .values({
-        billableEntityId: organization.id,
-        billingCustomerId: customer.id,
-        payerId: account.id,
-        provider: "dodo",
-        providerSubscriptionId: `sub_${crypto.randomUUID()}`,
-        providerProductId: price.providerProductId,
-        billingPriceEntryId: price.id,
-        catalogRevision: 1,
-        offerKey: "pro_month",
-        plan: "pro",
-        billingInterval: "month",
-        status: "cancelled",
-        paidThroughAt: status.paidThroughAt,
-        cancelAtPeriodEnd: status.cancelAtPeriodEnd,
-        isEntitlementSource: status.isEntitlementSource ?? true,
-      })
-      .returning();
-    await tdb
-      .update(billingPlanStates)
-      .set({
-        plan: "pro",
-        activeSubscriptionId: subscription.id,
-      })
-      .where(eq(billingPlanStates.billableEntityId, organization.id));
-    return { organization, subscription };
-  }
+    const paidThroughAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    await seedPaidSubscription(tdb, {
+      organizationId: organization.id,
+      payerId: account.id,
+      offerKey: "business_year",
+      cancelAtPeriodEnd: true,
+      paidThroughAt,
+    });
+    const entitlements = await getOrganizationEntitlements(organization.id);
+    expect(entitlements).toMatchObject({
+      plan: "business",
+      interval: "year",
+      paymentStatus: "cancel_at_period_end",
+      cancelAtPeriodEnd: true,
+      teamsLimit: 25,
+    });
+    expect(entitlements.paidThroughAt?.toISOString()).toBe(paidThroughAt.toISOString());
+  });
+
+  it("drops paid access once a scheduled cancellation's paid-through date passes", async () => {
+    const { account, organization } = await seedTeamAndContact(tdb);
+    // alpha.3 kept this paid because the provider still says active.
+    await seedPaidSubscription(tdb, {
+      organizationId: organization.id,
+      payerId: account.id,
+      status: "active",
+      cancelAtPeriodEnd: true,
+      paidThroughAt: new Date(Date.now() - 60_000),
+    });
+    expect(await getOrganizationEntitlements(organization.id)).toMatchObject({
+      plan: "free",
+      paymentStatus: "free",
+      teamsLimit: 1,
+    });
+  });
+
+  it("applies the past-due grace from SendLit's own column", async () => {
+    const { account, organization } = await seedTeamAndContact(tdb);
+    const graceEndsAt = new Date(Date.now() - 1_000);
+    await seedPaidSubscription(tdb, {
+      organizationId: organization.id,
+      payerId: account.id,
+      status: "past_due",
+      graceEndsAt,
+    });
+    const entitlements = await getOrganizationEntitlements(organization.id);
+    expect(entitlements).toMatchObject({
+      plan: "pro",
+      paymentStatus: "past_due",
+      canSend: false,
+    });
+    expect(entitlements.graceEndsAt?.toISOString()).toBe(graceEndsAt.toISOString());
+  });
+
+  it("locks subscriptions before the plan state inside a quota transaction", async () => {
+    const { account, organization } = await seedTeamAndContact(tdb);
+    await seedPaidSubscription(tdb, {
+      organizationId: organization.id,
+      payerId: account.id,
+    });
+    const locks: string[] = [];
+    const entitlements = await tdb.transaction((tx) =>
+      getOrganizationEntitlementsInTransaction(
+        recordLocks(tx, locks) as never,
+        organization.id,
+      ),
+    );
+    expect(entitlements.plan).toBe("pro");
+    // Same order as the engine's projection: subscription, then plan state.
+    expect(locks[0]).toBe("billing_subscriptions");
+    expect(locks.indexOf("billing_plan_states")).toBeGreaterThan(0);
+    // commercialState read its rows in this transaction (locked).
+    expect(locks).toContain("billing_checkout_attempts");
+  });
+});
+
+describe("scheduled cancellation expiry", () => {
+  beforeEach(async () => {
+    await activateFakeCatalog();
+  });
 
   it("keeps scheduled cancellation paid until the verified paid-through time", async () => {
-    const { organization } = await seedSubscription({
+    const { account, organization } = await seedTeamAndContact(tdb);
+    await seedPaidSubscription(tdb, {
+      organizationId: organization.id,
+      payerId: account.id,
       cancelAtPeriodEnd: true,
       paidThroughAt: new Date(Date.now() + 60_000),
     });
-    expect(await expireCancelledSubscriptionEntitlements()).toBe(0);
+    expect(await getBillingEngine().runDeadlineBatch()).toBe(0);
     const [state] = await tdb
       .select()
       .from(billingPlanStates)
       .where(eq(billingPlanStates.billableEntityId, organization.id));
-    expect(state).toMatchObject({
-      plan: "pro",
-      activeSubscriptionId: expect.any(String),
-    });
+    expect(state?.activeSubscriptionId).toEqual(expect.any(String));
+    expect((await getOrganizationEntitlements(organization.id)).plan).toBe("pro");
   });
 
-  it("projects elapsed scheduled cancellation to Free", async () => {
-    const { organization, subscription } = await seedSubscription({
+  it("releases an elapsed scheduled cancellation through the engine without writing plan_states.plan", async () => {
+    const { account, organization } = await seedTeamAndContact(tdb);
+    const { subscription } = await seedPaidSubscription(tdb, {
+      organizationId: organization.id,
+      payerId: account.id,
       cancelAtPeriodEnd: true,
       paidThroughAt: new Date(Date.now() - 60_000),
     });
-    expect(await expireCancelledSubscriptionEntitlements()).toBe(1);
+    // A stale value SendLit must neither read nor rewrite.
+    await tdb
+      .update(billingPlanStates)
+      .set({ plan: "pro" })
+      .where(eq(billingPlanStates.billableEntityId, organization.id));
+    expect(await getBillingEngine().runDeadlineBatch()).toBe(1);
     const [state] = await tdb
       .select()
       .from(billingPlanStates)
@@ -234,10 +310,8 @@ describe("scheduled cancellation expiry", () => {
       .select()
       .from(billingSubscriptions)
       .where(eq(billingSubscriptions.id, subscription.id));
-    expect(state).toMatchObject({
-      plan: "free",
-      activeSubscriptionId: null,
-    });
-    expect(row.isEntitlementSource).toBe(false);
+    expect(state).toMatchObject({ plan: "pro", activeSubscriptionId: null });
+    expect(row?.isEntitlementSource).toBe(false);
+    expect((await getOrganizationEntitlements(organization.id)).plan).toBe("free");
   });
 });

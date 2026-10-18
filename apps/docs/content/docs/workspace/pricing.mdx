@@ -95,21 +95,27 @@ SendLit owns the plan-change flow. From **Organizations → Plan**, choose
   being confirmed.
 
 **Manage billing** opens the payment provider's hosted portal for the selected
-organization. Use it to update a card, view invoices, cancel a subscription,
-or recover a failed payment. Plan and interval changes are initiated in
-SendLit, not by editing the subscription in the provider portal.
+organization. Use it to update a card, view invoices, or recover a failed
+payment. Plan changes and cancellation are initiated in SendLit, not by
+editing the subscription in the provider portal.
 
 ## Cancellation and expiry
 
-Cancellation normally takes effect at the end of the current paid period.
-Until that verified paid-through time, the organization keeps its paid plan
-and entitlements. Cancelling immediately (not at period end) removes paid
-access as soon as SendLit receives the provider update, even if the previous
-period end is still in the future. The Organizations **Plan** tab shows the
-cancellation status when the provider update has been received.
+Organization owners cancel from **Organizations → Plan** with **Cancel plan**.
+Cancellation is scheduled for the end of the current paid period: the
+organization keeps its paid plan and entitlements until the **Access until**
+date shown on the Plan tab, and is not charged again.
 
-Checkout, plan changes, the billing portal, and closing an organization
-require a recent sign-in. If the current session is too old, SendLit asks you
+Changed your mind? Choose **Resume** on the Plan tab any time before the
+**Access until** date. The subscription continues and renews as usual, with no
+new checkout.
+
+If a subscription is cancelled immediately (not at period end), for example
+by the payment provider, paid access ends as soon as SendLit receives the
+provider update, even if the previous period end is still in the future.
+
+Checkout, plan changes, cancelling or resuming a plan, the billing portal, and
+closing an organization require a recent sign-in. If the current session is too old, SendLit asks you
 to sign in again before it can continue.
 
 If a checkout is interrupted, returning to the same organization and plan

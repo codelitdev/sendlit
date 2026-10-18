@@ -1,222 +1,67 @@
-import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 import { eq } from "drizzle-orm";
-
-const catalogMocks = {
-  requireActiveCatalog: vi.fn(),
-  verifyCheckoutOffer: vi.fn(),
-  getBillingProvider: vi.fn(),
-};
 
 mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
 
-mock.module("./catalog-store", () => ({
-  requireActiveCatalog: catalogMocks.requireActiveCatalog,
-  verifyCheckoutOffer: catalogMocks.verifyCheckoutOffer,
-}));
-
-mock.module("./provider-registry", () => ({
-  getBillingProvider: catalogMocks.getBillingProvider,
-}));
-
 const { db } = await import("../db/client");
-const {
-  billingCatalogRevisionItems,
-  billingCatalogRevisions,
-  billingPlanStates,
-  billingPriceEntries,
-  billingProviderCustomers,
-  billingSubscriptions,
-} = await import("../db/schema");
+const { billingPlanStates, billingSubscriptions, verification } = await import(
+  "../db/schema"
+);
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
+const { activateFakeCatalog, seedPaidSubscription, useCloudFakeBillingEnv } =
+  await import("../test/billing");
 type TestDb = import("../test/db").TestDb;
 const { createOrganizationPlanChange } = await import("./plan-change");
+const { getBillingActionGrants } = await import("./engine");
 
 const tdb = db as unknown as TestDb;
 
-function cloudBillingEnv() {
-  process.env.SENDLIT_DEPLOYMENT_MODE = "cloud";
-  process.env.BILLING_CHECKOUT_PROVIDER = "dodo";
-  process.env.BILLING_ENABLED_PROVIDERS = "dodo";
-  process.env.BILLING_CATALOG_REVISION = "1";
-  process.env.BILLING_CURRENCY = "USD";
-  process.env.BILLING_PRO_MONTH_AMOUNT_MINOR = "4900";
-  process.env.BILLING_PRO_YEAR_AMOUNT_MINOR = "49000";
-  process.env.BILLING_BUSINESS_MONTH_AMOUNT_MINOR = "19900";
-  process.env.BILLING_BUSINESS_YEAR_AMOUNT_MINOR = "199000";
-  process.env.DODO_PRO_MONTH_PRODUCT_ID = "pdt_pro_month";
-  process.env.DODO_PRO_YEAR_PRODUCT_ID = "pdt_pro_year";
-  process.env.DODO_BUSINESS_MONTH_PRODUCT_ID = "pdt_business_month";
-  process.env.DODO_BUSINESS_YEAR_PRODUCT_ID = "pdt_business_year";
-}
-
 beforeEach(async () => {
-  cloudBillingEnv();
-  catalogMocks.requireActiveCatalog.mockReset();
-  catalogMocks.verifyCheckoutOffer.mockReset();
-  catalogMocks.getBillingProvider.mockReset();
-  process.env.WEB_CLIENT = "http://localhost:3000";
-  catalogMocks.getBillingProvider.mockReturnValue({
-    provider: "dodo",
-    capabilities: {
-      planChanges: true,
-      intervalChanges: true,
-      portalPlanChanges: false,
-      portalIntervalChanges: false,
-      proratedPlanChanges: true,
-      mutationRecovery: {
-        createCustomer: "idempotency_key",
-        createCheckout: "idempotency_key",
-        planChange: "idempotency_key",
-        cancellation: "idempotency_key",
-      },
-    },
-    changeSubscriptionPlan: vi.fn().mockResolvedValue({
-      provider: "dodo",
-      providerPaymentId: null,
-      paymentUrl: null,
-    }),
-    retrieveProduct: vi.fn(),
-    createPortalSession: vi.fn(),
-  });
+  useCloudFakeBillingEnv();
   await truncateAll(tdb);
+  await activateFakeCatalog();
 });
 
 async function seedActiveSubscription() {
   const { account, organization } = await seedTeamAndContact(tdb);
-  const [currentPrice] = await tdb
-    .insert(billingPriceEntries)
-    .values({
-      offerKey: "pro_month",
-      plan: "pro",
-      billingInterval: "month",
-      currency: "USD",
-      amountMinor: 4900,
-      provider: "dodo",
-      providerProductId: "pdt_pro_month",
-    })
-    .returning();
-  const [targetPrice] = await tdb
-    .insert(billingPriceEntries)
-    .values({
-      offerKey: "business_month",
-      plan: "business",
-      billingInterval: "month",
-      currency: "USD",
-      amountMinor: 19900,
-      provider: "dodo",
-      providerProductId: "pdt_business_month",
-    })
-    .returning();
-  const extras = await tdb
-    .insert(billingPriceEntries)
-    .values([
-      {
-        offerKey: "pro_year",
-        plan: "pro",
-        billingInterval: "year",
-        currency: "USD",
-        amountMinor: 49000,
-        provider: "dodo",
-        providerProductId: "pdt_pro_year",
-      },
-      {
-        offerKey: "business_year",
-        plan: "business",
-        billingInterval: "year",
-        currency: "USD",
-        amountMinor: 199000,
-        provider: "dodo",
-        providerProductId: "pdt_business_year",
-      },
-    ])
-    .returning();
-  const [revision] = await tdb
-    .insert(billingCatalogRevisions)
-    .values({
-      revision: 1,
-      checkoutProvider: "dodo",
-      status: "active",
-      activatedAt: new Date(),
-    })
-    .returning();
-  await tdb.insert(billingCatalogRevisionItems).values([
-    {
-      catalogRevisionId: revision!.id,
-      offerKey: "pro_month",
-      billingPriceEntryId: currentPrice.id,
-    },
-    {
-      catalogRevisionId: revision!.id,
-      offerKey: "business_month",
-      billingPriceEntryId: targetPrice.id,
-    },
-    {
-      catalogRevisionId: revision!.id,
-      offerKey: "pro_year",
-      billingPriceEntryId: extras[0]!.id,
-    },
-    {
-      catalogRevisionId: revision!.id,
-      offerKey: "business_year",
-      billingPriceEntryId: extras[1]!.id,
-    },
-  ]);
-  const [customer] = await tdb
-    .insert(billingProviderCustomers)
-    .values({
-      provider: "dodo",
-      payerId: account.id,
-      providerCustomerId: `cus_${crypto.randomUUID()}`,
-      idempotencyKey: `customer:dodo:${account.id}`,
-      status: "active",
-    })
-    .returning();
-  const [subscription] = await tdb
-    .insert(billingSubscriptions)
-    .values({
-      billableEntityId: organization.id,
-      billingCustomerId: customer.id,
-      payerId: account.id,
-      provider: "dodo",
-      providerSubscriptionId: `sub_${crypto.randomUUID()}`,
-      providerProductId: currentPrice.providerProductId,
-      billingPriceEntryId: currentPrice.id,
-      catalogRevision: 1,
-      offerKey: "pro_month",
-      plan: "pro",
-      billingInterval: "month",
-      status: "active",
-      isEntitlementSource: true,
-    })
-    .returning();
-  await tdb
-    .update(billingPlanStates)
-    .set({
-      plan: "pro",
-      activeSubscriptionId: subscription.id,
-    })
-    .where(eq(billingPlanStates.billableEntityId, organization.id));
-  catalogMocks.requireActiveCatalog.mockResolvedValue({
-    revision: { revision: 1, status: "active" },
-    items: [
-      { offerKey: "pro_month", price: currentPrice },
-      { offerKey: "business_month", price: targetPrice },
-    ],
+  const { subscription } = await seedPaidSubscription(tdb, {
+    organizationId: organization.id,
+    payerId: account.id,
   });
-  catalogMocks.verifyCheckoutOffer.mockResolvedValue(undefined);
-  return { account, organization, subscription, targetPrice };
+  const grants = getBillingActionGrants();
+  const target = { kind: "organization", id: organization.id };
+  const issued = await grants.issue({
+    actorId: account.id,
+    sessionId: "session-1",
+    sessionCreatedAt: new Date(),
+    action: "plan_change",
+    target,
+  });
+  if (!issued.ok) throw new Error("grant_not_issued");
+  const grant = grants.grant({
+    token: issued.token,
+    actorId: account.id,
+    sessionId: "session-1",
+    action: "plan_change",
+    target,
+  });
+  return { account, organization, subscription, grant };
 }
 
-describe("plan-change pointer revalidation", () => {
+async function grantRows() {
+  return tdb.select().from(verification);
+}
+
+describe("plan-change pre-checks on the engine's commercial state", () => {
   it("rejects a plan change when the active subscription pointer has been cleared", async () => {
-    const { account, organization } = await seedActiveSubscription();
+    const { account, organization, grant } = await seedActiveSubscription();
     await tdb
       .update(billingPlanStates)
-      .set({ plan: "free", activeSubscriptionId: null })
+      .set({ activeSubscriptionId: null })
       .where(eq(billingPlanStates.billableEntityId, organization.id));
 
     await expect(
@@ -226,15 +71,19 @@ describe("plan-change pointer revalidation", () => {
         plan: "business",
         interval: "month",
         catalogRevision: 1,
+        grant,
       }),
     ).rejects.toMatchObject({
       code: "billing_subscription_required",
       status: 402,
     });
+    // The single-use grant is not spent on a request that cannot succeed.
+    expect(await grantRows()).toHaveLength(1);
   });
 
-  it("rejects a plan change when the locked active subscription is no longer changeable", async () => {
-    const { account, organization, subscription } = await seedActiveSubscription();
+  it("rejects a plan change when the subscription is no longer changeable", async () => {
+    const { account, organization, subscription, grant } =
+      await seedActiveSubscription();
     await tdb
       .update(billingSubscriptions)
       .set({ status: "cancelled", cancelAtPeriodEnd: true })
@@ -247,10 +96,58 @@ describe("plan-change pointer revalidation", () => {
         plan: "business",
         interval: "month",
         catalogRevision: 1,
+        grant,
       }),
     ).rejects.toMatchObject({
       code: "billing_subscription_not_changeable",
       status: 409,
     });
+  });
+
+  it("rejects the current offer as the same plan", async () => {
+    const { account, organization, grant } = await seedActiveSubscription();
+    await expect(
+      createOrganizationPlanChange({
+        organizationId: organization.id,
+        actorId: account.id,
+        plan: "pro",
+        interval: "month",
+        catalogRevision: 1,
+        grant,
+      }),
+    ).rejects.toMatchObject({ code: "billing_plan_change_same_plan", status: 409 });
+  });
+
+  it("starts an upgrade through the engine and consumes the grant", async () => {
+    const { account, organization, grant } = await seedActiveSubscription();
+    const result = await createOrganizationPlanChange({
+      organizationId: organization.id,
+      actorId: account.id,
+      plan: "business",
+      interval: "month",
+      catalogRevision: 1,
+      grant,
+    });
+    expect(result).toMatchObject({
+      targetPlan: "business",
+      targetInterval: "month",
+      effectiveAt: "immediately",
+    });
+    expect(await grantRows()).toHaveLength(0);
+  });
+
+  it("maps a payer mismatch to billing_owner_required", async () => {
+    const { organization, grant } = await seedActiveSubscription();
+    const { account: other } = await seedTeamAndContact(tdb);
+    await expect(
+      createOrganizationPlanChange({
+        organizationId: organization.id,
+        actorId: other.id,
+        plan: "business",
+        interval: "month",
+        catalogRevision: 1,
+        grant: { ...grant, actorId: other.id },
+      }),
+    ).rejects.toMatchObject({ code: "billing_owner_required", status: 403 });
   });
 });

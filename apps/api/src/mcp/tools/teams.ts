@@ -61,10 +61,13 @@ export function registerTeamTools(server: McpToolRegistrar): void {
   server.registerTool(
     "get_plan_usage",
     {
-      description: "Returns plan usage and limits for the current team's organization.",
+      description:
+        "Returns plan usage and limits for the current team's organization. When cancelAtPeriodEnd is true the paid plan ends at paidThroughAt.",
       outputSchema: z.object({
         plan: z.enum(["oss", "free", "pro", "business"]),
         paymentStatus: z.string(),
+        cancelAtPeriodEnd: z.boolean(),
+        paidThroughAt: z.string().nullable(),
         teams: z.number().int().nonnegative(),
         subscribedContacts: z.number().int().nonnegative(),
         monthlySends: z.number().int().nonnegative(),
@@ -99,6 +102,8 @@ export function registerTeamTools(server: McpToolRegistrar): void {
           ...usage,
           plan: entitlements.plan,
           paymentStatus: entitlements.paymentStatus,
+          cancelAtPeriodEnd: entitlements.cancelAtPeriodEnd,
+          paidThroughAt: entitlements.paidThroughAt?.toISOString() ?? null,
           teamsLimit: entitlements.teamsLimit,
           subscribedContactsLimit: entitlements.subscribedContactsLimit,
           monthlySendsLimit: entitlements.monthlySendsLimit,

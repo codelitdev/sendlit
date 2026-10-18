@@ -59,6 +59,9 @@ export const organizationBillingSchema = z.object({
   paymentStatus: paymentStatusSchema,
   trialEndsAt: z.string().nullable(),
   currentPeriodEndsAt: z.string().nullable(),
+  /** When paid access ends if the subscription is not renewed. With
+   * `cancelAtPeriodEnd`, this is the "access until" date. */
+  paidThroughAt: z.string().nullable(),
   cancelAtPeriodEnd: z.boolean(),
   graceEndsAt: z.string().nullable(),
   canManageBilling: z.boolean(),
@@ -95,6 +98,7 @@ export const billingActionSchema = z.enum([
   "checkout",
   "portal",
   "plan_change",
+  "cancellation",
   "organization_close",
   "pending_hide",
 ]);
@@ -107,6 +111,11 @@ export const billingActionTokenBodySchema = z.object({
 export const billingActionTokenResponseSchema = z.object({
   token: z.string().min(32),
   expiresAt: z.string().datetime(),
+});
+
+export const billingCancellationResponseSchema = z.object({
+  accepted: z.literal(true),
+  subscriptionId: z.string(),
 });
 
 export const billingPlanChangeBodySchema = z.object({

@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-import type { FakeBillingProvider } from "./providers/fake";
-
 mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
@@ -9,51 +7,38 @@ mock.module("../db/client", async () => {
 
 const { db } = await import("../db/client");
 const { truncateAll } = await import("../test/db");
+const { activateFakeCatalog, fakeProvider, useCloudFakeBillingEnv } = await import(
+  "../test/billing"
+);
 type TestDb = import("../test/db").TestDb;
 const { readBillingConfig } = await import("./catalog");
-const { getActiveCatalog, verifyCatalogAgainstProvider } = await import(
-  "./catalog-store"
-);
-const { getBillingProvider, resetBillingProviderInstances } = await import(
-  "./provider-registry"
-);
+const { getPublicCatalog, recordRequestedCatalogRevision, requirePublicCatalog } =
+  await import("./catalog-store");
+const { getBillingEngine } = await import("./engine");
+const { resetBillingProviderInstances } = await import("./provider-registry");
 
 const tdb = db as unknown as TestDb;
 
-function cloudFakeEnv() {
-  process.env.SENDLIT_DEPLOYMENT_MODE = "cloud";
-  process.env.BILLING_CHECKOUT_PROVIDER = "fake";
-  process.env.BILLING_ENABLED_PROVIDERS = "fake";
-  process.env.BILLING_CATALOG_REVISION = "1";
-  process.env.BILLING_CURRENCY = "USD";
-  process.env.BILLING_PRO_MONTH_AMOUNT_MINOR = "4900";
-  process.env.BILLING_PRO_YEAR_AMOUNT_MINOR = "49000";
-  process.env.BILLING_BUSINESS_MONTH_AMOUNT_MINOR = "19900";
-  process.env.BILLING_BUSINESS_YEAR_AMOUNT_MINOR = "199000";
-  process.env.FAKE_PRO_MONTH_PRODUCT_ID = "pdt_pro_month";
-  process.env.FAKE_PRO_YEAR_PRODUCT_ID = "pdt_pro_year";
-  process.env.FAKE_BUSINESS_MONTH_PRODUCT_ID = "pdt_business_month";
-  process.env.FAKE_BUSINESS_YEAR_PRODUCT_ID = "pdt_business_year";
-  process.env.BILLING_TRIAL_EMAIL_HMAC_KEY = "trial-hmac-secret";
-}
-
 beforeEach(async () => {
-  cloudFakeEnv();
+  useCloudFakeBillingEnv();
   resetBillingProviderInstances();
   await truncateAll(tdb);
 });
 
 describe("catalog verification against the fake adapter", () => {
   it("activates a four-offer revision when products match", async () => {
-    getBillingProvider("fake");
-    await verifyCatalogAgainstProvider(readBillingConfig());
-    const active = await getActiveCatalog(readBillingConfig());
-    expect(active.revision.revision).toBe(1);
-    expect(active.items).toHaveLength(4);
+    await activateFakeCatalog();
+    const active = await getPublicCatalog(readBillingConfig());
+    expect(active.revision).toBe(1);
+    expect(active.offers).toHaveLength(4);
+    expect(active.checkoutAvailable).toBe(true);
+    await expect(
+      requirePublicCatalog(readBillingConfig(), "pro_month"),
+    ).resolves.toMatchObject({ revision: 1 });
   });
 
-  it("rejects a provider amount mismatch without activating", async () => {
-    const provider = getBillingProvider("fake") as FakeBillingProvider;
+  it("does not activate on a provider amount mismatch", async () => {
+    const provider = await fakeProvider();
     provider.seedProduct({
       provider: "fake",
       providerProductId: "pdt_pro_month",
@@ -61,8 +46,19 @@ describe("catalog verification against the fake adapter", () => {
       amountMinor: 9900,
       interval: "month",
     });
-    await expect(verifyCatalogAgainstProvider(readBillingConfig())).rejects.toThrow(
+    await recordRequestedCatalogRevision(readBillingConfig());
+    const result = await getBillingEngine().verifyRequestedCatalog();
+    expect(result.verified).toBe(false);
+    await expect(getPublicCatalog(readBillingConfig())).rejects.toThrow(
       /billing_catalog_unavailable/,
     );
+  });
+
+  it("reports a changed catalog when another revision is requested", async () => {
+    await activateFakeCatalog();
+    process.env.BILLING_CATALOG_REVISION = "2";
+    await expect(
+      requirePublicCatalog(readBillingConfig(), "pro_month"),
+    ).rejects.toThrow("billing_catalog_changed");
   });
 });

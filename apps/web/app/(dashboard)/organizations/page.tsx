@@ -97,6 +97,7 @@ import {
   archiveOrganizationTeam,
   type BillingCatalog,
   type CreatedOrganizationApiKey,
+  cancelOrganizationSubscription,
   createOrganization,
   createOrganizationBillingCheckout,
   createOrganizationBillingPlanChange,
@@ -140,6 +141,7 @@ import {
   removeOrganizationMember,
   renameOrganizationTeam,
   resumeOrganizationEsp,
+  resumeOrganizationSubscription,
   retireOrganizationEsp,
   revokeOrganizationKey,
   revokeOrganizationSendingDomain,
@@ -243,6 +245,8 @@ const ORGANIZATION_ERROR_MESSAGES: Record<string, string> = {
     "An organization must have at least one owner. Add another owner before changing this role.",
   member_exists: "That person is already a member of this organization.",
   member_not_found: "That organization member could not be found.",
+  operation_conflicted:
+    "Your previous cancellation is still being processed. Try again in a moment.",
   organization_esp_permission_required:
     "You need organization administrator access to manage shared mailboxes.",
   organization_membership_required:
@@ -816,6 +820,7 @@ export default function OrganizationsPage() {
                   billing={billing}
                   onUpgrade={() => setBillingDialogOpen(true)}
                   onChangePlan={() => setPlanChangeDialogOpen(true)}
+                  onChanged={refresh}
                 />
               </div>
             ) : null}
@@ -933,6 +938,7 @@ export default function OrganizationsPage() {
                           billing={billing}
                           onUpgrade={() => setBillingDialogOpen(true)}
                           onChangePlan={() => setPlanChangeDialogOpen(true)}
+                          onChanged={refresh}
                         />
                       ) : (
                         <Loading />
@@ -1071,14 +1077,23 @@ function OrganizationPlanSummary({
   billing,
   onUpgrade,
   onChangePlan,
+  onChanged,
 }: {
   organizationId: string;
   billing: OrganizationBilling;
   onUpgrade: () => void;
   onChangePlan: () => void;
+  onChanged: () => Promise<void>;
 }) {
   const { usage, entitlements } = billing;
   const periodEnd = formatBillingDate(billing.currentPeriodEndsAt);
+  // Once cancellation is scheduled, paid access ends at `paidThroughAt`, which
+  // can differ from the billing period end.
+  const accessEnd = formatBillingDate(billing.paidThroughAt);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancellationAction, setCancellationAction] = useState<
+    "cancel" | "resume" | null
+  >(null);
   const trialEnd = formatBillingDate(billing.trialEndsAt);
   // Providers may represent a period-end cancellation as either an explicit
   // cancel-at-period-end flag or a cancelled subscription that remains paid
@@ -1090,7 +1105,7 @@ function OrganizationPlanSummary({
   const cancellationPending =
     cancellationRequested &&
     (billing.plan === "pro" || billing.plan === "business") &&
-    hasFutureBillingDate(billing.currentPeriodEndsAt);
+    hasFutureBillingDate(billing.paidThroughAt);
   const subscriptionExpired =
     billing.paymentStatus === "expired" ||
     (billing.plan === "free" && billing.paymentStatus === "cancelled");
@@ -1099,8 +1114,8 @@ function OrganizationPlanSummary({
       ? `Ended ${periodEnd}`
       : null
     : cancellationPending
-      ? periodEnd
-        ? `Access until ${periodEnd}`
+      ? accessEnd
+        ? `Access until ${accessEnd}`
         : null
       : trialEnd
         ? `Trial ends ${trialEnd}`
@@ -1116,6 +1131,51 @@ function OrganizationPlanSummary({
       toast.error(errorMessage(error, "Unable to open billing portal"));
     }
   }
+
+  const isPaidPlan = billing.plan === "pro" || billing.plan === "business";
+  const canCancel = billing.canManageBilling && isPaidPlan && !cancellationRequested;
+  // Resume clears a scheduled cancellation on the still-active subscription;
+  // it never starts a new checkout.
+  const canResume = billing.canManageBilling && isPaidPlan && billing.cancelAtPeriodEnd;
+  const cancelAccessEnd = accessEnd ?? periodEnd;
+
+  async function changeCancellation(action: "cancel" | "resume") {
+    setCancellationAction(action);
+    try {
+      if (action === "cancel") {
+        await cancelOrganizationSubscription(organizationId);
+      } else {
+        await resumeOrganizationSubscription(organizationId);
+      }
+      setCancelDialogOpen(false);
+      toast.success(
+        action === "cancel"
+          ? "Cancellation scheduled for the end of the paid period"
+          : "Your plan will renew as usual",
+      );
+      await onChanged();
+    } catch (error) {
+      toast.error(
+        errorMessage(
+          error,
+          action === "cancel" ? "Unable to cancel plan" : "Unable to resume plan",
+        ),
+      );
+    } finally {
+      setCancellationAction(null);
+    }
+  }
+
+  const resumeButton = canResume ? (
+    <Button
+      variant="outline"
+      className="shrink-0"
+      disabled={cancellationAction !== null}
+      onClick={() => void changeCancellation("resume")}
+    >
+      {cancellationAction === "resume" ? "Resuming…" : "Resume"}
+    </Button>
+  ) : null;
 
   return (
     <Card className="mb-6 overflow-hidden">
@@ -1149,6 +1209,46 @@ function OrganizationPlanSummary({
                   Manage billing
                 </Button>
               </>
+            ) : null}
+            {canCancel ? (
+              <AlertDialog
+                open={cancelDialogOpen}
+                onOpenChange={(open) => {
+                  if (cancellationAction === null) setCancelDialogOpen(open);
+                }}
+              >
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline">Cancel plan</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Cancel plan?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Your {PLAN_LABELS[billing.plan]} plan will not renew. Paid access
+                      continues until the end of the current paid period
+                      {cancelAccessEnd ? ` (${cancelAccessEnd})` : ""}, then the
+                      organization moves to Free. You can resume the plan any time
+                      before then.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={cancellationAction !== null}>
+                      Keep plan
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      variant="destructive"
+                      disabled={cancellationAction !== null}
+                      onClick={(event) => {
+                        // Keep the dialog open until the request settles.
+                        event.preventDefault();
+                        void changeCancellation("cancel");
+                      }}
+                    >
+                      {cancellationAction === "cancel" ? "Cancelling…" : "Cancel plan"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             ) : null}
             <Badge
               variant={billing.plan === "free" ? "secondary" : "success"}
@@ -1257,22 +1357,26 @@ function OrganizationPlanSummary({
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold">Cancellation scheduled</p>
-                  {periodEnd ? (
+                  {accessEnd ? (
                     <Badge
                       variant="outline"
                       className="border-amber-300/70 text-amber-800 dark:border-amber-300/30 dark:text-amber-200"
                     >
-                      Ends {periodEnd}
+                      Ends {accessEnd}
                     </Badge>
                   ) : null}
                 </div>
-                <p>
-                  Your {PLAN_LABELS[billing.plan]} plan remains active
-                  {periodEnd
-                    ? ` until ${periodEnd}`
-                    : " through the current billing period"}
-                  . Paid features are available until then.
-                </p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p>
+                    Your {PLAN_LABELS[billing.plan]} plan remains active
+                    {accessEnd
+                      ? ` until ${accessEnd}`
+                      : " through the current billing period"}
+                    . Paid features are available until then.
+                    {canResume ? " Resume to keep your plan renewing as usual." : ""}
+                  </p>
+                  {resumeButton}
+                </div>
                 <div className="grid gap-2 pt-1 text-xs sm:grid-cols-2">
                   <div className="rounded-lg border border-amber-300/60 bg-background/40 p-3 dark:border-amber-300/20">
                     <p className="font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
@@ -1329,9 +1433,14 @@ function OrganizationPlanSummary({
         cancellationRequested &&
         (billing.plan === "pro" || billing.plan === "business") ? (
           <Banner variant="warning" className="rounded-xl p-4">
-            This subscription is cancelled. Your paid features remain available through
-            the current billing period. The provider has not supplied an exact end date
-            yet.
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p>
+                This subscription is cancelled. Your paid features remain available
+                through the current billing period. The provider has not supplied an
+                exact end date yet.
+              </p>
+              {resumeButton}
+            </div>
           </Banner>
         ) : null}
       </CardContent>

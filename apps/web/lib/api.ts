@@ -747,6 +747,7 @@ type BillingAction =
   | "checkout"
   | "portal"
   | "plan_change"
+  | "cancellation"
   | "organization_close"
   | "pending_hide";
 
@@ -1351,6 +1352,9 @@ export interface OrganizationBilling {
   paymentStatus: OrganizationPaymentStatus;
   trialEndsAt: string | null;
   currentPeriodEndsAt: string | null;
+  /** When paid access ends if the subscription is not renewed. With
+   * `cancelAtPeriodEnd`, this is the "access until" date. */
+  paidThroughAt: string | null;
   cancelAtPeriodEnd: boolean;
   graceEndsAt: string | null;
   canManageBilling: boolean;
@@ -1395,6 +1399,31 @@ export function createOrganizationBillingPortal(organizationId: string) {
     "portal",
     organizationId,
     `/organizations/${organizationId}/billing/portal`,
+    { method: "POST" },
+  );
+}
+
+export interface OrganizationCancellationResult {
+  accepted: true;
+  subscriptionId: string;
+}
+
+/** Schedules cancellation at the end of the paid period. Idempotent. */
+export function cancelOrganizationSubscription(organizationId: string) {
+  return billingActionRequest<OrganizationCancellationResult>(
+    "cancellation",
+    organizationId,
+    `/organizations/${organizationId}/billing/cancel`,
+    { method: "POST" },
+  );
+}
+
+/** Clears a scheduled cancellation before the paid period ends. Idempotent. */
+export function resumeOrganizationSubscription(organizationId: string) {
+  return billingActionRequest<OrganizationCancellationResult>(
+    "cancellation",
+    organizationId,
+    `/organizations/${organizationId}/billing/resume`,
     { method: "POST" },
   );
 }

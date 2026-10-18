@@ -285,6 +285,10 @@ export function assertBillingProviderConfig(
     if (environment !== "test_mode" && environment !== "live_mode") {
       throw new BillingConfigurationError("DODO_PAYMENTS_ENVIRONMENT_invalid");
     }
+    const brandId = env.DODO_BRAND_ID?.trim();
+    if (brandId && (brandId.length > 256 || /\s/.test(brandId))) {
+      throw new BillingConfigurationError("DODO_BRAND_ID_invalid");
+    }
     const previous = env.DODO_PAYMENTS_WEBHOOK_KEY_PREVIOUS?.trim();
     const expires = env.DODO_PAYMENTS_WEBHOOK_KEY_PREVIOUS_EXPIRES_AT;
     if (previous) {

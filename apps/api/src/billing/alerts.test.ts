@@ -12,7 +12,7 @@ mock.module("nodemailer", () => ({
 mock.module("../services/log", () => ({
   default: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
-mock.module("../observability/posthog", () => ({
+mock.module("../observability", () => ({
   captureError: vi.fn(),
   captureEvent: vi.fn(),
 }));

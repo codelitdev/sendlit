@@ -67,9 +67,10 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
   await db.delete(schema.billingTrialClaims);
   await db.delete(schema.billingReconciliationJobs);
   await db.delete(schema.billingPlanChangeAttempts);
-  await db.delete(schema.billingCheckoutAttempts);
   await db.delete(schema.billingPlanStates);
+  // A subscription references the checkout it came from.
   await db.delete(schema.billingSubscriptions);
+  await db.delete(schema.billingCheckoutAttempts);
   await db.delete(schema.billingWebhookEvents);
   await db.delete(schema.billingCatalogRevisionItems);
   await db.delete(schema.billingCatalogRevisions);

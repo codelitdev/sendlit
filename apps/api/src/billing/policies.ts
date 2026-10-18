@@ -88,21 +88,24 @@ export function marketingRampDailyLimit(stage: number): number | null {
   return null;
 }
 
-export type SubscriptionLike = {
-  plan: "pro" | "business";
-  billingInterval: BillingInterval;
-  status: "pending" | "trialing" | "active" | "past_due" | "cancelled" | "expired";
-  currentPeriodEndsAt: Date | null;
-  paidThroughAt: Date | null;
-  trialEndsAt: Date | null;
-  graceEndsAt: Date | null;
-  cancelAtPeriodEnd: boolean;
-};
-
+/** SendLit's own policy columns on the plan state (operator overrides). Paid
+ * state is never read from the plan state. */
 export type PlanStateLike = {
-  plan: "free" | "pro" | "business";
   teamsLimitOverride: number | null;
   contactsLimitOverride: number | null;
+};
+
+/** The subset of the engine's `CommercialBillingState` SendLit policy uses. */
+export type CommercialStateLike = {
+  activePaidPlan: string | null;
+  billingInterval: BillingInterval | null;
+  subscriptionStatus: string | null;
+  providerTrialEndsAt: Date | null;
+  currentPeriodEndsAt: Date | null;
+  paidThroughAt: Date | null;
+  cancelAtPeriodEnd: boolean;
+  pendingCheckout: boolean;
+  pendingPlanChange: boolean;
 };
 
 export type OrganizationEntitlements = {
@@ -120,23 +123,49 @@ export type OrganizationEntitlements = {
   fairUse: boolean;
   canSend: boolean;
   graceEndsAt: Date | null;
+  trialEndsAt: Date | null;
+  currentPeriodEndsAt: Date | null;
+  paidThroughAt: Date | null;
+  cancelAtPeriodEnd: boolean;
 };
 
+function paidPlan(plan: string | null | undefined): "pro" | "business" | null {
+  return plan === "pro" || plan === "business" ? plan : null;
+}
+
+/**
+ * SendLit plan policy on top of the engine's paid state. Whether a
+ * subscription still grants paid access (including a scheduled cancellation
+ * whose period has passed) is decided only by the engine; SendLit adds its
+ * plan limits, operator overrides and the 7-day past-due sending grace.
+ * `expired` and `cancelled` payment statuses are no longer produced; they
+ * stay in the public enum for compatibility.
+ */
 export function resolveEntitlements({
   organizationId,
   deploymentMode,
   planState,
-  subscription,
-  checkoutPending = false,
+  commercial,
+  graceEndsAt = null,
   now = new Date(),
 }: {
   organizationId: string;
   deploymentMode: "oss" | "cloud";
   planState: PlanStateLike | null;
-  subscription?: SubscriptionLike | null;
-  checkoutPending?: boolean;
+  commercial?: CommercialStateLike | null;
+  /** The past-due grace deadline of the entitlement subscription. */
+  graceEndsAt?: Date | null;
   now?: Date;
 }): OrganizationEntitlements {
+  const none: Pick<
+    OrganizationEntitlements,
+    "trialEndsAt" | "currentPeriodEndsAt" | "paidThroughAt" | "cancelAtPeriodEnd"
+  > = {
+    trialEndsAt: null,
+    currentPeriodEndsAt: null,
+    paidThroughAt: null,
+    cancelAtPeriodEnd: false,
+  };
   if (deploymentMode === "oss") {
     return {
       organizationId,
@@ -146,61 +175,42 @@ export function resolveEntitlements({
       ...planPolicies.oss,
       canSend: true,
       graceEndsAt: null,
+      ...none,
     };
   }
 
-  const plan = planState?.plan ?? "free";
-  let effectivePlan: PlanId = plan;
-  let paymentStatus: PaymentStatus = checkoutPending ? "checkout_pending" : "free";
+  const plan = paidPlan(commercial?.activePaidPlan);
+  let effectivePlan: PlanId = "free";
+  let paymentStatus: PaymentStatus = commercial?.pendingCheckout
+    ? "checkout_pending"
+    : "free";
   let interval: BillingInterval | null = null;
-  let graceEndsAt: Date | null = null;
+  let grace: Date | null = null;
   let canSend = true;
+  let dates = none;
 
-  if (subscription) {
-    interval = subscription.billingInterval;
-    const paidThrough = subscription.paidThroughAt;
-    const hasFuturePaidThrough = Boolean(
-      paidThrough && paidThrough.getTime() > now.getTime(),
-    );
-    if (
-      subscription.status === "cancelled" &&
-      (!subscription.cancelAtPeriodEnd || !hasFuturePaidThrough)
-    ) {
-      effectivePlan = "free";
-      interval = null;
-      paymentStatus = "expired";
-    } else if (subscription.status === "expired") {
-      effectivePlan = "free";
-      interval = null;
-      paymentStatus = "expired";
-    } else if (subscription.status === "pending") {
-      effectivePlan = "free";
-      interval = null;
-      paymentStatus = "checkout_pending";
-    } else {
-      effectivePlan = subscription.plan;
-      paymentStatus =
-        subscription.status === "trialing"
-          ? "trialing"
-          : subscription.status === "past_due"
-            ? "past_due"
-            : subscription.cancelAtPeriodEnd
-              ? "cancel_at_period_end"
-              : subscription.status === "cancelled"
-                ? "cancelled"
-                : "active";
-      graceEndsAt = subscription.graceEndsAt;
-      if (
-        subscription.status === "past_due" &&
-        graceEndsAt &&
-        graceEndsAt.getTime() <= now.getTime()
-      ) {
-        canSend = false;
-      }
+  if (commercial && plan) {
+    effectivePlan = plan;
+    interval = commercial.billingInterval;
+    const status = commercial.subscriptionStatus;
+    paymentStatus =
+      status === "trialing"
+        ? "trialing"
+        : status === "past_due"
+          ? "past_due"
+          : commercial.cancelAtPeriodEnd || status === "cancelled"
+            ? "cancel_at_period_end"
+            : "active";
+    if (status === "past_due") {
+      grace = graceEndsAt;
+      if (grace && grace.getTime() <= now.getTime()) canSend = false;
     }
-  } else {
-    effectivePlan = "free";
-    interval = null;
+    dates = {
+      trialEndsAt: commercial.providerTrialEndsAt,
+      currentPeriodEndsAt: commercial.currentPeriodEndsAt,
+      paidThroughAt: commercial.paidThroughAt,
+      cancelAtPeriodEnd: commercial.cancelAtPeriodEnd,
+    };
   }
 
   const effectiveBase = planPolicies[effectivePlan];
@@ -219,6 +229,7 @@ export function resolveEntitlements({
     marketingBranding: effectiveBase.marketingBranding,
     fairUse: effectiveBase.fairUse,
     canSend,
-    graceEndsAt,
+    graceEndsAt: grace,
+    ...dates,
   };
 }

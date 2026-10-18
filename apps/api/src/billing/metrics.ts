@@ -1,4 +1,4 @@
-import { captureEvent } from "../observability/posthog";
+import { captureEvent } from "../observability";
 import logger from "../services/log";
 
 /** Structured billing telemetry. Never include checkout URLs, portal URLs,

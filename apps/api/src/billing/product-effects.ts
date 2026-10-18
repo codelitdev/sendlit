@@ -14,11 +14,25 @@ import {
   teamMembers,
   teams,
 } from "../db/schema";
+import { recordOrganizationAuditEvent } from "../organization/audit";
 import { defaultTeamName } from "../organization/default-team-name";
+import logger from "../services/log";
 import { notifyPaymentPastDue } from "./notifications";
 
 type EffectsDb = Pick<typeof db, "select" | "update" | "insert">;
 
+/** Organizations a billing projection must never (re)activate. `abandoned`
+ * and `closed` are terminal; `suspended` is an operator decision that a
+ * payment does not override. */
+const NOT_ACTIVATABLE = new Set(["abandoned", "closed", "suspended"]);
+
+/**
+ * SendLit's product work after the engine projects a subscription. Paid state
+ * itself (plan, interval, status) lives only in the engine and is read with
+ * `commercialState`; this hook never copies it. It runs inside the engine's
+ * projection transaction, including lapses released by the deadline batch
+ * and by `startCheckout` (then `next.isEntitlementSource` is false).
+ */
 export async function applySendLitProjectionEffects(
   input: {
     material: boolean;
@@ -31,7 +45,9 @@ export async function applySendLitProjectionEffects(
   if (!input.material) return;
   const organizationId = input.next.billableEntityId;
   const active = input.next.isEntitlementSource;
-  const nextPlan = active ? input.next.plan : "free";
+  const enteredPastDue =
+    input.next.status === "past_due" && input.previous?.status !== "past_due";
+  let notifyPastDue = false;
   const run = async (client: EffectsDb) => {
     const [organization] = await client
       .select({
@@ -43,24 +59,26 @@ export async function applySendLitProjectionEffects(
       .where(eq(organizations.id, organizationId))
       .limit(1);
     if (!organization) return;
+    const activatable = !NOT_ACTIVATABLE.has(organization.status);
     const [state] = await client
-      .select()
+      .select({
+        id: billingPlanStates.id,
+        firstPaidActivatedAt: billingPlanStates.firstPaidActivatedAt,
+      })
       .from(billingPlanStates)
       .where(eq(billingPlanStates.billableEntityId, organizationId))
       .limit(1);
-    if (!state) return;
-    await client
-      .update(billingPlanStates)
-      .set({
-        plan: nextPlan,
-        firstPaidActivatedAt:
-          active && !state.firstPaidActivatedAt
-            ? (input.next.providerOccurredAt ?? new Date())
-            : state.firstPaidActivatedAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(billingPlanStates.id, state.id));
-    if (input.next.status === "past_due" && input.previous?.status !== "past_due") {
+    if (state && active && !state.firstPaidActivatedAt) {
+      await client
+        .update(billingPlanStates)
+        .set({
+          firstPaidActivatedAt: input.next.providerOccurredAt ?? new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(billingPlanStates.id, state.id));
+    }
+    if (enteredPastDue) {
+      // SendLit's 7-day dunning grace, layered on the provider's past_due.
       await client
         .update(billingSubscriptions)
         .set({
@@ -69,6 +87,28 @@ export async function applySendLitProjectionEffects(
           updatedAt: new Date(),
         })
         .where(eq(billingSubscriptions.id, input.next.id));
+      notifyPastDue = !["abandoned", "closed"].includes(organization.status);
+    }
+    if (active && !activatable) {
+      // A late payment for an organization the owner abandoned or closed, or
+      // that an operator suspended. Never reactivate it; an operator must
+      // refund or cancel the subscription.
+      logger.error(
+        {
+          billing_subscription: input.next.id,
+          organization_status: organization.status,
+        },
+        "paid billing projection for an organization that cannot be activated",
+      );
+      await recordOrganizationAuditEvent(client, {
+        organizationId,
+        actor: { type: "system" },
+        action: "billing.paid_for_inactive_organization",
+        metadata: {
+          subscriptionId: input.next.id,
+          organizationStatus: organization.status,
+        },
+      });
     }
     if (active && input.next.originCheckoutAttemptId) {
       const [attempt] = await client
@@ -85,48 +125,47 @@ export async function applySendLitProjectionEffects(
             updatedAt: new Date(),
           })
           .where(eq(billingTrialClaims.checkoutAttemptId, attempt.id));
-        const [existingTeam] = await client
-          .select({ id: teams.id })
-          .from(teams)
-          .where(eq(teams.organizationId, organizationId))
-          .limit(1);
-        if (!existingTeam) {
-          const [team] = await client
-            .insert(teams)
-            .values({
-              organizationId,
-              name: attempt.pendingTeamName || defaultTeamName(organization.name),
-            })
-            .returning();
-          if (team) {
-            await client.insert(settings).values({ teamId: team.id });
-            await client.insert(teamDeliverySettings).values({ teamId: team.id });
-            await client.insert(teamMembers).values({
-              teamId: team.id,
-              userId: attempt.payerId,
-              role: "admin",
-            });
+        if (activatable) {
+          const [existingTeam] = await client
+            .select({ id: teams.id })
+            .from(teams)
+            .where(eq(teams.organizationId, organizationId))
+            .limit(1);
+          if (!existingTeam) {
+            const [team] = await client
+              .insert(teams)
+              .values({
+                organizationId,
+                name: attempt.pendingTeamName || defaultTeamName(organization.name),
+              })
+              .returning();
+            if (team) {
+              await client.insert(settings).values({ teamId: team.id });
+              await client.insert(teamDeliverySettings).values({ teamId: team.id });
+              await client.insert(teamMembers).values({
+                teamId: team.id,
+                userId: attempt.payerId,
+                role: "admin",
+              });
+            }
           }
         }
       }
     }
-    await client
-      .update(organizations)
-      .set({
-        status:
-          organization.status === "pending_payment" && !active
-            ? "pending_payment"
-            : "active",
-        updatedAt: new Date(),
-      })
-      .where(eq(organizations.id, organizationId));
+    if (active && organization.status === "pending_payment") {
+      await client
+        .update(organizations)
+        .set({ status: "active", updatedAt: new Date() })
+        .where(eq(organizations.id, organizationId));
+    }
   };
   if (tx === db) {
     await db.transaction((nested) => run(nested));
   } else {
     await run(tx as EffectsDb);
   }
-  if (input.next.status === "past_due" && input.previous?.status !== "past_due") {
-    await notifyPaymentPastDue(organizationId, null).catch(() => undefined);
+  if (notifyPastDue) {
+    // Not awaited: SMTP must not hold the projection transaction open.
+    void notifyPaymentPastDue(organizationId, null).catch(() => undefined);
   }
 }

@@ -2,17 +2,10 @@ import { BillingWorkflowError } from "@codelitdev/billing/core";
 import type { BillingActionGrant } from "@codelitdev/billing/workflows";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import {
-  billingPlanChangeAttempts,
-  billingPlanStates,
-  billingSubscriptions,
-  organizations,
-} from "../db/schema";
+import { billingPlanChangeAttempts, organizations } from "../db/schema";
 import { getBillingOffer, readBillingConfig } from "./catalog";
-import { requireActiveCatalog, verifyCheckoutOffer } from "./catalog-store";
-import { decryptBillingValue } from "./crypto";
-import { getBillingEngine, preconsumedGrant } from "./engine";
-import { getBillingProvider } from "./provider-registry";
+import { requirePublicCatalog } from "./catalog-store";
+import { getBillingEngine, getBillingSensitiveValues } from "./engine";
 
 type PlanChangeCode =
   | "billing_catalog_changed"
@@ -38,11 +31,16 @@ export class BillingPlanChangeError extends Error {
 
 type PlanChangeRow = typeof billingPlanChangeAttempts.$inferSelect;
 
-function responseFor(row: PlanChangeRow, includePaymentUrl: boolean) {
+/** Reads the plan-change attempt row by its public `changeId`. A narrow read:
+ * the engine has no public read model for one plan change (upstream gap). */
+async function responseFor(row: PlanChangeRow, includePaymentUrl: boolean) {
   let paymentUrl: string | null = null;
   if (includePaymentUrl && row.paymentUrlEncrypted) {
     try {
-      paymentUrl = decryptBillingValue(row.paymentUrlEncrypted);
+      paymentUrl = await getBillingSensitiveValues().decrypt(row.paymentUrlEncrypted, {
+        operatorActorId: row.actorId,
+        reason: "plan_change_payment_url",
+      });
     } catch {
       // A corrupted/expired payment link is never surfaced. The
       // provider webhook or a fresh request remains authoritative.
@@ -124,7 +122,7 @@ export async function createOrganizationPlanChange(input: {
   interval: "month" | "year";
   catalogRevision: number;
   idempotencyKey?: string;
-  grant?: BillingActionGrant;
+  grant: BillingActionGrant;
 }) {
   let config: ReturnType<typeof readBillingConfig>;
   try {
@@ -148,12 +146,8 @@ export async function createOrganizationPlanChange(input: {
   const offer = getBillingOffer(config, input.plan, input.interval);
   if (!offer) throw new BillingPlanChangeError("billing_catalog_unavailable", 503);
 
-  let provider: ReturnType<typeof getBillingProvider>;
-  let catalog: Awaited<ReturnType<typeof requireActiveCatalog>>;
   try {
-    provider = getBillingProvider(config.checkoutProvider ?? undefined);
-    catalog = await requireActiveCatalog(config, provider);
-    await verifyCheckoutOffer(config, provider, offer);
+    await requirePublicCatalog(config, offer.catalogKey);
   } catch (error) {
     if (error instanceof Error && error.message === "billing_catalog_changed") {
       throw new BillingPlanChangeError("billing_catalog_changed", 409, {
@@ -167,32 +161,17 @@ export async function createOrganizationPlanChange(input: {
     }
     throw new BillingPlanChangeError("billing_catalog_unavailable", 503);
   }
-  const targetPrice = catalog.items.find(
-    (row) => row.offerKey === offer.catalogKey,
-  )?.price;
-  if (!targetPrice)
-    throw new BillingPlanChangeError("billing_catalog_unavailable", 503);
 
-  const [observedState] = await db
-    .select()
-    .from(billingPlanStates)
-    .where(eq(billingPlanStates.billableEntityId, input.organizationId))
-    .limit(1);
-  if (!observedState?.activeSubscriptionId) {
+  const billing = getBillingEngine();
+  // Paid state from the engine. It also checks the payer, the provider's
+  // plan-change capabilities and the catalog when the change starts; these
+  // checks only spare the single-use grant for requests that cannot succeed.
+  const commercial = await billing.commercialState(input.organizationId);
+  const currentPlan = commercial.activePaidPlan;
+  const currentInterval = commercial.billingInterval;
+  if ((currentPlan !== "pro" && currentPlan !== "business") || !currentInterval) {
     throw new BillingPlanChangeError("billing_subscription_required", 402);
   }
-  const [subscription] = await db
-    .select()
-    .from(billingSubscriptions)
-    .where(
-      and(
-        eq(billingSubscriptions.id, observedState.activeSubscriptionId),
-        eq(billingSubscriptions.billableEntityId, input.organizationId),
-      ),
-    )
-    .limit(1);
-  if (!subscription)
-    throw new BillingPlanChangeError("billing_subscription_required", 402);
   const [organization] = await db
     .select({ status: organizations.status })
     .from(organizations)
@@ -201,22 +180,11 @@ export async function createOrganizationPlanChange(input: {
   if (organization?.status !== "active") {
     throw new BillingPlanChangeError("billing_subscription_not_changeable", 409);
   }
-  if (subscription.payerId !== input.actorId) {
-    throw new BillingPlanChangeError("billing_owner_required", 403);
-  }
-  if (!["trialing", "active"].includes(subscription.status)) {
+  if (!["trialing", "active"].includes(commercial.subscriptionStatus ?? "")) {
     throw new BillingPlanChangeError("billing_subscription_not_changeable", 409);
   }
-  const currentPlan = subscription.plan as "pro" | "business";
-  const currentInterval = subscription.billingInterval as "month" | "year";
   if (currentPlan === input.plan && currentInterval === input.interval) {
     throw new BillingPlanChangeError("billing_plan_change_same_plan", 409);
-  }
-  if (
-    !provider.capabilities.planChanges ||
-    (currentInterval !== input.interval && !provider.capabilities.intervalChanges)
-  ) {
-    throw new BillingPlanChangeError("billing_plan_change_not_supported", 409);
   }
   const policy = defaultPolicy(
     currentPlan,
@@ -224,18 +192,9 @@ export async function createOrganizationPlanChange(input: {
     input.plan,
     input.interval,
   );
-  if (
-    policy.prorationMode === "prorated_immediately" &&
-    !provider.capabilities.proratedPlanChanges
-  ) {
-    throw new BillingPlanChangeError("billing_plan_change_not_supported", 409);
-  }
-  const billing = getBillingEngine();
   try {
     const attempt = await billing.startPlanChange({
-      grant:
-        input.grant ??
-        preconsumedGrant("plan_change", input.organizationId, input.actorId),
+      grant: input.grant,
       entity: { kind: "organization", id: input.organizationId },
       payer: {
         id: input.actorId,
@@ -253,7 +212,7 @@ export async function createOrganizationPlanChange(input: {
       .where(eq(billingPlanChangeAttempts.changeId, attempt.changeId))
       .limit(1);
     if (!row) throw new BillingPlanChangeError("billing_provider_unavailable", 503);
-    return responseFor(row, true);
+    return await responseFor(row, true);
   } catch (error) {
     throw mapPlanChangeWorkflowError(error);
   }
@@ -275,5 +234,5 @@ export async function getOrganizationPlanChange(input: {
     )
     .limit(1);
   if (!row) return null;
-  return responseFor(row, row.actorId === input.userId);
+  return await responseFor(row, row.actorId === input.userId);
 }

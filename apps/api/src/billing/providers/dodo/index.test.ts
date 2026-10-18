@@ -36,4 +36,19 @@ describe("SendLit Dodo env mapping", () => {
     expect(options.webhookSecrets).toHaveLength(1);
     expect(options.webhookSecrets[0]?.secret).toBe("whsec_current");
   });
+
+  it("passes DODO_BRAND_ID only when it is set", () => {
+    const base = {
+      DODO_PAYMENTS_API_KEY: "test-token",
+      DODO_PAYMENTS_ENVIRONMENT: "test_mode",
+      DODO_PAYMENTS_WEBHOOK_KEY_CURRENT: "whsec_current",
+    };
+    expect(dodoOptionsFromEnv(base)).not.toHaveProperty("brandId");
+    expect(dodoOptionsFromEnv({ ...base, DODO_BRAND_ID: "  " })).not.toHaveProperty(
+      "brandId",
+    );
+    expect(
+      dodoOptionsFromEnv({ ...base, DODO_BRAND_ID: " bus_brand_1 " }).brandId,
+    ).toBe("bus_brand_1");
+  });
 });

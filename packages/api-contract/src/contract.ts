@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   billingActionTokenBodySchema,
   billingActionTokenResponseSchema,
+  billingCancellationResponseSchema,
   billingCatalogSchema,
   billingCheckoutBodySchema,
   billingCheckoutResponseSchema,
@@ -1667,6 +1668,40 @@ const billingContract = c.router(
         503: errorSchema,
       },
       summary: "Create the billing manager's hosted portal session",
+    },
+    cancel: {
+      method: "POST",
+      path: "/organizations/:organizationId/billing/cancel",
+      body: c.noBody(),
+      responses: {
+        200: billingCancellationResponseSchema,
+        401: errorSchema,
+        402: errorSchema,
+        403: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+        503: errorSchema,
+      },
+      summary: "Cancel the organization's subscription at the end of the paid period",
+      description:
+        "Requires a browser session, the CSRF headers, and a single-use `cancellation` action token in `X-SendLit-Billing-Action-Token`. Paid access continues until `paidThroughAt`. Idempotent: an already scheduled cancellation returns 200.",
+    },
+    resume: {
+      method: "POST",
+      path: "/organizations/:organizationId/billing/resume",
+      body: c.noBody(),
+      responses: {
+        200: billingCancellationResponseSchema,
+        401: errorSchema,
+        402: errorSchema,
+        403: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+        503: errorSchema,
+      },
+      summary: "Resume a subscription that is scheduled to cancel",
+      description:
+        "Clears a cancellation scheduled for the end of the paid period. Uses a single-use `cancellation` action token. Returns 409 `operation_conflicted` (retryable) while a cancellation is still being sent to the payment provider.",
     },
     changePlan: {
       method: "POST",

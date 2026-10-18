@@ -25,6 +25,8 @@ const mocks = {
   createOrganizationBillingPlanChange: mock(),
   createPaidOrganizationBillingCheckout: mock(),
   createOrganizationBillingPortal: mock(),
+  cancelOrganizationSubscription: mock(),
+  resumeOrganizationSubscription: mock(),
   createOrganization: mock(),
   abandonPendingOrganization: mock(),
   createOrganizationKey: mock(),
@@ -74,6 +76,8 @@ mock.module("@/lib/api", () => ({
   createOrganizationBillingPlanChange: mocks.createOrganizationBillingPlanChange,
   createPaidOrganizationBillingCheckout: mocks.createPaidOrganizationBillingCheckout,
   createOrganizationBillingPortal: mocks.createOrganizationBillingPortal,
+  cancelOrganizationSubscription: mocks.cancelOrganizationSubscription,
+  resumeOrganizationSubscription: mocks.resumeOrganizationSubscription,
   abandonPendingOrganization: mocks.abandonPendingOrganization,
   createOrganizationKey: mocks.createOrganizationKey,
   revokeOrganizationKey: mocks.revokeOrganizationKey,
@@ -210,6 +214,7 @@ beforeEach(() => {
     paymentStatus: "free",
     trialEndsAt: null,
     currentPeriodEndsAt: null,
+    paidThroughAt: null,
     cancelAtPeriodEnd: false,
     graceEndsAt: null,
     canManageBilling: true,
@@ -354,6 +359,7 @@ describe("billing presentation and entitlement hints", () => {
       paymentStatus: "cancelled",
       trialEndsAt: null,
       currentPeriodEndsAt: "2099-09-12T00:00:00.000Z",
+      paidThroughAt: "2099-09-12T00:00:00.000Z",
       cancelAtPeriodEnd: false,
       graceEndsAt: null,
       canManageBilling: true,
@@ -396,6 +402,120 @@ describe("billing presentation and entitlement hints", () => {
     expect(screen.queryByRole("button", { name: "Manage billing" })).toBeNull();
   });
 
+  function paidBilling(overrides: Record<string, unknown> = {}) {
+    return {
+      plan: "pro",
+      billingInterval: "month",
+      paymentStatus: "active",
+      trialEndsAt: null,
+      currentPeriodEndsAt: "2099-09-12T00:00:00.000Z",
+      paidThroughAt: "2099-09-12T00:00:00.000Z",
+      cancelAtPeriodEnd: false,
+      graceEndsAt: null,
+      canManageBilling: true,
+      entitlements: {
+        teamsLimit: 5,
+        subscribedContactsLimit: null,
+        monthlySendsLimit: null,
+        sharedOrganizationMailbox: true,
+        provisioning: true,
+        organizationApiKeys: true,
+        marketingBranding: false,
+      },
+      usage: {
+        plan: "pro",
+        paymentStatus: "active",
+        teams: 1,
+        subscribedContacts: 0,
+        monthlySends: 0,
+        monthlySendsReserved: 0,
+        bucketStartsAt: "2026-08-01T00:00:00.000Z",
+        bucketEndsAt: "2026-09-01T00:00:00.000Z",
+        teamsLimit: 5,
+        subscribedContactsLimit: null,
+        monthlySendsLimit: null,
+      },
+      pendingPlanChange: null,
+      ...overrides,
+    };
+  }
+
+  it("cancels a paid plan at period end after confirmation", async () => {
+    mocks.getOrganizationBilling.mockResolvedValueOnce(paidBilling());
+    mocks.getOrganizationBilling.mockResolvedValue(
+      paidBilling({
+        paymentStatus: "cancel_at_period_end",
+        cancelAtPeriodEnd: true,
+        // Access can end earlier than the billing period, so the UI must
+        // show paidThroughAt rather than currentPeriodEndsAt.
+        currentPeriodEndsAt: "2099-10-12T00:00:00.000Z",
+      }),
+    );
+    mocks.cancelOrganizationSubscription.mockResolvedValue({
+      accepted: true,
+      subscriptionId: "sub_1",
+    });
+
+    renderPage();
+    await openTab("Plan");
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel plan" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Cancel plan?")).toBeTruthy();
+    expect(within(dialog).getByText(/Paid access continues until/)).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Keep plan" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel plan" }));
+
+    await waitFor(() =>
+      expect(mocks.cancelOrganizationSubscription).toHaveBeenCalledWith("org_1"),
+    );
+    expect(await screen.findByText(/Cancellation scheduled/)).toBeTruthy();
+    const accessUntil = new Date("2099-09-12T00:00:00.000Z").toLocaleDateString(
+      undefined,
+      { year: "numeric", month: "long", day: "numeric" },
+    );
+    expect(screen.getByText(`Ends ${accessUntil}`)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancel plan" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+  });
+
+  it("resumes a scheduled cancellation without starting checkout", async () => {
+    mocks.getOrganizationBilling.mockResolvedValueOnce(
+      paidBilling({ paymentStatus: "cancel_at_period_end", cancelAtPeriodEnd: true }),
+    );
+    mocks.getOrganizationBilling.mockResolvedValue(paidBilling());
+    mocks.resumeOrganizationSubscription.mockResolvedValue({
+      accepted: true,
+      subscriptionId: "sub_1",
+    });
+
+    renderPage();
+    await openTab("Plan");
+    fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
+
+    await waitFor(() =>
+      expect(mocks.resumeOrganizationSubscription).toHaveBeenCalledWith("org_1"),
+    );
+    expect(await screen.findByRole("button", { name: "Cancel plan" })).toBeTruthy();
+    expect(screen.queryByText(/Cancellation scheduled/)).toBeNull();
+    expect(mocks.createOrganizationBillingCheckout).not.toHaveBeenCalled();
+  });
+
+  it("hides cancellation controls from members who cannot manage billing", async () => {
+    mocks.getOrganizationBilling.mockResolvedValue(
+      paidBilling({
+        paymentStatus: "cancel_at_period_end",
+        cancelAtPeriodEnd: true,
+        canManageBilling: false,
+      }),
+    );
+
+    renderPage();
+    await openTab("Plan");
+    expect(await screen.findByText(/Cancellation scheduled/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel plan" })).toBeNull();
+  });
+
   it("explains what remains after a paid plan expires", async () => {
     mocks.getOrganizationBilling.mockResolvedValue({
       plan: "free",
@@ -403,6 +523,7 @@ describe("billing presentation and entitlement hints", () => {
       paymentStatus: "expired",
       trialEndsAt: null,
       currentPeriodEndsAt: "2026-08-20T00:00:00.000Z",
+      paidThroughAt: "2026-08-20T00:00:00.000Z",
       cancelAtPeriodEnd: true,
       graceEndsAt: null,
       canManageBilling: true,
