@@ -238,6 +238,9 @@ export const auth = betterAuth({
         },
       ],
       clientRegistrationDefaultResources: [mcpResourceUrl],
+      // The kit allows every valid audience; registered clients only ever
+      // target the MCP resource, which is the only one seeded above.
+      clientRegistrationAllowedResources: [mcpResourceUrl],
       ...createSendLitOAuthTeamSelectionHooks({
         page: `${authBaseUrl}/oauth/select-team`,
         adapter: oauthTeamSelectionAdapter,

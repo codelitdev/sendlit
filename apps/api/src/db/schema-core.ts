@@ -381,8 +381,10 @@ export const account = pgTable(
   "account",
   {
     id: text("id").primaryKey(),
-    // Better Auth 1.7 account key is (issuer, accountId).
-    issuer: text("issuer").notNull(),
+    // Better Auth 1.7.7 no longer reads or writes this column. It is nullable
+    // so new accounts can be created; drop it in a later release once no
+    // deployed version writes it.
+    issuer: text("issuer"),
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
     userId: text("user_id")
@@ -612,6 +614,7 @@ export const oauthAccessToken = pgTable(
     }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    revoked: timestamp("revoked", { withTimezone: true }),
     scopes: text("scopes").array().notNull(),
     confirmation: jsonb("confirmation"),
   },

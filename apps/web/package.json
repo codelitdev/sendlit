@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@codelitdev/design-system": "0.1.0-alpha.6",
+    "@codelitdev/design-system": "0.4.1",
     "@radix-ui/react-alert-dialog": "^1.1.18",
     "@radix-ui/react-dialog": "^1.1.18",
     "@radix-ui/react-label": "^2.1.11",
@@ -22,7 +22,7 @@
     "@sendlit/api-contract": "workspace:*",
     "@sendlit/email-blocks": "workspace:*",
     "@sendlit/email-editor": "workspace:*",
-    "@ts-rest/core": "^3.52.1",
+    "@ts-rest/core": "3.52.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.577.0",
