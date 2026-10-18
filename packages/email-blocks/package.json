@@ -36,6 +36,7 @@
         "test": "vitest run",
         "clean": "rimraf dist/",
         "prepublishOnly": "pnpm run build",
+        "prebuild": "pnpm --filter @sendlit/api-contract build",
         "build": "tsup",
         "tsc:build": "tsc",
         "dev": "tsup --watch",
