@@ -13,11 +13,13 @@ vi.mock("../mail/send", () => ({
 
 import { db } from "../db/client";
 import { sendMail } from "../mail/send";
+import { getUnsubLink } from "../utils/mail";
 import {
     contacts,
     emailDeliveries,
     espConfigs,
     ongoingSequences,
+    outboundMessages,
     sequenceEmails,
     sequences,
 } from "../db/schema";
@@ -125,6 +127,10 @@ describe("processOngoingSequence", () => {
         expect(sent.to).toBe(contact.email);
         expect(sent.subject).toBe("First");
         expect(sent.from).toBe("Test Sender <sender@example.com>");
+        expect(sent.headers).toEqual({
+            "List-Unsubscribe": `<${getUnsubLink(contact.unsubscribeToken)}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        });
 
         const deliveries = await tdb
             .select()
@@ -139,6 +145,37 @@ describe("processOngoingSequence", () => {
             .where(eq(ongoingSequences.id, row.id));
         expect(after.sentEmailIds).toEqual(["email_e1"]);
         expect(after.nextEmailScheduledTime).toBe(scheduledAt + 3_600_000);
+    });
+
+    it("adds the SES message tag alongside the unsubscribe headers and stores the bare SES id", async () => {
+        const { team, contact } = await seedTeamAndContact(tdb);
+        await tdb
+            .update(espConfigs)
+            .set({ provider: "ses" })
+            .where(eq(espConfigs.teamId, team.id));
+        const { sequenceRow } = await seedSequence(tdb, {
+            teamId: team.id,
+            emails: [{ emailId: "email_e1" }],
+        });
+        const row = await seedOngoingSequence(tdb, {
+            teamId: team.id,
+            sequenceId: sequenceRow.id,
+            contactId: contact.id,
+        });
+        mockedSendMail.mockResolvedValue({
+            messageId: null,
+            providerResponse: "250 Ok 0100018f-ses-id-000000",
+        });
+
+        await processOngoingSequence(row.id);
+
+        const [outbound] = await tdb.select().from(outboundMessages);
+        expect(mockedSendMail.mock.calls[0][0].headers).toEqual({
+            "List-Unsubscribe": `<${getUnsubLink(contact.unsubscribeToken)}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            "X-SES-MESSAGE-TAGS": `sendlit_message_id=${outbound.messageId}`,
+        });
+        expect(outbound.providerMessageId).toBe("0100018f-ses-id-000000");
     });
 
     it("rejects corrupted marketing content without a final managed footer before transport", async () => {

@@ -40,6 +40,8 @@ aws sns set-topic-attributes \
 
 SendLit also accepts version 1 (SHA-1) signatures, but version 2 is recommended.
 
+In the AWS console, create a **Standard** topic and leave the other settings at their defaults. The create page doesn't offer the signature version. New topics use version 1, which works. To switch to version 2, run the `set-topic-attributes` command above.
+
 Note the topic ARN. You need it in the next step.
 
 ## 2. Add the topic ARN in SendLit
