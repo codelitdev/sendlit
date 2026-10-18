@@ -55,13 +55,27 @@ type TestResponse = {
 };
 
 async function get(path: string): Promise<TestResponse> {
+    return request("GET", path);
+}
+
+async function request(
+    method: string,
+    path: string,
+    body?: string,
+    contentType?: string,
+): Promise<TestResponse> {
     const app = express();
     app.use(trackingRoutes);
 
     const req = new IncomingMessage(new Socket());
-    req.method = "GET";
+    req.method = method;
     req.url = path;
     req.headers = { host: "localhost:5000" };
+    if (body !== undefined) {
+        req.headers["content-type"] =
+            contentType ?? "application/x-www-form-urlencoded";
+        req.headers["content-length"] = String(Buffer.byteLength(body));
+    }
 
     const res = new ServerResponse(req);
     const chunks: Buffer[] = [];
@@ -84,6 +98,7 @@ async function get(path: string): Promise<TestResponse> {
     });
 
     (app as any).handle(req, res);
+    if (body !== undefined) req.push(body);
     req.push(null);
     return done;
 }
@@ -228,5 +243,28 @@ describe("tracking and unsubscribe routes", () => {
         mocks.getContactByUnsubscribeToken.mockResolvedValue(null);
         const unknown = await get("/unsubscribe/unknown");
         expect(unknown.status).toBe(404);
+    });
+
+    it("unsubscribes on an RFC 8058 one-click POST without a confirmation page", async () => {
+        mocks.getContactByUnsubscribeToken.mockResolvedValue({
+            teamId: "team-internal",
+            contactId: "cnt_public",
+            email: "reader@example.com",
+            subscribed: true,
+        });
+
+        const response = await request(
+            "POST",
+            "/unsubscribe/unsub-token",
+            "List-Unsubscribe=One-Click",
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.toString()).not.toContain("<form");
+        expect(mocks.updateContact).toHaveBeenCalledWith(
+            "team-internal",
+            "cnt_public",
+            { subscribed: false },
+        );
     });
 });

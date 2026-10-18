@@ -5,7 +5,9 @@ export default defineConfig((options: Options) => ({
     splitting: true,
     entry: ["src/**/*.tsx", "src/**/*.ts"],
     format: ["esm"],
-    dts: true,
+    // `@sendlit/api-contract` is private and only used for types, so inline
+    // them instead of leaving an import of an unpublished package.
+    dts: { resolve: ["@sendlit/api-contract"] },
     minify: true,
     clean: true,
     external: ["react"],

@@ -25,6 +25,7 @@ import {
     getTrackedClickUrl,
     getTrackingPixelUrl,
     getUnsubLink,
+    getListUnsubscribeHeaders,
 } from "../utils/mail";
 import { generatePixelToken } from "../utils/pixel-jwt";
 import logger from "../services/log";
@@ -327,7 +328,10 @@ async function attemptMailSending({
             to,
             subject,
             html: contentWithTrackedLinks,
-            headers: withCorrelationHeaders(outbound),
+            headers: withCorrelationHeaders(
+                outbound,
+                getListUnsubscribeHeaders(contact.unsubscribeToken),
+            ),
             teamId: team.id,
             espConfigId: pin.espConfigId,
             secretVersion: pin.secretVersion,
