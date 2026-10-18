@@ -14,7 +14,14 @@ import {
 } from "../../contacts/queries";
 import { getSegment } from "../../contacts/segments-queries";
 import { contactFilterSchema } from "@sendlit/api-contract";
-import { AUTH_ERROR, INTERNAL_ERROR, NOT_FOUND, jsonResult } from "./responses";
+import {
+    AUTH_ERROR,
+    INTERNAL_ERROR,
+    NOT_FOUND,
+    jsonResult,
+    planGateResult,
+    isPlanGateError,
+} from "./responses";
 import {
     contactListSchema,
     contactSchema,
@@ -88,7 +95,8 @@ export function registerContactTools(server: McpToolRegistrar): void {
                     items: items.map((item) => omitInternal(item)),
                     total,
                 });
-            } catch {
+            } catch (error) {
+                if (isPlanGateError(error)) return planGateResult(error);
                 return INTERNAL_ERROR;
             }
         },
@@ -182,6 +190,7 @@ export function registerContactTools(server: McpToolRegistrar): void {
                 const contact = await createContact({ teamId, ...args });
                 return jsonResult(omitInternal(contact));
             } catch (err: any) {
+                if (isPlanGateError(err)) return planGateResult(err);
                 return {
                     content: [{ type: "text" as const, text: err.message }],
                     isError: true,
@@ -219,7 +228,8 @@ export function registerContactTools(server: McpToolRegistrar): void {
                 const contact = await updateContact(teamId, contactId, patch);
                 if (!contact) return NOT_FOUND;
                 return jsonResult(omitInternal(contact));
-            } catch {
+            } catch (error) {
+                if (isPlanGateError(error)) return planGateResult(error);
                 return INTERNAL_ERROR;
             }
         },

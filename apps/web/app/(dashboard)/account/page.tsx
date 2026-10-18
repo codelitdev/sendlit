@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CreditCard, Sparkles, UserRound } from "lucide-react";
+import { UserRound } from "lucide-react";
 import { Loader } from "@codelitdev/design-system";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -25,7 +25,7 @@ import {
     TabsTrigger,
 } from "@/components/ui/codelit/tabs";
 
-const ACCOUNT_TABS = ["general", "billing"] as const;
+const ACCOUNT_TABS = ["general"] as const;
 type AccountTab = (typeof ACCOUNT_TABS)[number];
 
 interface Account {
@@ -50,7 +50,12 @@ export default function AccountPage() {
     const [profileError, setProfileError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (tabParam !== "notifications") return;
+        if (tabParam !== "billing" && tabParam !== "notifications") return;
+
+        if (tabParam === "billing") {
+            router.replace("/organizations?tab=plan", { scroll: false });
+            return;
+        }
 
         const params = new URLSearchParams(searchParams.toString());
         params.delete("tab");
@@ -126,7 +131,7 @@ export default function AccountPage() {
             <div className="w-full">
                 <PageHeader
                     title="Account"
-                    description="Manage your profile, plan, and billing."
+                    description="Manage your profile. Organization plans and billing are managed from Organizations."
                 />
 
                 <Tabs
@@ -136,7 +141,6 @@ export default function AccountPage() {
                 >
                     <TabsList>
                         <TabsTrigger value="general">General</TabsTrigger>
-                        <TabsTrigger value="billing">Billing</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="general">
@@ -246,31 +250,6 @@ export default function AccountPage() {
                                     ) : (
                                         <Loading />
                                     )}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-
-                    <TabsContent value="billing">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                    <CreditCard className="size-4" />
-                                    Billing
-                                </CardTitle>
-                                <CardDescription>
-                                    Manage your plan and payment details for
-                                    this account.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex items-center gap-3 text-sm">
-                                <Sparkles className="size-5 text-muted-foreground" />
-                                <div>
-                                    <p className="font-medium">Free plan</p>
-                                    <p className="text-muted-foreground">
-                                        Billing management will appear here when
-                                        subscriptions are available.
-                                    </p>
                                 </div>
                             </CardContent>
                         </Card>

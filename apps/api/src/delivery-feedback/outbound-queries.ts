@@ -3,6 +3,8 @@ import { db } from "../db/client";
 import { outboundMessages } from "../db/schema";
 import type { OutboundSourceType } from "../config/constants";
 
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 export type OutboundMessage = typeof outboundMessages.$inferSelect;
 
 /**
@@ -25,8 +27,10 @@ export async function createOutboundMessage(input: {
     normalizedRecipient: string;
     provider: string | null;
     rfcMessageId: string;
+    tx?: Transaction;
 }): Promise<OutboundMessage> {
-    const [row] = await db
+    const database = input.tx ?? db;
+    const [row] = await database
         .insert(outboundMessages)
         .values({
             teamId: input.teamId,
@@ -49,7 +53,7 @@ export async function createOutboundMessage(input: {
     if (!input.submissionKey) {
         throw new Error("outbound_message_not_created");
     }
-    const [existing] = await db
+    const [existing] = await database
         .select()
         .from(outboundMessages)
         .where(eq(outboundMessages.submissionKey, input.submissionKey))

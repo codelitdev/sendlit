@@ -147,7 +147,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
         "send_test_email",
         {
             description:
-                "Sends a test email through the team's default ESP to verify it works. Requires a mailing address. Defaults to the current user's own email address if `to` is omitted (OAuth sessions only — API-key sessions must supply `to`).",
+                "Sends a test email through the team's default ESP to verify it works. Defaults to the current user's own email address if `to` is omitted (OAuth sessions only — API-key sessions must supply `to`).",
             inputSchema: {
                 to: z.string().email().optional(),
             },
@@ -363,7 +363,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
         "test_esp",
         {
             description:
-                "Sends a test email through a user-managed ESP (by its ESP ID) to verify it works. Requires a mailing address. Defaults to the current user's own email address if `to` is omitted (OAuth sessions only — API-key sessions must supply `to`).",
+                "Sends a test email through a user-managed ESP (by its ESP ID) to verify it works. Defaults to the current user's own email address if `to` is omitted (OAuth sessions only — API-key sessions must supply `to`).",
             inputSchema: {
                 espId: z.string().min(1),
                 to: z.string().email().optional(),

@@ -8,6 +8,7 @@ import {
     render,
     screen,
     waitFor,
+    within,
 } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({
@@ -17,11 +18,23 @@ const mocks = vi.hoisted(() => ({
     listOrganizationKeys: vi.fn(),
     getOrganizationDeliveryPolicy: vi.fn(),
     listOrganizationMembers: vi.fn(),
+    listOrganizationSendingDomains: vi.fn(),
+    createOrganizationSendingDomain: vi.fn(),
+    verifyOrganizationSendingDomain: vi.fn(),
+    revokeOrganizationSendingDomain: vi.fn(),
     getOrganizationUsage: vi.fn(),
     getOrganizationMailActivity: vi.fn(),
     enterOrganizationTeam: vi.fn(),
     listOrganizationAuditEvents: vi.fn(),
     getOrganizationEspGrant: vi.fn(),
+    getOrganizationBilling: vi.fn(),
+    getBillingCatalog: vi.fn(),
+    createOrganizationBillingCheckout: vi.fn(),
+    createOrganizationBillingPlanChange: vi.fn(),
+    createPaidOrganizationBillingCheckout: vi.fn(),
+    createOrganizationBillingPortal: vi.fn(),
+    createOrganization: vi.fn(),
+    abandonPendingOrganization: vi.fn(),
     createOrganizationKey: vi.fn(),
     revokeOrganizationKey: vi.fn(),
     getOrganizationIdFromCookie: vi.fn(),
@@ -30,6 +43,7 @@ const mocks = vi.hoisted(() => ({
     setTeamIdCookie: vi.fn(),
     routerPush: vi.fn(),
     routerReplace: vi.fn(),
+    reloadPage: vi.fn(),
 }));
 
 vi.mock("@/lib/tokens", () => ({
@@ -53,14 +67,27 @@ vi.mock("@/lib/api", () => ({
     listOrganizationKeys: mocks.listOrganizationKeys,
     getOrganizationDeliveryPolicy: mocks.getOrganizationDeliveryPolicy,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    listOrganizationSendingDomains: mocks.listOrganizationSendingDomains,
+    createOrganizationSendingDomain: mocks.createOrganizationSendingDomain,
+    verifyOrganizationSendingDomain: mocks.verifyOrganizationSendingDomain,
+    revokeOrganizationSendingDomain: mocks.revokeOrganizationSendingDomain,
     getOrganizationUsage: mocks.getOrganizationUsage,
     getOrganizationMailActivity: mocks.getOrganizationMailActivity,
     enterOrganizationTeam: mocks.enterOrganizationTeam,
     listOrganizationAuditEvents: mocks.listOrganizationAuditEvents,
     getOrganizationEspGrant: mocks.getOrganizationEspGrant,
+    getOrganizationBilling: mocks.getOrganizationBilling,
+    getBillingCatalog: mocks.getBillingCatalog,
+    createOrganizationBillingCheckout: mocks.createOrganizationBillingCheckout,
+    createOrganizationBillingPlanChange:
+        mocks.createOrganizationBillingPlanChange,
+    createPaidOrganizationBillingCheckout:
+        mocks.createPaidOrganizationBillingCheckout,
+    createOrganizationBillingPortal: mocks.createOrganizationBillingPortal,
+    abandonPendingOrganization: mocks.abandonPendingOrganization,
     createOrganizationKey: mocks.createOrganizationKey,
     revokeOrganizationKey: mocks.revokeOrganizationKey,
-    createOrganization: vi.fn(),
+    createOrganization: mocks.createOrganization,
     updateOrganization: vi.fn(),
     addOrganizationMember: vi.fn(),
     updateOrganizationMember: vi.fn(),
@@ -100,8 +127,13 @@ vi.mock("@/lib/api-client", () => ({
     },
 }));
 
+vi.mock("@/lib/navigation", () => ({
+    reloadPage: mocks.reloadPage,
+}));
+
 import OrganizationsPage from "./page";
 import { BreadcrumbProvider } from "@/components/dashboard/breadcrumb-context";
+import { ApiError as ClientApiError } from "@/lib/api-client";
 
 const organization = {
     organizationId: "org_1",
@@ -133,7 +165,10 @@ const usageWindow = {
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.getOrganizationIdFromCookie.mockReturnValue("org_1");
-    mocks.listOrganizations.mockResolvedValue({ items: [organization] });
+    mocks.listOrganizations.mockResolvedValue({
+        items: [organization],
+        ownsFreeOrganization: false,
+    });
     mocks.listOrganizationTeams.mockResolvedValue({ items: [] });
     mocks.listOrganizationEsps.mockResolvedValue({ items: [] });
     mocks.listOrganizationKeys.mockResolvedValue({ items: [activeKey] });
@@ -149,6 +184,7 @@ beforeEach(() => {
         updatedAt: "2026-08-01T00:00:00.000Z",
     });
     mocks.listOrganizationMembers.mockResolvedValue({ items: [] });
+    mocks.listOrganizationSendingDomains.mockResolvedValue({ items: [] });
     mocks.getOrganizationUsage.mockResolvedValue({
         day: usageWindow,
         month: usageWindow,
@@ -165,6 +201,38 @@ beforeEach(() => {
     });
     mocks.listOrganizationAuditEvents.mockResolvedValue({ items: [] });
     mocks.getOrganizationEspGrant.mockResolvedValue(null);
+    mocks.getOrganizationBilling.mockResolvedValue({
+        plan: "oss",
+        billingInterval: null,
+        paymentStatus: "free",
+        trialEndsAt: null,
+        currentPeriodEndsAt: null,
+        cancelAtPeriodEnd: false,
+        graceEndsAt: null,
+        canManageBilling: true,
+        entitlements: {
+            teamsLimit: null,
+            subscribedContactsLimit: null,
+            monthlySendsLimit: null,
+            sharedOrganizationMailbox: true,
+            provisioning: true,
+            organizationApiKeys: true,
+            marketingBranding: false,
+        },
+        usage: {
+            plan: "oss",
+            paymentStatus: "free",
+            teams: 0,
+            subscribedContacts: 0,
+            monthlySends: 0,
+            monthlySendsReserved: 0,
+            bucketStartsAt: "2026-08-01T00:00:00.000Z",
+            bucketEndsAt: "2026-09-01T00:00:00.000Z",
+            teamsLimit: null,
+            subscribedContactsLimit: null,
+            monthlySendsLimit: null,
+        },
+    });
 });
 
 afterEach(() => cleanup());
@@ -240,6 +308,295 @@ describe("organization API keys", () => {
         await waitFor(() => {
             expect(screen.queryByText("CourseLit production")).toBeNull();
         });
+    });
+});
+
+describe("billing presentation and entitlement hints", () => {
+    it("implicitly creates OSS organizations without a plan selector", async () => {
+        mocks.getBillingCatalog.mockResolvedValue({
+            catalogRevision: null,
+            currency: null,
+            offers: [],
+            checkoutAvailable: false,
+        });
+        mocks.createOrganization.mockResolvedValue(organization);
+
+        renderPage();
+        fireEvent.click(
+            await screen.findByRole("button", { name: "New organization" }),
+        );
+        expect(
+            await screen.findByPlaceholderText("e.g. CourseLit"),
+        ).toBeTruthy();
+        await waitFor(() => {
+            expect(
+                within(screen.getByRole("dialog")).queryByText("Plan", {
+                    exact: true,
+                }),
+            ).toBeNull();
+        });
+        expect(screen.queryByText(/Paid checkout is not enabled/i)).toBeNull();
+
+        fireEvent.change(screen.getByPlaceholderText("e.g. CourseLit"), {
+            target: { value: "OSS Org" },
+        });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Create organization" }),
+        );
+        await waitFor(() => {
+            expect(mocks.createOrganization).toHaveBeenCalledWith("OSS Org");
+            expect(mocks.reloadPage).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    it("shows the organization plan and usage summary", async () => {
+        renderPage();
+        await openTab("Plan");
+        expect(await screen.findByText("Plan and usage")).toBeTruthy();
+        expect(screen.getByText("OSS")).toBeTruthy();
+        expect(screen.getAllByText("0 · unlimited")).toHaveLength(3);
+    });
+
+    it("explains the end date and downgrade behavior for a cancelled plan", async () => {
+        mocks.getOrganizationBilling.mockResolvedValue({
+            plan: "business",
+            billingInterval: "month",
+            paymentStatus: "cancelled",
+            trialEndsAt: null,
+            currentPeriodEndsAt: "2099-09-12T00:00:00.000Z",
+            cancelAtPeriodEnd: false,
+            graceEndsAt: null,
+            canManageBilling: true,
+            entitlements: {
+                teamsLimit: 25,
+                subscribedContactsLimit: null,
+                monthlySendsLimit: null,
+                sharedOrganizationMailbox: true,
+                provisioning: true,
+                organizationApiKeys: true,
+                marketingBranding: false,
+            },
+            usage: {
+                plan: "business",
+                paymentStatus: "cancelled",
+                teams: 6,
+                subscribedContacts: 0,
+                monthlySends: 0,
+                monthlySendsReserved: 0,
+                bucketStartsAt: "2026-08-01T00:00:00.000Z",
+                bucketEndsAt: "2026-09-01T00:00:00.000Z",
+                teamsLimit: 25,
+                subscribedContactsLimit: null,
+                monthlySendsLimit: null,
+            },
+        });
+
+        renderPage();
+        await openTab("Plan");
+
+        expect(
+            screen.getByRole("button", { name: "Change plan" }),
+        ).toBeTruthy();
+        expect(
+            screen.getByRole("button", { name: "Manage billing" }),
+        ).toBeTruthy();
+        expect(await screen.findByText(/Cancellation scheduled/)).toBeTruthy();
+        expect(screen.getByText(/remains active until/)).toBeTruthy();
+        expect(
+            screen.getByText(/Organizations, teams, contacts, sequences/),
+        ).toBeTruthy();
+        expect(screen.getByText(/The organization moves to Free/)).toBeTruthy();
+
+        await openTab("Teams");
+        expect(
+            screen.queryByRole("button", { name: "Change plan" }),
+        ).toBeNull();
+        expect(
+            screen.queryByRole("button", { name: "Manage billing" }),
+        ).toBeNull();
+    });
+
+    it("explains what remains after a paid plan expires", async () => {
+        mocks.getOrganizationBilling.mockResolvedValue({
+            plan: "free",
+            billingInterval: null,
+            paymentStatus: "expired",
+            trialEndsAt: null,
+            currentPeriodEndsAt: "2026-08-20T00:00:00.000Z",
+            cancelAtPeriodEnd: true,
+            graceEndsAt: null,
+            canManageBilling: true,
+            entitlements: {
+                teamsLimit: 1,
+                subscribedContactsLimit: 1000,
+                monthlySendsLimit: 3000,
+                sharedOrganizationMailbox: false,
+                provisioning: false,
+                organizationApiKeys: false,
+                marketingBranding: true,
+            },
+            usage: {
+                plan: "free",
+                paymentStatus: "expired",
+                teams: 1,
+                subscribedContacts: 0,
+                monthlySends: 0,
+                monthlySendsReserved: 0,
+                bucketStartsAt: "2026-08-01T00:00:00.000Z",
+                bucketEndsAt: "2026-09-01T00:00:00.000Z",
+                teamsLimit: 1,
+                subscribedContactsLimit: 1000,
+                monthlySendsLimit: 3000,
+            },
+        });
+
+        renderPage();
+        await openTab("Plan");
+
+        expect(
+            await screen.findByText(/organization is now on the Free plan/),
+        ).toBeTruthy();
+        expect(screen.getByText(/paid plan ended on/)).toBeTruthy();
+        expect(screen.getByText(/data are retained/)).toBeTruthy();
+    });
+
+    it("explains when an owned organization already has that name", async () => {
+        mocks.getBillingCatalog.mockResolvedValue({
+            catalogRevision: null,
+            currency: null,
+            offers: [],
+            checkoutAvailable: false,
+        });
+        mocks.createOrganization.mockRejectedValue(
+            new ClientApiError(409, "organization_name_already_exists"),
+        );
+
+        renderPage();
+        fireEvent.click(
+            await screen.findByRole("button", { name: "New organization" }),
+        );
+        fireEvent.change(await screen.findByPlaceholderText("e.g. CourseLit"), {
+            target: { value: "Acme" },
+        });
+        await waitFor(() => {
+            expect(
+                screen.getByRole("button", { name: "Create organization" }),
+            ).toBeTruthy();
+        });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Create organization" }),
+        );
+
+        expect(
+            await screen.findByText(
+                /already own an organization with this name/i,
+            ),
+        ).toBeTruthy();
+        expect(mocks.reloadPage).not.toHaveBeenCalled();
+    });
+
+    it("explains the one-Free-organization rule", async () => {
+        mocks.getBillingCatalog.mockResolvedValue({
+            catalogRevision: 1,
+            currency: "USD",
+            checkoutAvailable: true,
+            offers: [],
+        });
+        mocks.createOrganization.mockRejectedValue(
+            new ClientApiError(409, "free_organization_already_owned"),
+        );
+
+        renderPage();
+        fireEvent.click(
+            await screen.findByRole("button", { name: "New organization" }),
+        );
+        fireEvent.change(await screen.findByPlaceholderText("e.g. CourseLit"), {
+            target: { value: "Another organization" },
+        });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Create organization" }),
+        );
+
+        expect(
+            await screen.findByText(
+                /already own a Free organization\. Upgrade it first, or choose Pro or Business/i,
+            ),
+        ).toBeTruthy();
+        expect(
+            screen.queryByText("free_organization_already_owned"),
+        ).toBeNull();
+    });
+
+    it("disables Free-plan organization capabilities with upgrade copy", async () => {
+        mocks.getOrganizationBilling.mockResolvedValue({
+            plan: "free",
+            billingInterval: null,
+            paymentStatus: "free",
+            trialEndsAt: null,
+            currentPeriodEndsAt: null,
+            cancelAtPeriodEnd: false,
+            graceEndsAt: null,
+            canManageBilling: true,
+            entitlements: {
+                teamsLimit: 1,
+                subscribedContactsLimit: 1000,
+                monthlySendsLimit: 3000,
+                sharedOrganizationMailbox: false,
+                provisioning: false,
+                organizationApiKeys: false,
+                marketingBranding: true,
+            },
+            usage: {
+                plan: "free",
+                paymentStatus: "free",
+                teams: 1,
+                subscribedContacts: 1000,
+                monthlySends: 3000,
+                monthlySendsReserved: 0,
+                bucketStartsAt: "2026-08-01T00:00:00.000Z",
+                bucketEndsAt: "2026-09-01T00:00:00.000Z",
+                teamsLimit: 1,
+                subscribedContactsLimit: 1000,
+                monthlySendsLimit: 3000,
+            },
+        });
+        renderPage();
+        await openTab("Teams");
+        expect(
+            (
+                screen.getByRole("button", {
+                    name: "New team",
+                }) as HTMLButtonElement
+            ).disabled,
+        ).toBe(true);
+        expect(screen.getByText(/reached its 1-team limit/i)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
+        await openTab("Delivery");
+        expect(
+            (
+                screen.getByRole("button", {
+                    name: "New shared ESP",
+                }) as HTMLButtonElement
+            ).disabled,
+        ).toBe(true);
+        expect(
+            screen.getByText(
+                /Shared mailboxes are available on Pro and Business/i,
+            ),
+        ).toBeTruthy();
+        await openTab("Keys");
+        expect(
+            (
+                screen.getByRole("button", {
+                    name: "New key",
+                }) as HTMLButtonElement
+            ).disabled,
+        ).toBe(true);
+        expect(
+            screen.getByText(
+                /Organization API keys are available on Business and OSS/i,
+            ),
+        ).toBeTruthy();
     });
 });
 

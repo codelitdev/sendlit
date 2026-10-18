@@ -19,6 +19,7 @@ import {
 import { serializeDates } from "../utils/serialize";
 import { getUser } from "../user/queries";
 import { getOrganizationMembership } from "../organization/queries";
+import { isPlanGateError } from "../billing/errors";
 
 const router = Router();
 // This router is mounted at the API root. Scope account-level middleware to
@@ -120,12 +121,22 @@ const impl = s.router(contract.teams, {
                 body: { error: "organization_permission_required" },
             } as const;
         }
-        const team = await createTeam({
-            organizationId: identity.defaultOrganizationId,
-            creatorUserId: identity.id,
-            name: body.name,
-        });
-        return { status: 201, body: serializeDates(toPublicTeam(team)) };
+        try {
+            const team = await createTeam({
+                organizationId: identity.defaultOrganizationId,
+                creatorUserId: identity.id,
+                name: body.name,
+            });
+            return { status: 201, body: serializeDates(toPublicTeam(team)) };
+        } catch (error) {
+            if (isPlanGateError(error)) {
+                return {
+                    status: error.status,
+                    body: { error: error.code, ...error.details },
+                } as any;
+            }
+            throw error;
+        }
     },
     rename: async ({ params, body, req }) => {
         const resolved = await resolveTeamParam(

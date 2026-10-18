@@ -95,6 +95,7 @@ const toolPolicies = {
     activate_esp: MCP_SCOPES.espWrite,
 
     list_teams: MCP_SCOPES.teamsRead,
+    get_plan_usage: MCP_SCOPES.teamsRead,
     create_team: MCP_SCOPES.teamsWrite,
     rename_team: MCP_SCOPES.teamsWrite,
     delete_team: MCP_SCOPES.teamsWrite,

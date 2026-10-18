@@ -6,8 +6,9 @@ description: OAuth2, organization keys, and team API keys.
 SendLit supports OAuth2, organization API keys, and team API keys.
 
 Use OAuth2 for user-authorized app integrations. Use a team API key for
-team-scoped server-to-server integrations. Use an organization API key for
-trusted platform provisioning and organization administration.
+team-scoped server-to-server integrations. Use a scoped organization API key
+for trusted platform team provisioning or headless organization setup through
+the REST API.
 
 ## OAuth2 for user-authorized integrations
 
@@ -43,6 +44,12 @@ Keys are stored hashed (SHA-256), which means:
 - Keys are revoked by their `id` (`DELETE /teams/:teamId/keys/:keyId`), not by the secret.
 
 If a key is lost or leaked, revoke it and create a new one.
+
+Organization keys use the `sl_org_live_...` prefix and are sent with
+`Authorization: Bearer <organization-key>`. Their permissions are explicitly
+scoped; see [Headless organization setup](/developers/headless-provisioning)
+for discovery, shared-delivery setup, and key roles. An organization key does
+not authenticate to MCP, which remains team-scoped.
 
 ## Dashboard sign-in
 

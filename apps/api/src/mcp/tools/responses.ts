@@ -39,3 +39,28 @@ export function jsonResult(data: unknown) {
         structuredContent: serialized,
     };
 }
+
+export function planGateResult(error: {
+    code: string;
+    details?: Record<string, unknown>;
+    status?: number;
+}) {
+    const details = { error: error.code, ...(error.details ?? {}) };
+    return {
+        content: [{ type: "text" as const, text: JSON.stringify(details) }],
+        structuredContent: details,
+        isError: true,
+    };
+}
+
+export function isPlanGateError(error: unknown): error is {
+    code: string;
+    details?: Record<string, unknown>;
+    status?: number;
+} {
+    return Boolean(
+        error &&
+        typeof error === "object" &&
+        (error as any).name === "PlanGateError",
+    );
+}

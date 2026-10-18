@@ -11,11 +11,11 @@ import {
     listTransactionalEmails,
     toPublicTransactionalEmail,
 } from "./queries";
-import { MAILING_ADDRESS_REQUIRED } from "../settings/general/constants";
 import {
     MISSING_TEMPLATE_VARIABLES,
     MissingTemplateVariablesError,
 } from "../mail/render";
+import { isPlanGateError } from "../billing/errors";
 
 const router = Router();
 router.use("/emails", requireAuth, requireTeam);
@@ -86,6 +86,12 @@ const impl = s.router(contract.transactional, {
                 body: { txeId: row.txeId, status: row.status as any },
             };
         } catch (err: any) {
+            if (isPlanGateError(err)) {
+                return {
+                    status: err.status,
+                    body: { error: err.code, ...err.details },
+                } as any;
+            }
             if (err instanceof MissingTemplateVariablesError) {
                 return {
                     status: 422,
@@ -139,13 +145,6 @@ const impl = s.router(contract.transactional, {
                     return {
                         status: 422,
                         body: { error: "Team ESP is not configured." },
-                    };
-                case MAILING_ADDRESS_REQUIRED:
-                    return {
-                        status: 422,
-                        body: {
-                            error: "A mailing address is required before sending email.",
-                        },
                     };
                 case "esp_not_found":
                     return { status: 422, body: { error: "ESP not found" } };

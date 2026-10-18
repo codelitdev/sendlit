@@ -15,3 +15,4 @@ export * from "./schemas/media";
 export * from "./schemas/feedback";
 export * from "./schemas/delivery-events";
 export * from "./schemas/suppressions";
+export * from "./schemas/billing";

@@ -14,6 +14,12 @@ import {
 } from "../db/schema";
 import { releaseReservedQuotaForGrantInTransaction } from "./quota";
 import { recordOrganizationAuditEvent } from "../organization/audit";
+import {
+    assertCapability,
+    assertSendAllowedForTeam,
+    getOrganizationEntitlements,
+} from "../billing/entitlements";
+import { assertSendingEligibility } from "../billing/domains";
 
 export type OrganizationDeliveryPolicy =
     typeof organizationDeliveryPolicies.$inferSelect;
@@ -40,7 +46,9 @@ export type ResolvedDeliverySource = {
 export async function resolveDeliverySource(
     teamId: string,
     requested?: DeliverySourceSelection,
+    purpose: "marketing" | "transactional" = "transactional",
 ): Promise<ResolvedDeliverySource> {
+    await assertSendAllowedForTeam(teamId, purpose);
     const [context] = await db
         .select({
             team: teams,
@@ -98,6 +106,12 @@ export async function resolveDeliverySource(
             ? { type: "organization" }
             : { type: "team" };
     }
+    if (selection?.type === "organization") {
+        assertCapability(
+            await getOrganizationEntitlements(context.team.organizationId),
+            "shared_organization_mailbox",
+        );
+    }
 
     if (selection.type === "organization") {
         const [row] = await db
@@ -120,6 +134,12 @@ export async function resolveDeliverySource(
         if (!row?.esp.fromEmail) {
             throw new Error("organization_delivery_disabled");
         }
+        await assertSendingEligibility(
+            context.team.organizationId,
+            row.esp.fromEmail,
+            context.team.id,
+            row.esp.id,
+        );
         return {
             type: "organization",
             espConfigId: row.esp.id,
@@ -171,6 +191,12 @@ export async function resolveDeliverySource(
         )
         .limit(1);
     if (!esp?.fromEmail) throw new Error("esp_not_configured");
+    await assertSendingEligibility(
+        context.team.organizationId,
+        esp.fromEmail,
+        context.team.id,
+        esp.id,
+    );
     return {
         type: "team",
         espConfigId: esp.id,
@@ -191,7 +217,25 @@ export async function resolvePinnedDeliverySource(input: {
     type: "organization" | "team";
     espConfigId: string;
     espGrantId: string | null;
+    purpose?: "marketing" | "transactional";
 }): Promise<ResolvedDeliverySource> {
+    await assertSendAllowedForTeam(
+        input.teamId,
+        input.purpose ?? "transactional",
+    );
+    if (input.type === "organization") {
+        const [team] = await db
+            .select({ organizationId: teams.organizationId })
+            .from(teams)
+            .where(eq(teams.id, input.teamId))
+            .limit(1);
+        if (team) {
+            assertCapability(
+                await getOrganizationEntitlements(team.organizationId),
+                "shared_organization_mailbox",
+            );
+        }
+    }
     if (input.type === "team") {
         if (input.espGrantId) throw new Error("invalid_delivery_pin");
         const [row] = await db
@@ -216,6 +260,12 @@ export async function resolvePinnedDeliverySource(input: {
                 ));
         if (!row?.esp.fromEmail || !dispatchableEsp)
             throw new Error("delivery_source_unavailable");
+        await assertSendingEligibility(
+            row.team.organizationId,
+            row.esp.fromEmail,
+            row.team.id,
+            row.esp.id,
+        );
         return {
             type: "team",
             espConfigId: row.esp.id,
@@ -277,6 +327,12 @@ export async function resolvePinnedDeliverySource(input: {
     ) {
         throw new Error("delivery_source_unavailable");
     }
+    await assertSendingEligibility(
+        row.team.organizationId,
+        row.esp.fromEmail,
+        row.team.id,
+        row.esp.id,
+    );
     return {
         type: "organization",
         espConfigId: row.esp.id,

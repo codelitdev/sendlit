@@ -40,8 +40,15 @@
         {
             "idx": 5,
             "version": "7",
-            "when": 1792001038807,
-            "tag": "0005_equal_patriot",
+            "when": 1788113568973,
+            "tag": "0005_billing",
+            "breakpoints": true
+        },
+        {
+            "idx": 6,
+            "version": "7",
+            "when": 1792322408451,
+            "tag": "0006_esp_feedback_subscription_confirmed",
             "breakpoints": true
         }
     ]

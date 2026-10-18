@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../db/client", async () => {
     const { makeTestDb } = await import("../test/db.js");
@@ -8,16 +8,24 @@ vi.mock("../db/client", async () => {
 import { db } from "../db/client";
 import { eq } from "drizzle-orm";
 import {
+    billingCheckoutAttempts,
+    billingPriceEntries,
+    billingProviderCustomers,
     espConfigTeamGrants,
     espConfigs,
     organizationEspQuotaReservations,
     organizationEspUsageBuckets,
+    billingPlanStates,
+    billingSubscriptions,
+    organizations,
     outboundMessages,
     sequences,
+    teams,
     user,
 } from "../db/schema";
 import {
     addOrganizationMemberByEmail,
+    closeOrganization,
     getOrganizationMembership,
     listOrganizationsForUser,
     createOrganization,
@@ -42,6 +50,63 @@ beforeEach(async () => {
 });
 
 describe("organizations", () => {
+    it("names an automatically-created initial team from its organization", async () => {
+        const [owner] = await tdb
+            .insert(user)
+            .values({
+                id: crypto.randomUUID(),
+                name: "Owner",
+                email: `owner-${crypto.randomUUID()}@example.com`,
+                emailVerified: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .returning();
+
+        const organization = await createOrganization(owner.id, "Acme", {
+            createInitialTeam: true,
+        });
+        const [team] = await tdb
+            .select({ name: teams.name })
+            .from(teams)
+            .where(eq(teams.organizationId, organization.id))
+            .limit(1);
+
+        expect(team?.name).toBe("Acme Team");
+    });
+
+    it("rejects case-only duplicate organization names for the same owner", async () => {
+        const [owner, otherOwner] = await tdb
+            .insert(user)
+            .values([
+                {
+                    id: crypto.randomUUID(),
+                    name: "Owner",
+                    email: `owner-${crypto.randomUUID()}@example.com`,
+                    emailVerified: true,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                },
+                {
+                    id: crypto.randomUUID(),
+                    name: "Other Owner",
+                    email: `other-owner-${crypto.randomUUID()}@example.com`,
+                    emailVerified: true,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                },
+            ])
+            .returning();
+
+        await createOrganization(owner.id, "Acme");
+        await expect(createOrganization(owner.id, " acME ")).rejects.toThrow(
+            "organization_name_already_exists",
+        );
+        await expect(
+            createOrganization(otherOwner.id, "ACME"),
+        ).resolves.toBeTruthy();
+    });
+
     it("owns teams through a Better Auth user membership", async () => {
         const [member] = await tdb
             .insert(user)
@@ -301,5 +366,172 @@ describe("organizations", () => {
             type: "organization",
             espConfigId: esp.id,
         });
+    });
+
+    it("blocks organization close while a live checkout attempt exists", async () => {
+        const [owner] = await tdb
+            .insert(user)
+            .values({
+                id: crypto.randomUUID(),
+                name: "Owner",
+                email: `owner-${crypto.randomUUID()}@example.com`,
+                emailVerified: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .returning();
+        const organization = await createOrganization(owner.id, "Acme");
+        const [price] = await tdb
+            .insert(billingPriceEntries)
+            .values({
+                offerKey: "pro_month",
+                plan: "pro",
+                billingInterval: "month",
+                currency: "USD",
+                amountMinor: 4900,
+                provider: "dodo",
+                providerProductId: `pdt_${crypto.randomUUID()}`,
+            })
+            .returning();
+        await tdb.insert(billingCheckoutAttempts).values({
+            attemptId: `bca_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
+            billableEntityId: organization.id,
+            payerId: owner.id,
+            provider: "dodo",
+            catalogRevision: 1,
+            offerKey: "pro_month",
+            requestedPlan: "pro",
+            requestedInterval: "month",
+            billingPriceEntryId: price.id,
+            quotedAmountMinor: 4900,
+            quotedCurrency: "USD",
+            idempotencyKey: `checkout:${organization.id}`,
+            status: "open",
+            expiresAt: new Date(Date.now() + 60_000),
+        });
+
+        await expect(closeOrganization(organization.id)).rejects.toThrow(
+            "billing_checkout_pending",
+        );
+        const [row] = await tdb
+            .select({ status: organizations.status })
+            .from(organizations)
+            .where(eq(organizations.id, organization.id));
+        expect(row?.status).toBe("active");
+    });
+});
+
+describe("one owned Free organization", () => {
+    const originalMode = process.env.SENDLIT_DEPLOYMENT_MODE;
+    afterEach(() => {
+        if (originalMode === undefined)
+            delete process.env.SENDLIT_DEPLOYMENT_MODE;
+        else process.env.SENDLIT_DEPLOYMENT_MODE = originalMode;
+    });
+
+    async function seedOwner() {
+        const [owner] = await tdb
+            .insert(user)
+            .values({
+                id: crypto.randomUUID(),
+                name: "Owner",
+                email: `owner-${crypto.randomUUID()}@example.com`,
+                emailVerified: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .returning();
+        return owner;
+    }
+
+    async function attachSubscription(
+        organizationId: string,
+        ownerId: string,
+        input: {
+            status: "active" | "cancelled";
+            cancelAtPeriodEnd: boolean;
+            paidThroughAt: Date;
+        },
+    ) {
+        const [price] = await tdb
+            .insert(billingPriceEntries)
+            .values({
+                offerKey: "pro_month",
+                plan: "pro",
+                billingInterval: "month",
+                currency: "USD",
+                amountMinor: 4900,
+                provider: "dodo",
+                providerProductId: `pdt_${crypto.randomUUID()}`,
+            })
+            .returning();
+        const [customer] = await tdb
+            .insert(billingProviderCustomers)
+            .values({
+                provider: "dodo",
+                payerId: ownerId,
+                providerCustomerId: `cus_${crypto.randomUUID()}`,
+                idempotencyKey: `customer:dodo:${ownerId}`,
+                status: "active",
+            })
+            .returning();
+        const [subscription] = await tdb
+            .insert(billingSubscriptions)
+            .values({
+                billableEntityId: organizationId,
+                billingCustomerId: customer.id,
+                payerId: ownerId,
+                provider: "dodo",
+                providerSubscriptionId: `sub_${crypto.randomUUID()}`,
+                providerProductId: price.providerProductId,
+                billingPriceEntryId: price.id,
+                catalogRevision: 1,
+                offerKey: "pro_month",
+                plan: "pro",
+                billingInterval: "month",
+                status: input.status,
+                paidThroughAt: input.paidThroughAt,
+                cancelAtPeriodEnd: input.cancelAtPeriodEnd,
+                isEntitlementSource: true,
+            })
+            .returning();
+        await tdb
+            .update(billingPlanStates)
+            .set({
+                plan: "pro",
+                activeSubscriptionId: subscription.id,
+            })
+            .where(eq(billingPlanStates.billableEntityId, organizationId));
+        return subscription;
+    }
+
+    it("treats an elapsed scheduled cancellation as Free even if the plan projection is stale", async () => {
+        process.env.SENDLIT_DEPLOYMENT_MODE = "cloud";
+        const owner = await seedOwner();
+        const paid = await createOrganization(owner.id, "Paid");
+        await attachSubscription(paid.id, owner.id, {
+            status: "cancelled",
+            cancelAtPeriodEnd: true,
+            paidThroughAt: new Date(Date.now() - 60_000),
+        });
+
+        await expect(createOrganization(owner.id, "Second")).rejects.toThrow(
+            "free_organization_already_owned",
+        );
+    });
+
+    it("allows another Free organization while scheduled cancellation still has paid access", async () => {
+        process.env.SENDLIT_DEPLOYMENT_MODE = "cloud";
+        const owner = await seedOwner();
+        const paid = await createOrganization(owner.id, "Paid");
+        await attachSubscription(paid.id, owner.id, {
+            status: "cancelled",
+            cancelAtPeriodEnd: true,
+            paidThroughAt: new Date(Date.now() + 60_000),
+        });
+
+        await expect(
+            createOrganization(owner.id, "Second"),
+        ).resolves.toMatchObject({ name: "Second" });
     });
 });

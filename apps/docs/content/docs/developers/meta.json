@@ -9,6 +9,7 @@
         "errors",
         "mcp",
         "transactional",
-        "provisioning"
+        "provisioning",
+        "headless-provisioning"
     ]
 }

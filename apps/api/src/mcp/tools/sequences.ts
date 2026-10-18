@@ -25,6 +25,8 @@ import {
     NOT_FOUND,
     errorResult,
     jsonResult,
+    planGateResult,
+    isPlanGateError,
 } from "./responses";
 import {
     sequenceListSchema,
@@ -373,6 +375,7 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
                 });
                 return jsonResult(toPublicSequence(sequence));
             } catch (err: any) {
+                if (isPlanGateError(err)) return planGateResult(err);
                 return errorResult(err.message);
             }
         },

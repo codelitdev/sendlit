@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "crypto";
  * makes the credential type obvious at a glance without exposing the secret. */
 export const API_KEY_PREFIX = "sl_live_";
 export const ORGANIZATION_API_KEY_PREFIX = "sl_org_live_";
+const ORGANIZATION_API_KEY_SECRET_PATTERN = /^sl_org_live_[A-Za-z0-9_-]{43}$/;
 
 /** Characters of the secret shown in list/UI surfaces (`sl_live_a1b2`). */
 const DISPLAY_PREFIX_LENGTH = 12;
@@ -18,6 +19,11 @@ export function generateOrganizationApiKeySecret(): string {
     return `${ORGANIZATION_API_KEY_PREFIX}${randomBytes(32).toString(
         "base64url",
     )}`;
+}
+
+/** Accept only the 256-bit, base64url organization key format generated here. */
+export function isOrganizationApiKeySecret(secret: string): boolean {
+    return ORGANIZATION_API_KEY_SECRET_PATTERN.test(secret);
 }
 
 /** Keys are stored hashed, like passwords — but as a plain SHA-256, not

@@ -42,4 +42,16 @@ describe("SendLit MCP auth context", () => {
         });
         expect(JSON.stringify(auth)).not.toContain("sl_live_secret");
     });
+
+    it("does not treat organization API keys as MCP credentials", () => {
+        expect(
+            createSendLitMcpAuthInfo({
+                authKind: "organization_key",
+                organizationId: "org-internal",
+                organizationApiKeyId: "oak_public",
+                apiKeyId: "oak_public",
+                teamId: "team-1",
+            }),
+        ).toBeNull();
+    });
 });

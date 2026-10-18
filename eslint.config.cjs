@@ -99,6 +99,12 @@ module.exports = defineConfig([
             "react-hooks/set-state-in-effect": "off",
         },
     },
+    {
+        files: ["apps/api/scripts/**/*.{js,ts}"],
+        rules: {
+            "no-console": "off",
+        },
+    },
     prettier,
     globalIgnores([
         "**/node_modules/",

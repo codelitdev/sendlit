@@ -13,6 +13,8 @@ export interface SendLitEmailRenderContext {
     footer?: {
         mailingAddress: string;
         unsubscribeUrl: string;
+        /** Server-owned plan branding; never part of editable template data. */
+        brandingText?: string;
     };
 }
 

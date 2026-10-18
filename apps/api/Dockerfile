@@ -22,6 +22,7 @@ COPY --from=deps /app/ ./
 RUN pnpm --filter=@sendlit/email-editor build
 RUN pnpm --filter=@sendlit/api-contract build
 RUN pnpm --filter=@sendlit/email-blocks build
+RUN pnpm --filter=@sendlit/api billing:generate
 RUN pnpm --filter=@sendlit/api build
 
 FROM base AS runner

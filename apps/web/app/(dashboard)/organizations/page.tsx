@@ -12,9 +12,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
     Activity,
     Archive,
+    CalendarClock,
     CheckCircle2,
     Copy,
-    KeyRound,
     LogIn,
     Mail,
     MoreHorizontal,
@@ -22,7 +22,7 @@ import {
     Plus,
     ShieldCheck,
     Send,
-    Server,
+    Sparkles,
     Trash2,
     Users,
 } from "lucide-react";
@@ -56,6 +56,7 @@ import {
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -95,6 +96,8 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
+import { reloadPage } from "@/lib/navigation";
+import { cn } from "@/lib/utils";
 import {
     getOrganizationIdFromCookie,
     notifyTeamsChanged,
@@ -106,6 +109,9 @@ import {
     archiveOrganizationTeam,
     activateOrganizationEsp,
     createOrganization,
+    abandonPendingOrganization,
+    createPaidOrganizationBillingCheckout,
+    createOrganizationSendingDomain,
     createOrganizationEsp,
     createOrganizationKey,
     createOrganizationTeam,
@@ -117,12 +123,23 @@ import {
     getOrganizationMailActivity,
     getOrganizationEspGrant,
     listOrganizationAuditEvents,
+    getBillingCatalog,
+    getOrganizationBilling,
+    createOrganizationBillingCheckout,
+    createOrganizationBillingPlanChange,
+    createOrganizationBillingPortal,
+    type BillingCatalog,
+    type OrganizationBilling,
+    type OrganizationPlanChange,
     listOrganizationEsps,
     listOrganizationKeys,
     listOrganizationMembers,
+    listOrganizationSendingDomains,
     listOrganizations,
     listOrganizationTeams,
     revokeOrganizationKey,
+    revokeOrganizationSendingDomain,
+    verifyOrganizationSendingDomain,
     renameOrganizationTeam,
     removeOrganizationMember,
     resumeOrganizationEsp,
@@ -150,6 +167,7 @@ import {
     type OrganizationMember,
     type OrganizationTeam,
     type OrganizationUsage,
+    type SendingDomain,
 } from "@/lib/api";
 
 const PROVIDERS: Array<{ value: EspProvider; label: string }> = [
@@ -173,12 +191,129 @@ const KEY_SCOPES: Array<{ value: OrganizationApiKeyScope; label: string }> = [
     { value: "usage:read", label: "Read quota usage" },
 ];
 
+const ORGANIZATION_ERROR_MESSAGES: Record<string, string> = {
+    active_subscription_exists:
+        "This organization already has an active subscription.",
+    billing_catalog_changed:
+        "The available pricing changed. Close this dialog and try again to load the latest plans.",
+    billing_catalog_unavailable:
+        "Plans are temporarily unavailable. Please try again in a moment.",
+    billing_checkout_pending:
+        "Checkout is already in progress for this organization.",
+    billing_manager_required:
+        "Only the billing manager can change this organization’s billing.",
+    billing_owner_required: "Only the organization owner can manage billing.",
+    billing_plan_change_not_supported:
+        "That plan change is not available right now. Please try again later.",
+    billing_plan_change_pending:
+        "A plan change is already being processed for this organization.",
+    billing_plan_change_same_plan:
+        "This organization is already on that plan and billing interval.",
+    billing_provider_unavailable:
+        "Billing is temporarily unavailable. Please try again later.",
+    billing_human_session_required:
+        "For your security, sign in again before changing billing.",
+    billing_action_token_invalid:
+        "This secure billing request expired or was already used. Please try again.",
+    billing_action_token_required:
+        "This billing request could not be verified. Please try again.",
+    billing_security_unavailable:
+        "Secure billing verification is temporarily unavailable. Please try again shortly.",
+    csrf_origin_invalid:
+        "This billing request could not be verified. Refresh the page and try again.",
+    csrf_token_invalid:
+        "This billing request expired. Refresh the page and try again.",
+    recent_authentication_required:
+        "For your security, sign in again before changing billing.",
+    billing_subscription_not_changeable:
+        "This subscription cannot be changed right now. Please try again later.",
+    billing_subscription_required:
+        "An active subscription is required for this action.",
+    delivery_policy_not_found:
+        "Delivery settings are not available for this organization.",
+    delivery_source_in_use:
+        "This mailbox is still assigned to a team. Remove its assignments and try again.",
+    domain_exists: "That sending domain has already been added.",
+    domain_invalid: "Enter a valid domain, such as example.com.",
+    domain_not_found: "That sending domain could not be found.",
+    domain_public_suffix:
+        "Use a registrable domain, not a public suffix such as com or co.uk.",
+    domain_verification_pending:
+        "Domain verification is still pending. Add the DNS record and try again.",
+    esp_not_found: "That shared mailbox could not be found.",
+    feedback_not_configured:
+        "Delivery feedback is not configured for this mailbox yet.",
+    feedback_not_supported:
+        "This email provider does not support delivery feedback configuration.",
+    free_organization_already_owned:
+        "You already own a Free organization. Upgrade it first, or choose Pro or Business for this new organization.",
+    invalid_lifecycle_transition:
+        "That mailbox action is no longer available. Refresh the page and try again.",
+    key_not_found: "That organization key could not be found.",
+    last_organization_owner:
+        "An organization must have at least one owner. Add another owner before changing this role.",
+    member_exists: "That person is already a member of this organization.",
+    member_not_found: "That organization member could not be found.",
+    organization_esp_permission_required:
+        "You need organization administrator access to manage shared mailboxes.",
+    organization_membership_required:
+        "You must be a member of this organization to perform that action.",
+    organization_name_already_exists:
+        "You already own an organization with this name. Choose a different name.",
+    organization_name_required: "Enter an organization name.",
+    organization_not_found:
+        "This organization is no longer available. Refresh the page and try again.",
+    organization_owner_required:
+        "Only an organization owner can perform that action.",
+    organization_permission_required:
+        "You need organization administrator access to perform that action.",
+    organization_scope_required:
+        "This integration does not have permission to manage the organization.",
+    organization_esp_unavailable:
+        "The organization mailbox is unavailable. Check its configuration and try again.",
+    payment_required:
+        "An active subscription or payment method is required for this action.",
+    pending_organization_exists:
+        "You already have an organization awaiting payment. Finish that checkout before creating another.",
+    plan_feature_unavailable:
+        "This feature is not available on your current plan. Upgrade to continue.",
+    plan_limit_reached:
+        "This organization has reached its plan limit. Upgrade to continue.",
+    provider_capability_required:
+        "This email provider does not support that action.",
+    team_archived: "Archived teams cannot be edited.",
+    team_not_found: "That team could not be found.",
+    team_organization_mismatch:
+        "That team does not belong to this organization.",
+    user_auth_required: "Please sign in again to continue.",
+};
+
 function errorMessage(error: unknown, fallback: string) {
-    return error instanceof ApiError ? error.message : fallback;
+    if (!(error instanceof ApiError)) return fallback;
+    const code = error.message.trim();
+    const mapped = ORGANIZATION_ERROR_MESSAGES[code];
+    if (mapped) return mapped;
+
+    // Never expose an unrecognized machine-readable API code to end users.
+    // Preserve ordinary prose from validation/provider responses when it is
+    // already suitable for display.
+    if (/^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(code)) return fallback;
+    return code || fallback;
+}
+
+function formatMinorAmount(amountMinor: number, currency: string): string {
+    const formatter = new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency,
+    });
+    const fractionDigits =
+        formatter.resolvedOptions().maximumFractionDigits ?? 2;
+    return formatter.format(amountMinor / 10 ** fractionDigits);
 }
 
 const ORGANIZATION_TABS = [
     "general",
+    "plan",
     "delivery",
     "teams",
     "members",
@@ -191,17 +326,187 @@ function isOrganizationTab(value: string | null): value is OrganizationTab {
     return ORGANIZATION_TABS.includes(value as OrganizationTab);
 }
 
+const PLAN_LABELS: Record<OrganizationBilling["plan"], string> = {
+    oss: "OSS",
+    free: "Free",
+    pro: "Pro",
+    business: "Business",
+};
+
+const PAYMENT_STATUS_LABELS: Record<
+    OrganizationBilling["paymentStatus"],
+    string
+> = {
+    free: "No subscription",
+    checkout_pending: "Checkout pending",
+    trialing: "Trial active",
+    active: "Active",
+    past_due: "Payment past due",
+    cancel_at_period_end: "Cancels at period end",
+    cancelled: "Cancelled",
+    expired: "Expired",
+};
+
+function usageLabel(value: number, limit: number | null): string {
+    const formattedValue = value.toLocaleString();
+    return limit === null
+        ? `${formattedValue} · unlimited`
+        : `${formattedValue} / ${limit.toLocaleString()}`;
+}
+
+function formatBillingDate(value: string | null): string | null {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+    });
+}
+
+function hasFutureBillingDate(value: string | null): boolean {
+    if (!value) return false;
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) && timestamp > Date.now();
+}
+
+function usagePercentage(value: number, limit: number | null): number | null {
+    if (limit === null) return null;
+    return Math.min(100, Math.round((value / Math.max(1, limit)) * 100));
+}
+
+function paymentStatusVariant(
+    status: OrganizationBilling["paymentStatus"],
+): "secondary" | "success" | "destructive" {
+    if (status === "active" || status === "trialing") return "success";
+    if (status === "past_due") return "destructive";
+    return "secondary";
+}
+
+function UsageMeter({
+    icon,
+    label,
+    description,
+    value,
+    limit,
+}: {
+    icon: React.ReactNode;
+    label: string;
+    description: string;
+    value: number;
+    limit: number | null;
+}) {
+    const percentage = usagePercentage(value, limit);
+    const overLimit = limit !== null && value > limit;
+    const barWidth = percentage === null ? 0 : percentage;
+    const barColor = overLimit
+        ? "bg-destructive"
+        : percentage !== null && percentage >= 80
+          ? "bg-amber-500"
+          : "bg-primary";
+
+    return (
+        <div className="rounded-xl border bg-background p-4 shadow-sm transition-colors">
+            <div className="flex items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    {icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                        <p className="text-sm font-medium">{label}</p>
+                        {limit === null ? (
+                            <Badge variant="secondary">Unlimited</Badge>
+                        ) : percentage !== null ? (
+                            <span
+                                className={cn(
+                                    "text-xs font-medium tabular-nums",
+                                    overLimit
+                                        ? "text-destructive"
+                                        : percentage >= 80
+                                          ? "text-amber-700 dark:text-amber-300"
+                                          : "text-muted-foreground",
+                                )}
+                            >
+                                {overLimit
+                                    ? "Over limit"
+                                    : `${percentage}% used`}
+                            </span>
+                        ) : null}
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        {description}
+                    </p>
+                </div>
+            </div>
+            <p className="mt-4 text-xl font-semibold tracking-tight tabular-nums">
+                {usageLabel(value, limit)}
+            </p>
+            {percentage !== null ? (
+                <div
+                    className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-label={`${label} usage`}
+                    aria-valuemin={0}
+                    aria-valuemax={limit ?? undefined}
+                    aria-valuenow={Math.min(value, limit ?? value)}
+                >
+                    <div
+                        className={cn(
+                            "h-full rounded-full transition-[width]",
+                            barColor,
+                        )}
+                        style={{ width: `${barWidth}%` }}
+                    />
+                </div>
+            ) : (
+                <p className="mt-3 text-xs text-muted-foreground">
+                    No plan cap
+                </p>
+            )}
+        </div>
+    );
+}
+
+function OrganizationSectionHeader({
+    title,
+    description,
+    action,
+}: {
+    title: string;
+    description: React.ReactNode;
+    action?: React.ReactNode;
+}) {
+    return (
+        <CardHeader className="flex flex-col gap-4 border-b bg-muted/10 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+                <CardTitle>{title}</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    {description}
+                </p>
+            </div>
+            {action ? (
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {action}
+                </div>
+            ) : null}
+        </CardHeader>
+    );
+}
+
 export default function OrganizationsPage() {
     useSetBreadcrumb([{ label: "Organizations" }]);
     const router = useRouter();
     const searchParams = useSearchParams();
     const tabFromUrl = searchParams.get("tab");
+    const confirmingCheckout = searchParams.get("billing") === "confirming";
     const [selectedTab, setSelectedTab] = useState<OrganizationTab>(() =>
         isOrganizationTab(tabFromUrl) ? tabFromUrl : "general",
     );
     const [organizations, setOrganizations] = useState<Organization[] | null>(
         null,
     );
+    const [ownsFreeOrganization, setOwnsFreeOrganization] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(() =>
         getOrganizationIdFromCookie(),
     );
@@ -209,7 +514,14 @@ export default function OrganizationsPage() {
     const [esps, setEsps] = useState<EspConfig[]>([]);
     const [keys, setKeys] = useState<OrganizationApiKey[]>([]);
     const [members, setMembers] = useState<OrganizationMember[]>([]);
+    const [sendingDomains, setSendingDomains] = useState<SendingDomain[]>([]);
     const [usage, setUsage] = useState<OrganizationUsage | null>(null);
+    const [billing, setBilling] = useState<OrganizationBilling | null>(null);
+    const [billingDialogOpen, setBillingDialogOpen] = useState(false);
+    const [planChangeDialogOpen, setPlanChangeDialogOpen] = useState(false);
+    const [checkoutConfirmation, setCheckoutConfirmation] = useState<
+        "idle" | "polling" | "confirmed" | "timed_out"
+    >("idle");
     const [mailActivity, setMailActivity] =
         useState<OrganizationMailActivity | null>(null);
     const [mailRangeDays, setMailRangeDays] =
@@ -244,6 +556,7 @@ export default function OrganizationsPage() {
         try {
             const result = await listOrganizations();
             setOrganizations(result.items);
+            setOwnsFreeOrganization(Boolean(result.ownsFreeOrganization));
             const nextId =
                 preferredId &&
                 result.items.some((item) => item.organizationId === preferredId)
@@ -275,34 +588,59 @@ export default function OrganizationsPage() {
         }
         setError(null);
         try {
+            const billingResult = await getOrganizationBilling(organizationId);
+            setBilling(billingResult);
+        } catch (err) {
+            if (!(
+                err instanceof ApiError &&
+                (err.message === "organization_permission_required" ||
+                    err.message === "organization_owner_required")
+            )) {
+                setError(errorMessage(err, "Failed to load billing"));
+            }
+        }
+        try {
             const [
                 teamResult,
                 espResult,
-                keyResult,
                 policyResult,
                 memberResult,
+                domainResult,
                 usageResult,
                 mailActivityResult,
                 auditResult,
             ] = await Promise.all([
                 listOrganizationTeams(organizationId),
                 listOrganizationEsps(organizationId),
-                listOrganizationKeys(organizationId),
                 getOrganizationDeliveryPolicy(organizationId),
                 listOrganizationMembers(organizationId),
+                listOrganizationSendingDomains(organizationId),
                 getOrganizationUsage(organizationId),
                 getOrganizationMailActivity(organizationId, mailRangeDays),
                 listOrganizationAuditEvents(organizationId),
             ]);
             setTeams(teamResult.items);
             setEsps(espResult.items);
-            setKeys(keyResult.items);
             setPolicy(policyResult);
             setMembers(memberResult.items);
+            setSendingDomains(domainResult.items);
             setUsage(usageResult);
             setMailActivity(mailActivityResult);
             setAuditEvents(auditResult.items);
             setHasManagementAccess(true);
+            try {
+                const keyResult = await listOrganizationKeys(organizationId);
+                setKeys(keyResult.items);
+            } catch (err) {
+                if (
+                    err instanceof ApiError &&
+                    err.message === "organization_owner_required"
+                ) {
+                    setKeys([]);
+                } else {
+                    throw err;
+                }
+            }
             const pairs = await Promise.all(
                 teamResult.items.map(
                     async (team) =>
@@ -319,7 +657,8 @@ export default function OrganizationsPage() {
         } catch (err) {
             if (
                 err instanceof ApiError &&
-                err.message === "organization_permission_required"
+                (err.message === "organization_permission_required" ||
+                    err.message === "organization_owner_required")
             ) {
                 setHasManagementAccess(false);
                 setError(null);
@@ -332,7 +671,7 @@ export default function OrganizationsPage() {
     }
 
     useEffect(() => {
-        void loadOrganizations();
+        void loadOrganizations(searchParams.get("organization") ?? undefined);
         // Load once on mount; subsequent changes are driven by the selector.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -343,9 +682,13 @@ export default function OrganizationsPage() {
             setEsps([]);
             setKeys([]);
             setMembers([]);
+            setSendingDomains([]);
             setUsage(null);
             setMailActivity(null);
             setAuditEvents([]);
+            setBilling(null);
+            setBillingDialogOpen(false);
+            setPlanChangeDialogOpen(false);
             setPolicy(null);
             setGrants({});
             return;
@@ -353,6 +696,52 @@ export default function OrganizationsPage() {
         void loadDetails(selectedId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedId]);
+
+    useEffect(() => {
+        if (!confirmingCheckout || !selectedId) return;
+        const organizationId = selectedId;
+        let cancelled = false;
+        const startedAt = Date.now();
+        setCheckoutConfirmation("polling");
+
+        async function poll() {
+            try {
+                const nextBilling =
+                    await getOrganizationBilling(organizationId);
+                if (cancelled) return;
+                setBilling(nextBilling);
+                const activated =
+                    nextBilling.plan === "pro" ||
+                    nextBilling.plan === "business";
+                if (activated) {
+                    setCheckoutConfirmation("confirmed");
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.delete("billing");
+                    params.delete("organization");
+                    router.replace(`/organizations?${params.toString()}`, {
+                        scroll: false,
+                    });
+                    return;
+                }
+            } catch {
+                // Keep polling. The provider webhook may still be in flight.
+            }
+            if (cancelled) return;
+            if (Date.now() - startedAt >= 90_000) {
+                setCheckoutConfirmation("timed_out");
+                return;
+            }
+            window.setTimeout(() => void poll(), 2_000);
+        }
+
+        void poll();
+        return () => {
+            cancelled = true;
+        };
+        // searchParams is intentionally omitted: its value is captured for
+        // the one return-flow poll and router.replace removes billing.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [confirmingCheckout, selectedId, router]);
 
     useEffect(() => {
         if (selectedOrganization)
@@ -435,23 +824,45 @@ export default function OrganizationsPage() {
                                                 }
                                             >
                                                 {organization.name}
+                                                {organization.status ===
+                                                "pending_payment"
+                                                    ? " (pending payment)"
+                                                    : ""}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
                             ) : null}
                             <CreateOrganizationDialog
-                                onCreated={(organization) =>
-                                    void loadOrganizations(
-                                        organization.organizationId,
-                                    )
-                                }
+                                hasFreeOrganization={ownsFreeOrganization}
+                                onCreated={reloadPage}
                             />
                         </div>
                     }
                 />
 
                 {error && <Banner>{error}</Banner>}
+
+                {checkoutConfirmation === "polling" && (
+                    <Banner variant="success">
+                        Confirming your subscription. We’ll update this
+                        organization as soon as the payment provider confirms
+                        it.
+                    </Banner>
+                )}
+                {checkoutConfirmation === "confirmed" && (
+                    <Banner variant="success">
+                        Subscription confirmed. Your organization’s paid
+                        features are now available.
+                    </Banner>
+                )}
+                {checkoutConfirmation === "timed_out" && (
+                    <Banner>
+                        Payment is still being confirmed. Refresh this page in a
+                        moment; your organization will update automatically when
+                        the provider webhook arrives.
+                    </Banner>
+                )}
 
                 {organizations.length === 0 ? (
                     <Card>
@@ -462,213 +873,354 @@ export default function OrganizationsPage() {
                     </Card>
                 ) : (
                     <>
+                        {selectedId &&
+                        billing &&
+                        hasManagementAccess === false ? (
+                            <div className="mb-6">
+                                <OrganizationPlanSummary
+                                    organizationId={selectedId}
+                                    billing={billing}
+                                    onUpgrade={() => setBillingDialogOpen(true)}
+                                    onChangePlan={() =>
+                                        setPlanChangeDialogOpen(true)
+                                    }
+                                />
+                            </div>
+                        ) : null}
+
+                        {selectedId &&
+                        selectedOrganization?.status === "pending_payment" ? (
+                            <Banner className="mb-6">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <p>
+                                        This organization is awaiting payment
+                                        and cannot send until checkout is
+                                        confirmed.
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() =>
+                                                setBillingDialogOpen(true)
+                                            }
+                                        >
+                                            Resume checkout
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                if (!selectedId) return;
+                                                void abandonPendingOrganization(
+                                                    selectedId,
+                                                )
+                                                    .then(() => reloadPage())
+                                                    .catch((error) =>
+                                                        toast.error(
+                                                            errorMessage(
+                                                                error,
+                                                                "Unable to hide this organization",
+                                                            ),
+                                                        ),
+                                                    );
+                                            }}
+                                        >
+                                            Hide
+                                        </Button>
+                                    </div>
+                                </div>
+                            </Banner>
+                        ) : null}
+
                         {selectedId && hasManagementAccess === false && (
                             <Card>
                                 <CardContent className="p-6 text-sm text-muted-foreground">
                                     You are a member of this organization, but
                                     only organization owners and administrators
                                     can manage shared mailboxes, teams, and
-                                    members. Team content still requires an
-                                    explicit team membership.
+                                    members. Plan and usage are shown above.
+                                    Team content still requires an explicit team
+                                    membership.
                                 </CardContent>
                             </Card>
                         )}
 
                         {selectedId && hasManagementAccess === true && (
-                            <Tabs
-                                value={selectedTab}
-                                onValueChange={selectTab}
-                                className="gap-6"
-                            >
-                                <TabsList className="flex h-auto w-full flex-wrap sm:w-fit">
-                                    <TabsTrigger
-                                        value="general"
-                                        onClick={() => selectTab("general")}
-                                    >
-                                        General
-                                    </TabsTrigger>
-                                    <TabsTrigger
-                                        value="delivery"
-                                        onClick={() => selectTab("delivery")}
-                                    >
-                                        Delivery
-                                    </TabsTrigger>
-                                    <TabsTrigger
-                                        value="teams"
-                                        onClick={() => selectTab("teams")}
-                                    >
-                                        Teams
-                                    </TabsTrigger>
-                                    <TabsTrigger
-                                        value="members"
-                                        onClick={() => selectTab("members")}
-                                    >
-                                        Members
-                                    </TabsTrigger>
-                                    <TabsTrigger
-                                        value="activity"
-                                        onClick={() => selectTab("activity")}
-                                    >
-                                        Activity
-                                    </TabsTrigger>
-                                    <TabsTrigger
-                                        value="keys"
-                                        onClick={() => selectTab("keys")}
-                                    >
-                                        Keys
-                                    </TabsTrigger>
-                                </TabsList>
-                                {selectedTab === "general" && (
-                                    <TabsContent value="general" forceMount>
-                                        <Card>
-                                            <CardHeader>
-                                                <CardTitle>
-                                                    Organization
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <div className="space-y-1.5">
-                                                    <Label htmlFor="organization-display-name">
-                                                        Name
-                                                    </Label>
-                                                    <Input
-                                                        id="organization-display-name"
-                                                        value={organizationName}
-                                                        onChange={(event) =>
-                                                            setOrganizationName(
-                                                                event.target
-                                                                    .value,
-                                                            )
+                            <>
+                                <Tabs
+                                    value={selectedTab}
+                                    onValueChange={selectTab}
+                                    className="gap-6"
+                                >
+                                    <TabsList className="flex h-auto w-full flex-wrap sm:w-fit">
+                                        <TabsTrigger
+                                            value="general"
+                                            onClick={() => selectTab("general")}
+                                        >
+                                            General
+                                        </TabsTrigger>
+                                        <TabsTrigger
+                                            value="plan"
+                                            onClick={() => selectTab("plan")}
+                                        >
+                                            Plan
+                                        </TabsTrigger>
+                                        <TabsTrigger
+                                            value="delivery"
+                                            onClick={() =>
+                                                selectTab("delivery")
+                                            }
+                                        >
+                                            Delivery
+                                        </TabsTrigger>
+                                        <TabsTrigger
+                                            value="teams"
+                                            onClick={() => selectTab("teams")}
+                                        >
+                                            Teams
+                                        </TabsTrigger>
+                                        <TabsTrigger
+                                            value="members"
+                                            onClick={() => selectTab("members")}
+                                        >
+                                            Members
+                                        </TabsTrigger>
+                                        <TabsTrigger
+                                            value="activity"
+                                            onClick={() =>
+                                                selectTab("activity")
+                                            }
+                                        >
+                                            Activity
+                                        </TabsTrigger>
+                                        <TabsTrigger
+                                            value="keys"
+                                            onClick={() => selectTab("keys")}
+                                        >
+                                            Keys
+                                        </TabsTrigger>
+                                    </TabsList>
+                                    {selectedTab === "general" && (
+                                        <TabsContent value="general" forceMount>
+                                            <Card>
+                                                <OrganizationSectionHeader
+                                                    title="Organization"
+                                                    description="Manage the organization name and identity shown across your workspace."
+                                                />
+                                                <CardContent>
+                                                    <div className="space-y-1.5">
+                                                        <Label htmlFor="organization-display-name">
+                                                            Name
+                                                        </Label>
+                                                        <Input
+                                                            id="organization-display-name"
+                                                            value={
+                                                                organizationName
+                                                            }
+                                                            onChange={(event) =>
+                                                                setOrganizationName(
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                        />
+                                                    </div>
+                                                </CardContent>
+                                                <CardFooter>
+                                                    <Button
+                                                        onClick={() =>
+                                                            void saveName()
                                                         }
-                                                    />
-                                                </div>
-                                            </CardContent>
-                                            <CardFooter>
-                                                <Button
-                                                    onClick={() =>
-                                                        void saveName()
+                                                        disabled={
+                                                            savingName ||
+                                                            !organizationName.trim() ||
+                                                            organizationName.trim() ===
+                                                                selectedOrganization?.name
+                                                        }
+                                                    >
+                                                        {savingName
+                                                            ? "Saving…"
+                                                            : "Save"}
+                                                    </Button>
+                                                </CardFooter>
+                                            </Card>
+                                        </TabsContent>
+                                    )}
+                                    {selectedTab === "plan" && (
+                                        <TabsContent value="plan" forceMount>
+                                            {billing ? (
+                                                <OrganizationPlanSummary
+                                                    organizationId={selectedId}
+                                                    billing={billing}
+                                                    onUpgrade={() =>
+                                                        setBillingDialogOpen(
+                                                            true,
+                                                        )
                                                     }
-                                                    disabled={
-                                                        savingName ||
-                                                        !organizationName.trim() ||
-                                                        organizationName.trim() ===
-                                                            selectedOrganization?.name
+                                                    onChangePlan={() =>
+                                                        setPlanChangeDialogOpen(
+                                                            true,
+                                                        )
                                                     }
-                                                >
-                                                    {savingName
-                                                        ? "Saving…"
-                                                        : "Save"}
-                                                </Button>
-                                            </CardFooter>
-                                        </Card>
-                                    </TabsContent>
-                                )}
-                                {selectedTab === "delivery" && (
-                                    <TabsContent
-                                        value="delivery"
-                                        className="space-y-6"
-                                        forceMount
-                                    >
-                                        <SharedEspsSection
-                                            organizationId={selectedId}
-                                            esps={esps}
-                                            loading={loadingDetails}
-                                            onChanged={refresh}
-                                            onEspUpdated={(updated) =>
-                                                setEsps((current) =>
-                                                    current.map((esp) =>
-                                                        esp.espId ===
-                                                        updated.espId
-                                                            ? updated
-                                                            : esp,
-                                                    ),
-                                                )
-                                            }
-                                            onEspDeleted={(espId) =>
-                                                setEsps((current) =>
-                                                    current.filter(
-                                                        (esp) =>
-                                                            esp.espId !== espId,
-                                                    ),
-                                                )
-                                            }
-                                        />
-                                        <DeliveryPolicySection
-                                            organizationId={selectedId}
-                                            esps={esps}
-                                            policy={policy}
-                                            loading={loadingDetails}
-                                            onChanged={async () => {
-                                                await loadDetails(selectedId);
-                                            }}
-                                        />
-                                    </TabsContent>
-                                )}
-                                {selectedTab === "teams" && (
-                                    <TabsContent value="teams" forceMount>
-                                        <TeamsAndGrantsSection
-                                            organizationId={selectedId}
-                                            teams={teams}
-                                            esps={esps}
-                                            grants={grants}
-                                            loading={loadingDetails}
-                                            onChanged={refresh}
-                                        />
-                                    </TabsContent>
-                                )}
-                                {selectedTab === "members" && (
-                                    <TabsContent value="members" forceMount>
-                                        <OrganizationMembersSection
-                                            organizationId={selectedId}
-                                            members={members}
-                                            loading={loadingDetails}
-                                            onChanged={refresh}
-                                        />
-                                    </TabsContent>
-                                )}
-                                {selectedTab === "activity" && (
-                                    <TabsContent value="activity" forceMount>
-                                        <OrganizationOperationsSection
-                                            usage={usage}
-                                            mailActivity={mailActivity}
-                                            mailRangeDays={mailRangeDays}
-                                            onMailRangeDaysChange={async (
-                                                days,
-                                            ) => {
-                                                setMailRangeDays(days);
-                                                if (!selectedId) return;
-                                                try {
-                                                    setMailActivity(
-                                                        await getOrganizationMailActivity(
-                                                            selectedId,
-                                                            days,
+                                                />
+                                            ) : (
+                                                <Loading />
+                                            )}
+                                        </TabsContent>
+                                    )}
+                                    {selectedTab === "delivery" && (
+                                        <TabsContent
+                                            value="delivery"
+                                            className="space-y-6"
+                                            forceMount
+                                        >
+                                            <SharedEspsSection
+                                                organizationId={selectedId}
+                                                esps={esps}
+                                                loading={loadingDetails}
+                                                billing={billing}
+                                                onChanged={refresh}
+                                                onEspUpdated={(updated) =>
+                                                    setEsps((current) =>
+                                                        current.map((esp) =>
+                                                            esp.espId ===
+                                                            updated.espId
+                                                                ? updated
+                                                                : esp,
                                                         ),
-                                                    );
-                                                } catch (err) {
-                                                    setError(
-                                                        errorMessage(
-                                                            err,
-                                                            "Failed to load mail activity",
-                                                        ),
-                                                    );
+                                                    )
                                                 }
-                                            }}
-                                            events={auditEvents}
-                                            loading={loadingDetails}
-                                        />
-                                    </TabsContent>
-                                )}
-                                {selectedTab === "keys" && (
-                                    <TabsContent value="keys" forceMount>
-                                        <OrganizationKeysSection
+                                                onEspDeleted={(espId) =>
+                                                    setEsps((current) =>
+                                                        current.filter(
+                                                            (esp) =>
+                                                                esp.espId !==
+                                                                espId,
+                                                        ),
+                                                    )
+                                                }
+                                            />
+                                            <DeliveryPolicySection
+                                                organizationId={selectedId}
+                                                esps={esps}
+                                                policy={policy}
+                                                loading={loadingDetails}
+                                                onChanged={async () => {
+                                                    await loadDetails(
+                                                        selectedId,
+                                                    );
+                                                }}
+                                            />
+                                            <SendingDomainsSection
+                                                organizationId={selectedId}
+                                                domains={sendingDomains}
+                                                onChanged={async () => {
+                                                    setSendingDomains(
+                                                        (
+                                                            await listOrganizationSendingDomains(
+                                                                selectedId,
+                                                            )
+                                                        ).items,
+                                                    );
+                                                }}
+                                            />
+                                        </TabsContent>
+                                    )}
+                                    {selectedTab === "teams" && (
+                                        <TabsContent value="teams" forceMount>
+                                            <TeamsAndGrantsSection
+                                                organizationId={selectedId}
+                                                teams={teams}
+                                                esps={esps}
+                                                grants={grants}
+                                                loading={loadingDetails}
+                                                billing={billing}
+                                                onUpgradeParent={() =>
+                                                    selectTab("plan")
+                                                }
+                                                onChanged={refresh}
+                                            />
+                                        </TabsContent>
+                                    )}
+                                    {selectedTab === "members" && (
+                                        <TabsContent value="members" forceMount>
+                                            <OrganizationMembersSection
+                                                organizationId={selectedId}
+                                                members={members}
+                                                loading={loadingDetails}
+                                                onChanged={refresh}
+                                            />
+                                        </TabsContent>
+                                    )}
+                                    {selectedTab === "activity" && (
+                                        <TabsContent
+                                            value="activity"
+                                            forceMount
+                                        >
+                                            <OrganizationOperationsSection
+                                                usage={usage}
+                                                mailActivity={mailActivity}
+                                                mailRangeDays={mailRangeDays}
+                                                onMailRangeDaysChange={async (
+                                                    days,
+                                                ) => {
+                                                    setMailRangeDays(days);
+                                                    if (!selectedId) return;
+                                                    try {
+                                                        setMailActivity(
+                                                            await getOrganizationMailActivity(
+                                                                selectedId,
+                                                                days,
+                                                            ),
+                                                        );
+                                                    } catch (err) {
+                                                        setError(
+                                                            errorMessage(
+                                                                err,
+                                                                "Failed to load mail activity",
+                                                            ),
+                                                        );
+                                                    }
+                                                }}
+                                                events={auditEvents}
+                                                loading={loadingDetails}
+                                            />
+                                        </TabsContent>
+                                    )}
+                                    {selectedTab === "keys" && (
+                                        <TabsContent value="keys" forceMount>
+                                            <OrganizationKeysSection
+                                                organizationId={selectedId}
+                                                keys={keys}
+                                                loading={loadingDetails}
+                                                billing={billing}
+                                                onChanged={refresh}
+                                            />
+                                        </TabsContent>
+                                    )}
+                                </Tabs>
+                                {billing ? (
+                                    <>
+                                        <OrganizationBillingDialog
                                             organizationId={selectedId}
-                                            keys={keys}
-                                            loading={loadingDetails}
-                                            onChanged={refresh}
+                                            billing={billing}
+                                            open={billingDialogOpen}
+                                            onOpenChange={setBillingDialogOpen}
                                         />
-                                    </TabsContent>
-                                )}
-                            </Tabs>
+                                        {billing.plan !== "free" &&
+                                        billing.plan !== "oss" ? (
+                                            <OrganizationPlanChangeDialog
+                                                organizationId={selectedId}
+                                                billing={billing}
+                                                open={planChangeDialogOpen}
+                                                onOpenChange={
+                                                    setPlanChangeDialogOpen
+                                                }
+                                                onChanged={refresh}
+                                            />
+                                        ) : null}
+                                    </>
+                                ) : null}
+                            </>
                         )}
                     </>
                 )}
@@ -677,31 +1229,422 @@ export default function OrganizationsPage() {
     );
 }
 
+function OrganizationPlanSummary({
+    organizationId,
+    billing,
+    onUpgrade,
+    onChangePlan,
+}: {
+    organizationId: string;
+    billing: OrganizationBilling;
+    onUpgrade: () => void;
+    onChangePlan: () => void;
+}) {
+    const { usage, entitlements } = billing;
+    const periodEnd = formatBillingDate(billing.currentPeriodEndsAt);
+    const trialEnd = formatBillingDate(billing.trialEndsAt);
+    // Providers may represent a period-end cancellation as either an explicit
+    // cancel-at-period-end flag or a cancelled subscription that remains paid
+    // through the current period. Treat both forms consistently in the UI.
+    const cancellationRequested =
+        billing.cancelAtPeriodEnd ||
+        billing.paymentStatus === "cancel_at_period_end" ||
+        billing.paymentStatus === "cancelled";
+    const cancellationPending =
+        cancellationRequested &&
+        (billing.plan === "pro" || billing.plan === "business") &&
+        hasFutureBillingDate(billing.currentPeriodEndsAt);
+    const subscriptionExpired =
+        billing.paymentStatus === "expired" ||
+        (billing.plan === "free" && billing.paymentStatus === "cancelled");
+    const periodLabel = subscriptionExpired
+        ? periodEnd
+            ? `Ended ${periodEnd}`
+            : null
+        : cancellationPending
+          ? periodEnd
+              ? `Access until ${periodEnd}`
+              : null
+          : trialEnd
+            ? `Trial ends ${trialEnd}`
+            : periodEnd
+              ? `Renews ${periodEnd}`
+              : null;
+
+    async function openBillingPortal() {
+        try {
+            const result =
+                await createOrganizationBillingPortal(organizationId);
+            window.location.assign(result.portalUrl);
+        } catch (error) {
+            toast.error(errorMessage(error, "Unable to open billing portal"));
+        }
+    }
+
+    return (
+        <Card className="mb-6 overflow-hidden">
+            <CardHeader className="border-b bg-muted/10">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                        <CardTitle>Plan and usage</CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Organization-level limits shared across your teams.
+                            Members and logins are never billed as seats.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                        {billing.canManageBilling && billing.plan === "free" ? (
+                            <Button variant="outline" onClick={onUpgrade}>
+                                Upgrade
+                            </Button>
+                        ) : null}
+                        {billing.canManageBilling &&
+                        billing.plan !== "free" &&
+                        billing.plan !== "oss" ? (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    onClick={onChangePlan}
+                                    disabled={Boolean(
+                                        billing.pendingPlanChange,
+                                    )}
+                                >
+                                    Change plan
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => void openBillingPortal()}
+                                >
+                                    Manage billing
+                                </Button>
+                            </>
+                        ) : null}
+                        <Badge
+                            variant={
+                                billing.plan === "free"
+                                    ? "secondary"
+                                    : "success"
+                            }
+                            className="mt-0.5 shrink-0"
+                        >
+                            {PLAN_LABELS[billing.plan]}
+                        </Badge>
+                    </div>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold">
+                        {PLAN_LABELS[billing.plan]} plan
+                    </span>
+                    {billing.billingInterval ? (
+                        <span className="text-sm text-muted-foreground">
+                            ·{" "}
+                            {billing.billingInterval === "month"
+                                ? "Monthly"
+                                : "Yearly"}{" "}
+                            billing
+                        </span>
+                    ) : null}
+                    <Badge
+                        variant={paymentStatusVariant(billing.paymentStatus)}
+                    >
+                        {PAYMENT_STATUS_LABELS[billing.paymentStatus]}
+                    </Badge>
+                    {periodLabel ? (
+                        <span className="text-xs text-muted-foreground">
+                            · {periodLabel}
+                        </span>
+                    ) : null}
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                        <h3 className="text-sm font-semibold">Usage</h3>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                            Current usage for this organization
+                        </p>
+                    </div>
+                    {formatBillingDate(usage.bucketEndsAt) ? (
+                        <span className="text-xs text-muted-foreground">
+                            Resets {formatBillingDate(usage.bucketEndsAt)}
+                        </span>
+                    ) : null}
+                </div>
+                {(entitlements.subscribedContactsLimit !== null &&
+                    usage.subscribedContacts >
+                        entitlements.subscribedContactsLimit) ||
+                (entitlements.monthlySendsLimit !== null &&
+                    usage.monthlySends > entitlements.monthlySendsLimit) ? (
+                    <Banner>
+                        This organization is over its plan limit
+                        {entitlements.subscribedContactsLimit !== null &&
+                        usage.subscribedContacts >
+                            entitlements.subscribedContactsLimit
+                            ? ` (${usage.subscribedContacts} of ${entitlements.subscribedContactsLimit} subscribed contacts)`
+                            : ""}
+                        {entitlements.monthlySendsLimit !== null &&
+                        usage.monthlySends > entitlements.monthlySendsLimit
+                            ? ` (${usage.monthlySends} of ${entitlements.monthlySendsLimit} monthly sends)`
+                            : ""}
+                        . Export, unsubscribe, or delete contacts to get under
+                        the cap, then upgrade if you need more capacity.
+                    </Banner>
+                ) : null}
+                <div className="grid gap-3 sm:grid-cols-3">
+                    <UsageMeter
+                        icon={<Users className="size-4" />}
+                        label="Teams"
+                        description="Active teams"
+                        value={usage.teams}
+                        limit={entitlements.teamsLimit}
+                    />
+                    <UsageMeter
+                        icon={<Mail className="size-4" />}
+                        label="Subscribed contacts"
+                        description="Across all teams"
+                        value={usage.subscribedContacts}
+                        limit={entitlements.subscribedContactsLimit}
+                    />
+                    <UsageMeter
+                        icon={<Send className="size-4" />}
+                        label="Monthly sends"
+                        description="Resets each month"
+                        value={usage.monthlySends}
+                        limit={entitlements.monthlySendsLimit}
+                    />
+                </div>
+                {billing.paymentStatus === "past_due" ? (
+                    <Banner>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p>
+                                Payment is past due
+                                {formatBillingDate(billing.graceEndsAt)
+                                    ? `. Paid sending remains available until ${formatBillingDate(billing.graceEndsAt)}`
+                                    : ""}
+                                . Update the card on file to keep paid sending
+                                enabled.
+                            </p>
+                            {billing.canManageBilling ? (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => void openBillingPortal()}
+                                >
+                                    Manage billing
+                                </Button>
+                            ) : null}
+                        </div>
+                    </Banner>
+                ) : null}
+                {cancellationPending ? (
+                    <Banner variant="warning" className="rounded-xl p-4">
+                        <div className="flex items-start gap-3">
+                            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
+                                <CalendarClock className="size-4" />
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <p className="font-semibold">
+                                        Cancellation scheduled
+                                    </p>
+                                    {periodEnd ? (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-amber-300/70 text-amber-800 dark:border-amber-300/30 dark:text-amber-200"
+                                        >
+                                            Ends {periodEnd}
+                                        </Badge>
+                                    ) : null}
+                                </div>
+                                <p>
+                                    Your {PLAN_LABELS[billing.plan]} plan
+                                    remains active
+                                    {periodEnd
+                                        ? ` until ${periodEnd}`
+                                        : " through the current billing period"}
+                                    . Paid features are available until then.
+                                </p>
+                                <div className="grid gap-2 pt-1 text-xs sm:grid-cols-2">
+                                    <div className="rounded-lg border border-amber-300/60 bg-background/40 p-3 dark:border-amber-300/20">
+                                        <p className="font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                                            After expiry
+                                        </p>
+                                        <p className="mt-1">
+                                            The organization moves to Free: 1
+                                            active team, 1,000 subscribed
+                                            contacts, and 3,000 sends per month.
+                                            New additions or sends over those
+                                            limits are blocked.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg border border-amber-300/60 bg-background/40 p-3 dark:border-amber-300/20">
+                                        <p className="font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                                            What stays
+                                        </p>
+                                        <p className="mt-1">
+                                            Organizations, teams, contacts,
+                                            sequences, broadcasts, templates,
+                                            media, logs, and existing keys
+                                            remain. Shared mailboxes and grants
+                                            stay readable but cannot be used for
+                                            new sends.
+                                        </p>
+                                    </div>
+                                </div>
+                                <p className="text-xs">
+                                    Provisioning and organization-key mutations
+                                    stop after expiry. Upgrade this organization
+                                    again to restore paid capabilities without
+                                    migrating data.
+                                </p>
+                            </div>
+                        </div>
+                    </Banner>
+                ) : null}
+                {subscriptionExpired ? (
+                    <Banner variant="info" className="rounded-xl p-4">
+                        <div className="flex items-start gap-3">
+                            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                <CheckCircle2 className="size-4" />
+                            </div>
+                            <div className="space-y-1">
+                                <p className="font-semibold">
+                                    This organization is now on the Free plan.
+                                    {periodEnd
+                                        ? ` The paid plan ended on ${periodEnd}.`
+                                        : null}
+                                </p>
+                                <p className="text-sm">
+                                    Your teams, contacts, sequences, broadcasts,
+                                    templates, media, logs, and other data are
+                                    retained. Free limits apply; shared
+                                    mailboxes and grants remain readable but
+                                    cannot be used for new sends. Upgrade again
+                                    to restore paid capabilities.
+                                </p>
+                            </div>
+                        </div>
+                    </Banner>
+                ) : null}
+                {!cancellationPending &&
+                cancellationRequested &&
+                (billing.plan === "pro" || billing.plan === "business") ? (
+                    <Banner variant="warning" className="rounded-xl p-4">
+                        This subscription is cancelled. Your paid features
+                        remain available through the current billing period. The
+                        provider has not supplied an exact end date yet.
+                    </Banner>
+                ) : null}
+            </CardContent>
+        </Card>
+    );
+}
+
 function CreateOrganizationDialog({
+    hasFreeOrganization,
     onCreated,
 }: {
-    onCreated: (organization: Organization) => void;
+    hasFreeOrganization: boolean;
+    onCreated: () => void;
 }) {
     const [open, setOpen] = useState(false);
     const [name, setName] = useState("");
+    const [teamName, setTeamName] = useState("");
+    const [plan, setPlan] = useState<"oss" | "free" | "pro" | "business">(
+        "free",
+    );
+    const [interval, setInterval] = useState<"month" | "year">("month");
+    const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
+    const [catalogUnavailable, setCatalogUnavailable] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const isOssDeployment =
+        catalog?.catalogRevision === null && !catalog.checkoutAvailable;
+    const showPlanSelector =
+        catalogUnavailable || (catalog !== null && !isOssDeployment);
+
+    useEffect(() => {
+        if (!open) return;
+        setError(null);
+        setPlan(hasFreeOrganization ? "pro" : "free");
+        setInterval("month");
+        setTeamName("");
+        setCatalog(null);
+        setCatalogUnavailable(false);
+        void (async () => {
+            try {
+                const nextCatalog = await getBillingCatalog();
+                setCatalog(nextCatalog);
+                if (
+                    nextCatalog.catalogRevision === null &&
+                    !nextCatalog.checkoutAvailable
+                ) {
+                    setPlan("oss");
+                } else {
+                    setPlan(hasFreeOrganization ? "pro" : "free");
+                }
+            } catch {
+                setCatalog(null);
+                setCatalogUnavailable(true);
+            }
+        })();
+    }, [hasFreeOrganization, open]);
+
+    const offer =
+        plan === "free" || plan === "oss"
+            ? null
+            : catalog?.offers.find(
+                  (item) => item.plan === plan && item.interval === interval,
+              );
+
     async function submit() {
         if (!name.trim()) return;
+        if (
+            plan !== "free" &&
+            plan !== "oss" &&
+            (!catalog?.catalogRevision || !offer)
+        ) {
+            setError(
+                "Paid plans are temporarily unavailable. Please try again.",
+            );
+            return;
+        }
         setSaving(true);
         setError(null);
         try {
-            const organization = await createOrganization(name.trim());
-            setOpen(false);
-            setName("");
-            onCreated(organization);
+            if (plan === "free" || plan === "oss") {
+                await createOrganization(name.trim());
+                setOpen(false);
+                setName("");
+                onCreated();
+            } else {
+                const result = await createPaidOrganizationBillingCheckout({
+                    organizationName: name.trim(),
+                    teamName: teamName.trim() || `${name.trim()} Team`,
+                    plan,
+                    interval,
+                    catalogRevision: catalog!.catalogRevision!,
+                });
+                // Activation is webhook-driven; the hosted provider page is
+                // the only place where payment details are entered.
+                window.location.assign(result.checkoutUrl);
+            }
         } catch (err) {
             setError(errorMessage(err, "Failed to create organization"));
         } finally {
             setSaving(false);
         }
     }
+
+    const submitLabel = saving
+        ? plan === "free"
+            ? "Creating…"
+            : "Opening checkout…"
+        : !catalog && !catalogUnavailable
+          ? "Loading…"
+          : plan === "free" || plan === "oss"
+            ? "Create organization"
+            : "Continue to checkout";
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -725,12 +1668,134 @@ function CreateOrganizationDialog({
                         placeholder="e.g. CourseLit"
                     />
                 </div>
+                {showPlanSelector ? (
+                    <div className="space-y-1.5">
+                        <Label>Plan</Label>
+                        <Select
+                            value={plan}
+                            onValueChange={(value) =>
+                                setPlan(
+                                    value as
+                                        "oss" | "free" | "pro" | "business",
+                                )
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {!hasFreeOrganization ? (
+                                    <SelectItem value="free">Free</SelectItem>
+                                ) : null}
+                                <SelectItem
+                                    value="pro"
+                                    disabled={
+                                        catalogUnavailable ||
+                                        Boolean(
+                                            catalog &&
+                                            !catalog.checkoutAvailable,
+                                        )
+                                    }
+                                >
+                                    Pro
+                                </SelectItem>
+                                <SelectItem
+                                    value="business"
+                                    disabled={
+                                        catalogUnavailable ||
+                                        Boolean(
+                                            catalog &&
+                                            !catalog.checkoutAvailable,
+                                        )
+                                    }
+                                >
+                                    Business
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {hasFreeOrganization ? (
+                            <p className="text-xs text-muted-foreground">
+                                Your existing Free organization means this new
+                                organization must use a paid plan.
+                            </p>
+                        ) : null}
+                    </div>
+                ) : null}
+                {catalogUnavailable ||
+                (catalog &&
+                    !catalog.checkoutAvailable &&
+                    catalog.catalogRevision !== null) ? (
+                    <p className="text-sm text-muted-foreground">
+                        Paid checkout is not enabled for this deployment.
+                    </p>
+                ) : null}
+                {plan !== "free" && plan !== "oss" ? (
+                    <>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="organization-paid-team-name">
+                                First team name
+                            </Label>
+                            <Input
+                                id="organization-paid-team-name"
+                                value={teamName}
+                                onChange={(event) =>
+                                    setTeamName(event.target.value)
+                                }
+                                placeholder="e.g. Main team"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Billing interval</Label>
+                            <Select
+                                value={interval}
+                                onValueChange={(value) =>
+                                    setInterval(value as "month" | "year")
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="month">
+                                        Monthly
+                                    </SelectItem>
+                                    <SelectItem value="year">
+                                        Yearly (2 months free)
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {offer ? (
+                            <p className="text-sm font-medium">
+                                {formatMinorAmount(
+                                    offer.amountMinor,
+                                    offer.currency,
+                                )}{" "}
+                                / {interval}
+                                {offer.trialDays
+                                    ? ` · ${offer.trialDays}-day trial`
+                                    : ""}
+                            </p>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                Loading the current provider-configured price…
+                            </p>
+                        )}
+                    </>
+                ) : null}
                 <DialogFooter>
                     <Button
                         onClick={() => void submit()}
-                        disabled={saving || !name.trim()}
+                        disabled={
+                            saving ||
+                            !name.trim() ||
+                            (!catalog && !catalogUnavailable) ||
+                            (plan !== "free" &&
+                                plan !== "oss" &&
+                                (!catalog?.catalogRevision || !offer))
+                        }
                     >
-                        {saving ? "Creating…" : "Create organization"}
+                        {submitLabel}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -742,6 +1807,7 @@ function SharedEspsSection({
     organizationId,
     esps,
     loading,
+    billing,
     onChanged,
     onEspUpdated,
     onEspDeleted,
@@ -749,6 +1815,7 @@ function SharedEspsSection({
     organizationId: string;
     esps: EspConfig[];
     loading: boolean;
+    billing: OrganizationBilling | null;
     onChanged: () => Promise<void>;
     onEspUpdated: (esp: EspConfig) => void;
     onEspDeleted: (espId: string) => void;
@@ -761,6 +1828,8 @@ function SharedEspsSection({
     const [transitioningId, setTransitioningId] = useState<string | null>(null);
     const [retiringEsp, setRetiringEsp] = useState<EspConfig | null>(null);
     const [deletingEsp, setDeletingEsp] = useState<EspConfig | null>(null);
+    const sharedMailboxEnabled =
+        billing === null || billing.entitlements.sharedOrganizationMailbox;
 
     async function test(espId: string) {
         setTestingId(espId);
@@ -856,25 +1925,33 @@ function SharedEspsSection({
 
     return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
-                <div>
-                    <CardTitle className="flex items-center gap-2">
-                        <Server className="size-5" />
-                        Shared mailboxes
-                    </CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
+            <OrganizationSectionHeader
+                title="Shared mailboxes"
+                description={
+                    <>
                         Shared ESPs are organization-owned. Configure
                         credentials once, then grant the mailbox to selected
                         teams. A team receives only a delivery option after an
                         explicit grant; credentials never enter team APIs.
-                    </p>
-                </div>
-                <Button onClick={() => setEditing(null)}>
-                    <Plus className="size-4" />
-                    New shared ESP
-                </Button>
-            </CardHeader>
+                    </>
+                }
+                action={
+                    <Button
+                        onClick={() => setEditing(null)}
+                        disabled={!sharedMailboxEnabled}
+                    >
+                        <Plus className="size-4" />
+                        New shared ESP
+                    </Button>
+                }
+            />
             <CardContent className="space-y-4">
+                {!sharedMailboxEnabled ? (
+                    <Banner>
+                        Shared mailboxes are available on Pro and Business.
+                        Upgrade this organization to configure one.
+                    </Banner>
+                ) : null}
                 {loading ? (
                     <Loading />
                 ) : esps.length === 0 ? (
@@ -1496,14 +2573,17 @@ function DeliveryPolicySection({
     const activeEsps = esps.filter((esp) => esp.status === "active");
     return (
         <Card>
-            <CardHeader>
-                <CardTitle>Default delivery for new teams</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    This policy powers CourseLit-style provisioning: each new
-                    team can automatically receive this shared ESP as its
-                    default delivery source and inherit the quota limits below.
-                </p>
-            </CardHeader>
+            <OrganizationSectionHeader
+                title="Default delivery for new teams"
+                description={
+                    <>
+                        This policy powers CourseLit-style provisioning: each
+                        new team can automatically receive this shared ESP as
+                        its default delivery source and inherit the quota limits
+                        below.
+                    </>
+                }
+            />
             <CardContent className="space-y-4">
                 {loading ? (
                     <Loading />
@@ -1646,12 +2726,246 @@ function DeliveryPolicySection({
     );
 }
 
+function SendingDomainsSection({
+    organizationId,
+    domains,
+    onChanged,
+}: {
+    organizationId: string;
+    domains: SendingDomain[];
+    onChanged: () => Promise<void>;
+}) {
+    const [open, setOpen] = useState(false);
+    const [domain, setDomain] = useState("");
+    const [challenge, setChallenge] = useState<SendingDomain | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [revoking, setRevoking] = useState<SendingDomain | null>(null);
+
+    async function addDomain() {
+        if (!domain.trim()) return;
+        setSaving(true);
+        setError(null);
+        try {
+            const created = await createOrganizationSendingDomain(
+                organizationId,
+                domain.trim(),
+            );
+            setChallenge(created);
+            setDomain("");
+            setOpen(false);
+            await onChanged();
+        } catch (err) {
+            setError(errorMessage(err, "Failed to add sending domain"));
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function verify(domainId: string) {
+        setSaving(true);
+        setError(null);
+        try {
+            await verifyOrganizationSendingDomain(organizationId, domainId);
+            await onChanged();
+        } catch (err) {
+            setError(errorMessage(err, "Domain is not verified yet"));
+            await onChanged();
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function revoke() {
+        if (!revoking) return;
+        setSaving(true);
+        setError(null);
+        try {
+            await revokeOrganizationSendingDomain(
+                organizationId,
+                revoking.domainId,
+            );
+            setRevoking(null);
+            await onChanged();
+        } catch (err) {
+            setError(errorMessage(err, "Failed to revoke sending domain"));
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <>
+            <Card>
+                <OrganizationSectionHeader
+                    title="Sending domains"
+                    description="Verify ownership before sending beyond cloud test volume."
+                    action={
+                        <Button variant="outline" onClick={() => setOpen(true)}>
+                            <Plus className="size-4" />
+                            Add domain
+                        </Button>
+                    }
+                />
+                <CardContent className="space-y-3">
+                    {error ? <Banner>{error}</Banner> : null}
+                    {challenge ? (
+                        <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                            <p className="font-medium">
+                                Add this DNS TXT record
+                            </p>
+                            <p className="mt-1 text-muted-foreground">
+                                Publish it, then choose Verify. The token is
+                                shown only once.
+                            </p>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                <div>
+                                    <p className="text-xs text-muted-foreground">
+                                        Name
+                                    </p>
+                                    <code className="break-all text-xs">
+                                        {challenge.challengeRecordName}
+                                    </code>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">
+                                        Value
+                                    </p>
+                                    <code className="break-all text-xs">
+                                        {challenge.challengeRecordValue}
+                                    </code>
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
+                    {domains.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            No sending domains configured.
+                        </p>
+                    ) : (
+                        <div className="overflow-hidden rounded-lg border">
+                            {domains.map((item) => (
+                                <div
+                                    key={item.domainId}
+                                    className="flex flex-wrap items-center gap-3 border-b p-3 last:border-b-0"
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate font-medium">
+                                            {item.domain}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {item.lastCheckedAt
+                                                ? `Checked ${new Date(item.lastCheckedAt).toLocaleDateString()}`
+                                                : "Not checked yet"}
+                                        </p>
+                                    </div>
+                                    <Badge
+                                        variant={
+                                            item.status === "verified"
+                                                ? "success"
+                                                : item.status === "revoked"
+                                                  ? "destructive"
+                                                  : "secondary"
+                                        }
+                                    >
+                                        {item.status}
+                                    </Badge>
+                                    {item.status !== "revoked" ? (
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={saving}
+                                                onClick={() =>
+                                                    void verify(item.domainId)
+                                                }
+                                            >
+                                                Verify
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                disabled={saving}
+                                                onClick={() =>
+                                                    setRevoking(item)
+                                                }
+                                            >
+                                                Revoke
+                                            </Button>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add sending domain</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="sending-domain">Domain</Label>
+                        <Input
+                            id="sending-domain"
+                            value={domain}
+                            onChange={(event) => setDomain(event.target.value)}
+                            placeholder="example.com"
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            disabled={saving || !domain.trim()}
+                            onClick={() => void addDomain()}
+                        >
+                            {saving ? "Creating…" : "Create challenge"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            <AlertDialog
+                open={Boolean(revoking)}
+                onOpenChange={(value) => !value && setRevoking(null)}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Revoke sending domain?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            New sends from {revoking?.domain} will require
+                            another verified domain.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={saving}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={saving}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                void revoke();
+                            }}
+                        >
+                            Revoke domain
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
+    );
+}
+
 function TeamsAndGrantsSection({
     organizationId,
     teams,
     esps,
     grants,
     loading,
+    billing,
+    onUpgradeParent,
     onChanged,
 }: {
     organizationId: string;
@@ -1659,29 +2973,66 @@ function TeamsAndGrantsSection({
     esps: EspConfig[];
     grants: Record<string, OrganizationEspGrant | null>;
     loading: boolean;
+    billing: OrganizationBilling | null;
+    onUpgradeParent: () => void;
     onChanged: () => Promise<void>;
 }) {
     const [newTeamOpen, setNewTeamOpen] = useState(false);
     const activeTeams = teams.filter((team) => team.status !== "archived");
+    const teamLimitReached = Boolean(
+        billing?.entitlements.teamsLimit !== null &&
+        billing?.entitlements.teamsLimit !== undefined &&
+        billing.usage.teams >= billing.entitlements.teamsLimit,
+    );
+    const sharedMailboxEnabled =
+        billing === null || billing.entitlements.sharedOrganizationMailbox;
     return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
-                <div>
-                    <CardTitle className="flex items-center gap-2">
-                        <Users className="size-5" />
-                        Teams and mailbox sharing
-                    </CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Each team can receive one active shared ESP grant. Its
-                        members see a sending option, never mailbox credentials.
-                    </p>
-                </div>
-                <Button onClick={() => setNewTeamOpen(true)}>
-                    <Plus className="size-4" />
-                    New team
-                </Button>
-            </CardHeader>
+            <OrganizationSectionHeader
+                title="Teams and mailbox sharing"
+                description="Each team can receive one active shared ESP grant. Members see a sending option, never mailbox credentials."
+                action={
+                    <>
+                        <Button
+                            onClick={() => setNewTeamOpen(true)}
+                            disabled={teamLimitReached}
+                        >
+                            <Plus className="size-4" />
+                            New team
+                        </Button>
+                    </>
+                }
+            />
             <CardContent>
+                {billing?.pendingPlanChange ? (
+                    <Banner className="mb-4" variant="success">
+                        Plan change to{" "}
+                        {PLAN_LABELS[billing.pendingPlanChange.targetPlan]} (
+                        {billing.pendingPlanChange.targetInterval === "month"
+                            ? "monthly"
+                            : "yearly"}
+                        ) is{" "}
+                        {billing.pendingPlanChange.effectiveAt === "immediately"
+                            ? "being confirmed"
+                            : "scheduled for the next billing date"}
+                        .
+                    </Banner>
+                ) : null}
+                {teamLimitReached ? (
+                    <Banner className="mb-4">
+                        This organization has reached its{" "}
+                        {billing?.entitlements.teamsLimit}-team limit. Upgrade
+                        to add another team.
+                    </Banner>
+                ) : null}
+                {billing &&
+                billing.entitlements.teamsLimit !== null &&
+                !teamLimitReached ? (
+                    <p className="mb-4 text-xs text-muted-foreground">
+                        {billing.usage.teams} of{" "}
+                        {billing.entitlements.teamsLimit} teams used.
+                    </p>
+                ) : null}
                 {loading ? (
                     <Loading />
                 ) : activeTeams.length === 0 ? (
@@ -1697,6 +3048,8 @@ function TeamsAndGrantsSection({
                                 team={team}
                                 esps={esps}
                                 grant={grants[team.teamId] ?? null}
+                                sharedMailboxEnabled={sharedMailboxEnabled}
+                                onUpgradeParent={onUpgradeParent}
                                 onChanged={onChanged}
                             />
                         ))}
@@ -1772,17 +3125,488 @@ function CreateOrganizationTeamDialog({
     );
 }
 
+function OrganizationBillingDialog({
+    organizationId,
+    billing,
+    open,
+    onOpenChange,
+}: {
+    organizationId: string;
+    billing: OrganizationBilling | null;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
+    const [plan, setPlan] = useState<"pro" | "business">("pro");
+    const [interval, setInterval] = useState<"month" | "year">("month");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setError(null);
+        setCatalog(null);
+        void (async () => {
+            try {
+                setCatalog(await getBillingCatalog());
+            } catch (err) {
+                setError(errorMessage(err, "Unable to load billing plans"));
+            }
+        })();
+    }, [open]);
+
+    const offer = catalog?.offers.find(
+        (item) => item.plan === plan && item.interval === interval,
+    );
+
+    async function checkout() {
+        if (!catalog?.catalogRevision || !offer) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const result = await createOrganizationBillingCheckout(
+                organizationId,
+                { plan, interval, catalogRevision: catalog.catalogRevision },
+            );
+            window.location.assign(result.checkoutUrl);
+        } catch (err) {
+            setError(errorMessage(err, "Unable to start checkout"));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-[600px] overflow-hidden p-0">
+                <div className="border-b bg-gradient-to-br from-[var(--primary-soft)] via-card to-card px-6 pt-7 pb-6">
+                    <DialogHeader className="gap-4 pr-6">
+                        <div className="flex items-start gap-3.5">
+                            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm shadow-primary/20">
+                                <Sparkles className="size-5" />
+                            </div>
+                            <div className="space-y-1">
+                                <DialogTitle className="text-xl tracking-tight">
+                                    Upgrade organization
+                                </DialogTitle>
+                                <DialogDescription className="max-w-[440px] leading-relaxed">
+                                    Unlock more room to grow while keeping
+                                    billing neatly scoped to this organization.
+                                </DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+                </div>
+
+                <div className="space-y-5 px-6 py-6">
+                    {error ? <Banner>{error}</Banner> : null}
+                    {!catalog ? (
+                        error ? (
+                            <div className="rounded-[var(--radius-lg)] border border-dashed p-4 text-sm text-muted-foreground">
+                                Close this dialog and try again once billing
+                                plans are available.
+                            </div>
+                        ) : (
+                            <Loading />
+                        )
+                    ) : (
+                        <>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                        Plan
+                                    </Label>
+                                    <Select
+                                        value={plan}
+                                        onValueChange={(value) =>
+                                            setPlan(value as "pro" | "business")
+                                        }
+                                    >
+                                        <SelectTrigger className="h-11 bg-background">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="pro">
+                                                Pro
+                                            </SelectItem>
+                                            <SelectItem value="business">
+                                                Business
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                        Billing interval
+                                    </Label>
+                                    <Select
+                                        value={interval}
+                                        onValueChange={(value) =>
+                                            setInterval(
+                                                value as "month" | "year",
+                                            )
+                                        }
+                                    >
+                                        <SelectTrigger className="h-11 bg-background">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="month">
+                                                Monthly
+                                            </SelectItem>
+                                            <SelectItem value="year">
+                                                Yearly (2 months free)
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            {offer ? (
+                                <div className="relative overflow-hidden rounded-[var(--radius-lg)] border border-primary/15 bg-[var(--primary-soft)] p-4">
+                                    <div className="absolute -top-10 -right-8 size-28 rounded-full bg-primary/10 blur-2xl" />
+                                    <div className="relative flex items-start justify-between gap-4">
+                                        <div className="space-y-1.5">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <p className="text-sm font-semibold">
+                                                    {plan === "pro"
+                                                        ? "Pro workspace"
+                                                        : "Business workspace"}
+                                                </p>
+                                                {plan === "pro" ? (
+                                                    <Badge variant="success">
+                                                        Most popular
+                                                    </Badge>
+                                                ) : null}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                {plan === "pro"
+                                                    ? "5 teams · 10,000 subscribed contacts"
+                                                    : "25 teams · unlimited subscribed contacts"}
+                                            </p>
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                            <p className="text-2xl font-semibold tracking-tight tabular-nums">
+                                                {formatMinorAmount(
+                                                    offer.amountMinor,
+                                                    offer.currency,
+                                                )}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                per{" "}
+                                                {interval === "month"
+                                                    ? "month"
+                                                    : "year"}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="relative mt-4 flex items-center gap-2 border-t border-primary/15 pt-3 text-xs text-muted-foreground">
+                                        <ShieldCheck className="size-4 shrink-0 text-primary" />
+                                        <span>
+                                            {offer.trialDays
+                                                ? `${offer.trialDays}-day trial included · hosted secure checkout`
+                                                : "Hosted secure checkout · change plan in SendLit; manage cards and cancellation in billing"}
+                                        </span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="rounded-[var(--radius-lg)] border border-dashed p-4 text-sm text-muted-foreground">
+                                    Choose a plan and billing interval to see
+                                    the current price.
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                <DialogFooter className="mt-0 flex-col items-stretch gap-3 border-t bg-muted/25 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <ShieldCheck className="size-4 text-primary" />
+                        <span>Secure payment handled by Dodo</span>
+                    </div>
+                    <div className="flex w-full gap-2 sm:w-auto">
+                        <Button
+                            className="flex-1 sm:flex-none"
+                            variant="outline"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            className="flex-1 sm:min-w-[190px] sm:flex-none"
+                            size="lg"
+                            onClick={() => void checkout()}
+                            disabled={
+                                loading || !offer || !catalog?.checkoutAvailable
+                            }
+                        >
+                            {loading
+                                ? "Opening checkout…"
+                                : "Continue to checkout"}
+                        </Button>
+                    </div>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function OrganizationPlanChangeDialog({
+    organizationId,
+    billing,
+    open,
+    onOpenChange,
+    onChanged,
+}: {
+    organizationId: string;
+    billing: OrganizationBilling;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onChanged: () => Promise<void>;
+}) {
+    const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
+    const [plan, setPlan] = useState<"pro" | "business">(
+        billing.plan === "business" ? "business" : "pro",
+    );
+    const [interval, setInterval] = useState<"month" | "year">(
+        billing.billingInterval ?? "month",
+    );
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setPlan(billing.plan === "business" ? "business" : "pro");
+        setInterval(billing.billingInterval ?? "month");
+        setError(null);
+        setCatalog(null);
+        void (async () => {
+            try {
+                setCatalog(await getBillingCatalog());
+            } catch (err) {
+                setError(errorMessage(err, "Unable to load billing plans"));
+            }
+        })();
+    }, [open, billing.plan, billing.billingInterval]);
+
+    const offer = catalog?.offers.find(
+        (item) => item.plan === plan && item.interval === interval,
+    );
+    const unchanged =
+        billing.plan === plan && billing.billingInterval === interval;
+    const isUpgrade =
+        (plan === "business" && billing.plan === "pro") ||
+        (plan === billing.plan &&
+            billing.billingInterval === "month" &&
+            interval === "year");
+
+    async function submit() {
+        if (!catalog?.catalogRevision || !offer || unchanged) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const result: OrganizationPlanChange =
+                await createOrganizationBillingPlanChange(organizationId, {
+                    plan,
+                    interval,
+                    catalogRevision: catalog.catalogRevision,
+                });
+            if (result.paymentUrl) {
+                window.location.assign(result.paymentUrl);
+                return;
+            }
+            onOpenChange(false);
+            toast.success(
+                result.effectiveAt === "immediately"
+                    ? "Plan change requested. We’ll enable it when the payment provider confirms it."
+                    : "Plan change scheduled for the next billing date.",
+            );
+            await onChanged();
+        } catch (err) {
+            setError(errorMessage(err, "Unable to change plan"));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-[600px] overflow-hidden p-0">
+                <div className="border-b bg-gradient-to-br from-[var(--primary-soft)] via-card to-card px-6 pt-7 pb-6">
+                    <DialogHeader className="gap-2 pr-6">
+                        <div className="flex items-start gap-3.5">
+                            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm shadow-primary/20">
+                                <Sparkles className="size-5" />
+                            </div>
+                            <div className="space-y-1">
+                                <DialogTitle className="text-xl tracking-tight">
+                                    Change organization plan
+                                </DialogTitle>
+                                <DialogDescription className="leading-relaxed">
+                                    Choose the plan and billing interval for
+                                    this organization. SendLit will apply the
+                                    change and confirm it from the provider
+                                    webhook.
+                                </DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+                </div>
+                <div className="space-y-5 px-6 py-6">
+                    {error ? <Banner>{error}</Banner> : null}
+                    {!catalog ? (
+                        error ? (
+                            <div className="rounded-[var(--radius-lg)] border border-dashed p-4 text-sm text-muted-foreground">
+                                Close this dialog and try again once billing
+                                plans are available.
+                            </div>
+                        ) : (
+                            <Loading />
+                        )
+                    ) : (
+                        <>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                        Plan
+                                    </Label>
+                                    <Select
+                                        value={plan}
+                                        onValueChange={(value) =>
+                                            setPlan(value as "pro" | "business")
+                                        }
+                                    >
+                                        <SelectTrigger className="h-11 bg-background">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="pro">
+                                                Pro
+                                            </SelectItem>
+                                            <SelectItem value="business">
+                                                Business
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                        Billing interval
+                                    </Label>
+                                    <Select
+                                        value={interval}
+                                        onValueChange={(value) =>
+                                            setInterval(
+                                                value as "month" | "year",
+                                            )
+                                        }
+                                    >
+                                        <SelectTrigger className="h-11 bg-background">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="month">
+                                                Monthly
+                                            </SelectItem>
+                                            <SelectItem value="year">
+                                                Yearly (2 months free)
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            {offer ? (
+                                <div className="relative overflow-hidden rounded-[var(--radius-lg)] border border-primary/15 bg-[var(--primary-soft)] p-4">
+                                    <div className="relative flex items-start justify-between gap-4">
+                                        <div className="space-y-1.5">
+                                            <p className="text-sm font-semibold">
+                                                {plan === "pro"
+                                                    ? "Pro workspace"
+                                                    : "Business workspace"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {plan === "pro"
+                                                    ? "5 teams · 10,000 subscribed contacts"
+                                                    : "25 teams · unlimited subscribed contacts"}
+                                            </p>
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                            <p className="text-2xl font-semibold tracking-tight tabular-nums">
+                                                {formatMinorAmount(
+                                                    offer.amountMinor,
+                                                    offer.currency,
+                                                )}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                per{" "}
+                                                {interval === "month"
+                                                    ? "month"
+                                                    : "year"}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="relative mt-4 flex items-center gap-2 border-t border-primary/15 pt-3 text-xs text-muted-foreground">
+                                        <ShieldCheck className="size-4 shrink-0 text-primary" />
+                                        <span>
+                                            {unchanged
+                                                ? "This is your current plan."
+                                                : isUpgrade
+                                                  ? "Takes effect immediately; any prorated charge is handled securely by the payment provider."
+                                                  : "Takes effect at the next billing date; your current entitlements remain available until then."}
+                                        </span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="rounded-[var(--radius-lg)] border border-dashed p-4 text-sm text-muted-foreground">
+                                    Choose a plan and billing interval to see
+                                    the current price.
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+                <DialogFooter className="mt-0 flex-col items-stretch gap-3 border-t bg-muted/25 px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
+                    <Button
+                        className="sm:w-auto"
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        className="sm:min-w-[190px]"
+                        size="lg"
+                        onClick={() => void submit()}
+                        disabled={
+                            loading ||
+                            !offer ||
+                            unchanged ||
+                            !catalog?.checkoutAvailable
+                        }
+                    >
+                        {loading ? "Updating plan…" : "Confirm plan change"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function TeamMailboxGrantRow({
     organizationId,
     team,
     esps,
     grant,
+    sharedMailboxEnabled,
+    onUpgradeParent,
     onChanged,
 }: {
     organizationId: string;
     team: OrganizationTeam;
     esps: EspConfig[];
     grant: OrganizationEspGrant | null;
+    sharedMailboxEnabled: boolean;
+    onUpgradeParent: () => void;
     onChanged: () => Promise<void>;
 }) {
     const router = useRouter();
@@ -1901,12 +3725,18 @@ function TeamMailboxGrantRow({
                             Already a member
                         </DropdownMenuItem>
                     ) : null}
+                    <DropdownMenuItem onSelect={() => onUpgradeParent()}>
+                        <Sparkles />
+                        Upgrade parent organization
+                    </DropdownMenuItem>
                     <DropdownMenuItem
-                        disabled={archived}
+                        disabled={archived || !sharedMailboxEnabled}
                         onSelect={() => setGrantEditorOpen(true)}
                     >
                         <Mail />
-                        Mailbox grant settings
+                        {sharedMailboxEnabled
+                            ? "Mailbox grant settings"
+                            : "Mailbox grant settings (upgrade required)"}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         disabled={archived}
@@ -2383,23 +4213,22 @@ function OrganizationMembersSection({
 
     return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
-                <div>
-                    <CardTitle className="flex items-center gap-2">
-                        <Users className="size-5" />
-                        Organization members
-                    </CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
+            <OrganizationSectionHeader
+                title="Organization members"
+                description={
+                    <>
                         Organization access is separate from team membership and
                         never grants access to a team&apos;s contacts or
                         content.
-                    </p>
-                </div>
-                <Button onClick={() => setOpen(true)}>
-                    <Plus className="size-4" />
-                    Add existing user
-                </Button>
-            </CardHeader>
+                    </>
+                }
+                action={
+                    <Button onClick={() => setOpen(true)}>
+                        <Plus className="size-4" />
+                        Add existing user
+                    </Button>
+                }
+            />
             <CardContent>
                 {error && <Banner className="mb-4">{error}</Banner>}
                 {loading ? (
@@ -2592,16 +4421,10 @@ function OrganizationOperationsSection({
         <div className="space-y-6">
             <div className="grid gap-6 xl:grid-cols-2">
                 <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Activity className="size-5" />
-                            Shared-delivery usage
-                        </CardTitle>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Only organization-delivery sends count toward this
-                            pool.
-                        </p>
-                    </CardHeader>
+                    <OrganizationSectionHeader
+                        title="Shared-delivery usage"
+                        description="Only organization-delivery sends count toward this pool."
+                    />
                     <CardContent>
                         {loading || !usage ? (
                             <Loading />
@@ -2622,16 +4445,10 @@ function OrganizationOperationsSection({
                     </CardContent>
                 </Card>
                 <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <ShieldCheck className="size-5" />
-                            Recent audit activity
-                        </CardTitle>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            The latest 50 secret-free organization
-                            administration events.
-                        </p>
-                    </CardHeader>
+                    <OrganizationSectionHeader
+                        title="Recent audit activity"
+                        description="The latest 50 secret-free organization administration events."
+                    />
                     <CardContent>
                         {loading ? (
                             <Loading />
@@ -2673,41 +4490,35 @@ function OrganizationOperationsSection({
                 </Card>
             </div>
             <Card>
-                <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <CardTitle className="flex items-center gap-2">
-                            <Mail className="size-5" />
-                            Transactional mail activity
-                        </CardTitle>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Counts are transactional only. Shared-delivery quota
-                            remains separate. No email content is shown.
-                        </p>
-                    </div>
-                    <Select
-                        value={String(mailRangeDays)}
-                        onValueChange={(value) =>
-                            void onMailRangeDaysChange(
-                                Number(
-                                    value,
-                                ) as OrganizationMailActivityRangeDays,
-                            )
-                        }
-                    >
-                        <SelectTrigger
-                            aria-label="Transactional mail activity range"
-                            className="w-36"
+                <OrganizationSectionHeader
+                    title="Transactional mail activity"
+                    description="Counts are transactional only. Shared-delivery quota remains separate. No email content is shown."
+                    action={
+                        <Select
+                            value={String(mailRangeDays)}
+                            onValueChange={(value) =>
+                                void onMailRangeDaysChange(
+                                    Number(
+                                        value,
+                                    ) as OrganizationMailActivityRangeDays,
+                                )
+                            }
                         >
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="1">Last 1 day</SelectItem>
-                            <SelectItem value="3">Last 3 days</SelectItem>
-                            <SelectItem value="7">Last 7 days</SelectItem>
-                            <SelectItem value="30">Last 30 days</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </CardHeader>
+                            <SelectTrigger
+                                aria-label="Transactional mail activity range"
+                                className="w-36"
+                            >
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="1">Last 1 day</SelectItem>
+                                <SelectItem value="3">Last 3 days</SelectItem>
+                                <SelectItem value="7">Last 7 days</SelectItem>
+                                <SelectItem value="30">Last 30 days</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    }
+                />
                 <CardContent>
                     {loading || !mailActivity ? (
                         <Loading />
@@ -2853,16 +4664,20 @@ function OrganizationKeysSection({
     organizationId,
     keys,
     loading,
+    billing,
     onChanged,
 }: {
     organizationId: string;
     keys: OrganizationApiKey[];
     loading: boolean;
+    billing: OrganizationBilling | null;
     onChanged: () => Promise<void>;
 }) {
     const [newKeyOpen, setNewKeyOpen] = useState(false);
     const [revokingId, setRevokingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const keysEnabled =
+        billing === null || billing.entitlements.organizationApiKeys;
     const activeKeys = keys.filter((key) => !key.revokedAt);
     async function revoke(keyId: string) {
         setRevokingId(keyId);
@@ -2878,24 +4693,33 @@ function OrganizationKeysSection({
     }
     return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
-                <div>
-                    <CardTitle className="flex items-center gap-2">
-                        <KeyRound className="size-5" />
-                        Organization API keys
-                    </CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
+            <OrganizationSectionHeader
+                title="Organization API keys"
+                description={
+                    <>
                         Use scoped keys for server-to-server provisioning.
                         Secrets are shown once and are never stored in the
                         browser.
-                    </p>
-                </div>
-                <Button type="button" onClick={() => setNewKeyOpen(true)}>
-                    <Plus className="size-4" />
-                    New key
-                </Button>
-            </CardHeader>
+                    </>
+                }
+                action={
+                    <Button
+                        type="button"
+                        onClick={() => setNewKeyOpen(true)}
+                        disabled={!keysEnabled}
+                    >
+                        <Plus className="size-4" />
+                        New key
+                    </Button>
+                }
+            />
             <CardContent>
+                {!keysEnabled ? (
+                    <Banner className="mb-4">
+                        Organization API keys are available on Business and OSS.
+                        Upgrade this organization to create one.
+                    </Banner>
+                ) : null}
                 {error && <Banner className="mb-4">{error}</Banner>}
                 {loading ? (
                     <Loading />

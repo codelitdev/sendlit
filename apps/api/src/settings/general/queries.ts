@@ -18,11 +18,7 @@ export interface GeneralSettings {
     updatedAt: Date | null;
 }
 
-/**
- * A physical mailing address is a compliance prerequisite for every team
- * email. Keep this check close to the settings source so all send paths use
- * the same definition (a whitespace-only value is not configured).
- */
+/** A physical mailing address is required for marketing campaign delivery. */
 export async function assertMailingAddressConfigured(
     teamId: string,
 ): Promise<void> {

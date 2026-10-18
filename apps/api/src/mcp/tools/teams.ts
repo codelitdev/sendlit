@@ -13,7 +13,14 @@ import {
     deleteApiKey,
     getApiKeysByTeamId,
 } from "../../apikey/queries";
-import { AUTH_ERROR, INTERNAL_ERROR, NOT_FOUND, jsonResult } from "./responses";
+import {
+    AUTH_ERROR,
+    INTERNAL_ERROR,
+    NOT_FOUND,
+    jsonResult,
+    planGateResult,
+    isPlanGateError,
+} from "./responses";
 import {
     apiKeySchema,
     createdApiKeySchema,
@@ -48,7 +55,62 @@ export function registerTeamTools(server: McpToolRegistrar): void {
                         organizationName: t.organizationName,
                     })),
                 });
-            } catch {
+            } catch (error) {
+                if (isPlanGateError(error)) return planGateResult(error);
+                return INTERNAL_ERROR;
+            }
+        },
+    );
+
+    server.registerTool(
+        "get_plan_usage",
+        {
+            description:
+                "Returns plan usage and limits for the current team's organization.",
+            outputSchema: z.object({
+                plan: z.enum(["oss", "free", "pro", "business"]),
+                paymentStatus: z.string(),
+                teams: z.number().int().nonnegative(),
+                subscribedContacts: z.number().int().nonnegative(),
+                monthlySends: z.number().int().nonnegative(),
+                monthlySendsReserved: z.number().int().nonnegative(),
+                bucketStartsAt: z.string(),
+                bucketEndsAt: z.string(),
+                teamsLimit: z.number().int().positive().nullable(),
+                subscribedContactsLimit: z.number().int().positive().nullable(),
+                monthlySendsLimit: z.number().int().positive().nullable(),
+            }),
+            annotations: {
+                readOnlyHint: true,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
+        },
+        async (_args: any, extra: any) => {
+            const teamId = getTeamId(extra);
+            if (!teamId) return AUTH_ERROR;
+            try {
+                const team = await getTeamByTeamId(teamId);
+                if (!team) return NOT_FOUND;
+                const { usageForOrganization } =
+                    await import("../../billing/usage.js");
+                const { getOrganizationEntitlements } =
+                    await import("../../billing/entitlements.js");
+                const [usage, entitlements] = await Promise.all([
+                    usageForOrganization(team.organizationId),
+                    getOrganizationEntitlements(team.organizationId),
+                ]);
+                return jsonResult({
+                    ...usage,
+                    plan: entitlements.plan,
+                    paymentStatus: entitlements.paymentStatus,
+                    teamsLimit: entitlements.teamsLimit,
+                    subscribedContactsLimit:
+                        entitlements.subscribedContactsLimit,
+                    monthlySendsLimit: entitlements.monthlySendsLimit,
+                });
+            } catch (error) {
+                if (isPlanGateError(error)) return planGateResult(error);
                 return INTERNAL_ERROR;
             }
         },
@@ -58,7 +120,7 @@ export function registerTeamTools(server: McpToolRegistrar): void {
         "create_team",
         {
             description:
-                "Creates a new team in the authenticated user's default organization.",
+                "Creates a new team in the authenticated user's default organization. Subject to the parent organization's plan team limit.",
             inputSchema: {
                 name: z.string().min(1).describe("Team name"),
             },
@@ -91,7 +153,8 @@ export function registerTeamTools(server: McpToolRegistrar): void {
                     teamId: team.teamId,
                     name: team.name,
                 });
-            } catch {
+            } catch (error) {
+                if (isPlanGateError(error)) return planGateResult(error);
                 return INTERNAL_ERROR;
             }
         },

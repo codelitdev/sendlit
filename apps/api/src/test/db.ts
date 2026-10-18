@@ -41,6 +41,9 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
     // email_deliveries, team_members, api_keys; sequences cascades to
     // sequence_emails.
     await db.delete(schema.mailDispatchOutbox);
+    await db.delete(schema.verification);
+    await db.delete(schema.planSendReservations);
+    await db.delete(schema.planSendUsageBuckets);
     await db.delete(schema.organizationEspQuotaReservations);
     await db.delete(schema.outboundMessages);
     await db.delete(schema.transactionalEmails);
@@ -55,12 +58,27 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
     await db.delete(schema.organizationEspUsageBuckets);
     await db.delete(schema.espConfigTeamGrants);
     await db.delete(schema.teamDeliverySettings);
+    await db.delete(schema.teamSendingControls);
+    // A policy may point at an organization ESP; clear the reference before
+    // truncating ESP rows to preserve the composite foreign-key invariant.
+    await db.delete(schema.organizationDeliveryPolicies);
     await db.delete(schema.espConfigs);
     await db.delete(schema.teams);
+    await db.delete(schema.sendingDomains);
+    await db.delete(schema.billingTrialClaims);
+    await db.delete(schema.billingReconciliationJobs);
+    await db.delete(schema.billingPlanChangeAttempts);
+    await db.delete(schema.billingCheckoutAttempts);
+    await db.delete(schema.billingPlanStates);
+    await db.delete(schema.billingSubscriptions);
+    await db.delete(schema.billingWebhookEvents);
+    await db.delete(schema.billingCatalogRevisionItems);
+    await db.delete(schema.billingCatalogRevisions);
+    await db.delete(schema.billingPriceEntries);
+    await db.delete(schema.billingProviderCustomers);
     await db.delete(schema.organizationApiKeys);
     await db.delete(schema.organizationAuditEvents);
     await db.delete(schema.organizationMembers);
-    await db.delete(schema.organizationDeliveryPolicies);
     await db.delete(schema.organizations);
     await db.delete(schema.user);
 }
@@ -106,6 +124,12 @@ export async function seedTeamAndContact(
     });
     await db.insert(schema.organizationDeliveryPolicies).values({
         organizationId: organization.id,
+    });
+    await db.insert(schema.billingPlanStates).values({
+        billableEntityId: organization.id,
+        plan: "free",
+        rampStage: 0,
+        rampCleanStageDays: 0,
     });
 
     const [team] = await db

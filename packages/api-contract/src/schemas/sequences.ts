@@ -131,6 +131,8 @@ export const sequenceSchema = z.object({
     triggerData: z.string().nullable().optional(),
     filter: z.any().nullable().optional(),
     excludeFilter: z.any().nullable().optional(),
+    /** Active enrollments for a sequence or its locked recipient count for a broadcast. */
+    entrantsCount: z.number().int().nonnegative().optional(),
     emailsOrder: z.array(z.string()),
     entrants: z.array(z.string()),
     report: z.any(),

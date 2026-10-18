@@ -392,11 +392,10 @@ export default function SettingsPage() {
                             {generalSettings &&
                                 !generalSettings.mailingAddress?.trim() && (
                                     <Banner className="mb-4">
-                                        A mailing address is required before
-                                        this workspace can send email. Add and
-                                        save it below to enable broadcasts,
-                                        sequences, transactional email, and ESP
-                                        test sends.
+                                        Add and save a mailing address to enable
+                                        broadcasts and sequences. Transactional
+                                        email and ESP test sends do not require
+                                        one.
                                     </Banner>
                                 )}
                             <Card>
@@ -408,7 +407,8 @@ export default function SettingsPage() {
                                 <CardContent className="space-y-4">
                                     <div className="space-y-1.5">
                                         <Label htmlFor="mailing-address">
-                                            Mailing address (required to send)
+                                            Mailing address (required for
+                                            broadcasts and sequences)
                                         </Label>
                                         <Textarea
                                             id="mailing-address"
@@ -427,9 +427,8 @@ export default function SettingsPage() {
                                             className="text-sm text-muted-foreground"
                                         >
                                             Your physical mailing address is
-                                            included in email footers and is
-                                            required before any email can be
-                                            sent.
+                                            included in the managed marketing
+                                            footer for broadcasts and sequences.
                                         </p>
                                     </div>
                                 </CardContent>
@@ -615,8 +614,8 @@ export default function SettingsPage() {
                         {generalSettings &&
                             !generalSettings.mailingAddress?.trim() && (
                                 <Banner className="mb-4">
-                                    Add a mailing address in General before
-                                    sending an ESP test email or campaign email.
+                                    A mailing address is required for campaigns;
+                                    ESP test sends do not require one.
                                 </Banner>
                             )}
                         <div className="mb-4 flex items-start justify-between gap-4">

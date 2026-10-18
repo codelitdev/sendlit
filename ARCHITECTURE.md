@@ -229,13 +229,15 @@ Phase 5 — **done**:
       consumer's own tenants may share an owner email (which would otherwise
       incorrectly merge them into one team). Provisioning creates no account
       or membership; the organization owns the resulting team.
-    - `src/bootstrap.ts`: a _separate_, boot-time-only convenience directly
-      ported from MediaLit's `createAdminUser()` — if `SUPER_ADMIN_EMAIL` is
-      set and no account exists for it yet, creates one (with its default team
-        - key) and logs the key once. Useful for local dev/self-hosting a single
-          instance; not a substitute for `/provisioning/teams`, which a multi-tenant
-          consumer needs in order to provision many teams over the running lifetime
-          of the app, not just once at boot.
+    - `src/bootstrap.ts`: a _separate_, boot-time-only convenience — when
+      `BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` is set, it finds or creates that
+      ordinary initial owner, ensures their default organization/team, and
+      registers the configured delivery and team provisioning keys from the
+      environment. It stores only hashes and never logs secrets. This is
+      useful for local/self-hosted
+      installs, but is not a substitute for `/provisioning/teams`, which a
+      multi-tenant consumer needs to provision many teams over the running
+      lifetime of the app.
     - `apps/web`: a `/dashboard/teams` page (list teams, create new ones,
       switch — a plain form POST to `/api/team/switch` sets a
       `sendlit_team_id` cookie the BFF proxy forwards as `X-Sendlit-Team-Id` —
@@ -253,9 +255,11 @@ Phase 5 — **done**:
     contacts, sending identity, and quota, regardless of how many people or
     integration keys touch it.
 
-Validated end-to-end against a live Postgres + Redis + Mailpit stack: booted
-with `SUPER_ADMIN_EMAIL` set and confirmed the account/team/key were created
-and logged; created a contact via that key; provisioned a second team via
+The original organization implementation was validated end-to-end against a
+live Postgres + Redis + Mailpit stack: booted with
+`BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` set and confirmed the
+organization-owner/team/key were created; created a contact via that key;
+provisioned a second team via
 `POST /provisioning/teams` (simulating a CourseLit tenant) and created a
 contact with the _same_ email address under it — confirmed both contacts
 exist independently, one per team, with no collision; confirmed re-provisioning

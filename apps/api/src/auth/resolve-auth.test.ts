@@ -221,7 +221,7 @@ describe("resolveAuth", () => {
             resolveAuth(
                 {
                     apiKeyHeader: "api-key",
-                    headers: { cookie: "better-auth.session_token=s" },
+                    headers: { cookie: "sendlit.session_token=s" },
                 },
                 authDeps,
             ),
@@ -241,7 +241,7 @@ describe("resolveAuth", () => {
         ).resolves.toEqual({ status: "unauthorized" });
         await expect(
             resolveAuth(
-                { headers: { cookie: "better-auth.session_token=s" } },
+                { headers: { cookie: "sendlit.session_token=s" } },
                 deps({
                     resolveSession: vi.fn(
                         async () =>
@@ -265,7 +265,7 @@ describe("resolveAuth", () => {
 
         await expect(
             resolveAuth(
-                { headers: { cookie: "better-auth.session_token=s" } },
+                { headers: { cookie: "sendlit.session_token=s" } },
                 authDeps,
             ),
         ).resolves.toMatchObject({

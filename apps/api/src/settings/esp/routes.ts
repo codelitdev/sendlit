@@ -95,9 +95,6 @@ async function testConfig({
     if (result.noDestination) {
         return { status: 400 as const, body: { error: result.error! } };
     }
-    if (result.mailingAddressRequired) {
-        return { status: 422 as const, body: { error: result.error! } };
-    }
     if (!result.success) {
         return {
             status: 502 as const,

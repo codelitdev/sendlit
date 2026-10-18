@@ -24,6 +24,8 @@ interface MailInput {
     messageId?: string;
 }
 
+type MailPurpose = "campaign" | "transactional";
+
 /** What `sendMail` hands back instead of discarding Nodemailer's
  * `SentMessageInfo` — the outbound ledger persists this for later
  * correlation. Both fields are `null` outside production, since `sendMail`
@@ -53,6 +55,7 @@ async function resolveTeamTransporter(
 }
 
 export async function sendMail({
+    purpose,
     from,
     to,
     subject,
@@ -62,12 +65,15 @@ export async function sendMail({
     espConfigId,
     secretVersion,
     messageId,
-}: MailInput): Promise<SendMailResult> {
+}: MailInput & { purpose: MailPurpose }): Promise<SendMailResult> {
     let result: SendMailResult = { messageId: null, providerResponse: null };
     try {
-        // This is the final guard for all delivery paths, including queued
-        // work accepted before a team clears its address.
-        await assertMailingAddressConfigured(teamId);
+        // Marketing messages require the physical address used by their
+        // managed compliance footer. Transactional messages have no marketing
+        // footer and must remain deliverable without a workspace address.
+        if (purpose === "campaign") {
+            await assertMailingAddressConfigured(teamId);
+        }
         const transporter = await resolveTeamTransporter(
             teamId,
             espConfigId,
@@ -117,7 +123,6 @@ export async function sendTestMail({
     teamId,
     espConfigId,
 }: MailInput): Promise<void> {
-    await assertMailingAddressConfigured(teamId);
     const transporter = await resolveTeamTransporter(teamId, espConfigId);
     await transporter.sendMail({ from, to, subject, html });
 }

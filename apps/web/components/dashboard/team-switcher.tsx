@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronsUpDownIcon, PlusIcon } from "lucide-react";
+import { Building2Icon, ChevronsUpDownIcon } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -124,10 +124,10 @@ export function TeamSwitcher({
                         <DropdownMenuItem asChild className="gap-2">
                             <Link href="/organizations">
                                 <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
-                                    <PlusIcon className="size-4" />
+                                    <Building2Icon className="size-4" />
                                 </div>
                                 <div className="font-medium text-muted-foreground">
-                                    Add team
+                                    Manage organizations
                                 </div>
                             </Link>
                         </DropdownMenuItem>

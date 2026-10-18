@@ -4,7 +4,9 @@ import { contract } from "@sendlit/api-contract";
 import { requireAuth } from "../auth/middleware";
 import {
     addOrganizationMemberByEmail,
+    abandonPendingOrganization,
     closeOrganization,
+    userOwnsFreeOrganization,
     createOrganization,
     getOrganizationByPublicId,
     getOrganizationMembership,
@@ -70,6 +72,19 @@ import { feedbackCapableProviders } from "../config/constants";
 import { listOrganizationAuditEvents } from "./audit";
 import { recordOrganizationAuditEvent } from "./audit";
 import { db } from "../db/client";
+import {
+    assertCapability,
+    getOrganizationEntitlements,
+} from "../billing/entitlements";
+import { isPlanGateError, planGateHttp } from "../billing/errors";
+import {
+    createSendingDomain,
+    listSendingDomains,
+    revokeSendingDomain,
+    serializeSendingDomain,
+    verifySendingDomain,
+} from "../billing/domains";
+import { requireBillingAction } from "../billing/security";
 
 const router = Router();
 router.use("/organizations", requireAuth);
@@ -79,7 +94,8 @@ function serializeOrganization(organization: Organization) {
     return {
         organizationId: organization.organizationId,
         name: organization.name,
-        status: organization.status as "active" | "suspended" | "closed",
+        status: organization.status as
+            "pending_payment" | "active" | "suspended" | "abandoned" | "closed",
         createdAt: organization.createdAt.toISOString(),
         updatedAt: organization.updatedAt.toISOString(),
     };
@@ -174,6 +190,8 @@ function serializeOrganizationKey(
         keyPrefix: key.keyPrefix,
         scopes: key.scopes as Array<
             | "organization:read"
+            | "delivery:read"
+            | "delivery:manage"
             | "teams:provision"
             | "teams:read"
             | "teams:manage"
@@ -237,6 +255,24 @@ function mayManageOrganizationEsp(
         hasRole(authorization, ["owner", "admin"]) ||
         Boolean(authorization.keyScopes?.includes("esps:manage"))
     );
+}
+
+async function sharedMailboxGate(organizationId: string) {
+    try {
+        assertCapability(
+            await getOrganizationEntitlements(organizationId),
+            "shared_organization_mailbox",
+        );
+        return null;
+    } catch (error) {
+        if (isPlanGateError(error)) {
+            return {
+                status: error.status,
+                body: { error: error.code, ...error.details },
+            } as any;
+        }
+        throw error;
+    }
 }
 
 function serializeDeliveryPolicy(
@@ -334,7 +370,12 @@ const impl = s.router(contract.organizations, {
         );
         return {
             status: 200,
-            body: { items: organizations.map(serializeOrganization) },
+            body: {
+                items: organizations.map(serializeOrganization),
+                ownsFreeOrganization: await userOwnsFreeOrganization(
+                    (req as any).userId,
+                ),
+            },
         };
     },
     create: async ({ req, body }) => {
@@ -344,11 +385,28 @@ const impl = s.router(contract.organizations, {
                 body: { error: "user_auth_required" },
             };
         }
-        const organization = await createOrganization(
-            (req as any).userId,
-            body.name,
-        );
-        return { status: 201, body: serializeOrganization(organization) };
+        try {
+            const organization = await createOrganization(
+                (req as any).userId,
+                body.name,
+                { createInitialTeam: true },
+            );
+            return { status: 201, body: serializeOrganization(organization) };
+        } catch (error: any) {
+            if (error?.message === "organization_name_already_exists") {
+                return {
+                    status: 409,
+                    body: { error: "organization_name_already_exists" },
+                };
+            }
+            if (error?.message === "free_organization_already_owned") {
+                return {
+                    status: 409,
+                    body: { error: "free_organization_already_owned" },
+                };
+            }
+            throw error;
+        }
     },
     get: async ({ req, params }) => {
         const authorization = await resolveAuthorization(
@@ -386,10 +444,34 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_permission_required" },
             };
         }
-        const updated = await updateOrganizationName(
-            authorization.organization.id,
-            body.name,
-        );
+        let updated: Organization | null;
+        try {
+            updated = await updateOrganizationName(
+                authorization.organization.id,
+                body.name,
+                (req as any).userId,
+            );
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                error.message === "organization_name_already_exists"
+            ) {
+                return {
+                    status: 409,
+                    body: { error: "organization_name_already_exists" },
+                };
+            }
+            if (
+                error instanceof Error &&
+                error.message === "organization_name_required"
+            ) {
+                return {
+                    status: 400,
+                    body: { error: "organization_name_required" },
+                };
+            }
+            throw error;
+        }
         if (!updated) {
             return { status: 404, body: { error: "organization_not_found" } };
         }
@@ -415,10 +497,70 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_owner_required" },
             };
         }
-        await closeOrganization(authorization.organization.id, {
-            type: "user",
-            id: (req as any).userId,
-        });
+        const boundary = await requireBillingAction(
+            req,
+            req.res,
+            "organization_close",
+            params.organizationId,
+        );
+        if (boundary) return boundary as any;
+        try {
+            await closeOrganization(authorization.organization.id, {
+                type: "user",
+                id: (req as any).userId,
+            });
+        } catch (error: any) {
+            if (error?.message === "active_subscription_exists") {
+                return {
+                    status: 409,
+                    body: { error: "active_subscription_exists" },
+                };
+            }
+            if (error?.message === "billing_checkout_pending") {
+                return {
+                    status: 409,
+                    body: { error: "billing_checkout_pending" },
+                };
+            }
+            throw error;
+        }
+        return { status: 204, body: undefined };
+    },
+    abandon: async ({ req, params }) => {
+        const authorization = await resolveAuthorization(
+            req,
+            params.organizationId,
+        );
+        if (!authorization) {
+            return { status: 404, body: { error: "organization_not_found" } };
+        }
+        if (!hasRole(authorization, ["owner"])) {
+            return {
+                status: 403,
+                body: { error: "organization_owner_required" },
+            };
+        }
+        const boundary = await requireBillingAction(
+            req,
+            req.res,
+            "pending_hide",
+            params.organizationId,
+        );
+        if (boundary) return boundary as any;
+        try {
+            await abandonPendingOrganization(
+                authorization.organization.id,
+                (req as any).userId,
+            );
+        } catch (error: any) {
+            if (error?.message === "organization_not_pending_payment") {
+                return {
+                    status: 409,
+                    body: { error: "organization_not_pending_payment" },
+                };
+            }
+            throw error;
+        }
         return { status: 204, body: undefined };
     },
     listMembers: async ({ req, params }) => {
@@ -482,6 +624,12 @@ const impl = s.router(contract.organizations, {
             if (error?.code === "23505") {
                 return { status: 409, body: { error: "member_exists" } };
             }
+            if (error?.message === "free_organization_already_owned") {
+                return {
+                    status: 409,
+                    body: { error: "free_organization_already_owned" },
+                };
+            }
             throw error;
         }
     },
@@ -532,6 +680,18 @@ const impl = s.router(contract.organizations, {
                     body: { error: "last_organization_owner" },
                 };
             }
+            if (error?.message === "free_organization_already_owned") {
+                return {
+                    status: 409,
+                    body: { error: "free_organization_already_owned" },
+                };
+            }
+            if (error?.message === "billing_manager_required") {
+                return {
+                    status: 409,
+                    body: { error: "billing_manager_required" },
+                };
+            }
             throw error;
         }
     },
@@ -578,6 +738,12 @@ const impl = s.router(contract.organizations, {
                 return {
                     status: 409,
                     body: { error: "last_organization_owner" },
+                };
+            }
+            if (error?.message === "billing_manager_required") {
+                return {
+                    status: 409,
+                    body: { error: "billing_manager_required" },
                 };
             }
             throw error;
@@ -648,6 +814,8 @@ const impl = s.router(contract.organizations, {
             );
             return { status: 201, body: serializeTeam(team) };
         } catch (error: any) {
+            const gated = planGateHttp(error);
+            if (gated) return gated as any;
             return { status: 409, body: { error: error.message } };
         }
     },
@@ -752,6 +920,22 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_owner_required" },
             };
         }
+        try {
+            assertCapability(
+                await getOrganizationEntitlements(
+                    authorization.organization.id,
+                ),
+                "organization_api_keys",
+            );
+        } catch (error) {
+            if (isPlanGateError(error)) {
+                return {
+                    status: error.status,
+                    body: { error: error.code, ...error.details },
+                } as any;
+            }
+            throw error;
+        }
         const { apiKey, secret } = await createOrganizationApiKey(
             authorization.organization.id,
             body.name,
@@ -841,6 +1025,8 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_esp_permission_required" },
             };
         }
+        const gate = await sharedMailboxGate(authorization.organization.id);
+        if (gate) return gate;
         const config = await createOrganizationEspConfig(
             authorization.organization.id,
             body,
@@ -888,6 +1074,10 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_esp_permission_required" },
             };
         }
+        const updateGate = await sharedMailboxGate(
+            authorization.organization.id,
+        );
+        if (updateGate) return updateGate;
         try {
             const config = await updateOrganizationEspConfig(
                 authorization.organization.id,
@@ -927,6 +1117,8 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_esp_permission_required" },
             };
         }
+        const testGate = await sharedMailboxGate(authorization.organization.id);
+        if (testGate) return testGate;
         const config = await getOrganizationEspConfigByEspId(
             authorization.organization.id,
             params.espId,
@@ -940,9 +1132,6 @@ const impl = s.router(contract.organizations, {
         });
         if (result.noDestination) {
             return { status: 400, body: { error: result.error! } };
-        }
-        if (result.mailingAddressRequired) {
-            return { status: 422, body: { error: result.error! } };
         }
         if (!result.success) {
             return {
@@ -972,6 +1161,10 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_esp_permission_required" },
             };
         }
+        const activateGate = await sharedMailboxGate(
+            authorization.organization.id,
+        );
+        if (activateGate) return activateGate;
         const config = await getOrganizationEspConfigByEspId(
             authorization.organization.id,
             params.espId,
@@ -1065,6 +1258,10 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_esp_permission_required" },
             };
         }
+        const resumeGate = await sharedMailboxGate(
+            authorization.organization.id,
+        );
+        if (resumeGate) return resumeGate;
         const config = await getOrganizationEspConfigByEspId(
             authorization.organization.id,
             params.espId,
@@ -1214,6 +1411,8 @@ const impl = s.router(contract.organizations, {
                 status: 403,
                 body: { error: "organization_esp_permission_required" },
             };
+        const gate = await sharedMailboxGate(authorization.organization.id);
+        if (gate) return gate;
         const esp = await getOrganizationEspConfigByEspId(
             authorization.organization.id,
             params.espId,
@@ -1254,6 +1453,8 @@ const impl = s.router(contract.organizations, {
                 status: 403,
                 body: { error: "organization_esp_permission_required" },
             };
+        const gate = await sharedMailboxGate(authorization.organization.id);
+        if (gate) return gate;
         const esp = await getOrganizationEspConfigByEspId(
             authorization.organization.id,
             params.espId,
@@ -1353,7 +1554,10 @@ const impl = s.router(contract.organizations, {
         if (!authorization) {
             return { status: 404, body: { error: "organization_not_found" } };
         }
-        if (!hasRole(authorization, ["owner", "admin"])) {
+        const mayRead =
+            hasRole(authorization, ["owner", "admin"]) ||
+            Boolean(authorization.keyScopes?.includes("delivery:read"));
+        if (!mayRead) {
             return {
                 status: 403,
                 body: { error: "organization_permission_required" },
@@ -1378,11 +1582,18 @@ const impl = s.router(contract.organizations, {
         if (!authorization) {
             return { status: 404, body: { error: "organization_not_found" } };
         }
-        if (!hasRole(authorization, ["owner", "admin"])) {
+        const mayManage =
+            hasRole(authorization, ["owner", "admin"]) ||
+            Boolean(authorization.keyScopes?.includes("delivery:manage"));
+        if (!mayManage) {
             return {
                 status: 403,
                 body: { error: "organization_permission_required" },
             };
+        }
+        if (body.defaultEspId || body.autoGrantDefaultEsp) {
+            const gate = await sharedMailboxGate(authorization.organization.id);
+            if (gate) return gate;
         }
         try {
             const view = await updateOrganizationDeliveryPolicy(
@@ -1625,6 +1836,8 @@ const impl = s.router(contract.organizations, {
                 body: { error: "organization_permission_required" },
             };
         }
+        const gate = await sharedMailboxGate(authorization.organization.id);
+        if (gate) return gate;
         const team = await getTeamByTeamId(params.teamId);
         if (!team || team.organizationId !== authorization.organization.id) {
             return { status: 404, body: { error: "team_not_found" } };
@@ -1722,6 +1935,108 @@ const impl = s.router(contract.organizations, {
                 body: { error: "invalid_lifecycle_transition" },
             };
         }
+    },
+    listSendingDomains: async ({ req, params }: any) => {
+        const authorization = await resolveAuthorization(
+            req,
+            params.organizationId,
+        );
+        if (!authorization)
+            return { status: 404, body: { error: "organization_not_found" } };
+        if (!hasRole(authorization, ["owner", "admin"]))
+            return {
+                status: 403,
+                body: { error: "organization_permission_required" },
+            };
+        return {
+            status: 200,
+            body: {
+                items: (
+                    await listSendingDomains(authorization.organization.id)
+                ).map((row) => serializeSendingDomain(row)),
+            },
+        };
+    },
+    createSendingDomain: async ({ req, params, body }: any) => {
+        const authorization = await resolveAuthorization(
+            req,
+            params.organizationId,
+        );
+        if (!authorization)
+            return { status: 404, body: { error: "organization_not_found" } };
+        if (!hasRole(authorization, ["owner", "admin"]))
+            return {
+                status: 403,
+                body: { error: "organization_permission_required" },
+            };
+        try {
+            const result = await createSendingDomain(
+                authorization.organization.id,
+                body.domain,
+            );
+            return {
+                status: 201,
+                body: serializeSendingDomain(result.row, result.token),
+            };
+        } catch (error: any) {
+            if (error?.code === "23505")
+                return { status: 409, body: { error: "domain_exists" } };
+            if (
+                error?.message === "domain_invalid" ||
+                error?.message === "domain_public_suffix"
+            )
+                return { status: 400, body: { error: error.message } };
+            throw error;
+        }
+    },
+    verifySendingDomain: async ({ req, params }: any) => {
+        const authorization = await resolveAuthorization(
+            req,
+            params.organizationId,
+        );
+        if (!authorization)
+            return { status: 404, body: { error: "organization_not_found" } };
+        if (!hasRole(authorization, ["owner", "admin"]))
+            return {
+                status: 403,
+                body: { error: "organization_permission_required" },
+            };
+        const result = await verifySendingDomain(
+            authorization.organization.id,
+            params.domainId,
+        );
+        if (!result)
+            return { status: 404, body: { error: "domain_not_found" } };
+        return result.verified
+            ? { status: 200, body: serializeSendingDomain(result.row) }
+            : ({
+                  status: 422,
+                  body: {
+                      error: "domain_verification_pending",
+                      ...serializeSendingDomain(result.row),
+                  },
+              } as any);
+    },
+    revokeSendingDomain: async ({ req, params }: any) => {
+        const authorization = await resolveAuthorization(
+            req,
+            params.organizationId,
+        );
+        if (!authorization)
+            return { status: 404, body: { error: "organization_not_found" } };
+        if (!hasRole(authorization, ["owner", "admin"]))
+            return {
+                status: 403,
+                body: { error: "organization_permission_required" },
+            };
+        if (
+            !(await revokeSendingDomain(
+                authorization.organization.id,
+                params.domainId,
+            ))
+        )
+            return { status: 404, body: { error: "domain_not_found" } };
+        return { status: 204, body: undefined };
     },
 });
 

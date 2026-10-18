@@ -11,6 +11,11 @@ import {
     teamMembers,
     teams,
 } from "../db/schema";
+import {
+    assertCapability,
+    getOrganizationEntitlements,
+    reserveTeamSlot,
+} from "../billing/entitlements";
 import { transitionEspGrant } from "../delivery/queries";
 import { createApiKey } from "../apikey/queries";
 
@@ -210,8 +215,8 @@ export async function getProvisionedTeamView(team: Team) {
  *
  * `withDefaultApiKey` opts into also minting a "Default" API key for the new
  * team — only worth doing when the caller has an actual way to hand the
- * one-time secret to whoever needs it (provisioning's response body,
- * bootstrap's startup log). Dashboard/MCP-driven team creation has no such
+ * one-time secret to whoever needs it (provisioning's response body).
+ * Dashboard/MCP-driven team creation has no such
  * surface, so it defaults to `false`: better to have the user mint a key
  * explicitly (and see it) than to silently burn one they'll never see.
  */
@@ -248,6 +253,7 @@ export async function createTeam({
     withDefaultApiKey?: boolean;
 }): Promise<CreatedTeam> {
     return db.transaction(async (tx) => {
+        await reserveTeamSlot(tx, organizationId);
         const [policy] = await tx
             .select()
             .from(organizationDeliveryPolicies)
@@ -386,6 +392,10 @@ export async function findOrCreateTeamByExternalId({
         }
         return existing;
     }
+    assertCapability(
+        await getOrganizationEntitlements(organizationId),
+        "provisioning",
+    );
     // Provisioning's response body is the consumer's only way to receive the
     // key, so this path always mints one (unlike other `createTeam` callers).
     try {

@@ -47,6 +47,15 @@ docker compose logs init
 
 Open the dashboard at <http://localhost:3000>, sign in with an email one-time code, and follow [Send your first broadcast](./apps/docs/content/docs/getting-started/first-broadcast.mdx).
 
+`BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` selects an ordinary initial organization
+owner; it does not create a special global-admin role. To integrate
+headlessly, set `BOOTSTRAP_DELIVERY_SETUP_API_KEY` and `BOOTSTRAP_TEAM_PROVISIONING_API_KEY` in
+`.env`. Bootstrap hashes both keys and never logs them.
+See the [Headless organization setup](./apps/docs/content/docs/developers/headless-provisioning.mdx)
+for the complete REST sequence, scopes, rotation, and migration from the old
+log-generated key. The plain Markdown guide is at
+[`apps/docs/integrations/headless-provisioning.md`](./apps/docs/integrations/headless-provisioning.md).
+
 Call the API with the key printed by the `init` service:
 
 ```bash
@@ -72,8 +81,8 @@ The repository also contains the API (`apps/api`), which owns all product behavi
 
 The root Compose stack runs PostgreSQL, Redis, the API and the web dashboard, plus a one-shot `init` service that applies migrations and creates the first account, its default team and a team-scoped API key.
 
-1. Set `SUPER_ADMIN_EMAIL` and the required secrets in `.env` before the first start.
-2. Run `docker compose up --build -d`, then `docker compose logs init`. The logs contain the initial API key exactly once. Save it in a password manager and use it as the `x-sendlit-apikey` header. If you lose it, create a replacement in the dashboard.
+1. Set `BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` and the required secrets in `.env` before the first start.
+2. Run `docker compose up --build -d`. The `init` service applies migrations and creates the owner's organization and default team.
 3. Open the dashboard at `WEB_CLIENT` (default `http://localhost:3000`) and the API documentation at `API_PUBLIC_URL/docs`.
 4. Configure a sending provider for your team in the dashboard settings. Without one, SendLit won't send campaign mail.
 
@@ -121,6 +130,29 @@ pnpm test          # API, web and package unit tests
 pnpm lint          # ESLint
 pnpm prettier      # Format the codebase
 ```
+
+## Operator billing CLI
+
+Cloud billing recovery is a CLI, not the dashboard. From the repo root it
+loads `apps/api/.env` and talks to that API's database:
+
+```sh
+pnpm --filter @sendlit/api billing catalog-status
+pnpm --filter @sendlit/api billing catalog-verify
+```
+
+Run it with no arguments for the full list. Subcommands:
+
+- `catalog-status` / `catalog-verify` / `catalog-abandon <revision> --reason <text>`
+- `reconcile-org <organization_public_id>`
+- `webhook-retry <provider_event_id>` / `webhook-inspect <provider_event_id>`
+- `set-override <organization_public_id> --teams <n>|none --contacts <n>|none --reason <text>`
+- `reputation-apply <team_public_id> <warned|marketing_paused|all_paused> --operator <user_id> --reason <text>`
+- `reputation-release <team_public_id> --operator <user_id> --reason <text>`
+- `cancel-subscription <organization_public_id> --reason <text>`
+
+OSS mode has nothing to verify. A new `BILLING_CATALOG_REVISION` is recorded on
+API startup; `catalog-verify` checks it against Dodo and activates it.
 
 ## Documentation
 

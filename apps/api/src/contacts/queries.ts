@@ -7,6 +7,7 @@ import {
     emailDeliveries,
     sequenceEmails,
     sequences,
+    teams,
 } from "../db/schema";
 // `contacts.contactId` auto-generates via `$defaultFn` (see `db/schema.ts`);
 // `generateUniqueId` is only still needed here for `unsubscribeToken`, an
@@ -19,6 +20,7 @@ import {
     buildContactFilterCondition,
     type ContactFilterWithAggregator,
 } from "./segment";
+import { reserveSubscribedContactSlot } from "../billing/entitlements";
 
 export type Contact = typeof contacts.$inferSelect;
 type ContactListFilter =
@@ -37,20 +39,55 @@ export async function createContact({
     tags?: string[];
     customFields?: CustomFields;
 }): Promise<Contact> {
-    const [contact] = await db
-        .insert(contacts)
-        .values({
-            teamId,
-            email: email.toLowerCase().trim(),
-            name,
-            tags,
-            customFields,
-            unsubscribeToken: generateUniqueId(),
-        })
-        .onConflictDoNothing({ target: [contacts.teamId, contacts.email] })
-        .returning();
+    const result = await db.transaction(async (tx) => {
+        const [team] = await tx
+            .select({ organizationId: teams.organizationId })
+            .from(teams)
+            .where(eq(teams.id, teamId))
+            .limit(1);
+        if (!team) throw new Error("team_not_found");
+        const [existing] = await tx
+            .select()
+            .from(contacts)
+            .where(
+                and(
+                    eq(contacts.teamId, teamId),
+                    eq(contacts.email, email.toLowerCase().trim()),
+                ),
+            )
+            .limit(1)
+            .for("update");
+        if (existing) return { contact: existing, created: false };
+        await reserveSubscribedContactSlot(tx, team.organizationId, teamId);
+        const [created] = await tx
+            .insert(contacts)
+            .values({
+                teamId,
+                email: email.toLowerCase().trim(),
+                name,
+                tags,
+                customFields,
+                unsubscribeToken: generateUniqueId(),
+            })
+            .onConflictDoNothing({ target: [contacts.teamId, contacts.email] })
+            .returning();
+        if (created) return { contact: created, created: true };
+        const [raced] = await tx
+            .select()
+            .from(contacts)
+            .where(
+                and(
+                    eq(contacts.teamId, teamId),
+                    eq(contacts.email, email.toLowerCase().trim()),
+                ),
+            )
+            .limit(1);
+        if (!raced) throw new Error("contact_create_race_failed");
+        return { contact: raced, created: false };
+    });
 
-    if (contact) {
+    if (result.created) {
+        const contact = result.contact;
         await syncContactCustomFieldValues({
             teamId,
             contactId: contact.id,
@@ -70,10 +107,7 @@ export async function createContact({
         return contact;
     }
 
-    // Already existed — return the existing row (mirrors CourseLit's
-    // createSubscription which is a find-or-create).
-    const existing = await findContactByEmail(teamId, email);
-    return existing as Contact;
+    return result.contact;
 }
 
 export async function findContactByEmail(
@@ -194,13 +228,35 @@ export async function updateContact(
         Pick<Contact, "name" | "tags" | "subscribed" | "customFields">
     >,
 ): Promise<Contact | null> {
-    const [row] = await db
-        .update(contacts)
-        .set({ ...patch, updatedAt: new Date() })
-        .where(
-            and(eq(contacts.teamId, teamId), eq(contacts.contactId, contactId)),
-        )
-        .returning();
+    const row = await db.transaction(async (tx) => {
+        const [current] = await tx
+            .select()
+            .from(contacts)
+            .where(
+                and(
+                    eq(contacts.teamId, teamId),
+                    eq(contacts.contactId, contactId),
+                ),
+            )
+            .limit(1)
+            .for("update");
+        if (!current) return null;
+        if (patch.subscribed === true && !current.subscribed) {
+            const [team] = await tx
+                .select({ organizationId: teams.organizationId })
+                .from(teams)
+                .where(eq(teams.id, teamId))
+                .limit(1);
+            if (!team) throw new Error("team_not_found");
+            await reserveSubscribedContactSlot(tx, team.organizationId, teamId);
+        }
+        const [updated] = await tx
+            .update(contacts)
+            .set({ ...patch, updatedAt: new Date() })
+            .where(eq(contacts.id, current.id))
+            .returning();
+        return updated ?? null;
+    });
     if (row && Object.prototype.hasOwnProperty.call(patch, "customFields")) {
         await syncContactCustomFieldValues({
             teamId,

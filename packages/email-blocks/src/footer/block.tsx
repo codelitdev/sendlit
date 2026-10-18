@@ -61,6 +61,9 @@ export function FooterBlock({
                     {unsubscribeLabel}
                 </a>
             </div>
+            {footer.brandingText ? (
+                <div style={{ marginTop: "8px" }}>{footer.brandingText}</div>
+            ) : null}
         </div>
     );
 }

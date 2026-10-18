@@ -13,12 +13,18 @@ import {
     listTransactionalEmails,
     toPublicTransactionalEmail,
 } from "../../transactional/queries";
-import { MAILING_ADDRESS_REQUIRED } from "../../settings/general/constants";
 import {
     MISSING_TEMPLATE_VARIABLES,
     MissingTemplateVariablesError,
 } from "../../mail/render";
-import { AUTH_ERROR, NOT_FOUND, errorResult, jsonResult } from "./responses";
+import {
+    AUTH_ERROR,
+    NOT_FOUND,
+    errorResult,
+    jsonResult,
+    planGateResult,
+    isPlanGateError,
+} from "./responses";
 import { getTeamId } from "./auth";
 
 const transactionalEmailListSchema = z.object({
@@ -115,6 +121,7 @@ export function registerTransactionalTools(server: McpToolRegistrar): void {
                 });
                 return jsonResult({ txeId: row.txeId, status: row.status });
             } catch (err: any) {
+                if (isPlanGateError(err)) return planGateResult(err);
                 if (
                     err instanceof MissingTemplateVariablesError ||
                     err?.message === MISSING_TEMPLATE_VARIABLES
@@ -147,10 +154,6 @@ export function registerTransactionalTools(server: McpToolRegistrar): void {
                         return errorResult("Template rendering failed");
                     case "esp_not_configured":
                         return errorResult("Team ESP is not configured.");
-                    case MAILING_ADDRESS_REQUIRED:
-                        return errorResult(
-                            "A mailing address is required before sending email.",
-                        );
                     case "esp_not_found":
                         return errorResult("ESP not found");
                     case "recipient_suppressed":
