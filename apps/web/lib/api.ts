@@ -2,6 +2,8 @@ import {
   type CustomFields,
   contactFilterSchema,
   contract,
+  type ImportContactRow,
+  type ImportContactsResult,
 } from "@sendlit/api-contract";
 import type {
   Contact,
@@ -436,6 +438,27 @@ export function createSequence(input: {
 
 export function getSequence(sequenceId: string) {
   return unwrap<Sequence>(client.sequences.get({ params: { sequenceId } }));
+}
+
+export type { ImportContactRow, ImportContactsResult };
+
+/** Imports up to 1000 rows; see the contract's `contacts.import`. */
+export function importContacts(body: {
+  contacts: ImportContactRow[];
+  tags?: string[];
+  pending?: "skip" | "unsubscribed";
+}) {
+  return unwrap<ImportContactsResult>(client.contacts.import({ body }));
+}
+
+/** The team's contacts, or those matching `filter`, as CSV text. */
+export function exportContacts(filter?: ContactFilterWithAggregator) {
+  const apiFilter = toApiContactFilter(filter);
+  return unwrap<string>(
+    client.contacts.export({
+      query: { filter: apiFilter ? JSON.stringify(apiFilter) : undefined },
+    }),
+  );
 }
 
 export function updateSequence(

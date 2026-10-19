@@ -1,5 +1,5 @@
 import type { CustomFields, CustomFieldValue } from "@sendlit/api-contract";
-import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { fireEvent } from "../automation/fire-event";
 import { reserveSubscribedContactSlot } from "../billing/entitlements";
 import { EventType, itemsPerPage } from "../config/constants";
@@ -158,7 +158,7 @@ interface ContactListQuery {
   excludeFilter?: ContactFilterWithAggregator;
 }
 
-function listContactsConditions({
+export function listContactsConditions({
   teamId,
   searchText,
   filter,
@@ -399,18 +399,31 @@ async function syncContactCustomFieldValues({
   contactId: string;
   customFields: CustomFields;
 }) {
-  await db
-    .delete(contactCustomFieldValues)
-    .where(
-      and(
-        eq(contactCustomFieldValues.teamId, teamId),
-        eq(contactCustomFieldValues.contactId, contactId),
-      ),
-    );
+  await replaceContactCustomFieldValues(teamId, [{ contactId, customFields }]);
+}
 
-  const rows = Object.entries(customFields).flatMap(([key, value]) =>
-    scalarValues(value).map((item) =>
-      customFieldRow({ teamId, contactId, key, value: item }),
+/** Rewrites the searchable custom-field index of many contacts (internal
+ * ids) in two statements. */
+export async function replaceContactCustomFieldValues(
+  teamId: string,
+  entries: { contactId: string; customFields: CustomFields }[],
+) {
+  if (entries.length === 0) return;
+  await db.delete(contactCustomFieldValues).where(
+    and(
+      eq(contactCustomFieldValues.teamId, teamId),
+      inArray(
+        contactCustomFieldValues.contactId,
+        entries.map((entry) => entry.contactId),
+      ),
+    ),
+  );
+
+  const rows = entries.flatMap(({ contactId, customFields }) =>
+    Object.entries(customFields).flatMap(([key, value]) =>
+      scalarValues(value).map((item) =>
+        customFieldRow({ teamId, contactId, key, value: item }),
+      ),
     ),
   );
 

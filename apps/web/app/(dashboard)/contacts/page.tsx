@@ -6,12 +6,13 @@ import {
   type ContactFilterWithAggregator,
   TagEditor,
 } from "@sendlit/email-blocks";
-import { Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
+import { ImportContactsDialog } from "@/components/dashboard/import-contacts-dialog";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
@@ -29,7 +30,7 @@ import {
 import { IconButton } from "@/components/ui/codelit/icon-button";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
-import { createContact, deleteContact, listContacts } from "@/lib/api";
+import { createContact, deleteContact, exportContacts, listContacts } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { useSegments } from "@/lib/use-segments";
 
@@ -49,7 +50,28 @@ export default function ContactsPage() {
   );
   const { segmentProps, clearSelection } = useSegments(setError);
 
+  const [exporting, setExporting] = useState(false);
+
   useSetBreadcrumb([{ label: "Contacts" }]);
+
+  /** Downloads the contacts matching the current filter as CSV. */
+  async function exportCsv() {
+    setExporting(true);
+    setError(null);
+    try {
+      const csv = await exportContacts(filter.filters.length > 0 ? filter : undefined);
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `contacts-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to export contacts");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function load(nextFilter: ContactFilterWithAggregator = filter) {
     try {
@@ -74,11 +96,18 @@ export default function ContactsPage() {
         title="Contacts"
         description="Your audience, filterable into saved segments."
         action={
-          <NewContactDialog
-            open={open}
-            onOpenChange={setOpen}
-            onCreated={() => load()}
-          />
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={exportCsv} disabled={exporting}>
+              <Download className="size-4" />
+              {exporting ? "Exporting…" : "Export"}
+            </Button>
+            <ImportContactsDialog onImported={() => load()} />
+            <NewContactDialog
+              open={open}
+              onOpenChange={setOpen}
+              onCreated={() => load()}
+            />
+          </div>
         }
       />
 

@@ -9,6 +9,50 @@ Tags are the primary automation and segmentation primitive. They can be applied 
 
 Custom fields store generic contact attributes as scalar values or scalar arrays. Use namespaced keys for data synced from another system, for example `courselit.products: ["course_123"]` or `courselit.permissions: ["manageUsers"]`. SendLit treats these as CRM contact attributes; it does not need to understand the source system's product, community, or permission model.
 
+## Import contacts
+
+**Contacts → Import** takes a CSV export from beehiiv, Mailchimp, Substack,
+Kit (ConvertKit) or any other tool. The file is read in your browser; you then
+check how each column is imported. Common export headers are recognised
+automatically: email, name (or first and last name), tags, status, signup
+date (`created_at`, `OPTIN_TIME`, ...), and beehiiv's `tier`, which becomes a
+`tier:<value>` tag. Other columns become custom fields, or choose
+"Don't import". You can add tags to every imported contact, for example
+`beehiiv`.
+
+An import never makes a contact's status less strict. The order is
+subscribed, then unsubscribed, then bounced, then complained:
+
+| Source status | Imported as |
+| --- | --- |
+| Active, subscribed, empty | Subscribed |
+| Paused (beehiiv) | Subscribed, tagged `paused` |
+| Inactive, unsubscribed | Unsubscribed |
+| Bounced, cleaned (Mailchimp) | Unsubscribed and added to the suppression list |
+| Complained, spam | Unsubscribed and suppressed as a complaint |
+| Pending, Needs approval | Skipped, or imported unsubscribed and tagged `pending` if you choose |
+
+A contact that already exists is matched by email: tags and custom fields are
+merged in, the name is updated, and an earlier signup date replaces a later
+one, so growth charts keep the original dates. An unsubscribed or suppressed
+contact is never re-subscribed. Imported contacts don't trigger sequences.
+Subscribed contacts beyond your plan's limit are skipped. When the import
+finishes you get counts of created, updated, unchanged, suppressed and
+skipped rows, with the reason for each skipped row. Importing the same file
+again is safe.
+
+Over the API, `POST /contacts/import` takes up to 1000 rows per request with
+each row's source `status` as it appears in the export; the MCP tool is
+`import_contacts`.
+
+## Export contacts
+
+**Contacts → Export** downloads every contact matching the current filter as
+CSV: email, name, status (subscribed, unsubscribed, bounced or complained),
+tags, created_at, suppression_reason and one column per custom field. Over
+the API use `GET /contacts/export` (optionally with `segmentId` or `filter`);
+the MCP tool is `export_contacts`. The file can be imported again as is.
+
 ## Segments
 
 A segment is a saved, named contact filter — a combination of tag, email, subscription status, and signup date conditions joined with `and`/`or`. Build the filter once, save it as a segment, and reuse it instead of rebuilding it for every broadcast or sequence.

@@ -67,3 +67,70 @@ export const contactDeliverySchema = z.object({
   emailId: z.string(),
   createdAt: z.string().nullable(),
 });
+
+export const importContactRowSchema = z.object({
+  /** Validated per row; an invalid address is reported as skipped. */
+  email: z.string(),
+  name: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  status: z
+    .string()
+    .optional()
+    .describe(
+      "The source platform's status, e.g. beehiiv's Active/Paused/Inactive/Pending or Mailchimp's subscribed/unsubscribed/cleaned. Empty means subscribed.",
+    ),
+  createdAt: z
+    .string()
+    .optional()
+    .describe("Original signup date; kept as the contact's createdAt"),
+  customFields: customFieldsSchema.optional(),
+  /** Echoed back in `skipped` so callers can point at the CSV line. */
+  row: z.number().int().optional(),
+});
+
+export const importContactsBodySchema = z.object({
+  contacts: z.array(importContactRowSchema).min(1).max(1000),
+  tags: z
+    .array(z.string().min(1))
+    .max(20)
+    .optional()
+    .describe("Added to every imported contact"),
+  pending: z
+    .enum(["skip", "unsubscribed"])
+    .optional()
+    .describe(
+      "Contacts who never confirmed (Pending / Needs approval): skip them (default) or import them unsubscribed with the `pending` tag",
+    ),
+});
+
+export const importContactsResultSchema = z.object({
+  created: z.number().int(),
+  updated: z.number().int(),
+  unchanged: z.number().int(),
+  /** Imported as bounced/complained and added to the suppression list. */
+  suppressed: z.number().int(),
+  skipped: z.array(
+    z.object({
+      row: z.number().int().optional(),
+      email: z.string(),
+      reason: z.enum([
+        "invalid_email",
+        "duplicate",
+        "pending_confirmation",
+        "unknown_status",
+        "plan_limit_reached",
+      ]),
+    }),
+  ),
+});
+
+export const exportContactsQuerySchema = z.object({
+  segmentId: z.string().optional().describe("Only export this saved segment"),
+  filter: z
+    .string()
+    .optional()
+    .describe("Serialized ContactFilterWithAggregator JSON; combines with segmentId"),
+});
+
+export type ImportContactRow = z.infer<typeof importContactRowSchema>;
+export type ImportContactsResult = z.infer<typeof importContactsResultSchema>;
