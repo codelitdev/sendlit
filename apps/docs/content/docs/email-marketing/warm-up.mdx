@@ -10,8 +10,8 @@ emails looks like a spammer, so mail lands in spam or is throttled. Warming
 up means building that history gradually: sending to your most engaged
 readers first and raising the volume over two to four weeks.
 
-SendLit doesn't warm up automatically yet. Until it does, the
-**daily send limit** on an ESP lets you ramp up by hand.
+Turn on **automatic warm-up** on the ESP and SendLit does both for you, or
+set a **daily send limit** and raise it by hand.
 
 ## Do you need to warm up?
 
@@ -49,6 +49,31 @@ shared IPs and quota benefit from a short ramp.
   [Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback).
 - **Authenticate your domain** with SPF, DKIM and DMARC, and verify it in SES.
 
+## Automatic warm-up
+
+Open **Settings → Email service providers**, edit the ESP, turn on
+**Automatic warm-up** and enter the number of emails a day you want to grow
+to (your usual broadcast size, for example). From that day on, SendLit caps
+the broadcast and sequence emails sent through the ESP each UTC day:
+
+| Day | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Emails | 50 | 100 | 200 | 400 | 750 | 1,500 | 3,000 | 5,000 | 8,000 | 12,000 | 18,000 | 25,000 | 35,000 | 50,000 | 70,000 | 100,000 |
+
+After day 16 the limit grows 40% a day. It stops at your target, and the
+warm-up ends there. The ESP list shows the day and today's count.
+
+Emails over the day's limit wait for the next day, so a large broadcast goes
+out over several days. **The most engaged contacts go first** (see below), so
+the early days build the reputation that the rest of the list benefits from.
+Transactional email is never held back.
+
+If you also set a daily send limit, the lower of the two applies. Changing
+the target keeps the warm-up's progress; turning it off removes the cap. Over
+the API, set `warmupTargetDailyVolume` with `PATCH /settings/esps/{espId}` or
+the MCP `update_esp` tool (`null` turns it off); the ESP's `warmup` field
+shows the day and today's limit.
+
 ## Set a daily send limit
 
 Open **Settings → Email service providers**, edit the ESP and set
@@ -63,10 +88,10 @@ and clear it once you're sending your full volume. You can also set it with
 `PATCH /settings/esps/{espId}` (`dailySendLimit`, or `null` to remove it) or
 the MCP `update_esp` tool.
 
-## A sample ramp
+## A sample manual ramp
 
-Adjust the steps to your list size; stop raising the limit if bounce or
-complaint rates climb.
+If you'd rather ramp by hand, adjust these steps to your list size; stop
+raising the limit if bounce or complaint rates climb.
 
 | Days | Daily send limit |
 | --- | --- |
@@ -82,12 +107,18 @@ complaint rates climb.
 ## Send to your most engaged readers first
 
 Early sends should go to people who open and click, because their engagement
-builds reputation fastest. Readers who signed up recently are usually the
-most engaged, so a segment of recent signups (**Signed up after** a date) is
-a good first audience. If your old platform exports engagement, import it as
-a tag or custom field and build a segment from it. Send your first issues to
-that segment, then widen the audience as you raise the limit. Leave long
-inactive readers until last, or consider not mailing them at all.
+builds reputation fastest. When a broadcast can't go to everyone today, SendLit
+sends in this order:
+
+1. contacts who clicked recently (a click counts more than an open);
+2. contacts who opened recently;
+3. contacts with a high open or click rate imported from your old platform
+   (custom fields such as `open_rate` or `click_rate`, from a beehiiv or
+   Mailchimp export; see [Import contacts](/email-marketing/contacts#import-contacts));
+4. everyone else, newest signups first.
+
+Long inactive readers are sent to last. Consider leaving them out of the
+audience altogether.
 
 ## Watch the numbers
 
@@ -99,7 +130,11 @@ inactive readers until last, or consider not mailing them at all.
 - **Opens and clicks** on the broadcast's stats. A sudden drop often means
   mail is going to spam.
 - **Google Postmaster Tools** and **Microsoft SNDS** show how those providers
-  rate your domain and IPs.
+  rate your mail; connect them on the dashboard's
+  [Sender reputation](/email-marketing/reputation) card.
 
-If the numbers get worse, lower the daily limit, send only to your engaged
-segment for a few days, and clean addresses that bounce.
+If the numbers get worse, lower the daily limit (or the warm-up target),
+send only to your engaged segment for a few days, and clean addresses that
+bounce. Broadcasts and sequences also pause on their own when their bounce or
+complaint rates get too high, and the [Sender reputation](/email-marketing/reputation)
+card alerts you when Gmail or Outlook start rating your mail as spam.

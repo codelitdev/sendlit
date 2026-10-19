@@ -585,7 +585,17 @@ export default function SettingsPage() {
                           <TableCell>{PROVIDER_LABEL[esp.provider]}</TableCell>
                           <TableCell className="text-muted-foreground">
                             <div>{esp.fromEmail ?? "Not set"}</div>
-                            {esp.dailySendLimit ? (
+                            {esp.warmup && !esp.warmup.complete ? (
+                              <div className="text-xs">
+                                Warm-up day {esp.warmup.day} of {esp.warmup.totalDays}:{" "}
+                                {(esp.sentToday ?? 0).toLocaleString()} /{" "}
+                                {Math.min(
+                                  esp.warmup.todayLimit,
+                                  esp.dailySendLimit ?? Number.POSITIVE_INFINITY,
+                                ).toLocaleString()}{" "}
+                                today
+                              </div>
+                            ) : esp.dailySendLimit ? (
                               <div className="text-xs">
                                 Today: {(esp.sentToday ?? 0).toLocaleString()} /{" "}
                                 {esp.dailySendLimit.toLocaleString()} marketing emails

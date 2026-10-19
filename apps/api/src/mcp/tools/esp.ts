@@ -1,9 +1,11 @@
 import {
   domainAuthenticationQuerySchema,
   domainAuthenticationSchema,
+  upsertEspConfigBodySchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
 import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
+import { warmupState } from "../../mail/warmup";
 import { checkDomainAuthentication } from "../../settings/esp/domain-auth";
 import {
   createEspConfig,
@@ -44,6 +46,7 @@ function toPublicShape(config: EspConfig | null) {
     replyTo: config.replyTo,
     maxSendRate: config.maxSendRate,
     dailySendLimit: config.dailySendLimit,
+    warmup: warmupState(config),
     status: config.status,
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt,
@@ -88,6 +91,7 @@ const connectionFields = {
     .describe(
       "Most broadcast/sequence emails per UTC day through this ESP, e.g. a warm-up ramp; emails over it wait for the next day. null removes the cap.",
     ),
+  warmupTargetDailyVolume: upsertEspConfigBodySchema.shape.warmupTargetDailyVolume,
 };
 
 export function registerEspTools(server: McpToolRegistrar): void {
@@ -325,6 +329,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
         replyTo: connectionFields.replyTo,
         maxSendRate: connectionFields.maxSendRate,
         dailySendLimit: connectionFields.dailySendLimit,
+        warmupTargetDailyVolume: connectionFields.warmupTargetDailyVolume,
       },
       outputSchema: espConfigSchema,
       annotations: {

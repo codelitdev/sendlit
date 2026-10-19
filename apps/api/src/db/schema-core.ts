@@ -1021,6 +1021,10 @@ export const espConfigs = pgTable(
     /** Daily cap on marketing sends through this ESP (UTC days), e.g. while
      * warming up a new domain; `null` means no cap. */
     dailySendLimit: integer("daily_send_limit"),
+    /** Automatic warm-up: the daily marketing volume to grow to, and when
+     * the ramp started (see `WARMUP_RAMP`). Both null when off. */
+    warmupTargetDaily: integer("warmup_target_daily"),
+    warmupStartedAt: timestamp("warmup_started_at", { withTimezone: true }),
     status: text("status").notNull().default("draft"),
     secretVersion: integer("secret_version").notNull().default(1),
     lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
@@ -1467,6 +1471,9 @@ export const ongoingSequences = pgTable(
       mode: "number",
     }).notNull(),
     retryCount: integer("retry_count").notNull().default(0),
+    /** Higher goes first among due deliveries: a broadcast's most engaged
+     * contacts get the day's capacity while an ESP warms up. */
+    priority: bigint("priority", { mode: "number" }).notNull().default(0),
     sentEmailIds: text("sent_email_ids").array().notNull().default([]),
     processingStartedAt: timestamp("processing_started_at", {
       withTimezone: true,

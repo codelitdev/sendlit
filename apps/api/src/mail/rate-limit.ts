@@ -6,6 +6,7 @@ import { espConfigs } from "../db/schema";
 import { captureError } from "../observability";
 import { closeSharedRedis, sharedRedis } from "../services/redis-client";
 import type { EspProvider } from "../settings/esp/queries";
+import { effectiveDailySendLimit } from "./warmup";
 
 /** The longest a send waits in-process for its slot. Beyond this the send is
  * deferred and retried later instead of tying up a worker. */
@@ -166,14 +167,17 @@ export async function acquireEspSendCapacity(
       provider: espConfigs.provider,
       maxSendRate: espConfigs.maxSendRate,
       dailySendLimit: espConfigs.dailySendLimit,
+      warmupTargetDaily: espConfigs.warmupTargetDaily,
+      warmupStartedAt: espConfigs.warmupStartedAt,
     })
     .from(espConfigs)
     .where(eq(espConfigs.id, espConfigId))
     .limit(1);
   if (!esp) return async () => undefined;
+  const dailyLimit = effectiveDailySendLimit(esp);
   const release =
-    purpose === "campaign" && esp.dailySendLimit !== null
-      ? await reserveDailySend(espConfigId, esp.dailySendLimit)
+    purpose === "campaign" && dailyLimit !== null
+      ? await reserveDailySend(espConfigId, dailyLimit)
       : async () => undefined;
   const rate = effectiveMaxSendRate(esp);
   try {

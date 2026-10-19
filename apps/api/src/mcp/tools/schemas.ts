@@ -2,6 +2,7 @@ import {
   contactFilterSchema,
   customFieldsSchema,
   emailContentSchema,
+  espWarmupSchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
 import {
@@ -222,6 +223,7 @@ export const espConfigSchema = z.object({
   replyTo: z.string().nullable().optional(),
   maxSendRate: z.number().nullable().optional(),
   dailySendLimit: z.number().int().nullable().optional(),
+  warmup: espWarmupSchema.nullable().optional(),
   status: z.string(),
   secretVersion: z.number(),
   lastTestedAt: z.string().nullable().optional(),

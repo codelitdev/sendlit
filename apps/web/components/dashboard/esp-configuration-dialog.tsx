@@ -1,6 +1,10 @@
 "use client";
 
-import { defaultMaxSendRates } from "@sendlit/api-contract";
+import {
+  defaultMaxSendRates,
+  warmupDailyLimit,
+  warmupDays,
+} from "@sendlit/api-contract";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { Button } from "@/components/ui/codelit/button";
@@ -46,6 +50,8 @@ type FormState = {
   replyTo: string;
   maxSendRate: string;
   dailySendLimit: string;
+  warmupEnabled: boolean;
+  warmupTarget: string;
 };
 
 const emptyForm: FormState = {
@@ -61,6 +67,8 @@ const emptyForm: FormState = {
   replyTo: "",
   maxSendRate: "",
   dailySendLimit: "",
+  warmupEnabled: false,
+  warmupTarget: "10000",
 };
 
 function formFor(esp: EspConfig | null): FormState {
@@ -78,6 +86,8 @@ function formFor(esp: EspConfig | null): FormState {
     replyTo: esp.replyTo ?? "",
     maxSendRate: esp.maxSendRate ? String(esp.maxSendRate) : "",
     dailySendLimit: esp.dailySendLimit ? String(esp.dailySendLimit) : "",
+    warmupEnabled: Boolean(esp.warmup),
+    warmupTarget: String(esp.warmup?.targetDailyVolume ?? 10_000),
   };
 }
 
@@ -145,6 +155,14 @@ export function EspConfigurationDialog({
       setError("Enter a whole number of emails per day.");
       return;
     }
+    const warmupTarget = Number(form.warmupTarget);
+    if (
+      form.warmupEnabled &&
+      !(Number.isInteger(warmupTarget) && warmupTarget >= 100)
+    ) {
+      setError("Enter a warm-up target of at least 100 emails per day.");
+      return;
+    }
     const replyTo = form.replyTo.trim();
     if (replyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo)) {
       setError("Enter a valid reply-to email address.");
@@ -168,6 +186,12 @@ export function EspConfigurationDialog({
         ...(replyTo || esp?.replyTo ? { replyTo } : {}),
         maxSendRate,
         dailySendLimit,
+        // Only send a change, so saving other fields keeps the ramp's day.
+        ...(form.warmupEnabled
+          ? warmupTarget !== esp?.warmup?.targetDailyVolume && {
+              warmupTargetDailyVolume: warmupTarget,
+            }
+          : esp?.warmup && { warmupTargetDailyVolume: null }),
       });
       onOpenChange(false);
     } catch (err) {
@@ -366,6 +390,50 @@ export function EspConfigurationDialog({
               never held back.
             </p>
           </div>
+          <div className="col-span-full space-y-3 rounded-md border p-3">
+            <div className="flex items-start gap-3">
+              <Switch
+                id="esp-warmup"
+                checked={form.warmupEnabled}
+                onCheckedChange={(warmupEnabled) => setForm({ ...form, warmupEnabled })}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="esp-warmup">Automatic warm-up</Label>
+                <p className="text-sm text-muted-foreground">
+                  For a new domain or provider account: start at 50 broadcast and
+                  sequence emails a day and grow each day, sending to your most engaged
+                  contacts first. Everything else waits for the next day.
+                </p>
+              </div>
+            </div>
+            {form.warmupEnabled && (
+              <div className="space-y-1.5">
+                <Label htmlFor="esp-warmup-target">
+                  Grow to this many emails a day
+                </Label>
+                <Input
+                  id="esp-warmup-target"
+                  type="number"
+                  min="100"
+                  step="1"
+                  value={form.warmupTarget}
+                  onChange={(event) =>
+                    setForm({ ...form, warmupTarget: event.target.value })
+                  }
+                />
+                <WarmupPreview
+                  target={Number(form.warmupTarget)}
+                  current={
+                    esp?.warmup &&
+                    Number(form.warmupTarget) === esp.warmup.targetDailyVolume
+                      ? esp.warmup
+                      : null
+                  }
+                  restarts={!esp?.warmup}
+                />
+              </div>
+            )}
+          </div>
           <div className="col-span-full flex items-center gap-3">
             <Switch
               id="esp-secure"
@@ -394,5 +462,32 @@ export function EspConfigurationDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function WarmupPreview({
+  target,
+  current,
+  restarts,
+}: {
+  target: number;
+  current: NonNullable<EspConfig["warmup"]> | null;
+  restarts: boolean;
+}) {
+  if (!Number.isInteger(target) || target < 100) return null;
+  const days = warmupDays(target);
+  const steps = [0, 1, 2, 3, 4, 5, 6]
+    .filter((day) => day < days)
+    .map((day) => warmupDailyLimit(day, target).toLocaleString());
+  return (
+    <p className="text-sm text-muted-foreground">
+      {current
+        ? current.complete
+          ? `Warm-up finished: up to ${target.toLocaleString()} a day.`
+          : `Day ${current.day} of ${current.totalDays}: up to ${current.todayLimit.toLocaleString()} today.`
+        : `${restarts ? "Starts today" : "Keeps its progress"}; reaches ${target.toLocaleString()} a day on day ${days}.`}{" "}
+      Daily limits: {steps.join(", ")}
+      {days > steps.length ? ", …" : ""}.
+    </p>
   );
 }

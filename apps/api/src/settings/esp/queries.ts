@@ -12,6 +12,7 @@ import {
 } from "../../db/schema";
 import { cancelQueuedWorkForGrantInTransaction } from "../../delivery/queries";
 import { releaseReservedQuotaForGrantInTransaction } from "../../delivery/quota";
+import { warmupValues } from "../../mail/warmup";
 import { decryptSecret, encryptSecret } from "../../utils/secret-crypto";
 
 export type EspConfig = typeof espConfigs.$inferSelect;
@@ -41,6 +42,7 @@ export interface EspConnectionInput {
   maxSendRate?: number | null;
   /** Daily marketing send cap; `null` removes it. */
   dailySendLimit?: number | null;
+  warmupTargetDailyVolume?: number | null;
 }
 
 export interface CreateEspConfigInput extends EspConnectionInput {
@@ -191,6 +193,7 @@ async function createOwnedEspConfig(
       replyTo: input.replyTo || null,
       maxSendRate: input.maxSendRate ?? null,
       dailySendLimit: input.dailySendLimit ?? null,
+      ...warmupValues(input.warmupTargetDailyVolume, null),
     })
     .returning();
   return row;
@@ -271,6 +274,7 @@ async function updateOwnedEspConfig(
     if (input.maxSendRate !== undefined) values.maxSendRate = input.maxSendRate;
     if (input.dailySendLimit !== undefined)
       values.dailySendLimit = input.dailySendLimit;
+    Object.assign(values, warmupValues(input.warmupTargetDailyVolume, existing));
     if (invalidatesTest) {
       values.secretVersion = existing.secretVersion + 1;
       values.lastTestedAt = null;

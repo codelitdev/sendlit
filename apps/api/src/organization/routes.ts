@@ -39,6 +39,7 @@ import {
   feedbackConnectionInputError,
   toPublicFeedbackConnection,
 } from "../delivery-feedback/feedback-connection-shape";
+import { warmupState } from "../mail/warmup";
 import {
   canActivateForOrganization,
   requiresFeedbackForOrganization,
@@ -217,6 +218,7 @@ function serializeOrganizationEsp(config: EspConfig) {
     replyTo: config.replyTo,
     maxSendRate: config.maxSendRate,
     dailySendLimit: config.dailySendLimit,
+    warmup: warmupState(config),
     status: config.status as "draft" | "active" | "suspended" | "draining" | "retired",
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt?.toISOString() ?? null,

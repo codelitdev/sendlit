@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { assertMarketingAllowedForContactUsage } from "../billing/entitlements";
 import { EventType, sequenceBounceLimit } from "../config/constants";
 import {
@@ -8,6 +8,7 @@ import {
 } from "../contacts/segment";
 import { db } from "../db/client";
 import { contacts, ongoingSequences, rules, sequences, teams } from "../db/schema";
+import { engagementPriorities } from "./engagement";
 
 export async function getDueDateRules() {
   return db
@@ -116,6 +117,8 @@ export async function enrollContactsInOngoingSequence({
     });
   }
   const now = Date.now();
+  // Most engaged first, so a capped day (warm-up, daily limit) reaches them.
+  const priorities = await engagementPriorities(teamId, contactIds, now);
   await db
     .insert(ongoingSequences)
     .values(
@@ -124,6 +127,7 @@ export async function enrollContactsInOngoingSequence({
         sequenceId,
         contactId,
         nextEmailScheduledTime: now,
+        priority: priorities.get(contactId) ?? 0,
       })),
     )
     .onConflictDoNothing({
@@ -177,6 +181,10 @@ export async function getDueOngoingSequences() {
           ),
         ),
       ),
+    )
+    .orderBy(
+      desc(ongoingSequences.priority),
+      asc(ongoingSequences.nextEmailScheduledTime),
     );
   return rows.map(({ row }) => row);
 }
