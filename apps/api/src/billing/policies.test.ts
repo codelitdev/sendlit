@@ -135,7 +135,7 @@ describe("billing entitlement projection", () => {
         sharedOrganizationMailbox: sharedMailbox,
         provisioning,
         organizationApiKeys: provisioning,
-        fairUse: false,
+        fairUse: true,
       });
     },
   );

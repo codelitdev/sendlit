@@ -136,6 +136,19 @@ describe("send rate limit", () => {
     );
     expect(quota?.retryAfterMs).toBeGreaterThanOrEqual(120_000);
     expect(quotaExhaustionDeferral(new Error("smtp down"))).toBeNull();
+    const ramp = quotaExhaustionDeferral(
+      Object.assign(new Error("plan_limit_reached"), {
+        details: { capability: "marketing_daily_ramp" },
+      }),
+    );
+    expect(ramp?.message).toBe("marketing_daily_ramp");
+    expect(
+      quotaExhaustionDeferral(
+        Object.assign(new Error("plan_limit_reached"), {
+          details: { capability: "monthly_sends" },
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("uses the configured rate, else the provider default", () => {

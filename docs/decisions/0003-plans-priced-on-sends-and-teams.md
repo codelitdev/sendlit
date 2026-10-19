@@ -34,10 +34,12 @@ proposed a new ladder; #66 tracks shipping it. People switching from beehiiv
   (`plan_limit_reached` names the next plan up). Overage blocks and extra
   teams (#60's $10 per 50k, $5 or $3 per team) are not built yet; they would
   need a send-limit override and provider add-on products.
-- `fairUse` stays in the entitlement shape for compatibility but is false on
-  every plan. Contact-limit enforcement and `contacts_limit_override` stay so
-  an operator can still cap contacts for one organization and the schema
-  stays compatible with the previous release.
+- `fairUse` now means "cloud safeguards apply" (the new-account marketing
+  ramp and automatic bounce/complaint reputation controls) and is on for
+  every cloud plan, Free and Starter included; it no longer stands in for a
+  missing send cap. Contact-limit enforcement and `contacts_limit_override`
+  stay so an operator can still cap contacts for one organization and the
+  schema stays compatible with the previous release.
 - Organizations already on Pro or Business with more teams than the new
   limits keep them: migration `0016_grandfather_team_limits` sets
   `teams_limit_override` to their current team count. Existing Pro

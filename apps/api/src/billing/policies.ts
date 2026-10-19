@@ -22,6 +22,8 @@ export type PlanPolicy = {
   provisioning: boolean;
   organizationApiKeys: boolean;
   marketingBranding: boolean;
+  /** Cloud safeguards: the new-account marketing ramp and automatic
+   * bounce/complaint reputation controls. Independent of the send caps. */
   fairUse: boolean;
 };
 
@@ -47,7 +49,7 @@ export const planPolicies: Record<PlanId, PlanPolicy> = {
     provisioning: false,
     organizationApiKeys: false,
     marketingBranding: true,
-    fairUse: false,
+    fairUse: true,
   },
   starter: {
     teamsLimit: 1,
@@ -57,7 +59,7 @@ export const planPolicies: Record<PlanId, PlanPolicy> = {
     provisioning: false,
     organizationApiKeys: false,
     marketingBranding: true,
-    fairUse: false,
+    fairUse: true,
   },
   pro: {
     teamsLimit: 3,
@@ -67,7 +69,7 @@ export const planPolicies: Record<PlanId, PlanPolicy> = {
     provisioning: false,
     organizationApiKeys: false,
     marketingBranding: false,
-    fairUse: false,
+    fairUse: true,
   },
   business: {
     teamsLimit: 15,
@@ -77,7 +79,7 @@ export const planPolicies: Record<PlanId, PlanPolicy> = {
     provisioning: true,
     organizationApiKeys: true,
     marketingBranding: false,
-    fairUse: false,
+    fairUse: true,
   },
 };
 
