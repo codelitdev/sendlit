@@ -1,48 +1,76 @@
 {
-    "version": "7",
-    "dialect": "postgresql",
-    "entries": [
-        {
-            "idx": 0,
-            "version": "7",
-            "when": 1785470058751,
-            "tag": "0000_equal_blue_blade",
-            "breakpoints": true
-        },
-        {
-            "idx": 1,
-            "version": "7",
-            "when": 1786279046698,
-            "tag": "0001_square_energizer",
-            "breakpoints": true
-        },
-        {
-            "idx": 2,
-            "version": "7",
-            "when": 1787066846079,
-            "tag": "0002_kind_masked_marvel",
-            "breakpoints": true
-        },
-        {
-            "idx": 3,
-            "version": "7",
-            "when": 1787812056977,
-            "tag": "0003_furry_broadwing",
-            "breakpoints": true
-        },
-        {
-            "idx": 4,
-            "version": "7",
-            "when": 1787852563794,
-            "tag": "0004_kind_the_executioner",
-            "breakpoints": true
-        },
-        {
-            "idx": 5,
-            "version": "7",
-            "when": 1792001038807,
-            "tag": "0005_equal_patriot",
-            "breakpoints": true
-        }
-    ]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785470058751,
+      "tag": "0000_equal_blue_blade",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786279046698,
+      "tag": "0001_square_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787066846079,
+      "tag": "0002_kind_masked_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787812056977,
+      "tag": "0003_furry_broadwing",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787852563794,
+      "tag": "0004_kind_the_executioner",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788113568973,
+      "tag": "0005_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792322408451,
+      "tag": "0006_esp_feedback_subscription_confirmed",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792326651270,
+      "tag": "0007_better_auth_1_7_7",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792411138301,
+      "tag": "0008_sendlit_plan_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792411179022,
+      "tag": "0009_pure_billing_schema",
+      "breakpoints": true
+    }
+  ]
 }

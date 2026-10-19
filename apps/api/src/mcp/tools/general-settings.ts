@@ -1,69 +1,69 @@
-import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
 import {
-    getGeneralSettings,
-    upsertGeneralSettings,
-    type GeneralSettings,
+  type GeneralSettings,
+  getGeneralSettings,
+  upsertGeneralSettings,
 } from "../../settings/general/queries";
+import type { McpToolRegistrar } from "../tool-registry";
+import { getTeamId } from "./auth";
 import { AUTH_ERROR, errorResult, jsonResult } from "./responses";
 import { generalSettingsSchema } from "./schemas";
-import { getTeamId } from "./auth";
 
 function toPublicShape(settings: GeneralSettings) {
-    return {
-        mailingAddress: settings.mailingAddress,
-        updatedAt: settings.updatedAt,
-    };
+  return {
+    mailingAddress: settings.mailingAddress,
+    updatedAt: settings.updatedAt,
+  };
 }
 
 export function registerGeneralSettingsTools(server: McpToolRegistrar): void {
-    server.registerTool(
-        "get_general_settings",
-        {
-            description:
-                "Returns the team's general workspace settings. A non-empty mailing address is required before the team can send any email and is rendered in email footers. Returns defaults (null fields) when nothing has been saved yet.",
-            outputSchema: generalSettingsSchema,
-            annotations: {
-                readOnlyHint: true,
-                idempotentHint: true,
-                openWorldHint: false,
-            },
-        },
-        async (extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            const settings = await getGeneralSettings(teamId);
-            return jsonResult(toPublicShape(settings));
-        },
-    );
+  server.registerTool(
+    "get_general_settings",
+    {
+      description:
+        "Returns the team's general workspace settings. The mailing address is used in the managed marketing footer and is required for broadcasts and sequences. Returns defaults (null fields) when nothing has been saved yet.",
+      outputSchema: generalSettingsSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const settings = await getGeneralSettings(teamId);
+      return jsonResult(toPublicShape(settings));
+    },
+  );
 
-    server.registerTool(
-        "update_general_settings",
-        {
-            description:
-                "Updates the team's general workspace settings. Omitted fields are left unchanged; send an empty string to clear a field. `mailingAddress` is the physical postal address rendered in email footers and is required before the team can send email (CAN-SPAM/GDPR requirement).",
-            inputSchema: {
-                mailingAddress: z
-                    .string()
-                    .optional()
-                    .describe("Omit to keep unchanged; empty string clears it"),
-            },
-            outputSchema: generalSettingsSchema,
-            annotations: {
-                readOnlyHint: false,
-                destructiveHint: false,
-                openWorldHint: false,
-            },
-        },
-        async (args: any, extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            try {
-                const settings = await upsertGeneralSettings(teamId, args);
-                return jsonResult(toPublicShape(settings));
-            } catch (err: any) {
-                return errorResult(err.message);
-            }
-        },
-    );
+  server.registerTool(
+    "update_general_settings",
+    {
+      description:
+        "Updates the team's general workspace settings. Omitted fields are left unchanged; send an empty string to clear a field. `mailingAddress` is the physical postal address rendered in the managed marketing footer and required for broadcasts and sequences.",
+      inputSchema: {
+        mailingAddress: z
+          .string()
+          .optional()
+          .describe("Omit to keep unchanged; empty string clears it"),
+      },
+      outputSchema: generalSettingsSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        const settings = await upsertGeneralSettings(teamId, args);
+        return jsonResult(toPublicShape(settings));
+      } catch (err: any) {
+        return errorResult(err.message);
+      }
+    },
+  );
 }

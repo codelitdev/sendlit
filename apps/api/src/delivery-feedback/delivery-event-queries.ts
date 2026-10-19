@@ -1,12 +1,12 @@
 import { and, count, desc, eq, gte, lt } from "drizzle-orm";
+import type {
+  BounceClass,
+  DeliveryEventType,
+  DeliveryRoute,
+} from "../config/constants";
+import { itemsPerPage as defaultItemsPerPage } from "../config/constants";
 import { db } from "../db/client";
 import { emailDeliveryEvents, outboundMessages } from "../db/schema";
-import { itemsPerPage as defaultItemsPerPage } from "../config/constants";
-import type {
-    BounceClass,
-    DeliveryEventType,
-    DeliveryRoute,
-} from "../config/constants";
 
 export type DeliveryEvent = typeof emailDeliveryEvents.$inferSelect;
 
@@ -22,144 +22,133 @@ const MAX_REASON_LENGTH = 500;
  * duplicate delivery) a safe no-op after the first insert.
  */
 export async function insertCanonicalEventIfNew(input: {
-    connectionId: string;
-    receiptId: string;
-    teamId: string | null;
-    provider: string;
-    providerEventKey: string;
-    providerMessageId: string | null;
-    recipientEmail: string | null;
-    normalizedRecipient: string | null;
-    eventType: DeliveryEventType;
-    bounceClass: BounceClass | null;
-    smtpCode: number | null;
-    enhancedStatusCode: string | null;
-    reason: string | null;
-    remoteMta: string | null;
-    occurredAt: Date;
-    receivedAt: Date;
-    metadata: Record<string, unknown>;
+  connectionId: string;
+  receiptId: string;
+  teamId: string | null;
+  provider: string;
+  providerEventKey: string;
+  providerMessageId: string | null;
+  recipientEmail: string | null;
+  normalizedRecipient: string | null;
+  eventType: DeliveryEventType;
+  bounceClass: BounceClass | null;
+  smtpCode: number | null;
+  enhancedStatusCode: string | null;
+  reason: string | null;
+  remoteMta: string | null;
+  occurredAt: Date;
+  receivedAt: Date;
+  metadata: Record<string, unknown>;
 }): Promise<DeliveryEvent | null> {
-    const [row] = await db
-        .insert(emailDeliveryEvents)
-        .values({
-            ...input,
-            reason: input.reason?.slice(0, MAX_REASON_LENGTH) ?? null,
-        })
-        .onConflictDoNothing({
-            target: [
-                emailDeliveryEvents.connectionId,
-                emailDeliveryEvents.providerEventKey,
-            ],
-        })
-        .returning();
-    return row ?? null;
+  const [row] = await db
+    .insert(emailDeliveryEvents)
+    .values({
+      ...input,
+      reason: input.reason?.slice(0, MAX_REASON_LENGTH) ?? null,
+    })
+    .onConflictDoNothing({
+      target: [emailDeliveryEvents.connectionId, emailDeliveryEvents.providerEventKey],
+    })
+    .returning();
+  return row ?? null;
 }
 
 export async function linkEventToOutboundMessage(
-    eventId: string,
-    outboundMessageId: string,
-    teamId: string,
+  eventId: string,
+  outboundMessageId: string,
+  teamId: string,
 ): Promise<void> {
-    await db
-        .update(emailDeliveryEvents)
-        .set({ outboundMessageId, teamId })
-        .where(eq(emailDeliveryEvents.id, eventId));
+  await db
+    .update(emailDeliveryEvents)
+    .set({ outboundMessageId, teamId })
+    .where(eq(emailDeliveryEvents.id, eventId));
 }
 
 export async function getDeliveryEventByEventId(
-    teamId: string,
-    eventId: string,
+  teamId: string,
+  eventId: string,
 ): Promise<DeliveryEvent | null> {
-    const [row] = await db
-        .select()
-        .from(emailDeliveryEvents)
-        .where(
-            and(
-                eq(emailDeliveryEvents.teamId, teamId),
-                eq(emailDeliveryEvents.eventId, eventId),
-            ),
-        )
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(emailDeliveryEvents)
+    .where(
+      and(
+        eq(emailDeliveryEvents.teamId, teamId),
+        eq(emailDeliveryEvents.eventId, eventId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 interface DeliveryEventFilters {
-    teamId: string;
-    eventType?: DeliveryEventType;
-    /** Internal `esp_configs.id` — resolved from the public `espId` by the
-     * route layer. */
-    espConfigId?: string;
-    deliverySourceType?: DeliveryRoute;
-    createdAfter?: number;
-    createdBefore?: number;
+  teamId: string;
+  eventType?: DeliveryEventType;
+  /** Internal `esp_configs.id` — resolved from the public `espId` by the
+   * route layer. */
+  espConfigId?: string;
+  deliverySourceType?: DeliveryRoute;
+  createdAfter?: number;
+  createdBefore?: number;
 }
 
 function listConditions({
-    teamId,
-    eventType,
-    espConfigId,
-    deliverySourceType,
-    createdAfter,
-    createdBefore,
+  teamId,
+  eventType,
+  espConfigId,
+  deliverySourceType,
+  createdAfter,
+  createdBefore,
 }: DeliveryEventFilters) {
-    const conditions = [eq(emailDeliveryEvents.teamId, teamId)];
-    if (eventType)
-        conditions.push(eq(emailDeliveryEvents.eventType, eventType));
-    if (espConfigId)
-        conditions.push(eq(outboundMessages.espConfigId, espConfigId));
-    if (deliverySourceType)
-        conditions.push(
-            eq(outboundMessages.deliverySourceType, deliverySourceType),
-        );
-    if (createdAfter !== undefined) {
-        conditions.push(
-            gte(emailDeliveryEvents.occurredAt, new Date(createdAfter)),
-        );
-    }
-    if (createdBefore !== undefined) {
-        conditions.push(
-            lt(emailDeliveryEvents.occurredAt, new Date(createdBefore)),
-        );
-    }
-    return and(...conditions);
+  const conditions = [eq(emailDeliveryEvents.teamId, teamId)];
+  if (eventType) conditions.push(eq(emailDeliveryEvents.eventType, eventType));
+  if (espConfigId) conditions.push(eq(outboundMessages.espConfigId, espConfigId));
+  if (deliverySourceType)
+    conditions.push(eq(outboundMessages.deliverySourceType, deliverySourceType));
+  if (createdAfter !== undefined) {
+    conditions.push(gte(emailDeliveryEvents.occurredAt, new Date(createdAfter)));
+  }
+  if (createdBefore !== undefined) {
+    conditions.push(lt(emailDeliveryEvents.occurredAt, new Date(createdBefore)));
+  }
+  return and(...conditions);
 }
 
 /** `espId`/`deliveryRoute` filters require a join to `outbound_messages` —
  * always joined for simplicity (a left join over an indexed FK is cheap
  * even when the extra filters aren't used). */
 export async function listDeliveryEvents({
-    offset = 1,
-    rowsPerPage = defaultItemsPerPage,
-    ...filters
+  offset = 1,
+  rowsPerPage = defaultItemsPerPage,
+  ...filters
 }: DeliveryEventFilters & {
-    offset?: number;
-    rowsPerPage?: number;
+  offset?: number;
+  rowsPerPage?: number;
 }): Promise<DeliveryEvent[]> {
-    const rows = await db
-        .select({ event: emailDeliveryEvents })
-        .from(emailDeliveryEvents)
-        .leftJoin(
-            outboundMessages,
-            eq(emailDeliveryEvents.outboundMessageId, outboundMessages.id),
-        )
-        .where(listConditions(filters))
-        .orderBy(desc(emailDeliveryEvents.occurredAt))
-        .limit(rowsPerPage)
-        .offset((Math.max(offset, 1) - 1) * rowsPerPage);
-    return rows.map((r) => r.event);
+  const rows = await db
+    .select({ event: emailDeliveryEvents })
+    .from(emailDeliveryEvents)
+    .leftJoin(
+      outboundMessages,
+      eq(emailDeliveryEvents.outboundMessageId, outboundMessages.id),
+    )
+    .where(listConditions(filters))
+    .orderBy(desc(emailDeliveryEvents.occurredAt))
+    .limit(rowsPerPage)
+    .offset((Math.max(offset, 1) - 1) * rowsPerPage);
+  return rows.map((r) => r.event);
 }
 
 export async function countDeliveryEvents(
-    filters: DeliveryEventFilters,
+  filters: DeliveryEventFilters,
 ): Promise<number> {
-    const [row] = await db
-        .select({ value: count() })
-        .from(emailDeliveryEvents)
-        .leftJoin(
-            outboundMessages,
-            eq(emailDeliveryEvents.outboundMessageId, outboundMessages.id),
-        )
-        .where(listConditions(filters));
-    return row?.value ?? 0;
+  const [row] = await db
+    .select({ value: count() })
+    .from(emailDeliveryEvents)
+    .leftJoin(
+      outboundMessages,
+      eq(emailDeliveryEvents.outboundMessageId, outboundMessages.id),
+    )
+    .where(listConditions(filters));
+  return row?.value ?? 0;
 }

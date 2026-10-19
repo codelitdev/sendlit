@@ -40,10 +40,9 @@ which it is valid.
 Template purpose is immutable after creation. Changing purpose can silently
 change compliance and API behavior, so conversion is performed by duplication.
 
-SendLit continues to require a configured workspace mailing address before any
-send as a conservative platform policy. Transactional messages do not render
-that address or an unsubscribe footer. This policy is separate from template
-rendering.
+Campaigns require a configured workspace mailing address for their managed
+compliance footer. Transactional messages do not render that address or an
+unsubscribe footer and do not require a mailing address.
 
 ## Invariants
 

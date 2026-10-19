@@ -3,7 +3,8 @@ title: API keys
 description: Authenticate team-scoped server-to-server integrations.
 ---
 
-Create and revoke keys from the dashboard’s Teams page or the Teams API. Send a key with the `x-sendlit-apikey` header:
+This page covers team API keys. Create and revoke them from the dashboard’s
+Teams page or the Teams API. Send one with the `x-sendlit-apikey` header:
 
 ```bash
 curl https://api.sendlit.app/contacts \
@@ -11,3 +12,9 @@ curl https://api.sendlit.app/contacts \
 ```
 
 Keys are hashed at rest and the complete secret is returned only by the create operation. Store it in a secret manager, never commit it, and rotate it after suspected exposure. A key resolves exactly one team; pass `X-Sendlit-Team-Id` only when the authenticated identity can access multiple teams and the endpoint supports explicit team selection.
+
+Organization API keys use the `sl_org_live_...` prefix and the Bearer
+authorization header. They are independently scoped and are not accepted by
+MCP. See [Headless organization setup](/developers/headless-provisioning) for
+the self-host secret-file handoff and
+[Provisioning teams](/developers/provisioning) for runtime team provisioning.

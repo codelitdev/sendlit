@@ -17,28 +17,35 @@ email provider configuration.
   receipt inbox, canonical delivery events, and a per-workspace suppression
   list enforced on every send path.
 - Open and click tracking, plus unsubscribe handling.
-- Better Auth session login, OAuth2 bearer-token authentication, and
-  team-scoped API key authentication.
+- Better Auth session login, OAuth2 bearer-token authentication, team-scoped
+  API keys, and scoped organization API keys.
 - An MCP server exposing the same core capabilities for API/MCP clients.
 
 ## Running Locally
 
-1. Start Postgres and Redis.
+1. Start the local dependencies from the repository root:
+
+    ```sh
+    docker compose -f docker-compose.local.yml up -d
+    ```
+
 2. Copy `.env.example` to `.env` and fill in the required values.
 3. Push the database schema:
 
     ```sh
-    pnpm --filter @sendlit/api db:push
+    bun --filter @sendlit/api db:push
     ```
 
 4. Start the API:
 
     ```sh
-    pnpm --filter @sendlit/api dev
+    bun --filter @sendlit/api dev
     ```
 
-The server listens on `PORT` from `.env` (`4000` in `.env.example`; `80` if
-unset).
+The server listens on `PORT` from `.env` (`5000` in `.env.example`; `80` if
+unset). The local Compose file publishes Postgres on `5434`, Redis on `6380`,
+and Mailpit on SMTP/UI ports `1027`/`8027`; the example environment is set to
+use them. These ports are distinct from the CourseLit and FrontLit local stacks.
 
 ## Database Migrations In Docker
 
@@ -46,13 +53,13 @@ Production-style Docker deployments should apply the checked-in Drizzle SQL
 migrations before starting the API. The API image includes:
 
 - `apps/api/drizzle` — generated migration SQL and metadata;
-- `apps/api/dist/db/migrate.js` — a one-shot migration runner.
+- `apps/api/src/db/migrate.ts` — a one-shot migration runner (`bun apps/api/src/db/migrate.ts`).
 
 The root self-hosted deployment runs this through a Compose `init` service:
 
 ```sh
 cp .env.example .env
-# Fill in the required secrets and SUPER_ADMIN_EMAIL.
+# Fill in the required secrets and BOOTSTRAP_ORGANIZATION_OWNER_EMAIL.
 docker compose up --build -d
 docker compose logs init
 ```
@@ -61,15 +68,16 @@ Startup order:
 
 1. Postgres starts and passes its health check.
 2. Redis starts and passes its health check.
-3. `init` runs `node apps/api/dist/db/migrate.js`, then creates the configured
-   super-admin account, default team, and one-time API key.
+3. `init` runs `bun apps/api/src/db/migrate.ts`, ensures the configured
+   initial organization owner and default organization/team exist, then
+   registers configured organization keys from `.env`.
 4. The init container exits successfully.
 5. `api` starts.
 6. `web` starts.
 
 This mirrors an init-container pattern. The API process itself does not apply
 migrations on every boot; it only checks that the database is reachable. For
-local development, continue using `pnpm --filter @sendlit/api db:push` unless
+local development, continue using `bun --filter @sendlit/api db:push` unless
 you are explicitly testing generated migration files.
 
 ### Development-only template reset
@@ -85,7 +93,7 @@ For a disposable local database only, reset the schema and recreate it:
 # Verify DB_CONNECTION_STRING points at a disposable development/test database.
 psql "$DB_CONNECTION_STRING" \
   -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-pnpm --filter @sendlit/api db:push
+bun --filter @sendlit/api db:push
 ```
 
 This destroys all rows in that database. Never run it against a deployment
@@ -100,7 +108,11 @@ REST API reference, including request and response schemas.
 
 Fetch `GET /openapi.json` for the raw OpenAPI document.
 
-`GET /health` is available as a lightweight liveness check.
+`GET /health` is a lightweight liveness check. `GET /ready` returns 503 until
+startup finishes, while Postgres or Redis do not answer, and once shutdown
+starts; use it for load balancers and the Compose health check. On `SIGTERM`
+the API stops taking requests, lets workers finish their current job, then
+closes Redis, Postgres and telemetry.
 
 ## Authentication
 
@@ -114,15 +126,18 @@ SendLit supports three authentication modes:
   authorization-server metadata at
   `/.well-known/oauth-authorization-server` and OIDC metadata at
   `/.well-known/openid-configuration`.
-- **API keys** for server-to-server, REST, and MCP clients. API keys are scoped
-  to one team and are sent with the `x-sendlit-apikey` header.
+- **Team API keys** for server-to-server REST and MCP clients; send them with
+  the `x-sendlit-apikey` header. **Organization API keys** are scoped to one
+  organization and sent as Bearer credentials for provisioning and selected
+  organization REST operations.
 
 Session and OAuth requests resolve the active team through the
 `X-Sendlit-Team-Id` header. If the account belongs to exactly one team, the
 header may be omitted.
 
 API keys are stored hashed and cannot be recovered after creation. If a key is
-lost, create a new one and revoke the old key.
+lost, create a new one and revoke the old key. Self-host bootstrap reads both
+configured keys from the environment; neither is printed to logs.
 
 When the API runs behind the web BFF or another reverse proxy, set
 `ENABLE_TRUST_PROXY=true` so auth endpoint rate limits can use the real client
@@ -134,7 +149,7 @@ For local REST API testing with `Authorization: Bearer <token>`, run the API
 package helper:
 
 ```sh
-pnpm --filter @sendlit/api run access-token email@address.com
+bun --filter @sendlit/api run access-token email@address.com
 ```
 
 The email must already belong to a registered SendLit account and Better Auth
@@ -142,7 +157,7 @@ user. The account must also belong to a team. If the account belongs to more
 than one team, pass the public team ID explicitly:
 
 ```sh
-pnpm --filter @sendlit/api run access-token email@address.com --team team_...
+bun --filter @sendlit/api run access-token email@address.com --team team_...
 ```
 
 The command prints only the access token. Use it in REST requests as:
@@ -156,24 +171,30 @@ curl http://localhost:5000/contacts \
 The `X-Sendlit-Team-Id` header is optional only when the account belongs to
 exactly one team.
 
-## Bootstrap API Key
+## Headless organization setup
 
-For local development or self-hosted installs, set `SUPER_ADMIN_EMAIL` before
-starting the API. On startup, if no account exists for that email, SendLit
-creates:
+`BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` selects the initial owner; it does not
+grant a special global-admin role. Bootstrap also runs when this user already
+exists, reuses their default organization, and registers configured
+organization API keys from `BOOTSTRAP_DELIVERY_SETUP_API_KEY` and
+`BOOTSTRAP_TEAM_PROVISIONING_API_KEY`. Both values are set in `.env`. Bootstrap stores
+only their hashes, never logs the secrets, and fails closed if a key is
+revoked, expired, belongs to another organization, or has different scopes.
 
-- the account;
-- its default team;
-- a default team-scoped API key.
+Use separate keys: the short-lived delivery setup key has
+`organization:read`, `esps:read`, `esps:manage`, `delivery:read`, and
+`delivery:manage`; the runtime team provisioning key has only
+`organization:read`, `teams:provision`, and `teams:read`. `delivery:manage`
+also authorizes quota and team-delivery policy fields, so revoke it after
+one-time setup if it is no longer needed. Compose passes both keys only to
+`init` and clears them from the long-running API and web containers. Configure
+the team key in the consuming integration's server-side environment.
 
-The plaintext API key is logged once with the `Super admin account created`
-message. After that, only the hash is stored. Copy the key from the first
-startup logs (`docker compose logs`, or the API process logs) and use it as
-`x-sendlit-apikey` for REST or MCP requests.
-
-If the account already exists, bootstrap does nothing and cannot re-print the
-key. Create or rotate keys through the dashboard, `POST /teams/:teamId/keys`,
-or the MCP `create_api_key` tool.
+Follow the [Headless organization setup guide](../docs/content/docs/developers/headless-provisioning.mdx)
+for Compose configuration, REST examples, reruns, rotation, old-key migration, and the
+team grant/default inheritance flow. The API's machine-readable contract is
+available at `/openapi.json`. The raw Markdown guide is
+[`../docs/integrations/headless-provisioning.md`](../docs/integrations/headless-provisioning.md).
 
 ## Teams And Tenancy
 
@@ -190,9 +211,10 @@ multi-tenant consumers, such as CourseLit, to find or create one SendLit team
 per external tenant. It requires a scoped organization API key as a Bearer
 token; it is not authenticated by an end-user OAuth session or team API key.
 
-`SUPER_ADMIN_EMAIL` is only a boot-time convenience for the first local or
-self-hosted account. It is not the provisioning mechanism for multi-tenant
-consumers.
+`BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` selects the initial local or self-hosted
+organization owner; it is not the provisioning mechanism for multi-tenant
+consumers. Integrations use `/provisioning/teams` with a narrowly scoped
+organization key.
 
 ## Architecture
 
@@ -342,6 +364,88 @@ feedback (`get_esp_feedback_connection`/`upsert_esp_feedback_connection`/
 `test_esp_feedback_connection`/`delete_esp_feedback_connection`,
 `list_delivery_events`/`get_delivery_event`,
 `list_suppressions`/`get_suppression`/`release_suppression`).
+
+## Billing operations
+
+Cloud billing (`SENDLIT_DEPLOYMENT_MODE=cloud`) runs on `@codelitdev/billing`
+with the `@codelitdev/platform` billing adapters. The engine owns paid state;
+SendLit reads it with `commercialState` and adds plan limits, operator
+overrides, the fair-use ramp and the 7-day past-due grace. The Dodo webhook URL
+is `POST /webhooks/billing/dodo`.
+
+Background work starts with `startBillingMaintenance()` (`src/billing/lifecycle.ts`):
+
+- Platform billing workers, every minute: catalog verification, the webhook
+  inbox, reconciliation (including stuck checkouts, plan changes and stale
+  subscriptions), deadlines (expired checkouts and lapsed paid access), and
+  hourly retention of stored secrets. The first batch runs one minute after
+  boot, never at boot.
+- SendLit loops: expired send reservations every 5 seconds (all modes), and
+  hourly pending-organization cleanup, sending-domain checks, reputation, and
+  SLO alerts.
+
+Shutdown awaits `stop()`, which waits for work already running.
+
+### Operator CLI
+
+Run `bun --filter @sendlit/api billing <command>` with the production
+environment. Commands that change state or decrypt data require
+`--operator <id>` (your user ID or handle) and are audited.
+
+| Command | Use |
+| --- | --- |
+| `health` | Inbox age, quarantined webhooks and jobs, stuck work, catalog state |
+| `catalog-status`, `catalog-verify` | Inspect, record and verify the requested catalog |
+| `catalog-abandon <revision> --operator <id> --reason <text>` | Abandon the requested revision (only that one) |
+| `inspect-org <org_id>` | The engine's paid state for an organization |
+| `reconcile-org <org_id> --operator <id>` | Re-read the organization's subscription from the provider |
+| `reconcile-cancellations [--dry-run]` | Report scheduled cancellations and queued cancellation jobs |
+| `reconcile-cancellations --apply --operator <id>` | Re-read each of them from the provider |
+| `webhook-retry <event_id> --operator <id> [--new-budget]` | Retry one webhook (drains the inbox) |
+| `webhook-inspect <event_id> --operator <id> --reason <text>` | Show one webhook, with its decrypted payload |
+| `set-override <org_id> --teams <n>\|none --contacts <n>\|none --operator <id> --reason <text>` | Operator limit overrides (audited) |
+| `cancel-subscription <org_id> --operator <id> --reason <text>` | Schedule cancellation at the period end. To end immediately, cancel in the Dodo dashboard. |
+
+### Deploying the 0.4.1 billing release
+
+`@codelitdev/billing` 0.4.1 stops paid access for a subscription whose
+cancellation was scheduled for the period end once its paid-through date has
+passed, even if the provider still reports it as active. The previous release
+kept such rows paid. The first deadline batch after deploy releases them, so a
+stale row (the customer renewed or resumed in Dodo and the webhook was missed)
+would be downgraded wrongly.
+
+Operators must run `reconcile-cancellations` once against production right
+after deploying this release, before the first billing worker tick (one
+minute after the API starts). Ideally, run it from the new image before
+switching traffic:
+
+1. Dry run and review the report: `subscriptions` (rows with
+   `paidThroughPassed: true` lose paid access unless Dodo says otherwise) and
+   `queuedCancellationJobs`. Queued cancellation jobs from the old release now
+   schedule cancellation at the period end when retried, instead of ending the
+   subscription immediately. Check them in Dodo first.
+
+   ```bash
+   bun --filter @sendlit/api billing reconcile-cancellations
+   ```
+
+2. Apply. Each subscription is re-read from Dodo and projected, so the
+   deadline batch then acts on current provider state:
+
+   ```bash
+   bun --filter @sendlit/api billing reconcile-cancellations --apply --operator <your-id>
+   ```
+
+   The command exits non-zero if any subscription could not be reconciled;
+   rerun it, or use `reconcile-org` for that organization.
+
+3. Run `billing health` and check that nothing is quarantined.
+
+Other one-time effects: action tokens issued in the five minutes before the
+deploy are rejected (the dashboard asks the person to retry), and the first
+reconciliation runs queue a one-time burst of Dodo reads for subscriptions not
+reconciled in the last hour.
 
 ## More Context
 

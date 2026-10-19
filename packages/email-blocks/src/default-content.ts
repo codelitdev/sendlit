@@ -8,16 +8,16 @@ import { createFooterEmailBlock } from "./footer";
  * `@sendlit/email-editor`'s bare `defaultEmail` when creating new templates.
  */
 export const defaultTemplateEmail: Email = {
-    ...defaultEmail,
-    content: [
-        {
-            blockType: "text",
-            settings: {
-                content: "# Your Company Name\n\nThis is some paragraph text.",
-                alignment: "left",
-                fontSize: "24px",
-            },
-        },
-        createFooterEmailBlock(),
-    ],
+  ...defaultEmail,
+  content: [
+    {
+      blockType: "text",
+      settings: {
+        content: "# Your Company Name\n\nThis is some paragraph text.",
+        alignment: "left",
+        fontSize: "24px",
+      },
+    },
+    createFooterEmailBlock(),
+  ],
 };

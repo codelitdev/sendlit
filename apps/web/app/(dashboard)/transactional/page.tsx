@@ -1,199 +1,172 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { Banner } from "@/components/dashboard/banner";
+import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { ListPagination } from "@/components/dashboard/list-pagination";
+import { Loading } from "@/components/dashboard/loading";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/codelit/select";
-import { PageHeader } from "@/components/dashboard/page-header";
-import { Banner } from "@/components/dashboard/banner";
-import { Loading } from "@/components/dashboard/loading";
-import { ScrollablePage } from "@/components/dashboard/scrollable-page";
-import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
-import { ListPagination } from "@/components/dashboard/list-pagination";
+import { listTransactionalEmails, type TransactionalEmail } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { ITEMS_PER_PAGE } from "@/lib/pagination";
-import { listTransactionalEmails, type TransactionalEmail } from "@/lib/api";
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
-    { value: "all", label: "All statuses" },
-    { value: "queued", label: "Queued" },
-    { value: "sent", label: "Sent" },
-    { value: "failed", label: "Failed" },
-    { value: "bounced", label: "Bounced" },
+  { value: "all", label: "All statuses" },
+  { value: "queued", label: "Queued" },
+  { value: "sent", label: "Sent" },
+  { value: "failed", label: "Failed" },
+  { value: "bounced", label: "Bounced" },
 ];
 
 const STATUS_BADGE_VARIANT: Record<
-    TransactionalEmail["status"],
-    "success" | "secondary" | "destructive"
+  TransactionalEmail["status"],
+  "success" | "secondary" | "destructive"
 > = {
-    sent: "success",
-    queued: "secondary",
-    failed: "destructive",
-    bounced: "destructive",
+  sent: "success",
+  queued: "secondary",
+  failed: "destructive",
+  bounced: "destructive",
 };
 
 function formatSentDate(item: TransactionalEmail) {
-    const value = item.sentAt || item.createdAt;
-    return value ? new Date(value).toLocaleString() : "—";
+  const value = item.sentAt || item.createdAt;
+  return value ? new Date(value).toLocaleString() : "—";
 }
 
 export default function TransactionalPage() {
-    const [items, setItems] = useState<TransactionalEmail[] | null>(null);
-    const [total, setTotal] = useState(0);
-    const [page, setPage] = useState(1);
-    const [status, setStatus] = useState("all");
-    const [error, setError] = useState<string | null>(null);
-    const [loadingPage, setLoadingPage] = useState(false);
+  const [items, setItems] = useState<TransactionalEmail[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState("all");
+  const [error, setError] = useState<string | null>(null);
+  const [loadingPage, setLoadingPage] = useState(false);
 
-    useSetBreadcrumb([{ label: "Transactional" }]);
+  useSetBreadcrumb([{ label: "Transactional" }]);
 
-    function queryFor(statusFilter: string, offset: number) {
-        return listTransactionalEmails({
-            status:
-                statusFilter === "all"
-                    ? undefined
-                    : (statusFilter as TransactionalEmail["status"]),
-            offset,
-            itemsPerPage: ITEMS_PER_PAGE,
-        });
+  function queryFor(statusFilter: string, offset: number) {
+    return listTransactionalEmails({
+      status:
+        statusFilter === "all"
+          ? undefined
+          : (statusFilter as TransactionalEmail["status"]),
+      offset,
+      itemsPerPage: ITEMS_PER_PAGE,
+    });
+  }
+
+  async function load(pageToLoad = 1, statusFilter = status) {
+    setError(null);
+    setLoadingPage(true);
+    try {
+      const result = await queryFor(statusFilter, pageToLoad);
+      setItems(result.items);
+      setTotal(result.total);
+      setPage(pageToLoad);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Failed to load transactional emails",
+      );
+    } finally {
+      setLoadingPage(false);
     }
+  }
 
-    async function load(pageToLoad = 1, statusFilter = status) {
-        setError(null);
-        setLoadingPage(true);
-        try {
-            const result = await queryFor(statusFilter, pageToLoad);
-            setItems(result.items);
-            setTotal(result.total);
-            setPage(pageToLoad);
-        } catch (err) {
-            setError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Failed to load transactional emails",
-            );
-        } finally {
-            setLoadingPage(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reset to page 1 only when the status filter changes
+  useEffect(() => {
+    void load(1, status);
+  }, [status]);
+
+  return (
+    <ScrollablePage>
+      <PageHeader
+        title="Transactional"
+        description="Read-only activity log of API-triggered emails — receipts, password resets, and other one-off sends."
+        action={
+          <Select value={status} onValueChange={(value) => setStatus(value)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         }
-    }
+      />
 
-    useEffect(() => {
-        void load(1, status);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status]);
+      {error && <Banner className="mb-4">{error}</Banner>}
 
-    return (
-        <ScrollablePage>
-            <PageHeader
-                title="Transactional"
-                description="Read-only activity log of API-triggered emails — receipts, password resets, and other one-off sends."
-                action={
-                    <Select
-                        value={status}
-                        onValueChange={(value) => setStatus(value)}
-                    >
-                        <SelectTrigger className="w-40">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {STATUS_OPTIONS.map((option) => (
-                                <SelectItem
-                                    key={option.value}
-                                    value={option.value}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                }
-            />
+      <Card>
+        <CardContent className="p-0">
+          {items === null ? (
+            <Loading className="p-6" />
+          ) : items.length === 0 ? (
+            <p className="p-6 text-sm text-muted-foreground">
+              {status === "all"
+                ? "No transactional emails sent yet."
+                : "No transactional emails match this filter."}
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">To</th>
+                  <th className="px-4 py-3 font-medium">Subject</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Sent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.txeId} className="border-b last:border-0">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/transactional/${item.txeId}`}
+                        className="font-medium hover:underline"
+                      >
+                        {item.to}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{item.subject}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={STATUS_BADGE_VARIANT[item.status]}>
+                        {item.status}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {formatSentDate(item)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
 
-            {error && <Banner className="mb-4">{error}</Banner>}
-
-            <Card>
-                <CardContent className="p-0">
-                    {items === null ? (
-                        <Loading className="p-6" />
-                    ) : items.length === 0 ? (
-                        <p className="p-6 text-sm text-muted-foreground">
-                            {status === "all"
-                                ? "No transactional emails sent yet."
-                                : "No transactional emails match this filter."}
-                        </p>
-                    ) : (
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b text-left text-muted-foreground">
-                                    <th className="px-4 py-3 font-medium">
-                                        To
-                                    </th>
-                                    <th className="px-4 py-3 font-medium">
-                                        Subject
-                                    </th>
-                                    <th className="px-4 py-3 font-medium">
-                                        Status
-                                    </th>
-                                    <th className="px-4 py-3 font-medium">
-                                        Sent
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {items.map((item) => (
-                                    <tr
-                                        key={item.txeId}
-                                        className="border-b last:border-0"
-                                    >
-                                        <td className="px-4 py-3">
-                                            <Link
-                                                href={`/transactional/${item.txeId}`}
-                                                className="font-medium hover:underline"
-                                            >
-                                                {item.to}
-                                            </Link>
-                                        </td>
-                                        <td className="px-4 py-3 text-muted-foreground">
-                                            {item.subject}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <Badge
-                                                variant={
-                                                    STATUS_BADGE_VARIANT[
-                                                        item.status
-                                                    ]
-                                                }
-                                            >
-                                                {item.status}
-                                            </Badge>
-                                        </td>
-                                        <td className="px-4 py-3 text-muted-foreground">
-                                            {formatSentDate(item)}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </CardContent>
-            </Card>
-
-            {items !== null && (
-                <ListPagination
-                    page={page}
-                    total={total}
-                    itemsPerPage={ITEMS_PER_PAGE}
-                    disabled={loadingPage}
-                    onPageChange={(nextPage) => void load(nextPage)}
-                />
-            )}
-        </ScrollablePage>
-    );
+      {items !== null && (
+        <ListPagination
+          page={page}
+          total={total}
+          itemsPerPage={ITEMS_PER_PAGE}
+          disabled={loadingPage}
+          onPageChange={(nextPage) => void load(nextPage)}
+        />
+      )}
+    </ScrollablePage>
+  );
 }

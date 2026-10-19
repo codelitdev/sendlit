@@ -15,29 +15,29 @@ import { WEB_CLIENT } from "@/lib/config";
  * origin matches `WEB_CLIENT`). Everything else falls back to `/`.
  */
 export function safeAppRedirect(redirectTo: string): string {
-    try {
-        // Protocol-relative URLs (`//evil.example/...`) must not be treated
-        // as relative paths — they would rewrite the host.
-        if (redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
-            return redirectTo;
-        }
-
-        const absolute = new URL(redirectTo);
-        const appOrigin = new URL(WEB_CLIENT);
-        if (absolute.origin === appOrigin.origin) {
-            return `${absolute.pathname}${absolute.search}${absolute.hash}`;
-        }
-    } catch {
-        // Invalid URL — fall through to the home path.
+  try {
+    // Protocol-relative URLs (`//evil.example/...`) must not be treated
+    // as relative paths — they would rewrite the host.
+    if (redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+      return redirectTo;
     }
 
-    return "/";
+    const absolute = new URL(redirectTo);
+    const appOrigin = new URL(WEB_CLIENT);
+    if (absolute.origin === appOrigin.origin) {
+      return `${absolute.pathname}${absolute.search}${absolute.hash}`;
+    }
+  } catch {
+    // Invalid URL — fall through to the home path.
+  }
+
+  return "/";
 }
 
 /** 303 redirect that preserves cookies via `NextResponse`. */
 export function appRedirect(redirectTo: string, status = 303): NextResponse {
-    return new NextResponse(null, {
-        status,
-        headers: { Location: safeAppRedirect(redirectTo) },
-    });
+  return new NextResponse(null, {
+    status,
+    headers: { Location: safeAppRedirect(redirectTo) },
+  });
 }

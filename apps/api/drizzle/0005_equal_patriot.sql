@@ -1,1 +1,0 @@
-ALTER TABLE "esp_feedback_connections" ADD COLUMN "subscription_confirmed_at" timestamp with time zone;

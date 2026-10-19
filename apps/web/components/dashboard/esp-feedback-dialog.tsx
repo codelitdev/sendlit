@@ -1,94 +1,94 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { CheckCircle2, Copy, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Banner } from "@/components/dashboard/banner";
+import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
+import { Loading } from "@/components/dashboard/loading";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/codelit/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/codelit/dialog";
 import { IconButton } from "@/components/ui/codelit/icon-button";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
-import { Badge } from "@/components/ui/badge";
 import {
-    Dialog,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/codelit/dialog";
-import { Banner } from "@/components/dashboard/banner";
-import { Loading } from "@/components/dashboard/loading";
-import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
-import { ApiError } from "@/lib/api-client";
-import {
-    deleteEspFeedback,
-    deleteOrganizationEspFeedback,
-    getEspFeedback,
-    getOrganizationEspFeedback,
-    testEspFeedback,
-    testOrganizationEspFeedback,
-    upsertEspFeedback,
-    upsertOrganizationEspFeedback,
-    type EspConfig,
-    type FeedbackConnection,
-    type FeedbackConnectionStatus,
+  deleteEspFeedback,
+  deleteOrganizationEspFeedback,
+  type EspConfig,
+  type FeedbackConnection,
+  type FeedbackConnectionStatus,
+  getEspFeedback,
+  getOrganizationEspFeedback,
+  testEspFeedback,
+  testOrganizationEspFeedback,
+  upsertEspFeedback,
+  upsertOrganizationEspFeedback,
 } from "@/lib/api";
+import { ApiError } from "@/lib/api-client";
 
 const STATUS_LABEL: Record<FeedbackConnectionStatus, string> = {
-    pending: "Waiting for first event",
-    healthy: "Healthy",
-    stale: "Stale",
-    error: "Error",
-    retiring: "Retiring",
-    disabled: "Disabled",
+  pending: "Waiting for first event",
+  healthy: "Healthy",
+  stale: "Stale",
+  error: "Error",
+  retiring: "Retiring",
+  disabled: "Disabled",
 };
 
 const STATUS_VARIANT: Record<
-    FeedbackConnectionStatus,
-    "success" | "secondary" | "destructive" | "outline"
+  FeedbackConnectionStatus,
+  "success" | "secondary" | "destructive" | "outline"
 > = {
-    pending: "secondary",
-    healthy: "success",
-    stale: "outline",
-    error: "destructive",
-    retiring: "outline",
-    disabled: "outline",
+  pending: "secondary",
+  healthy: "success",
+  stale: "outline",
+  error: "destructive",
+  retiring: "outline",
+  disabled: "outline",
 };
 
 interface CredentialCopy {
-    /** Field label — providers name this value differently. */
-    label: string;
-    placeholder: string;
-    hint: string;
+  /** Field label — providers name this value differently. */
+  label: string;
+  placeholder: string;
+  hint: string;
 }
 
 /** Each feedback-capable provider authenticates its webhook differently, so
  * the single credential field is labelled and explained per provider. */
 const CREDENTIAL_COPY: Record<string, CredentialCopy> = {
-    resend: {
-        label: "webhook signing secret",
-        placeholder: "whsec_…",
-        hint: "The endpoint signing secret from Resend's webhook dashboard (starts with whsec_).",
-    },
-    postmark: {
-        label: "webhook secret",
-        placeholder: "Paste the shared secret / header value",
-        hint: "A high-entropy value you also configure as Postmark's custom webhook header or Basic auth password.",
-    },
-    sendgrid: {
-        label: "verification key",
-        placeholder: "Paste the Signed Event Webhook verification key",
-        hint: "The Signed Event Webhook verification key from SendGrid's Mail Settings → Event Webhook (base64, ECDSA public key).",
-    },
-    mailgun: {
-        label: "HTTP webhook signing key",
-        placeholder: "Paste the HTTP webhook signing key",
-        hint: "Mailgun's HTTP webhook signing key (Sending → Webhooks), used to HMAC-verify each event's timestamp and token.",
-    },
+  resend: {
+    label: "webhook signing secret",
+    placeholder: "whsec_…",
+    hint: "The endpoint signing secret from Resend's webhook dashboard (starts with whsec_).",
+  },
+  postmark: {
+    label: "webhook secret",
+    placeholder: "Paste the shared secret / header value",
+    hint: "A high-entropy value you also configure as Postmark's custom webhook header or Basic auth password.",
+  },
+  sendgrid: {
+    label: "verification key",
+    placeholder: "Paste the Signed Event Webhook verification key",
+    hint: "The Signed Event Webhook verification key from SendGrid's Mail Settings → Event Webhook (base64, ECDSA public key).",
+  },
+  mailgun: {
+    label: "HTTP webhook signing key",
+    placeholder: "Paste the HTTP webhook signing key",
+    hint: "Mailgun's HTTP webhook signing key (Sending → Webhooks), used to HMAC-verify each event's timestamp and token.",
+  },
 };
 
 const DEFAULT_CREDENTIAL_COPY: CredentialCopy = {
-    label: "webhook secret",
-    placeholder: "Paste the signing secret / shared value",
-    hint: "The provider's webhook signing secret.",
+  label: "webhook secret",
+  placeholder: "Paste the signing secret / shared value",
+  hint: "The provider's webhook signing secret.",
 };
 
 /**
@@ -99,360 +99,310 @@ const DEFAULT_CREDENTIAL_COPY: CredentialCopy = {
  * `apps/api/docs/bounces-and-complaints.md`.
  */
 export function EspFeedbackDialog({
-    esp,
-    onOpenChange,
-    organizationId,
+  esp,
+  onOpenChange,
+  organizationId,
 }: {
-    /** `null` closes the dialog. */
-    esp: EspConfig | null;
-    onOpenChange: (open: boolean) => void;
-    /** When set, administer the organization-owned ESP rather than the
-     * selected team's ESP. The API surface remains identical while keeping
-     * credentials and feedback topology organization-scoped. */
-    organizationId?: string;
+  /** `null` closes the dialog. */
+  esp: EspConfig | null;
+  onOpenChange: (open: boolean) => void;
+  /** When set, administer the organization-owned ESP rather than the
+   * selected team's ESP. The API surface remains identical while keeping
+   * credentials and feedback topology organization-scoped. */
+  organizationId?: string;
 }) {
-    const [connection, setConnection] = useState<FeedbackConnection | null>(
-        null,
-    );
-    const [loading, setLoading] = useState(false);
-    const [credential, setCredential] = useState("");
-    const [topicArn, setTopicArn] = useState("");
-    const [saving, setSaving] = useState(false);
-    const [testing, setTesting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [testResult, setTestResult] = useState<{
-        success: boolean;
-        error?: string;
-    } | null>(null);
-    const [copied, setCopied] = useState(false);
-    const [disableConfirmationOpen, setDisableConfirmationOpen] =
-        useState(false);
+  const [connection, setConnection] = useState<FeedbackConnection | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [credential, setCredential] = useState("");
+  const [topicArn, setTopicArn] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    error?: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [disableConfirmationOpen, setDisableConfirmationOpen] = useState(false);
 
-    useEffect(() => {
-        if (!esp) return;
-        setError(null);
-        setTestResult(null);
-        setCredential("");
-        setLoading(true);
-        (organizationId
-            ? getOrganizationEspFeedback(organizationId, esp.espId)
-            : getEspFeedback(esp.espId)
-        )
-            .then((loaded) => {
-                setConnection(loaded);
-                setTopicArn(loaded?.expectedTopicArn ?? "");
-            })
-            .catch((err) =>
-                setError(
-                    err instanceof ApiError
-                        ? err.message
-                        : "Failed to load feedback connection",
-                ),
-            )
-            .finally(() => setLoading(false));
-    }, [esp, organizationId]);
+  useEffect(() => {
+    if (!esp) return;
+    setError(null);
+    setTestResult(null);
+    setCredential("");
+    setLoading(true);
+    (organizationId
+      ? getOrganizationEspFeedback(organizationId, esp.espId)
+      : getEspFeedback(esp.espId)
+    )
+      .then((loaded) => {
+        setConnection(loaded);
+        setTopicArn(loaded?.expectedTopicArn ?? "");
+      })
+      .catch((err) =>
+        setError(
+          err instanceof ApiError ? err.message : "Failed to load feedback connection",
+        ),
+      )
+      .finally(() => setLoading(false));
+  }, [esp, organizationId]);
 
-    if (!esp) return null;
+  if (!esp) return null;
 
-    const credentialCopy =
-        CREDENTIAL_COPY[esp.provider] ?? DEFAULT_CREDENTIAL_COPY;
-    // SES authenticates through Amazon-signed SNS messages: the connection is
-    // armed by its SNS topic rather than a shared secret.
-    const isSes = esp.provider === "ses";
-    const canSave = isSes
-        ? Boolean(topicArn) && topicArn !== connection?.expectedTopicArn
-        : Boolean(credential);
+  const credentialCopy = CREDENTIAL_COPY[esp.provider] ?? DEFAULT_CREDENTIAL_COPY;
+  // SES authenticates through Amazon-signed SNS messages: the connection is
+  // armed by its SNS topic rather than a shared secret.
+  const isSes = esp.provider === "ses";
+  const canSave = isSes
+    ? Boolean(topicArn) && topicArn !== connection?.expectedTopicArn
+    : Boolean(credential);
 
-    async function save() {
-        if (!esp) return;
-        setSaving(true);
-        setError(null);
-        const input = isSes ? { expectedTopicArn: topicArn } : { credential };
-        try {
-            const updated = organizationId
-                ? await upsertOrganizationEspFeedback(
-                      organizationId,
-                      esp.espId,
-                      input,
-                  )
-                : await upsertEspFeedback(esp.espId, input);
-            setConnection(updated);
-            setCredential("");
-            setTopicArn(updated.expectedTopicArn ?? "");
-        } catch (err) {
-            setError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Failed to save feedback connection",
-            );
-        } finally {
-            setSaving(false);
-        }
+  async function save() {
+    if (!esp) return;
+    setSaving(true);
+    setError(null);
+    const input = isSes ? { expectedTopicArn: topicArn } : { credential };
+    try {
+      const updated = organizationId
+        ? await upsertOrganizationEspFeedback(organizationId, esp.espId, input)
+        : await upsertEspFeedback(esp.espId, input);
+      setConnection(updated);
+      setCredential("");
+      setTopicArn(updated.expectedTopicArn ?? "");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Failed to save feedback connection",
+      );
+    } finally {
+      setSaving(false);
     }
+  }
 
-    async function runTest() {
-        if (!esp) return;
-        setTesting(true);
-        setTestResult(null);
-        setError(null);
-        try {
-            const result = organizationId
-                ? await testOrganizationEspFeedback(organizationId, esp.espId)
-                : await testEspFeedback(esp.espId);
-            setTestResult(result);
-        } catch (err) {
-            setTestResult({
-                success: false,
-                error: err instanceof ApiError ? err.message : "Test failed",
-            });
-        } finally {
-            setTesting(false);
-        }
+  async function runTest() {
+    if (!esp) return;
+    setTesting(true);
+    setTestResult(null);
+    setError(null);
+    try {
+      const result = organizationId
+        ? await testOrganizationEspFeedback(organizationId, esp.espId)
+        : await testEspFeedback(esp.espId);
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({
+        success: false,
+        error: err instanceof ApiError ? err.message : "Test failed",
+      });
+    } finally {
+      setTesting(false);
     }
+  }
 
-    async function disable() {
-        if (!esp) return;
-        setError(null);
-        try {
-            if (organizationId) {
-                await deleteOrganizationEspFeedback(organizationId, esp.espId);
-            } else {
-                await deleteEspFeedback(esp.espId);
-            }
-            setConnection(null);
-        } catch (err) {
-            setError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Failed to disable feedback connection",
-            );
-        }
+  async function disable() {
+    if (!esp) return;
+    setError(null);
+    try {
+      if (organizationId) {
+        await deleteOrganizationEspFeedback(organizationId, esp.espId);
+      } else {
+        await deleteEspFeedback(esp.espId);
+      }
+      setConnection(null);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Failed to disable feedback connection",
+      );
     }
+  }
 
-    return (
-        <Dialog open={Boolean(esp)} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Delivery feedback — {esp.name}</DialogTitle>
-                </DialogHeader>
+  return (
+    <Dialog open={Boolean(esp)} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Delivery feedback — {esp.name}</DialogTitle>
+        </DialogHeader>
 
-                {error && <Banner>{error}</Banner>}
+        {error && <Banner>{error}</Banner>}
 
-                {loading ? (
-                    <Loading />
-                ) : (
-                    <div className="space-y-4">
-                        <p className="text-sm text-muted-foreground">
-                            Receives bounce and spam-complaint events from{" "}
-                            {esp.name} so SendLit can suppress future sends to
-                            addresses that hard-bounce or complain. This URL and{" "}
-                            {isSes ? "topic" : "secret"} are unique to this ESP
-                            — switching the team&apos;s default ESP never
-                            affects it.
-                        </p>
+        {loading ? (
+          <Loading />
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Receives bounce and spam-complaint events from {esp.name} so SendLit can
+              suppress future sends to addresses that hard-bounce or complain. This URL
+              and {isSes ? "topic" : "secret"} are unique to this ESP — switching the
+              team&apos;s default ESP never affects it.
+            </p>
 
-                        {connection && (
-                            <div className="space-y-1.5">
-                                <Label>Webhook URL</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        readOnly
-                                        value={connection.webhookUrl}
-                                        className="font-mono text-xs"
-                                    />
-                                    <IconButton
-                                        type="button"
-                                        variant="outline"
-                                        title="Copy"
-                                        aria-label="Copy webhook URL"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(
-                                                connection.webhookUrl,
-                                            );
-                                            setCopied(true);
-                                            setTimeout(
-                                                () => setCopied(false),
-                                                1500,
-                                            );
-                                        }}
-                                    >
-                                        <Copy className="size-4" />
-                                    </IconButton>
-                                </div>
-                                {copied && (
-                                    <p className="text-xs text-muted-foreground">
-                                        Copied.
-                                    </p>
-                                )}
-                                <p className="text-xs text-muted-foreground">
-                                    {isSes ? (
-                                        <>
-                                            Subscribe this URL to your SNS topic
-                                            using the HTTPS protocol, with raw
-                                            message delivery off. SendLit
-                                            confirms the subscription
-                                            automatically.
-                                        </>
-                                    ) : (
-                                        <>
-                                            This URL is an identifier, not a
-                                            credential — configure the shared
-                                            secret below on {esp.name}&apos;s
-                                            side too.
-                                        </>
-                                    )}
-                                </p>
-                            </div>
-                        )}
+            {connection && (
+              <div className="space-y-1.5">
+                <Label>Webhook URL</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={connection.webhookUrl}
+                    className="font-mono text-xs"
+                  />
+                  <IconButton
+                    type="button"
+                    variant="outline"
+                    title="Copy"
+                    aria-label="Copy webhook URL"
+                    onClick={() => {
+                      navigator.clipboard.writeText(connection.webhookUrl);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    }}
+                  >
+                    <Copy className="size-4" />
+                  </IconButton>
+                </div>
+                {copied && <p className="text-xs text-muted-foreground">Copied.</p>}
+                <p className="text-xs text-muted-foreground">
+                  {isSes ? (
+                    <>
+                      Subscribe this URL to your SNS topic using the HTTPS protocol,
+                      with raw message delivery off. SendLit confirms the subscription
+                      automatically.
+                    </>
+                  ) : (
+                    <>
+                      This URL is an identifier, not a credential — configure the shared
+                      secret below on {esp.name}&apos;s side too.
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
 
-                        {connection && (
-                            <div className="flex flex-wrap items-center gap-3 text-sm">
-                                <Badge
-                                    variant={STATUS_VARIANT[connection.status]}
-                                >
-                                    {STATUS_LABEL[connection.status]}
-                                </Badge>
-                                {isSes && (
-                                    <Badge
-                                        variant={
-                                            connection.subscriptionConfirmedAt
-                                                ? "success"
-                                                : "secondary"
-                                        }
-                                    >
-                                        {connection.subscriptionConfirmedAt
-                                            ? "SNS subscription confirmed"
-                                            : "Waiting for SNS subscription"}
-                                    </Badge>
-                                )}
-                                {connection.lastReceivedAt && (
-                                    <span className="text-muted-foreground">
-                                        Last event:{" "}
-                                        {new Date(
-                                            connection.lastReceivedAt,
-                                        ).toLocaleString()}
-                                    </span>
-                                )}
-                                {connection.lastErrorCode && (
-                                    <span className="text-destructive">
-                                        Last error: {connection.lastErrorCode}
-                                    </span>
-                                )}
-                            </div>
-                        )}
-
-                        {isSes ? (
-                            <div className="space-y-1.5">
-                                <Label htmlFor="feedback-topic-arn">
-                                    SNS topic ARN
-                                </Label>
-                                <Input
-                                    id="feedback-topic-arn"
-                                    value={topicArn}
-                                    onChange={(e) =>
-                                        setTopicArn(e.target.value.trim())
-                                    }
-                                    placeholder="arn:aws:sns:us-east-1:123456789012:sendlit-feedback"
-                                    className="font-mono text-xs"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    The topic your SES configuration set (or
-                                    identity) publishes bounce and complaint
-                                    events to. Messages from any other topic are
-                                    rejected.
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="space-y-1.5">
-                                <Label htmlFor="feedback-credential">
-                                    {connection ? "Rotate " : ""}
-                                    {credentialCopy.label}
-                                </Label>
-                                <Input
-                                    id="feedback-credential"
-                                    type="password"
-                                    value={credential}
-                                    onChange={(e) =>
-                                        setCredential(e.target.value)
-                                    }
-                                    placeholder={credentialCopy.placeholder}
-                                    autoComplete="new-password"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    {credentialCopy.hint}
-                                </p>
-                            </div>
-                        )}
-
-                        {testResult && (
-                            <Banner
-                                variant={
-                                    testResult.success ? "success" : "error"
-                                }
-                            >
-                                <span className="inline-flex items-center gap-1.5">
-                                    {testResult.success ? (
-                                        <CheckCircle2 className="size-4" />
-                                    ) : (
-                                        <XCircle className="size-4" />
-                                    )}
-                                    {testResult.success
-                                        ? "Connection verified."
-                                        : testResult.error || "Test failed."}
-                                </span>
-                            </Banner>
-                        )}
-                    </div>
+            {connection && (
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <Badge variant={STATUS_VARIANT[connection.status]}>
+                  {STATUS_LABEL[connection.status]}
+                </Badge>
+                {isSes && (
+                  <Badge
+                    variant={
+                      connection.subscriptionConfirmedAt ? "success" : "secondary"
+                    }
+                  >
+                    {connection.subscriptionConfirmedAt
+                      ? "SNS subscription confirmed"
+                      : "Waiting for SNS subscription"}
+                  </Badge>
                 )}
+                {connection.lastReceivedAt && (
+                  <span className="text-muted-foreground">
+                    Last event: {new Date(connection.lastReceivedAt).toLocaleString()}
+                  </span>
+                )}
+                {connection.lastErrorCode && (
+                  <span className="text-destructive">
+                    Last error: {connection.lastErrorCode}
+                  </span>
+                )}
+              </div>
+            )}
 
-                <DialogFooter className="flex-wrap justify-between gap-2 sm:justify-between">
-                    <div>
-                        {connection && (
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="text-destructive"
-                                onClick={() => setDisableConfirmationOpen(true)}
-                            >
-                                Disable
-                            </Button>
-                        )}
-                    </div>
-                    <div className="flex gap-2">
-                        {connection && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={runTest}
-                                disabled={testing}
-                            >
-                                {testing ? "Testing…" : "Test"}
-                            </Button>
-                        )}
-                        <Button
-                            type="button"
-                            onClick={save}
-                            disabled={saving || !canSave || loading}
-                        >
-                            {saving
-                                ? "Saving…"
-                                : connection
-                                  ? isSes
-                                      ? "Update topic"
-                                      : "Rotate secret"
-                                  : "Save"}
-                        </Button>
-                    </div>
-                </DialogFooter>
-            </DialogContent>
-            <DeleteConfirmationDialog
-                open={disableConfirmationOpen}
-                onOpenChange={setDisableConfirmationOpen}
-                title="Disable delivery feedback?"
-                description={`This will remove the delivery feedback connection for ${esp.name}. You can configure it again later.`}
-                confirmLabel="Disable feedback"
-                onConfirm={disable}
-            />
-        </Dialog>
-    );
+            {isSes ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="feedback-topic-arn">SNS topic ARN</Label>
+                <Input
+                  id="feedback-topic-arn"
+                  value={topicArn}
+                  onChange={(e) => setTopicArn(e.target.value.trim())}
+                  placeholder="arn:aws:sns:us-east-1:123456789012:sendlit-feedback"
+                  className="font-mono text-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  The topic your SES configuration set (or identity) publishes bounce
+                  and complaint events to. Messages from any other topic are rejected.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="feedback-credential">
+                  {connection ? "Rotate " : ""}
+                  {credentialCopy.label}
+                </Label>
+                <Input
+                  id="feedback-credential"
+                  type="password"
+                  value={credential}
+                  onChange={(e) => setCredential(e.target.value)}
+                  placeholder={credentialCopy.placeholder}
+                  autoComplete="new-password"
+                />
+                <p className="text-xs text-muted-foreground">{credentialCopy.hint}</p>
+              </div>
+            )}
+
+            {testResult && (
+              <Banner variant={testResult.success ? "success" : "error"}>
+                <span className="inline-flex items-center gap-1.5">
+                  {testResult.success ? (
+                    <CheckCircle2 className="size-4" />
+                  ) : (
+                    <XCircle className="size-4" />
+                  )}
+                  {testResult.success
+                    ? "Connection verified."
+                    : testResult.error || "Test failed."}
+                </span>
+              </Banner>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="flex-wrap justify-between gap-2 sm:justify-between">
+          <div>
+            {connection && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive"
+                onClick={() => setDisableConfirmationOpen(true)}
+              >
+                Disable
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {connection && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={runTest}
+                disabled={testing}
+              >
+                {testing ? "Testing…" : "Test"}
+              </Button>
+            )}
+            <Button
+              type="button"
+              onClick={save}
+              disabled={saving || !canSave || loading}
+            >
+              {saving
+                ? "Saving…"
+                : connection
+                  ? isSes
+                    ? "Update topic"
+                    : "Rotate secret"
+                  : "Save"}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+      <DeleteConfirmationDialog
+        open={disableConfirmationOpen}
+        onOpenChange={setDisableConfirmationOpen}
+        title="Disable delivery feedback?"
+        description={`This will remove the delivery feedback connection for ${esp.name}. You can configure it again later.`}
+        confirmLabel="Disable feedback"
+        onConfirm={disable}
+      />
+    </Dialog>
+  );
 }

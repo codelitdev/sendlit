@@ -1,10 +1,10 @@
+import { captureError } from "../observability";
 import logger from "../services/log";
-import { captureError } from "../observability/posthog";
-import {
-    getReceiptsDueForProcessing,
-    recoverStaleProcessingReceipts,
-} from "./webhook-receipt-queries";
 import { processWebhookReceipt } from "./process-receipt";
+import {
+  getReceiptsDueForProcessing,
+  recoverStaleProcessingReceipts,
+} from "./webhook-receipt-queries";
 
 const POLL_INTERVAL_MS = 30 * 1000;
 
@@ -17,48 +17,44 @@ const POLL_INTERVAL_MS = 30 * 1000;
  * -process one.
  */
 export async function startFeedbackReceiptPoller(): Promise<void> {
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-        try {
-            await pollFeedbackReceiptsOnce();
-        } catch (err: any) {
-            logger.error({ error: err.message }, "feedback poller loop failed");
-            captureError({
-                error: err,
-                source: "feedback.poller.loop",
-                severity: "critical",
-            });
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  while (true) {
+    try {
+      await pollFeedbackReceiptsOnce();
+    } catch (err: any) {
+      logger.error({ error: err.message }, "feedback poller loop failed");
+      captureError({
+        error: err,
+        source: "feedback.poller.loop",
+        severity: "critical",
+      });
     }
+
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
 }
 
 /** One durable recovery pass. Kept separate from the perpetual loop so missed
  * queue delivery and poison-receipt isolation stay directly testable. */
 export async function pollFeedbackReceiptsOnce(): Promise<void> {
-    const recovered = await recoverStaleProcessingReceipts();
-    if (recovered > 0) {
-        logger.info(
-            { count: recovered },
-            "recovered stale processing webhook receipts",
-        );
-    }
+  const recovered = await recoverStaleProcessingReceipts();
+  if (recovered > 0) {
+    logger.info({ count: recovered }, "recovered stale processing webhook receipts");
+  }
 
-    const due = await getReceiptsDueForProcessing();
-    for (const receipt of due) {
-        try {
-            await processWebhookReceipt(receipt.id);
-        } catch (err: any) {
-            logger.error(
-                { error: err.message, receipt_id: receipt.receiptId },
-                "poller.processReceipt failed",
-            );
-            captureError({
-                error: err,
-                source: "feedback.poller.process_receipt",
-                context: { receipt_id: receipt.receiptId },
-            });
-        }
+  const due = await getReceiptsDueForProcessing();
+  for (const receipt of due) {
+    try {
+      await processWebhookReceipt(receipt.id);
+    } catch (err: any) {
+      logger.error(
+        { error: err.message, receipt_id: receipt.receiptId },
+        "poller.processReceipt failed",
+      );
+      captureError({
+        error: err,
+        source: "feedback.poller.process_receipt",
+        context: { receipt_id: receipt.receiptId },
+      });
     }
+  }
 }

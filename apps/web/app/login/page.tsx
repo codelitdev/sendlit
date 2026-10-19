@@ -11,10 +11,10 @@ export const dynamic = "force-dynamic";
  * bounces the browser there and back.
  */
 export default function LoginPage() {
-    redirect(
-        getDashboardLoginUrl({
-            apiPublicUrl: API_PUBLIC_URL,
-            webClient: WEB_CLIENT,
-        }),
-    );
+  redirect(
+    getDashboardLoginUrl({
+      apiPublicUrl: API_PUBLIC_URL,
+      webClient: WEB_CLIENT,
+    }),
+  );
 }

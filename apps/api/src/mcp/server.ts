@@ -1,15 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/server";
+import { createMcpToolRegistrar } from "./tool-registry";
 import { registerContactTools } from "./tools/contacts";
-import { registerSegmentTools } from "./tools/segments";
-import { registerTemplateTools } from "./tools/templates";
-import { registerSequenceTools } from "./tools/sequences";
-import { registerTransactionalTools } from "./tools/transactional";
+import { registerDeliveryFeedbackTools } from "./tools/delivery-feedback";
 import { registerEspTools } from "./tools/esp";
 import { registerGeneralSettingsTools } from "./tools/general-settings";
-import { registerTeamTools } from "./tools/teams";
 import { registerMediaTools } from "./tools/media";
-import { registerDeliveryFeedbackTools } from "./tools/delivery-feedback";
-import { createMcpToolRegistrar } from "./tool-registry";
+import { registerSegmentTools } from "./tools/segments";
+import { registerSequenceTools } from "./tools/sequences";
+import { registerTeamTools } from "./tools/teams";
+import { registerTemplateTools } from "./tools/templates";
+import { registerTransactionalTools } from "./tools/transactional";
 
 export const SENDLIT_MCP_VERSION = "2.0.0";
 
@@ -20,42 +20,42 @@ export const SENDLIT_MCP_VERSION = "2.0.0";
  * SendLit's existing database/queue services.
  */
 export function buildMcpServer(): McpServer {
-    const server = new McpServer(
-        {
-            name: "SendLit",
-            version: SENDLIT_MCP_VERSION,
-            description:
-                "SendLit MCP server — compose, send and automate email for a SendLit team. Manage contacts and segments, templates and media, broadcasts and sequences, transactional email, sending providers, settings, API keys, and delivery feedback.",
+  const server = new McpServer(
+    {
+      name: "SendLit",
+      version: SENDLIT_MCP_VERSION,
+      description:
+        "SendLit MCP server — compose, send and automate email for a SendLit team. Manage contacts and segments, templates and media, broadcasts and sequences, transactional email, sending providers, settings, team API keys, and delivery feedback. Organization bootstrap, shared-delivery policy, and team provisioning use the REST API, not MCP.",
+    },
+    {
+      instructions:
+        "Use read tools to inspect existing state before mutations. Sending, activation, deletion, key management, and suppression-release tools have external or destructive effects; confirm the requested target and inputs before calling them. MCP is team-scoped and does not accept organization API keys. Use the REST API and /openapi.json for organization discovery, headless shared-delivery setup, and team provisioning.",
+      cacheHints: {
+        "server/discover": {
+          ttlMs: 300_000,
+          cacheScope: "private",
         },
-        {
-            instructions:
-                "Use read tools to inspect existing state before mutations. Sending, activation, deletion, key management, and suppression-release tools have external or destructive effects; confirm the requested target and inputs before calling them.",
-            cacheHints: {
-                "server/discover": {
-                    ttlMs: 300_000,
-                    cacheScope: "private",
-                },
-                "tools/list": {
-                    ttlMs: 300_000,
-                    cacheScope: "private",
-                },
-            },
+        "tools/list": {
+          ttlMs: 300_000,
+          cacheScope: "private",
         },
-    );
-    const tools = createMcpToolRegistrar(server);
+      },
+    },
+  );
+  const tools = createMcpToolRegistrar(server);
 
-    // Registration order is stable so catalog caching and upstream prompt
-    // caches receive deterministic tool lists.
-    registerContactTools(tools);
-    registerSegmentTools(tools);
-    registerTemplateTools(tools);
-    registerMediaTools(tools);
-    registerSequenceTools(tools);
-    registerTransactionalTools(tools);
-    registerGeneralSettingsTools(tools);
-    registerEspTools(tools);
-    registerTeamTools(tools);
-    registerDeliveryFeedbackTools(tools);
+  // Registration order is stable so catalog caching and upstream prompt
+  // caches receive deterministic tool lists.
+  registerContactTools(tools);
+  registerSegmentTools(tools);
+  registerTemplateTools(tools);
+  registerMediaTools(tools);
+  registerSequenceTools(tools);
+  registerTransactionalTools(tools);
+  registerGeneralSettingsTools(tools);
+  registerEspTools(tools);
+  registerTeamTools(tools);
+  registerDeliveryFeedbackTools(tools);
 
-    return server;
+  return server;
 }
