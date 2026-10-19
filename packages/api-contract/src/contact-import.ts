@@ -116,6 +116,7 @@ statuses({ status: "unsubscribed" }, [
   "canceled",
   "opted_out",
   "disabled",
+  "deactivated",
   "false",
   "no",
   "0",
@@ -150,4 +151,19 @@ export function normalizeImportStatus(
   raw: string | undefined,
 ): ContactImportStatusResult {
   return STATUS_VALUES[normalizeImportHeader(raw ?? "")] ?? { skip: "unknown_status" };
+}
+
+/**
+ * The status every row of an export file has when the file itself says so:
+ * Mailchimp exports one CSV per contact type (`subscribed_…`,
+ * `unsubscribed_…`, `nonsubscribed_…`, `cleaned_…`) with no status column.
+ */
+export function guessImportStatusFromFileName(
+  fileName: string,
+): ContactImportStatus | null {
+  const name = normalizeImportHeader(fileName.split(/[\\/]/).pop() ?? "");
+  if (/^cleaned/.test(name)) return "bounced";
+  if (/^(un|non_?)subscribed/.test(name)) return "unsubscribed";
+  if (/^subscribed/.test(name)) return "subscribed";
+  return null;
 }

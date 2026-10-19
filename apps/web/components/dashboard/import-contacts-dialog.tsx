@@ -2,8 +2,9 @@
 
 import {
   type ContactImportField,
+  type ContactImportStatus,
   guessContactImportField,
-  normalizeImportHeader,
+  guessImportStatusFromFileName,
 } from "@sendlit/api-contract";
 import { Upload } from "lucide-react";
 import Papa from "papaparse";
@@ -37,12 +38,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  type ImportContactRow,
-  type ImportContactsResult,
-  importContacts,
-} from "@/lib/api";
+import { type ImportContactsResult, importContacts } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
+import { type ParsedCsv, toImportRows } from "@/lib/contact-import";
 
 /** Rows sent per request; the API accepts at most 1000. */
 const CHUNK_SIZE = 1000;
@@ -69,57 +67,16 @@ const SKIP_REASONS: Record<ImportContactsResult["skipped"][number]["reason"], st
     plan_limit_reached: "Over your plan's contact limit",
   };
 
+const FILE_STATUS_LABELS: Record<ContactImportStatus, string> = {
+  subscribed: "Subscribed",
+  unsubscribed: "Unsubscribed",
+  bounced: "Bounced or cleaned (suppressed)",
+  complained: "Marked as spam (suppressed)",
+};
+
+const MIGRATION_GUIDES_URL = "https://docs.sendlit.app/migrate/overview";
+
 type Step = "pick" | "map" | "importing" | "done";
-
-interface ParsedCsv {
-  fileName: string;
-  headers: string[];
-  rows: Record<string, string>[];
-}
-
-/** Builds the API rows from the CSV rows and the chosen column mapping. */
-function toImportRows(
-  csv: ParsedCsv,
-  mapping: Record<string, ContactImportField>,
-): ImportContactRow[] {
-  const columns = (field: ContactImportField) =>
-    csv.headers.filter((header) => mapping[header] === field);
-  const [emailColumn] = columns("email");
-  return csv.rows.map((record, index) => {
-    const value = (header: string) => record[header]?.trim() ?? "";
-    const first = (field: ContactImportField) =>
-      columns(field)
-        .map(value)
-        .find((v) => v) || undefined;
-    const name =
-      first("name") ||
-      [first("first_name"), first("last_name")].filter(Boolean).join(" ") ||
-      undefined;
-    const tags = [
-      ...columns("tags").flatMap((header) => value(header).split(/[,;]/)),
-      ...columns("tag_from_value")
-        .filter((header) => value(header))
-        .map((header) => `${normalizeImportHeader(header)}:${value(header)}`),
-    ]
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-    const customFields = Object.fromEntries(
-      columns("custom_field")
-        .filter((header) => value(header))
-        .map((header) => [normalizeImportHeader(header), value(header)]),
-    );
-    return {
-      // The header is line 1, so data row 0 is line 2 of the file.
-      row: index + 2,
-      email: value(emailColumn),
-      ...(name && { name }),
-      ...(tags.length > 0 && { tags }),
-      ...(first("status") !== undefined && { status: first("status") }),
-      ...(first("created_at") && { createdAt: first("created_at") }),
-      ...(Object.keys(customFields).length > 0 && { customFields }),
-    };
-  });
-}
 
 /**
  * Imports contacts from another platform's CSV export (beehiiv, Mailchimp,
@@ -134,6 +91,7 @@ export function ImportContactsDialog({ onImported }: { onImported: () => void })
   const [mapping, setMapping] = useState<Record<string, ContactImportField>>({});
   const [tagsForAll, setTagsForAll] = useState("");
   const [importPending, setImportPending] = useState(false);
+  const [fileStatus, setFileStatus] = useState<ContactImportStatus>("subscribed");
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ImportContactsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +102,7 @@ export function ImportContactsDialog({ onImported }: { onImported: () => void })
     setMapping({});
     setTagsForAll("");
     setImportPending(false);
+    setFileStatus("subscribed");
     setProgress(0);
     setResult(null);
     setError(null);
@@ -172,6 +131,7 @@ export function ImportContactsDialog({ onImported }: { onImported: () => void })
           emailSeen = true;
         }
         setCsv({ fileName: file.name, headers, rows: data });
+        setFileStatus(guessImportStatusFromFileName(file.name) ?? "subscribed");
         setMapping(guessed);
         setStep("map");
       },
@@ -182,10 +142,13 @@ export function ImportContactsDialog({ onImported }: { onImported: () => void })
   const emailColumns = csv
     ? csv.headers.filter((header) => mapping[header] === "email").length
     : 0;
+  const hasStatusColumn = csv
+    ? csv.headers.some((header) => mapping[header] === "status")
+    : false;
 
   async function runImport() {
     if (!csv) return;
-    const rows = toImportRows(csv, mapping);
+    const rows = toImportRows(csv, mapping, fileStatus);
     const tags = tagsForAll
       .split(",")
       .map((tag) => tag.trim())
@@ -243,7 +206,16 @@ export function ImportContactsDialog({ onImported }: { onImported: () => void })
           <DialogDescription>
             Upload a CSV export from beehiiv, Mailchimp, Substack, Kit or any other
             tool. Unsubscribed, bounced and spam-complaint contacts stay that way, and
-            nobody is re-subscribed.
+            nobody is re-subscribed. Moving your newsletter?{" "}
+            <a
+              href={MIGRATION_GUIDES_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-4"
+            >
+              Read the migration guides
+            </a>
+            .
           </DialogDescription>
         </DialogHeader>
 
@@ -321,6 +293,30 @@ export function ImportContactsDialog({ onImported }: { onImported: () => void })
               <p className="text-sm text-destructive">
                 Choose exactly one column to import as Email.
               </p>
+            )}
+            {!hasStatusColumn && (
+              <div className="space-y-1.5">
+                <Label htmlFor="import-file-status">Everyone in this file is</Label>
+                <Select
+                  value={fileStatus}
+                  onValueChange={(value) => setFileStatus(value as ContactImportStatus)}
+                >
+                  <SelectTrigger id="import-file-status" className="w-72">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(FILE_STATUS_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  The file has no status column. Mailchimp exports one file per status;
+                  import its unsubscribed and cleaned files with the matching status.
+                </p>
+              </div>
             )}
             <div className="space-y-1.5">
               <Label htmlFor="import-tags">Add tags to every contact (optional)</Label>

@@ -1,0 +1,48 @@
+---
+title: From beehiiv
+description: Export your beehiiv subscribers and import them into SendLit.
+---
+
+## Export from beehiiv
+
+1. In beehiiv, open **Settings** and select your publication.
+2. Open **Export Data**.
+3. Under **Export Subscribers**, choose **Export All Subscribers** (the full
+   export, with custom fields) or **Export All Basic Subscribers** (email,
+   status and tier only).
+4. beehiiv emails you when the export is ready; you can also download it
+   from **Historical Exports** on the same page. The download link is valid
+   for 24 hours, so import it the same day or export again.
+
+To keep your past issues, also choose **Export All Posts** under **Export
+Posts**. SendLit can't import posts into the web archive yet, so keep that
+file.
+
+## Import into SendLit
+
+In **Contacts → Import**, upload the CSV. SendLit recognises beehiiv's
+columns: the email, the status and the `tier`, which becomes a tag such as
+`tier:premium`. The full export's custom fields become custom fields; set any
+column you don't need to "Don't import". Add a tag such as `beehiiv` to every
+contact.
+
+| beehiiv status | In SendLit |
+| --- | --- |
+| Active | Subscribed |
+| Paused | Subscribed, tagged `paused` |
+| Inactive | Unsubscribed |
+| Pending, Needs Approval | Skipped, or unsubscribed and tagged `pending` if you tick the option |
+
+Paused subscribers asked for a break, not to leave. Leave them out of
+broadcasts with an audience filter that excludes the `paused` tag until
+you're ready.
+
+Premium subscribers keep their tier as a tag, so you can send them premium
+issues. SendLit doesn't take payments; keep billing them through your
+payment provider.
+
+## Next
+
+Connect your provider, authenticate your domain, recreate your forms and
+welcome email, and go through the checklist in
+[Moving your newsletter](/migrate/overview#the-steps).
