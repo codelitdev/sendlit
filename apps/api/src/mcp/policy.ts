@@ -116,6 +116,18 @@ const toolPolicies = {
 
 export type McpToolName = keyof typeof toolPolicies;
 
+/**
+ * Tools a team API key may never call, mirroring REST, which refuses key
+ * management to key callers. Otherwise a leaked key could mint replacement
+ * keys for itself, so revoking it would not cut off the attacker, or revoke
+ * the team's other keys.
+ */
+const teamKeyDeniedTools: ReadonlySet<McpToolName> = new Set<McpToolName>([
+  "list_api_keys",
+  "create_api_key",
+  "delete_api_key",
+]);
+
 export function isMcpToolName(name: string): name is McpToolName {
   return Object.hasOwn(toolPolicies, name);
 }
@@ -136,9 +148,17 @@ export function authorizeMcpTool(name: string, ctx: ServerContext) {
     return errorResult("Authentication required.");
   }
 
-  // A team API key is already a full-access credential for exactly one team.
+  // A team API key is already a full-access credential for exactly one team,
+  // except for managing API keys, which requires a user (OAuth) session.
   // Scoped team keys are a separate API-key product feature.
-  if (authKind === "team_key") return null;
+  if (authKind === "team_key") {
+    if (teamKeyDeniedTools.has(name as McpToolName)) {
+      return errorResult(
+        "user_auth_required: managing API keys requires a user-authenticated session, not an API key.",
+      );
+    }
+    return null;
+  }
 
   if (authKind !== "oauth" || !authInfo.scopes.includes(requiredScope)) {
     return errorResult(`insufficient_scope: this tool requires '${requiredScope}'.`);

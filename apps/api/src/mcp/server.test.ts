@@ -9,6 +9,17 @@ import {
 
 mock.module("../db/client", () => ({ db: {}, pool: {} }));
 
+const apiKeyMocks = {
+  createApiKey: mock(),
+  deleteApiKey: mock(),
+  getApiKeysByTeamId: mock(),
+};
+const actualApiKeyQueries = await import("../apikey/queries");
+mock.module("../apikey/queries", () => ({
+  ...actualApiKeyQueries,
+  ...apiKeyMocks,
+}));
+
 const { authorizeMcpTool, listMcpToolPolicies, MCP_SCOPES } = await import("./policy");
 const { buildMcpServer } = await import("./server");
 
@@ -39,6 +50,7 @@ function transportFor(handler: McpHttpHandler, authInfo = teamKeyAuth) {
 const closeables: Array<{ close(): Promise<void> }> = [];
 
 afterEach(async () => {
+  for (const fn of Object.values(apiKeyMocks)) fn.mockReset();
   await Promise.allSettled(closeables.splice(0).map((item) => item.close()));
 });
 
@@ -142,5 +154,92 @@ describe("MCP server", () => {
     expect(() => authorizeMcpTool("unregistered_tool", oauthContext)).toThrow(
       "has no authorization policy",
     );
+  });
+
+  it("denies API key management to team API keys", () => {
+    const teamKeyContext = {
+      mcpReq: {},
+      http: { authInfo: teamKeyAuth },
+    } as unknown as ServerContext;
+
+    for (const tool of ["list_api_keys", "create_api_key", "delete_api_key"]) {
+      expect(authorizeMcpTool(tool, teamKeyContext)).toMatchObject({
+        isError: true,
+        content: [
+          expect.objectContaining({
+            text: expect.stringContaining("user_auth_required"),
+          }),
+        ],
+      });
+    }
+
+    const oauthContext = {
+      mcpReq: {},
+      http: {
+        authInfo: {
+          token: "oauth-token",
+          clientId: "client-1",
+          scopes: [MCP_SCOPES.apiKeysRead, MCP_SCOPES.apiKeysWrite],
+          extra: {
+            authKind: "oauth",
+            teamId: "team-1",
+            user: null,
+          },
+        },
+      },
+    } as unknown as ServerContext;
+    for (const tool of ["list_api_keys", "create_api_key", "delete_api_key"]) {
+      expect(authorizeMcpTool(tool, oauthContext)).toBeNull();
+    }
+  });
+
+  it("refuses team-key calls to key tools before touching keys", async () => {
+    const handler = createHandler();
+    const client = new Client(
+      { name: "sendlit-team-key-test", version: "1.0.0" },
+      { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+    );
+    closeables.push(client, handler);
+    await client.connect(transportFor(handler));
+
+    const calls = [
+      { name: "list_api_keys", arguments: {} },
+      { name: "create_api_key", arguments: { name: "replacement" } },
+      { name: "delete_api_key", arguments: { keyId: "tak_other" } },
+    ];
+    for (const call of calls) {
+      const result = await client.callTool(call);
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain("user_auth_required");
+    }
+
+    expect(apiKeyMocks.getApiKeysByTeamId).not.toHaveBeenCalled();
+    expect(apiKeyMocks.createApiKey).not.toHaveBeenCalled();
+    expect(apiKeyMocks.deleteApiKey).not.toHaveBeenCalled();
+  });
+
+  it("still lets OAuth sessions with api_keys scopes manage keys", async () => {
+    apiKeyMocks.deleteApiKey.mockResolvedValue(undefined);
+    const handler = createHandler();
+    const client = new Client(
+      { name: "sendlit-oauth-key-test", version: "1.0.0" },
+      { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+    );
+    closeables.push(client, handler);
+    await client.connect(
+      transportFor(handler, {
+        token: "oauth-token",
+        clientId: "client-1",
+        scopes: [MCP_SCOPES.apiKeysWrite],
+        extra: { authKind: "oauth", teamId: "team-1", user: null },
+      }),
+    );
+
+    const result = await client.callTool({
+      name: "delete_api_key",
+      arguments: { keyId: "tak_other" },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(apiKeyMocks.deleteApiKey).toHaveBeenCalledWith("team-1", "tak_other");
   });
 });

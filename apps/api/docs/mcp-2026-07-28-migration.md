@@ -176,7 +176,9 @@ registered tools and policy entries are identical sets.
 
 OAuth calls must contain the tool's required scope. Team API keys currently
 have full access to their fixed team because scoped team keys are not yet a
-SendLit API-key product feature.
+SendLit API-key product feature. The one exception is API key management:
+`list_api_keys`, `create_api_key` and `delete_api_key` return a
+`user_auth_required` tool error for team API keys, matching REST.
 
 Dynamic registration and discovery use identity-only default scopes. All MCP
 scopes remain requestable capabilities, but `/oauth2/authorize` rejects a
