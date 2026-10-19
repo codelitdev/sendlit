@@ -31,7 +31,8 @@ mock.module("bullmq", () => ({
   })),
 }));
 
-const { UnrecoverableError, Worker } = await import("bullmq");
+const { DelayedError, UnrecoverableError, Worker } = await import("bullmq");
+const { SendDeferredError } = await import("./rate-limit");
 const { db } = await import("../db/client");
 const schema = await import("../db/schema");
 const { isRecipientSuppressed } = await import(
@@ -49,7 +50,7 @@ const tdb = db as unknown as TestDb;
 const sendMailMock = sendMail as unknown as Mock<typeof sendMail>;
 const WorkerMock = Worker as unknown as Mock<(...args: unknown[]) => void>;
 
-let processor: (job: Job) => Promise<void>;
+let processor: (job: Job, token?: string) => Promise<void>;
 let workerQueueName: string | undefined;
 let registeredEvents: string[];
 
@@ -151,6 +152,26 @@ describe("mail worker transactional processing", () => {
     expect(sendMailMock).toHaveBeenCalledWith(
       expect.objectContaining({ replyTo: "support@example.com", text: "plain hi" }),
     );
+  });
+
+  it("delays a rate-limited send without using up an attempt", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const row = await queuedEmail(team.id);
+    sendMailMock.mockRejectedValueOnce(new SendDeferredError(60_000));
+    const delayed = job(row.id, 2);
+    const moveToDelayed = vi.fn().mockResolvedValue(undefined);
+    (delayed as any).moveToDelayed = moveToDelayed;
+    const before = Date.now();
+
+    await expect(processor(delayed, "token-1")).rejects.toBeInstanceOf(DelayedError);
+
+    expect(moveToDelayed).toHaveBeenCalledTimes(1);
+    expect(moveToDelayed.mock.calls[0][0]).toBeGreaterThanOrEqual(before + 60_000);
+    expect(moveToDelayed.mock.calls[0][1]).toBe("token-1");
+    // Even on what would be the final attempt, the row isn't failed.
+    await expect(getTransactionalEmailById(row.id)).resolves.toMatchObject({
+      status: "queued",
+    });
   });
 
   it("marks an SMTP 5xx as bounced and suppresses the recipient", async () => {

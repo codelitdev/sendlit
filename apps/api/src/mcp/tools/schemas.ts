@@ -208,6 +208,7 @@ export const espConfigSchema = z.object({
   fromName: z.string().nullable().optional(),
   fromEmail: z.string().nullable().optional(),
   replyTo: z.string().nullable().optional(),
+  maxSendRate: z.number().nullable().optional(),
   status: z.string(),
   secretVersion: z.number(),
   lastTestedAt: z.string().nullable().optional(),

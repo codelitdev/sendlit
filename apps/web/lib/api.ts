@@ -581,6 +581,7 @@ export interface EspConfig {
   fromName: string | null;
   fromEmail: string | null;
   replyTo?: string | null;
+  maxSendRate?: number | null;
   lastTestedAt: string | null;
   lastTestStatus: "success" | "failed" | null;
   lastTestError: string | null;
@@ -604,6 +605,8 @@ export interface EspConnectionInput {
   fromEmail?: string;
   /** "" clears it. */
   replyTo?: string;
+  /** Messages per second; `null` uses the provider default. */
+  maxSendRate?: number | null;
 }
 
 // ---- ESP collection (multiple user-managed ESPs per team) -----------------

@@ -12,6 +12,23 @@ carry a `Reply-To` header, so replies reach that inbox (for example
 `replyTo` takes precedence; a shared organization ESP can be given a per-team
 reply-to on the team's grant.
 
+## Send rate
+
+Providers cap how many emails per second an account may send; Amazon SES
+starts new accounts at 14 per second and rejects anything faster with
+`Throttling`. Set **Max send rate** on the ESP to your account's limit (for
+SES, the `MaxSendRate` shown in the SES console). SendLit spaces every send
+through that ESP to stay under it, across all workers, so a large broadcast
+takes longer instead of failing. Left empty, SES ESPs use 14 per second,
+Resend 2, and other providers aren't throttled.
+
+If the provider still replies that it is throttling (for example SES's
+`454 Throttling failure`) or asks to retry later, the email is rescheduled a
+minute later (15 minutes for a daily quota) without counting as a failed
+attempt.
+
+## Testing
+
 Use the test send endpoint after configuring settings to verify delivery before sending broadcasts or activating sequences.
 
 ## Bounce and complaint feedback

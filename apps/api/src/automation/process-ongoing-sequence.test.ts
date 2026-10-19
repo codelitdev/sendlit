@@ -24,6 +24,7 @@ const { addOrStrengthenSuppression } = await import(
   "../delivery-feedback/suppression-queries"
 );
 const { sendMail } = await import("../mail/send");
+const { SendDeferredError } = await import("../mail/rate-limit");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
 const { seedOngoingSequence, seedSequence } = await import("../test/fixtures");
@@ -523,6 +524,32 @@ describe("processOngoingSequence", () => {
       .from(sequences)
       .where(eq(sequences.id, sequenceRow.id));
     expect(seqAfter.status).toBe("active");
+  });
+
+  it("reschedules a rate-limited send without counting a failed attempt", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const row = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+    mockedSendMail.mockRejectedValueOnce(new SendDeferredError(60_000));
+    const before = Date.now();
+
+    await expect(processOngoingSequence(row.id)).resolves.toBeUndefined();
+
+    const [after] = await tdb
+      .select()
+      .from(ongoingSequences)
+      .where(eq(ongoingSequences.id, row.id));
+    expect(after.retryCount).toBe(0);
+    expect(after.processingStartedAt).toBeNull();
+    expect(after.nextEmailScheduledTime).toBeGreaterThanOrEqual(before + 60_000);
+    expect(after.sentEmailIds).toEqual([]);
   });
 
   it("increments retryCount and keeps the row on a send failure below the bounce limit", async () => {

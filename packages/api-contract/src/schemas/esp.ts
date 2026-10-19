@@ -9,6 +9,19 @@ export const espProviders = [
   "resend",
 ] as const;
 
+/**
+ * Messages per second each provider accepts when an ESP doesn't set its own
+ * `maxSendRate`. Amazon SES starts new accounts at 14/s (raise it to your
+ * account's `MaxSendRate`); Resend allows 2 requests per second per team.
+ * Providers without a published per-second cap aren't throttled by default.
+ */
+export const defaultMaxSendRates: Partial<
+  Record<(typeof espProviders)[number], number>
+> = {
+  ses: 14,
+  resend: 2,
+};
+
 /** Public shape only — the encrypted password/secret is never returned to
  * clients, only a `hasPassword` boolean (see
  * `apps/api/src/settings/esp/routes.ts`'s `toPublicShape`). */
@@ -26,6 +39,8 @@ export const espConfigSchema = z.object({
   fromName: z.string().nullable().optional(),
   fromEmail: z.string().nullable().optional(),
   replyTo: z.string().nullable().optional(),
+  /** Configured messages per second; `null` means the provider default. */
+  maxSendRate: z.number().nullable().optional(),
   status: z.enum(["draft", "active", "suspended", "draining", "retired"]),
   secretVersion: z.number().int().positive(),
   lastTestedAt: z.string().nullable().optional(),
@@ -36,6 +51,16 @@ export const espConfigSchema = z.object({
   retiredAt: z.string().nullable().optional(),
   updatedAt: z.string().optional(),
 });
+
+const maxSendRateSchema = z
+  .number()
+  .positive()
+  .max(10_000)
+  .nullable()
+  .optional()
+  .describe(
+    "Messages per second to send through this ESP, across all workers. `null` uses the provider default (Amazon SES 14, Resend 2, others unlimited).",
+  );
 
 export const upsertEspConfigBodySchema = z.object({
   provider: z.enum(espProviders),
@@ -51,6 +76,7 @@ export const upsertEspConfigBodySchema = z.object({
     .union([z.string().email(), z.literal("")])
     .optional()
     .describe('Where replies go, when not the from address. `""` clears it.'),
+  maxSendRate: maxSendRateSchema,
 });
 
 export const createEspConfigBodySchema = upsertEspConfigBodySchema.extend({
@@ -69,6 +95,7 @@ export const updateEspConfigBodySchema = z
     fromName: z.string().optional(),
     fromEmail: z.union([z.string().email(), z.literal("")]).optional(),
     replyTo: z.union([z.string().email(), z.literal("")]).optional(),
+    maxSendRate: maxSendRateSchema,
   })
   .refine((body) => Object.keys(body).length > 0, {
     message: "At least one field is required",

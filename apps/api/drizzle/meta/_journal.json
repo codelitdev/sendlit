@@ -92,6 +92,13 @@
       "when": 1792417856290,
       "tag": "0012_esp_config_reply_to",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792418220753,
+      "tag": "0013_esp_config_max_send_rate",
+      "breakpoints": true
     }
   ]
 }

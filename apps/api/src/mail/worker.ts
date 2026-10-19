@@ -1,4 +1,4 @@
-import { type Job, UnrecoverableError, Worker } from "bullmq";
+import { DelayedError, type Job, UnrecoverableError, Worker } from "bullmq";
 import {
   commitSendReservation,
   releaseSendReservation,
@@ -34,6 +34,7 @@ import {
 } from "../transactional/queries";
 import { getTrackedClickUrl, getTrackingPixelUrl } from "../utils/mail";
 import { generatePixelToken } from "../utils/pixel-jwt";
+import { SendDeferredError } from "./rate-limit";
 import { appendTrackingPixelToHtml, transformLinksForClickTracking } from "./render";
 import { sendMail } from "./send";
 import { registerWorkerEvents, workerOptions } from "./worker-options";
@@ -81,7 +82,7 @@ async function processCampaignJob(job: Job) {
  * (5xx) throws `UnrecoverableError` so it doesn't, and only the final attempt
  * marks the row `failed`. See `docs/transactional-emails.md#send-pipeline`.
  */
-async function processTransactionalJob(job: Job) {
+async function processTransactionalJob(job: Job, token?: string) {
   const { transactionalEmailId } = job.data as {
     transactionalEmailId: string;
   };
@@ -190,6 +191,12 @@ async function processTransactionalJob(job: Job) {
       await commitSendReservation(outbound.id);
     }
   } catch (err: any) {
+    if (err instanceof SendDeferredError && token) {
+      // Rate limited: run the job again later without using up an attempt.
+      await releaseTransactionalEmailClaim(row.id);
+      await job.moveToDelayed(Date.now() + err.retryAfterMs, token);
+      throw new DelayedError();
+    }
     const responseCode = err?.responseCode;
     const isPermanentRejection =
       typeof responseCode === "number" && responseCode >= 500 && responseCode < 600;
@@ -256,8 +263,8 @@ async function processTransactionalJob(job: Job) {
 
 const worker = new Worker(
   "mail",
-  async (job) => {
-    if (job.name === "transactional") return processTransactionalJob(job);
+  async (job, token) => {
+    if (job.name === "transactional") return processTransactionalJob(job, token);
     return processCampaignJob(job);
   },
   workerOptions,

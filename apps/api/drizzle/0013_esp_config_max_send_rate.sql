@@ -1,0 +1,1 @@
+ALTER TABLE "esp_configs" ADD COLUMN "max_send_rate" double precision;
