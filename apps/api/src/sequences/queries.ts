@@ -1,5 +1,7 @@
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { assertEmailContentAllowed } from "../abuse/content-scan";
+import { assertNoImportUnderReview } from "../abuse/imports";
 import { getMatchingContactIds } from "../automation/queries";
 import {
   assertMarketingAllowedForContactUsage,
@@ -483,6 +485,15 @@ export async function updateMailInSequence({
     if (published !== undefined) patch.published = published;
   }
   if (content !== undefined) patch.content = content as any;
+  // A running sequence sends edits straight away, so they're scanned now.
+  if (sequence.status === "active" && (patch.content || patch.subject)) {
+    await assertEmailContentAllowed({
+      teamId,
+      email,
+      subject: patch.subject ?? email.subject,
+      content: patch.content ?? email.content,
+    });
+  }
   if (delayInMillis !== undefined) patch.delayInMillis = delayInMillis;
   if (templateId !== undefined) patch.templateId = templateId;
   if (actionType !== undefined) patch.actionType = actionType;
@@ -628,6 +639,12 @@ export async function startSequence({
   await assertSendAllowedForTeam(teamId, "marketing");
   const team = await getTeam(teamId);
   if (!team) throw new Error("team_not_found");
+  // Hosted abuse controls: a new account's large import waits for review,
+  // and every published email is scanned before anything goes out.
+  await assertNoImportUnderReview(team.organizationId);
+  for (const email of sequence.emails.filter((e) => e.published)) {
+    await assertEmailContentAllowed({ teamId, email });
+  }
   await db.transaction(async (tx) => {
     await assertMarketingAllowedForContactUsage(tx, team.organizationId);
   });

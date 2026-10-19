@@ -450,6 +450,7 @@ export function importContacts(body: {
   contacts: ImportContactRow[];
   tags?: string[];
   pending?: "skip" | "unsubscribed";
+  source?: string;
 }) {
   return unwrap<ImportContactsResult>(client.contacts.import({ body }));
 }

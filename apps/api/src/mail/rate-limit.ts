@@ -1,10 +1,10 @@
 import { defaultMaxSendRates } from "@sendlit/api-contract";
 import { eq } from "drizzle-orm";
-import Redis from "ioredis";
+import { untilNextUtcHour } from "../abuse/pacing";
 import { db } from "../db/client";
 import { espConfigs } from "../db/schema";
 import { captureError } from "../observability";
-import redisConfig from "../services/redis";
+import { closeSharedRedis, sharedRedis } from "../services/redis-client";
 import type { EspProvider } from "../settings/esp/queries";
 
 /** The longest a send waits in-process for its slot. Beyond this the send is
@@ -49,16 +49,10 @@ redis.call('SET', KEYS[1], tat + interval, 'PX', wait + interval + 1000)
 return wait
 `;
 
-let client: Redis | null = null;
-
-function redis(): Redis {
-  client ??= new Redis({ ...redisConfig, maxRetriesPerRequest: 2 });
-  return client;
-}
+const redis = sharedRedis;
 
 export async function closeSendRateLimiter(): Promise<void> {
-  await client?.quit().catch(() => undefined);
-  client = null;
+  await closeSharedRedis();
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -207,6 +201,13 @@ export function quotaExhaustionDeferral(error: unknown): SendDeferredError | nul
     err.details?.capability === "marketing_daily_ramp"
   ) {
     return new SendDeferredError(untilNextUtcDay(), "marketing_daily_ramp");
+  }
+  // A new organization's sends are spread across the day (abuse/pacing.ts).
+  if (
+    err?.message === "plan_limit_reached" &&
+    err.details?.capability === "marketing_hourly_pacing"
+  ) {
+    return new SendDeferredError(untilNextUtcHour(), "marketing_hourly_pacing");
   }
   if (
     err?.message !== "organization_team_quota_exhausted" &&

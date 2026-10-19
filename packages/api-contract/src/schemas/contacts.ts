@@ -101,6 +101,13 @@ export const importContactsBodySchema = z.object({
     .describe(
       "Contacts who never confirmed (Pending / Needs approval): skip them (default) or import them unsubscribed with the `pending` tag",
     ),
+  source: z
+    .string()
+    .max(200)
+    .optional()
+    .describe(
+      "Where the rows came from, e.g. the CSV file name; kept in the audit log",
+    ),
 });
 
 export const importContactsResultSchema = z.object({

@@ -11,7 +11,11 @@ export type ReputationConfig = {
   recoveryCleanDays: number;
 };
 
-function positiveInt(name: string, fallback: number, max = 2_147_483_647): number {
+export function positiveInt(
+  name: string,
+  fallback: number,
+  max = 2_147_483_647,
+): number {
   const raw = process.env[name];
   if (raw === undefined || raw === "") return fallback;
   if (!/^\d+$/.test(raw)) throw new Error(`${name}_invalid`);

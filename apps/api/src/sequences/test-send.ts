@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { assertEmailContentAllowed } from "../abuse/content-scan";
 import { TEST_CONTACT_ID, TEST_UNSUBSCRIBE_TOKEN } from "../config/constants";
 import { findContactByEmail } from "../contacts/queries";
 import { db } from "../db/client";
@@ -84,6 +85,9 @@ export async function sendSequenceEmailTest({
   if (!email) throw new Error("email_not_found");
   const team = await getTeam(teamId);
   if (!team) throw new Error("sequence_not_found");
+
+  // A test is a real send, so it passes the same hosted content checks.
+  await assertEmailContentAllowed({ teamId, email });
 
   const requested = to?.length ? to : fallbackRecipient ? [fallbackRecipient] : [];
   const recipients = [...new Set(requested.map(normalizeEmail))];

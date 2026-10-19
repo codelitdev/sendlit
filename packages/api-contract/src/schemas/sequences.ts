@@ -21,6 +21,9 @@ export const sequenceEmailSchema = z.object({
   actionData: z.record(z.any()).nullable().optional(),
   /** When a test of this email was last sent; `null` if never. */
   lastTestSentAt: z.string().nullable().optional(),
+  /** Hosted content check: `clean`, `review` (held for SendLit's review),
+   * `blocked`, or `approved` after review; `null` when not scanned. */
+  contentScanVerdict: z.string().nullable().optional(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
 });
@@ -134,6 +137,18 @@ export const sequenceSchema = z.object({
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
   emails: z.array(sequenceEmailSchema),
+  /** Set while a running broadcast of a new hosted organization is sent
+   * gradually (`get` only). */
+  pacing: z
+    .object({
+      reason: z.enum(["new_account"]),
+      hourlyLimit: z.number().int(),
+      dailyLimit: z.number().int(),
+      remaining: z.number().int(),
+      estimatedCompletionAt: z.string(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const listSequencesQuerySchema = z.object({

@@ -144,6 +144,16 @@ export const sequenceSchema = z.object({
   entrants: z.number().optional(),
   report: z.record(z.any()).nullable().optional(),
   emails: z.array(sequenceEmailSchema),
+  pacing: z
+    .object({
+      reason: z.enum(["new_account"]),
+      hourlyLimit: z.number(),
+      dailyLimit: z.number(),
+      remaining: z.number(),
+      estimatedCompletionAt: z.string(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const sequenceListSchema = z.object({

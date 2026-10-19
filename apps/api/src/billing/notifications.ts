@@ -88,6 +88,20 @@ async function sendPlatformMail(
   });
 }
 
+/** Emails an organization's owners and billing managers from the platform
+ * address (for example about sending held for review). */
+export async function notifyOrganizationOwners(
+  organizationId: string,
+  subject: string,
+  text: string,
+): Promise<void> {
+  await sendPlatformMail(
+    await recipientsForOrganization(organizationId),
+    subject,
+    text,
+  );
+}
+
 export async function notifyPaymentPastDue(
   organizationId: string,
   graceEndsAt: Date | null,

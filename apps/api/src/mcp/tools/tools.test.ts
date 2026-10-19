@@ -115,6 +115,7 @@ mock.module("../../sequences/queries", () => ({
   pauseSequence: mocks.pauseSequence,
 }));
 
+mock.module("../../abuse/pacing-status", () => ({ broadcastPacing: async () => null }));
 mock.module("../../sequences/test-send", () => ({
   sendSequenceEmailTest: mocks.sendSequenceEmailTest,
 }));

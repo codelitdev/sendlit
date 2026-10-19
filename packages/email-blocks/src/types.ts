@@ -69,6 +69,8 @@ export interface SequenceEmail {
   actionData?: Record<string, unknown> | null;
   /** When a test of this email was last sent; `null` if never. */
   lastTestSentAt?: string | null;
+  /** Hosted content check: clean, review, blocked or approved. */
+  contentScanVerdict?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -100,6 +102,14 @@ export interface Sequence {
   createdAt: string;
   updatedAt: string;
   emails: SequenceEmail[];
+  /** Set while a new hosted account's broadcast is sent gradually. */
+  pacing?: {
+    reason: "new_account";
+    hourlyLimit: number;
+    dailyLimit: number;
+    remaining: number;
+    estimatedCompletionAt: string;
+  } | null;
 }
 
 export interface SequenceStats {

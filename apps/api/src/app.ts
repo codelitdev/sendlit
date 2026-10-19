@@ -9,6 +9,7 @@ import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
+import { CLIENT_IP_HEADER } from "./abuse/signup";
 import { auth } from "./auth/better-auth";
 import oauthPagesRoutes from "./auth/oauth-pages";
 import billingRoutes from "./billing/routes";
@@ -75,6 +76,13 @@ export function createApp(options: CreateAppOptions) {
       },
     }),
   );
+  // Hand Better Auth a client IP it can trust for the hosted signup guards:
+  // Express's req.ip honours ENABLE_TRUST_PROXY, and any value the client
+  // sent in this header is overwritten.
+  app.use("/api/auth", (req, _res, next) => {
+    req.headers[CLIENT_IP_HEADER] = req.ip ?? "";
+    next();
+  });
   app.all("/api/auth/*", toNodeHandler(auth));
   app.use(oauthPagesRoutes);
   // The MCP handler owns JSON parsing and protocol content-type errors, so it

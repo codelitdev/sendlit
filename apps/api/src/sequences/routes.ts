@@ -1,6 +1,7 @@
 import { contract } from "@sendlit/api-contract";
 import { createExpressEndpoints, initServer } from "@ts-rest/express";
 import { Router } from "express";
+import { broadcastPacing } from "../abuse/pacing-status";
 import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { planGateHttp } from "../billing/errors";
@@ -47,7 +48,9 @@ function toBody(sequence: HydratedSequence): any {
       "deliverySourceType",
       "deliverySourceIntent",
     ]),
-    emails: sequence.emails.map((email) => omitInternal(email, ["sequenceId"])),
+    emails: sequence.emails.map((email) =>
+      omitInternal(email, ["sequenceId", "contentScanHash", "contentScanReasons"]),
+    ),
   });
 }
 
@@ -88,7 +91,10 @@ const impl = s.router(contract.sequences, {
       params.sequenceId,
     );
     if (!sequence) return { status: 404, body: { error: "Sequence not found" } };
-    return { status: 200, body: toBody(sequence) };
+    return {
+      status: 200,
+      body: { ...toBody(sequence), pacing: await broadcastPacing(sequence) },
+    };
   },
   update: async ({ params, body, req }) => {
     try {

@@ -9,6 +9,13 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
 import { createTransport } from "nodemailer";
+import {
+  assertSignupAllowed,
+  CLIENT_IP_HEADER,
+  isExistingUser,
+  recordSignup,
+  SignupBlockedError,
+} from "../abuse/signup";
 import { db } from "../db/client";
 import * as schema from "../db/schema";
 import { MCP_SCOPES_SUPPORTED } from "../mcp/policy";
@@ -23,6 +30,31 @@ import {
 export const webClientUrl = process.env.WEB_CLIENT || "http://localhost:3000";
 const apiUrl = process.env.API_PUBLIC_URL || process.env.BETTER_AUTH_URL;
 const authBaseUrl = apiUrl || "http://localhost:5000";
+/** The client IP the API stamped on the auth request (see `app.ts`). */
+function clientIp(
+  context: { request?: Request; headers?: Headers } | null | undefined,
+): string | null {
+  return (
+    context?.request?.headers.get(CLIENT_IP_HEADER) ??
+    context?.headers?.get(CLIENT_IP_HEADER) ??
+    null
+  );
+}
+
+async function guardSignup(email: string, ip: string | null): Promise<void> {
+  try {
+    await assertSignupAllowed({ email, ip });
+  } catch (error) {
+    if (error instanceof SignupBlockedError) {
+      throw new APIError("FORBIDDEN", {
+        code: error.code.toUpperCase(),
+        message: error.userMessage,
+      });
+    }
+    throw error;
+  }
+}
+
 export const authBasePath = "/api/auth";
 
 /** Parent domain shared by `apps/web` and `apps/api` in production (e.g.
@@ -174,14 +206,38 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        async after(user) {
-          await ensureDefaultOrganization(user.id);
+        // Hosted signup guards (#71) also cover Google sign-ups, which never
+        // pass through the email OTP endpoints below.
+        async before(user, context) {
+          await guardSignup(user.email, clientIp(context));
+        },
+        async after(user, context) {
+          const organization = await ensureDefaultOrganization(user.id);
+          await recordSignup({
+            userId: user.id,
+            email: user.email,
+            organizationId: organization?.id ?? null,
+            ip: clientIp(context),
+          }).catch((error) =>
+            logger.error({ error: error.message }, "recording a signup failed"),
+          );
         },
       },
     },
   },
   hooks: {
     before: createAuthMiddleware(async (context) => {
+      // Refuse a new account before its sign-in code is even sent.
+      if (
+        context.path === "/email-otp/send-verification-otp" ||
+        context.path === "/sign-in/email-otp"
+      ) {
+        const email = (context.body as { email?: unknown } | undefined)?.email;
+        if (typeof email === "string" && !(await isExistingUser(email))) {
+          await guardSignup(email, clientIp(context));
+        }
+        return;
+      }
       if (context.path !== "/oauth2/authorize") return;
 
       const scope = context.query?.scope;

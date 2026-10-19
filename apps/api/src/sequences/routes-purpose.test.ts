@@ -18,6 +18,7 @@ mock.module("../auth/require-team", () => ({
     next();
   },
 }));
+mock.module("../abuse/pacing-status", () => ({ broadcastPacing: async () => null }));
 mock.module("./test-send", () => ({
   sendSequenceEmailTest: mocks.sendSequenceEmailTest,
 }));
