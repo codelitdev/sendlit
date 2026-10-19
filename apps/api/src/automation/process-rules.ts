@@ -1,4 +1,4 @@
-import type { ContactFilterWithAggregator } from "../contacts/segment";
+import { sequenceAudience } from "../contacts/segment";
 import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import {
@@ -76,7 +76,7 @@ export async function processRule(rule: {
 
   const contactIds = await getMatchingContactIds(
     rule.teamId,
-    sequenceRow.filter as ContactFilterWithAggregator | null,
+    sequenceAudience(sequenceRow),
   );
 
   logger.info(
@@ -102,7 +102,7 @@ export async function processRule(rule: {
 
   const publicContactIds = await getMatchingPublicContactIds(
     rule.teamId,
-    sequenceRow.filter as ContactFilterWithAggregator | null,
+    sequenceAudience(sequenceRow),
   );
   // lockBroadcast must run before markBroadcastSent: the latter jsonb_set's
   // `{broadcast,sentAt}` and needs `report.broadcast` to already exist.

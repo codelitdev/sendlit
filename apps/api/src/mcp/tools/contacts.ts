@@ -47,6 +47,9 @@ export function registerContactTools(server: McpToolRegistrar): void {
         filter: contactFilterSchema
           .optional()
           .describe("Inline contact filter; combines with q and segmentId using AND"),
+        excludeFilter: contactFilterSchema
+          .optional()
+          .describe("Contacts matching this filter are left out"),
         offset: z
           .number()
           .int()
@@ -82,9 +85,14 @@ export function registerContactTools(server: McpToolRegistrar): void {
             teamId,
             searchText: args.q,
             filter,
+            excludeFilter: args.excludeFilter,
             offset: args.offset,
           }),
-          countContacts(teamId, { searchText: args.q, filter }),
+          countContacts(teamId, {
+            searchText: args.q,
+            filter,
+            excludeFilter: args.excludeFilter,
+          }),
         ]);
         return jsonResult({
           items: items.map((item) => omitInternal(item)),

@@ -18,7 +18,10 @@ import {
   sequenceDelayBetweenMailsInMillis,
 } from "../config/constants";
 import { responses } from "../config/strings";
-import type { ContactFilterWithAggregator } from "../contacts/segment";
+import {
+  type ContactFilterWithAggregator,
+  sequenceAudience,
+} from "../contacts/segment";
 import { db } from "../db/client";
 import {
   contacts,
@@ -272,6 +275,7 @@ export async function updateSequence({
   triggerType,
   triggerData,
   filter,
+  excludeFilter,
   emailsOrder,
   deliverySource,
 }: {
@@ -281,6 +285,8 @@ export async function updateSequence({
   triggerType?: string;
   triggerData?: string;
   filter?: ContactFilterWithAggregator;
+  /** `null` clears the exclusion. */
+  excludeFilter?: ContactFilterWithAggregator | null;
   emailsOrder?: string[];
   deliverySource?: DeliverySourceSelection | null;
 }): Promise<HydratedSequence | null> {
@@ -291,6 +297,9 @@ export async function updateSequence({
   if (triggerType !== undefined) patch.triggerType = triggerType;
   if (triggerData !== undefined) patch.triggerData = triggerData;
   if (filter !== undefined) patch.filter = filter as any;
+  if (excludeFilter !== undefined) {
+    patch.excludeFilter = excludeFilter?.filters.length ? (excludeFilter as any) : null;
+  }
   if (emailsOrder !== undefined) patch.emailsOrder = emailsOrder;
   if (deliverySource !== undefined) {
     if (!["draft", "paused"].includes(current.status)) {
@@ -654,7 +663,7 @@ export async function startSequence({
   if (sequence.type === "broadcast") {
     const recipientIds = await getMatchingContactIds(
       teamId,
-      sequence.filter as ContactFilterWithAggregator | null,
+      sequenceAudience(sequence),
     );
     if (recipientIds.length === 0) {
       throw new Error(responses.broadcast_no_recipients);

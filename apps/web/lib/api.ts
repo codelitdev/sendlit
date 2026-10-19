@@ -184,16 +184,20 @@ export function listContacts(
     q?: string;
     segmentId?: string;
     filter?: ContactFilterWithAggregator;
+    /** Contacts matching this filter are left out. */
+    excludeFilter?: ContactFilterWithAggregator;
     offset?: number;
   } = {},
 ) {
   const filter = toApiContactFilter(params.filter);
+  const excludeFilter = toApiContactFilter(params.excludeFilter);
   return unwrap<Paginated<Contact>>(
     client.contacts.list({
       query: {
         q: params.q,
         segmentId: params.segmentId,
         filter: filter ? JSON.stringify(filter) : undefined,
+        excludeFilter: excludeFilter ? JSON.stringify(excludeFilter) : undefined,
         offset: params.offset,
       },
     }),
@@ -441,6 +445,8 @@ export function updateSequence(
     triggerType?: string;
     triggerData?: string;
     filter?: ContactFilterWithAggregator;
+    /** `null` clears the exclusion. */
+    excludeFilter?: ContactFilterWithAggregator | null;
     emailsOrder?: string[];
     /** `undefined` leaves the current selection unchanged; `null` clears
      * it so the team's default delivery source resolves at start. Only settable while
@@ -448,11 +454,20 @@ export function updateSequence(
     deliverySource?: DeliverySourceSelection | null;
   },
 ) {
-  const { filter, ...rest } = patch;
+  const { filter, excludeFilter, ...rest } = patch;
   return unwrap<Sequence>(
     client.sequences.update({
       params: { sequenceId },
-      body: { ...rest, filter: toApiContactFilter(filter) },
+      body: {
+        ...rest,
+        filter: toApiContactFilter(filter),
+        ...(excludeFilter !== undefined && {
+          excludeFilter:
+            excludeFilter && excludeFilter.filters.length > 0
+              ? toApiContactFilter(excludeFilter)
+              : null,
+        }),
+      },
     }),
   );
 }

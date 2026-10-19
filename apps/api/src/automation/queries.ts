@@ -2,8 +2,9 @@ import { and, count, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { assertMarketingAllowedForContactUsage } from "../billing/entitlements";
 import { EventType, sequenceBounceLimit } from "../config/constants";
 import {
+  type AudienceFilters,
+  buildContactExclusionCondition,
   buildContactFilterCondition,
-  type ContactFilterWithAggregator,
 } from "../contacts/segment";
 import { db } from "../db/client";
 import { contacts, ongoingSequences, rules, sequences, teams } from "../db/schema";
@@ -38,14 +39,13 @@ export async function getSequenceRowBySequenceId(teamId: string, sequenceId: str
   return row ?? null;
 }
 
-function matchingContactsCondition(
-  teamId: string,
-  filter: ContactFilterWithAggregator | null | undefined,
-) {
-  const condition = buildContactFilterCondition(filter);
-  return condition
-    ? and(eq(contacts.teamId, teamId), eq(contacts.subscribed, true), condition)
-    : and(eq(contacts.teamId, teamId), eq(contacts.subscribed, true));
+function matchingContactsCondition(teamId: string, audience: AudienceFilters) {
+  return and(
+    eq(contacts.teamId, teamId),
+    eq(contacts.subscribed, true),
+    buildContactFilterCondition(audience.filter),
+    buildContactExclusionCondition(audience.excludeFilter),
+  );
 }
 
 /** Returns **internal** contact ids — the only kind
@@ -55,12 +55,12 @@ function matchingContactsCondition(
  * `sequences.entrants`). */
 export async function getMatchingContactIds(
   teamId: string,
-  filter: ContactFilterWithAggregator | null | undefined,
+  audience: AudienceFilters,
 ): Promise<string[]> {
   const rows = await db
     .select({ id: contacts.id })
     .from(contacts)
-    .where(matchingContactsCondition(teamId, filter));
+    .where(matchingContactsCondition(teamId, audience));
   return rows.map((r) => r.id);
 }
 
@@ -69,13 +69,28 @@ export async function getMatchingContactIds(
  * intentionally aren't live FKs. */
 export async function getMatchingPublicContactIds(
   teamId: string,
-  filter: ContactFilterWithAggregator | null | undefined,
+  audience: AudienceFilters,
 ): Promise<string[]> {
   const rows = await db
     .select({ contactId: contacts.contactId })
     .from(contacts)
-    .where(matchingContactsCondition(teamId, filter));
+    .where(matchingContactsCondition(teamId, audience));
   return rows.map((r) => r.contactId);
+}
+
+/** Whether one contact (internal `contacts.id`) is in a sequence's audience,
+ * for event-triggered enrollment. */
+export async function contactMatchesAudience(
+  teamId: string,
+  contactId: string,
+  audience: AudienceFilters,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(and(eq(contacts.id, contactId), matchingContactsCondition(teamId, audience)))
+    .limit(1);
+  return Boolean(row);
 }
 
 export async function enrollContactsInOngoingSequence({

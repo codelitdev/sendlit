@@ -21,6 +21,7 @@ import {
   removeTagFromContact,
   updateContact,
 } from "./queries";
+import type { ContactFilterWithAggregator } from "./segment";
 import { getSegment } from "./segments-queries";
 
 const router = Router();
@@ -79,16 +80,25 @@ const impl = s.router(contract.contacts, {
       filters.push(parsedFilter.data as any);
     }
     const filter = filters.length ? filters : undefined;
+    let excludeFilter: ContactFilterWithAggregator | undefined;
+    if (query.excludeFilter) {
+      const parsedExclude = parseContactFilterQueryParam(query.excludeFilter);
+      if (!parsedExclude.success) {
+        return { status: 400, body: { error: "Invalid excludeFilter" } };
+      }
+      excludeFilter = parsedExclude.data as ContactFilterWithAggregator;
+    }
 
     const [items, total] = await Promise.all([
       listContacts({
         teamId,
         searchText: query.q,
         filter,
+        excludeFilter,
         offset: query.offset,
         rowsPerPage: query.rowsPerPage,
       }),
-      countContacts(teamId, { searchText: query.q, filter }),
+      countContacts(teamId, { searchText: query.q, filter, excludeFilter }),
     ]);
     return {
       status: 200,

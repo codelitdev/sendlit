@@ -150,7 +150,17 @@ export const updateSequenceBodySchema = z.object({
   title: z.string().optional(),
   triggerType: z.string().optional(),
   triggerData: z.string().optional(),
-  filter: contactFilterSchema.optional(),
+  filter: contactFilterSchema
+    .optional()
+    .describe(
+      "Audience: subscribed contacts matching this filter; empty means everyone",
+    ),
+  excludeFilter: contactFilterSchema
+    .nullable()
+    .optional()
+    .describe(
+      "Contacts matching this filter are left out of the audience, even when they match `filter`. `null` clears it.",
+    ),
   emailsOrder: z.array(z.string()).optional(),
   /** `null` clears the intent so the default is resolved on next start. */
   deliverySource: deliverySourceSelectionSchema.nullable().optional(),

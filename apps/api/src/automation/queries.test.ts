@@ -15,6 +15,7 @@ const {
   countOngoingSequencesForSequence,
   enrollContactsInOngoingSequence,
   getDueOngoingSequences,
+  getMatchingPublicContactIds,
 } = await import("./queries");
 
 const tdb = db as unknown as TestDb;
@@ -23,13 +24,17 @@ beforeEach(async () => {
   await truncateAll(tdb);
 });
 
-async function seedContact(teamId: string) {
+async function seedContact(
+  teamId: string,
+  values: Partial<typeof contacts.$inferInsert> = {},
+) {
   const [row] = await tdb
     .insert(contacts)
     .values({
       teamId,
       email: `reader-${crypto.randomUUID()}@example.com`,
       unsubscribeToken: crypto.randomUUID(),
+      ...values,
     })
     .returning();
   return row;
@@ -153,5 +158,51 @@ describe("countOngoingSequencesForSequence", () => {
 
     expect(await countOngoingSequencesForSequence(seqOne.id)).toBe(3);
     expect(await countOngoingSequencesForSequence(seqTwo.id)).toBe(0);
+  });
+});
+
+describe("getMatchingPublicContactIds", () => {
+  const tagFilter = (tag: string) => ({
+    aggregator: "or" as const,
+    filters: [{ name: "tag" as const, condition: "is", value: tag }],
+  });
+
+  it("leaves out contacts matching the exclusion filter", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    await tdb.delete(contacts).where(eq(contacts.teamId, team.id));
+    const reader = await seedContact(team.id, { tags: ["newsletter"] });
+    await seedContact(team.id, { tags: ["newsletter", "customer"] });
+    const untagged = await seedContact(team.id, { tags: [] });
+
+    expect(
+      (
+        await getMatchingPublicContactIds(team.id, {
+          filter: tagFilter("newsletter"),
+          excludeFilter: tagFilter("customer"),
+        })
+      ).sort(),
+    ).toEqual([reader.contactId]);
+    // An empty audience filter means everyone, minus the exclusion.
+    expect(
+      (
+        await getMatchingPublicContactIds(team.id, {
+          excludeFilter: tagFilter("customer"),
+        })
+      ).sort(),
+    ).toEqual([reader.contactId, untagged.contactId].sort());
+    expect(
+      (await getMatchingPublicContactIds(team.id, { excludeFilter: null })).length,
+    ).toBe(3);
+  });
+
+  it("never includes unsubscribed contacts", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    await tdb.delete(contacts).where(eq(contacts.teamId, team.id));
+    const subscribed = await seedContact(team.id);
+    await seedContact(team.id, { subscribed: false });
+
+    expect(await getMatchingPublicContactIds(team.id, {})).toEqual([
+      subscribed.contactId,
+    ]);
   });
 });

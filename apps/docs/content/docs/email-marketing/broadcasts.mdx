@@ -3,7 +3,12 @@ title: Broadcasts
 description: One-time email sends.
 ---
 
-A broadcast is a one-off send to contacts matching an audience filter. An empty filter (the default "Everyone" audience) sends to all contacts.
+A broadcast is a one-off send to subscribed contacts matching an audience filter. An empty filter (the default "Everyone" audience) sends to all subscribed contacts.
+
+Use **Exclude** to leave contacts out even when they match the audience, for
+example everyone tagged `newsletter` except those tagged `customer`. Over the
+API and MCP this is the sequence's `excludeFilter`; send `null` to clear it.
+The recipient count in the editor already accounts for exclusions.
 
 Broadcasts accept only templates whose `purpose` is `marketing`. Selecting or
 submitting a transactional template returns `422 template_not_marketing`.

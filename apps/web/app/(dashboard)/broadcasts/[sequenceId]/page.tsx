@@ -63,6 +63,7 @@ const MARKETING_PREVIEW_CONTEXT = {
 interface BroadcastMeta {
   title: string;
   filter?: ContactFilterWithAggregator | null;
+  excludeFilter?: ContactFilterWithAggregator | null;
   deliverySource?: DeliverySourceSelection | null;
 }
 
@@ -103,6 +104,7 @@ export default function BroadcastEditorPage({
   const [audienceCount, setAudienceCount] = useState<number>();
   const [sendingOptions, setSendingOptions] = useState<SendingOption[]>([]);
   const { segmentProps, clearSelection } = useSegments(setError);
+  const exclusionSegments = useSegments(setError);
 
   useSetBreadcrumb([
     { label: "Broadcasts", href: "/broadcasts" },
@@ -126,6 +128,7 @@ export default function BroadcastEditorPage({
       setMeta({
         title: s.title,
         filter: s.filter,
+        excludeFilter: s.excludeFilter,
         deliverySource: s.deliverySource,
       });
       const firstEmail = s.emails[0];
@@ -153,14 +156,18 @@ export default function BroadcastEditorPage({
   // filter semantics).
   // Undefined until the broadcast loads so the effect re-fires even when the
   // loaded filter serializes the same as "no meta yet".
-  const filterKey = meta ? JSON.stringify(meta.filter ?? null) : undefined;
+  const filterKey = meta
+    ? JSON.stringify([meta.filter ?? null, meta.excludeFilter ?? null])
+    : undefined;
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-run only when the serialized filter (filterKey) changes, not on every meta edit
   useEffect(() => {
     if (!meta) return;
     let stale = false;
-    const filter = meta.filter;
+    const { filter, excludeFilter } = meta;
     listContacts({
       filter: filter && filter.filters.length > 0 ? filter : undefined,
+      excludeFilter:
+        excludeFilter && excludeFilter.filters.length > 0 ? excludeFilter : undefined,
     })
       .then(({ total }) => {
         if (!stale) setAudienceCount(total);
@@ -186,6 +193,7 @@ export default function BroadcastEditorPage({
       const updated = await updateSequence(sequenceId, {
         title: meta.title,
         filter: meta.filter || undefined,
+        excludeFilter: meta.excludeFilter ?? null,
         ...(espEditable ? { deliverySource: meta.deliverySource ?? null } : {}),
       });
       const firstEmail = updated.emails[0];
@@ -391,6 +399,25 @@ export default function BroadcastEditorPage({
                   {...segmentProps}
                   count={audienceCount}
                   countLabel="recipients"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Exclude</Label>
+                <p className="text-sm text-muted-foreground">
+                  Contacts matching these filters won&apos;t get this broadcast, even if
+                  they match the audience.
+                </p>
+                <ContactFilterBuilder
+                  value={meta.excludeFilter ?? emptyFilter}
+                  onChange={(excludeFilter) => {
+                    setMeta({ ...meta, excludeFilter });
+                    exclusionSegments.clearSelection();
+                  }}
+                  disabled={!editable}
+                  {...exclusionSegments.segmentProps}
+                  defaultSegmentLabel="No one"
+                  searchPlaceholder="Exclude by email"
+                  searchAriaLabel="Exclude by email"
                 />
               </div>
             </CardContent>

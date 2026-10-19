@@ -18,6 +18,7 @@ import { captureEvent } from "../observability";
 // opaque secret rather than a public resource ID.
 import { generateUniqueId } from "../utils/id";
 import {
+  buildContactExclusionCondition,
   buildContactFilterCondition,
   type ContactFilterWithAggregator,
 } from "./segment";
@@ -150,15 +151,19 @@ export async function getContactByUnsubscribeToken(
   return row ?? null;
 }
 
+interface ContactListQuery {
+  searchText?: string;
+  filter?: ContactListFilter;
+  /** Contacts matching this filter are left out. */
+  excludeFilter?: ContactFilterWithAggregator;
+}
+
 function listContactsConditions({
   teamId,
   searchText,
   filter,
-}: {
-  teamId: string;
-  searchText?: string;
-  filter?: ContactListFilter;
-}) {
+  excludeFilter,
+}: ContactListQuery & { teamId: string }) {
   const conditions = [eq(contacts.teamId, teamId)];
   if (searchText) {
     conditions.push(
@@ -175,38 +180,36 @@ function listContactsConditions({
       conditions.push(filterCondition);
     }
   }
+  const exclusion = buildContactExclusionCondition(excludeFilter);
+  if (exclusion) conditions.push(exclusion);
   return and(...conditions);
 }
 
 export async function listContacts({
-  teamId,
-  searchText,
-  filter,
   offset = 1,
   rowsPerPage = itemsPerPage,
-}: {
+  ...query
+}: ContactListQuery & {
   teamId: string;
-  searchText?: string;
-  filter?: ContactListFilter;
   offset?: number;
   rowsPerPage?: number;
 }): Promise<Contact[]> {
   return db
     .select()
     .from(contacts)
-    .where(listContactsConditions({ teamId, searchText, filter }))
+    .where(listContactsConditions(query))
     .limit(rowsPerPage)
     .offset((Math.max(offset, 1) - 1) * rowsPerPage);
 }
 
 export async function countContacts(
   teamId: string,
-  { searchText, filter }: { searchText?: string; filter?: ContactListFilter } = {},
+  query: ContactListQuery = {},
 ): Promise<number> {
   const [row] = await db
     .select({ value: count() })
     .from(contacts)
-    .where(listContactsConditions({ teamId, searchText, filter }));
+    .where(listContactsConditions({ ...query, teamId }));
   return row?.value ?? 0;
 }
 
