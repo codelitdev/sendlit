@@ -1522,6 +1522,9 @@ export const transactionalEmails = pgTable(
     // Rendered snapshot actually sent (post-Liquid for template sends,
     // verbatim for inline `html` sends) — pre tracking-pixel/click rewrite.
     html: text("html"),
+    /** Caller-supplied `text/plain` part, sent verbatim; `null` means it is
+     * generated from `html` at send time. */
+    text: text("text"),
     // Liquid merge payload; only meaningful alongside `templateId` (inline
     // `html` sends are never re-rendered — see PRD's send-pipeline notes).
     variables: jsonb("variables").notNull().default({}),

@@ -1,0 +1,1 @@
+ALTER TABLE "transactional_emails" ADD COLUMN "text" text;

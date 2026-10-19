@@ -130,10 +130,12 @@ export async function sendSequenceEmailTest({
         name: contact?.name ?? null,
         tags: contact?.tags ?? [],
       },
-      contactId: TEST_CONTACT_ID,
+      ids: {
+        contactId: TEST_CONTACT_ID,
+        sequenceId: sequence.sequenceId,
+        emailId: email.emailId,
+      },
       unsubscribeToken: TEST_UNSUBSCRIBE_TOKEN,
-      sequenceId: sequence.sequenceId,
-      emailId: email.emailId,
     });
     await sendMail({
       purpose: "campaign",

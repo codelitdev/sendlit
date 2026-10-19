@@ -33,3 +33,10 @@ export function testUnsubscribePage() {
     `<h1>This was a test email</h1><p>Unsubscribe links in test emails don't change anything. Your recipients get a working link.</p>`,
   );
 }
+
+export function emailUnavailablePage() {
+  return page(
+    "Email not available",
+    `<h1>This email is not available</h1><p>The link is invalid, or the email or its recipient has been removed.</p>`,
+  );
+}

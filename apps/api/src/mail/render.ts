@@ -5,7 +5,7 @@ import { Liquid } from "liquidjs";
 import { captureError } from "../observability";
 import logger from "../services/log";
 import { SENDLIT_FOOTER_BLOCK } from "../templates/footer";
-import { isTrackingUrl } from "../utils/mail";
+import { isTrackingUrl, isViewInBrowserUrl } from "../utils/mail";
 
 const liquidEngine = new Liquid();
 
@@ -249,9 +249,12 @@ export async function renderEmailContent({
   variables,
   requireVariables = false,
   brandingText,
+  viewInBrowserUrl,
 }: {
   content: EmailType;
   variables: Record<string, unknown>;
+  /** Hosted web version, linked from the managed footer. */
+  viewInBrowserUrl?: string;
   /** Transactional sends reject unguarded values that would render blank. */
   requireVariables?: boolean;
   /** Server-owned Free-plan branding; callers cannot supply it in template data. */
@@ -277,7 +280,7 @@ export async function renderEmailContent({
       throw error;
     }
     renderContext = {
-      footer: { mailingAddress, unsubscribeUrl, brandingText },
+      footer: { mailingAddress, unsubscribeUrl, viewInBrowserUrl, brandingText },
     };
   }
 
@@ -383,6 +386,7 @@ export function transformLinksForClickTracking(
       if (!originalUrl) return;
       if (
         isTrackingUrl(originalUrl) ||
+        isViewInBrowserUrl(originalUrl) ||
         originalUrl.includes("/unsubscribe") ||
         originalUrl.startsWith("mailto:") ||
         originalUrl.startsWith("tel:") ||

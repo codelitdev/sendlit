@@ -13,7 +13,12 @@ const FOOTER_SETTINGS = new Set([
   "paddingX",
 ]);
 
-const PLATFORM_VARIABLE_ROOTS = new Set(["subscriber", "address", "unsubscribe_link"]);
+const PLATFORM_VARIABLE_ROOTS = new Set([
+  "subscriber",
+  "address",
+  "unsubscribe_link",
+  "view_in_browser_url",
+]);
 
 export class TemplateValidationError extends Error {
   readonly variables?: string[];
@@ -54,7 +59,7 @@ export function findReservedMarketingVariables(content: Email): string[] {
   const found = new Set<string>();
   for (const token of liquidTokens(JSON.stringify(content))) {
     for (const match of token.matchAll(
-      /\b(address|unsubscribe_link|subscriber(?:\.[A-Za-z_][A-Za-z0-9_-]*)*)\b/g,
+      /\b(address|unsubscribe_link|view_in_browser_url|subscriber(?:\.[A-Za-z_][A-Za-z0-9_-]*)*)\b/g,
     )) {
       found.add(match[1]);
     }

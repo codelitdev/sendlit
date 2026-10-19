@@ -16,6 +16,17 @@ Marketing templates contain one final managed footer. SendLit renders the
 workspace mailing address and recipient-specific unsubscribe URL at delivery
 time.
 
+## Plain text and the web version
+
+Every broadcast and sequence email is sent with a plain-text part generated
+from the HTML, which spam filters and text-only mail clients expect.
+
+The managed footer links a hosted web version of the email
+("View in browser"). The link is signed and personal to the recipient, so the
+web version shows their merge-tag data and their unsubscribe link. It has no
+open or click tracking and isn't indexed by search engines. To place the link
+elsewhere in your content, use the `{{ view_in_browser_url }}` merge tag.
+
 ## Send a test
 
 Use **Send test** in the broadcast editor (or the full-screen content editor)

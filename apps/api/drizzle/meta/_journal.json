@@ -78,6 +78,13 @@
       "when": 1792416090050,
       "tag": "0010_sequence_email_last_test_sent_at",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792417212166,
+      "tag": "0011_transactional_email_text",
+      "breakpoints": true
     }
   ]
 }

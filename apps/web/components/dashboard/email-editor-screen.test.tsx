@@ -166,6 +166,7 @@ describe("EmailEditorScreen", () => {
         footer: {
           mailingAddress: "123 Main Street",
           unsubscribeUrl: "#unsubscribe-preview",
+          viewInBrowserUrl: "#view-in-browser-preview",
         },
       }),
     );

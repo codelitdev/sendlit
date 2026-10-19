@@ -48,6 +48,10 @@ const MARKETING_VARIABLES = [
     tag: "{{ subscriber.tags }}",
     description: "The subscriber's tags",
   },
+  {
+    tag: "{{ view_in_browser_url }}",
+    description: "Link to the web version of this email",
+  },
 ];
 
 function EmailImageUploader({ children, onChange }: UploaderProps) {
@@ -76,6 +80,7 @@ const SENDLIT_FOOTER_BLOCK = createFooterBlock({
     displayName: "Footer",
     description: "Required mailing address and unsubscribe footer",
     unsubscribe: "Unsubscribe",
+    viewInBrowser: "View in browser",
     alignment: "Alignment",
     alignmentLeft: "Left",
     alignmentCenter: "Center",
@@ -174,6 +179,7 @@ export function EmailEditorScreen({
             footer: {
               mailingAddress,
               unsubscribeUrl: "#unsubscribe-preview",
+              viewInBrowserUrl: "#view-in-browser-preview",
             },
           }
         : undefined,

@@ -33,6 +33,7 @@ import generalSettingsRoutes from "./settings/general/routes";
 import teamRoutes from "./team/routes";
 import templatesRoutes from "./templates/routes";
 import trackingRoutes from "./tracking/routes";
+import webViewRoutes from "./tracking/web-view";
 import transactionalRoutes from "./transactional/routes";
 
 export const SERVICE_NAME = "sendlit-api";
@@ -121,6 +122,7 @@ export function createApp(options: CreateAppOptions) {
   // their traffic with `router.use(requireAuth)`, anything mounted after them
   // would otherwise be incorrectly blocked by that blanket check.
   app.use(trackingRoutes);
+  app.use(webViewRoutes);
   app.use(billingRoutes);
   app.use(provisioningRoutes);
   app.use(organizationRoutes);

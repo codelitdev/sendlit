@@ -242,10 +242,12 @@ async function attemptMailSending({
       name: contact.name,
       tags: contact.tags,
     },
-    contactId: contact.contactId,
+    ids: {
+      contactId: contact.contactId,
+      sequenceId: sequence.sequenceId,
+      emailId: email.emailId,
+    },
     unsubscribeToken: contact.unsubscribeToken,
-    sequenceId: sequence.sequenceId,
-    emailId: email.emailId,
   });
 
   let outboundForReservation: { id: string } | null = null;

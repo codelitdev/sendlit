@@ -5,6 +5,7 @@ export const SENDLIT_FOOTER_BLOCK = createFooterBlock({
     displayName: "Footer",
     description: "Required mailing address and unsubscribe footer",
     unsubscribe: "Unsubscribe",
+    viewInBrowser: "View in browser",
     alignment: "Alignment",
     alignmentLeft: "Left",
     alignmentCenter: "Center",

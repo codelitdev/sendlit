@@ -1,3 +1,4 @@
+import { renderEmailToPlainText } from "@sendlit/email-editor";
 import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
@@ -10,6 +11,8 @@ interface MailInput {
   to: string;
   subject: string;
   html: string;
+  /** The `text/plain` alternative. Generated from `html` when omitted. */
+  text?: string;
   headers?: Record<string, string>;
   /** Required for campaign mail; resolves to the team's configured ESP. */
   teamId: string;
@@ -60,6 +63,7 @@ export async function sendMail({
   to,
   subject,
   html,
+  text,
   headers,
   teamId,
   espConfigId,
@@ -84,6 +88,7 @@ export async function sendMail({
       to,
       subject,
       html,
+      text: text ?? renderEmailToPlainText(html),
       headers,
       messageId,
     });
@@ -124,5 +129,11 @@ export async function sendTestMail({
   espConfigId,
 }: MailInput): Promise<void> {
   const transporter = await resolveTeamTransporter(teamId, espConfigId);
-  await transporter.sendMail({ from, to, subject, html });
+  await transporter.sendMail({
+    from,
+    to,
+    subject,
+    html,
+    text: renderEmailToPlainText(html),
+  });
 }

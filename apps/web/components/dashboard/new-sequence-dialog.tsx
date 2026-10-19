@@ -31,6 +31,7 @@ const MARKETING_PREVIEW_CONTEXT = {
   footer: {
     mailingAddress: "Your workspace mailing address",
     unsubscribeUrl: "#unsubscribe-preview",
+    viewInBrowserUrl: "#view-in-browser-preview",
   },
 };
 

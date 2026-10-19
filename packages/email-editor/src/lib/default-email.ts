@@ -75,17 +75,6 @@ export const defaultEmail: Email = {
     {
       blockType: "text",
       settings: {
-        content: "View in browser",
-        alignment: "center",
-        fontSize: "12px",
-        foregroundColor: "#787878",
-        paddingTop: "0px",
-        paddingBottom: "0px",
-      },
-    },
-    {
-      blockType: "text",
-      settings: {
         content: "# Your Company Name\n\nThis is some paragraph text.",
         alignment: "left",
         fontSize: "24px",

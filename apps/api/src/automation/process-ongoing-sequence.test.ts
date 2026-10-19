@@ -304,6 +304,8 @@ describe("processOngoingSequence", () => {
     expect(html).not.toContain("/api/track/");
     // The original destination must only survive inside the signed token.
     expect(html).not.toContain('href="https://example.com/offer"');
+    // The footer links the web version directly, not through click tracking.
+    expect(html).toMatch(/href="https:\/\/sendlit\.test\/view\/[^"]+"/);
   });
 
   it("does not send twice when invoked again after the send (duplicate-job regression)", async () => {

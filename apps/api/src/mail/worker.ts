@@ -167,6 +167,7 @@ async function processTransactionalJob(job: Job) {
       to: row.toEmail,
       subject: row.subject,
       html,
+      text: row.text ?? undefined,
       headers: withCorrelationHeaders(
         outbound,
         (row.headers as Record<string, string> | null) ?? undefined,
