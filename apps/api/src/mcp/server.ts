@@ -3,6 +3,7 @@ import { createMcpToolRegistrar } from "./tool-registry";
 import { registerContactTools } from "./tools/contacts";
 import { registerDeliveryFeedbackTools } from "./tools/delivery-feedback";
 import { registerEspTools } from "./tools/esp";
+import { registerFormTools } from "./tools/forms";
 import { registerGeneralSettingsTools } from "./tools/general-settings";
 import { registerMediaTools } from "./tools/media";
 import { registerSegmentTools } from "./tools/segments";
@@ -48,6 +49,7 @@ export function buildMcpServer(): McpServer {
   // caches receive deterministic tool lists.
   registerContactTools(tools);
   registerSegmentTools(tools);
+  registerFormTools(tools);
   registerTemplateTools(tools);
   registerMediaTools(tools);
   registerSequenceTools(tools);

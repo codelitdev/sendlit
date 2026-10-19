@@ -7,6 +7,8 @@ import {
   type ImportContactRow,
   type ImportContactsResult,
   type PaidPlan,
+  type SignupForm,
+  type SignupFormInput,
 } from "@sendlit/api-contract";
 import type {
   Contact,
@@ -1709,4 +1711,22 @@ export function getTransactionalEmail(txeId: string) {
   return unwrap<TransactionalEmailDetail>(
     client.transactional.get({ params: { txeId } }),
   );
+}
+
+export type { SignupForm, SignupFormInput };
+
+export function listSignupForms() {
+  return unwrap<{ items: SignupForm[] }>(client.forms.list());
+}
+
+export function createSignupForm(body: SignupFormInput) {
+  return unwrap<SignupForm>(client.forms.create({ body }));
+}
+
+export function updateSignupForm(formId: string, body: Partial<SignupFormInput>) {
+  return unwrap<SignupForm>(client.forms.update({ params: { formId }, body }));
+}
+
+export function deleteSignupForm(formId: string) {
+  return unwrap<void>(client.forms.remove({ params: { formId } }));
 }

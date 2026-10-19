@@ -14,6 +14,7 @@ export * from "./schemas/delivery";
 export * from "./schemas/delivery-events";
 export * from "./schemas/esp";
 export * from "./schemas/feedback";
+export * from "./schemas/forms";
 export * from "./schemas/media";
 export * from "./schemas/organizations";
 export * from "./schemas/sequences";

@@ -21,6 +21,8 @@ import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
 import feedbackRoutes from "./delivery-feedback/feedback-routes";
 import suppressionsRoutes from "./delivery-feedback/suppressions-routes";
 import espWebhookRoutes from "./delivery-feedback/webhook-route";
+import signupFormPublicRoutes from "./forms/public-routes";
+import signupFormRoutes from "./forms/routes";
 import mcpRoutes from "./mcp/routes";
 import mediaRoutes from "./media/routes";
 import { captureError, getTeamId } from "./observability";
@@ -131,6 +133,7 @@ export function createApp(options: CreateAppOptions) {
   // would otherwise be incorrectly blocked by that blanket check.
   app.use(trackingRoutes);
   app.use(webViewRoutes);
+  app.use(signupFormPublicRoutes);
   app.use(billingRoutes);
   app.use(provisioningRoutes);
   app.use(organizationRoutes);
@@ -153,6 +156,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(feedbackRoutes);
   app.use(deliveryEventsRoutes);
   app.use(suppressionsRoutes);
+  app.use(signupFormRoutes);
 
   app.use(
     (
