@@ -19,6 +19,7 @@ import {
 } from "../../delivery-feedback/feedback-connection-shape";
 import { getOutboundMessagesByIds } from "../../delivery-feedback/outbound-queries";
 import {
+  addOrStrengthenSuppression,
   countSuppressions,
   getSuppressionBySuppressionId,
   listSuppressions,
@@ -446,6 +447,38 @@ export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
         }
         throw err;
       }
+    },
+  );
+
+  server.registerTool(
+    "add_suppression",
+    {
+      description:
+        "Suppresses an address for the team (reason `manual`): SendLit never mails it again (broadcasts, sequences or transactional) until released. For role accounts, legal requests or known spam traps.",
+      inputSchema: {
+        email: z.string().email(),
+        note: z.string().max(2000).optional().describe("Why; kept in the audit trail"),
+      },
+      outputSchema: suppressionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const suppression = await addOrStrengthenSuppression({
+        teamId,
+        recipientEmail: args.email,
+        reason: "manual",
+        actorType: "workspace_user",
+        actorUserId: getAuthUser(extra)?.id ?? null,
+        explanation: args.note ?? null,
+      });
+      return jsonResult(toPublicSuppression(suppression));
     },
   );
 }

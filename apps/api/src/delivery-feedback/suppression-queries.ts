@@ -7,7 +7,7 @@ import {
   suppressionReasonStrength,
 } from "../config/constants";
 import { db } from "../db/client";
-import { emailSuppressionActions, emailSuppressions } from "../db/schema";
+import { contacts, emailSuppressionActions, emailSuppressions } from "../db/schema";
 import { normalizeEmail } from "../utils/email";
 import { currentHashKeyVersion, hashRecipient } from "./suppression-hash";
 
@@ -113,6 +113,22 @@ export async function addOrStrengthenSuppression({
 }): Promise<Suppression> {
   const normalized = normalizeEmail(recipientEmail);
   const hash = hashRecipient(normalized);
+
+  // A spam complaint also unsubscribes the contact, permanently: releasing
+  // the suppression later doesn't resubscribe them (Mailchimp/Klaviyo
+  // practice). Hard bounces stay a delivery matter only.
+  if (reason === "complaint") {
+    await db
+      .update(contacts)
+      .set({ subscribed: false, updatedAt: new Date() })
+      .where(
+        and(
+          eq(contacts.teamId, teamId),
+          eq(contacts.email, normalized),
+          eq(contacts.subscribed, true),
+        ),
+      );
+  }
 
   return db.transaction(async (tx) => {
     const [existing] = await tx

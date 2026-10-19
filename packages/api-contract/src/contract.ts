@@ -102,6 +102,7 @@ import {
   updateGeneralSettingsBodySchema,
 } from "./schemas/settings";
 import {
+  createSuppressionBodySchema,
   listSuppressionsQuerySchema,
   releaseSuppressionBodySchema,
   suppressionSchema,
@@ -1603,6 +1604,15 @@ const suppressionsContract = c.router(
       query: listSuppressionsQuerySchema,
       responses: { 200: paginated(suppressionSchema) },
       summary: "List the team's suppressed recipients",
+    },
+    create: {
+      method: "POST",
+      path: "/suppressions",
+      body: createSuppressionBodySchema,
+      responses: { 201: suppressionSchema, 400: errorSchema },
+      summary: "Suppress an address",
+      description:
+        "Adds a manual suppression: SendLit never mails the address again from this team (broadcasts, sequences or transactional) until the suppression is released. Use it for role accounts, legal requests or known spam traps. An existing stronger suppression (for example a complaint) is kept.",
     },
     get: {
       method: "GET",

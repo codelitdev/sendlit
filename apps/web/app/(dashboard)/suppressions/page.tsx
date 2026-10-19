@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AddSuppressionDialog } from "@/components/dashboard/add-suppression-dialog";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { Loading } from "@/components/dashboard/loading";
@@ -165,7 +166,7 @@ export default function SuppressionsPage() {
     <ScrollablePage>
       <PageHeader
         title="Suppressions"
-        description="Addresses that hard-bounced or complained. Suppressed recipients are blocked from every future campaign and transactional send for this workspace, regardless of ESP or contact status."
+        description="Addresses that hard-bounced, complained, or that you blocked. Suppressed recipients are blocked from every future campaign and transactional send for this workspace, regardless of ESP or contact status. A spam complaint also unsubscribes the contact."
         action={
           <div className="flex gap-2">
             <Select value={activeOnly} onValueChange={setActiveOnly}>
@@ -190,6 +191,7 @@ export default function SuppressionsPage() {
                 ))}
               </SelectContent>
             </Select>
+            <AddSuppressionDialog onAdded={() => load()} />
           </div>
         }
       />
