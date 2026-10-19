@@ -191,7 +191,7 @@ export const teamSendingControls = pgTable(
     ),
     sourceCheck: check(
       "team_sending_controls_source_check",
-      sql`${table.source} IN ('automatic', 'operator')`,
+      sql`${table.source} IN ('automatic', 'operator', 'abuse')`,
     ),
     cleanDaysCheck: check(
       "team_sending_controls_clean_days_check",
@@ -1112,6 +1112,11 @@ export const organizationPlanPolicies = pgTable(
     }),
     /** When the entitlement subscription entered `past_due`; null otherwise. */
     pastDueSince: timestamp("past_due_since", { withTimezone: true }),
+    /** Set by an operator for a vetted organization: no new-account pacing
+     * of marketing sends (`abuse/pacing.ts`). */
+    pacingExempt: boolean("pacing_exempt").notNull().default(false),
+    /** Hosted signup risk check (`abuse/signup.ts`), 0 low to 100 high. */
+    signupRiskScore: integer("signup_risk_score"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1369,6 +1374,13 @@ export const sequenceEmails = pgTable(
     actionData: jsonb("action_data"),
     /** When a test of this email was last sent (`POST .../test`). */
     lastTestSentAt: timestamp("last_test_sent_at", { withTimezone: true }),
+    /** Hosted content scan (`abuse/content-scan.ts`): `clean`, `review`
+     * (held for an operator), `blocked`, or `approved` by an operator. It
+     * applies to the content whose hash is `contentScanHash`. */
+    contentScanVerdict: text("content_scan_verdict"),
+    contentScanHash: text("content_scan_hash"),
+    contentScanReasons: jsonb("content_scan_reasons"),
+    contentScannedAt: timestamp("content_scanned_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
@@ -2133,5 +2145,67 @@ export const emailSuppressionActions = pgTable(
     suppressionActionsIdx: index(
       "email_suppression_actions_suppression_id_created_at_idx",
     ).on(table.suppressionId, table.createdAt),
+  }),
+);
+
+/**
+ * Hosted abuse review queue (#75): signups, content and imports that look
+ * risky. Operators work it with `bun scripts/abuse.ts`. Never shown to the
+ * organization, unlike `organization_audit_events`.
+ */
+export const abuseFlags = pgTable(
+  "abuse_flags",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    flagId: text("flag_id")
+      .notNull()
+      .unique()
+      .$defaultFn(() => genPublicId("abf")),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }),
+    userId: text("user_id"),
+    /** signup | content | import */
+    kind: text("kind").notNull(),
+    /** low | medium | high */
+    severity: text("severity").notNull(),
+    /** open | released | confirmed */
+    status: text("status").notNull().default("open"),
+    reason: text("reason").notNull(),
+    details: jsonb("details").notNull().default({}),
+    sequenceEmailId: uuid("sequence_email_id").references(() => sequenceEmails.id, {
+      onDelete: "cascade",
+    }),
+    contentHash: text("content_hash"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: text("resolved_by"),
+    resolutionNote: text("resolution_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    flagIdCheck: publicIdCheck("abuse_flags_flag_id_check", table.flagId, "abf"),
+    kindCheck: check(
+      "abuse_flags_kind_check",
+      sql`${table.kind} IN ('signup', 'content', 'import')`,
+    ),
+    severityCheck: check(
+      "abuse_flags_severity_check",
+      sql`${table.severity} IN ('low', 'medium', 'high')`,
+    ),
+    statusCheck: check(
+      "abuse_flags_status_check",
+      sql`${table.status} IN ('open', 'released', 'confirmed')`,
+    ),
+    statusIdx: index("abuse_flags_status_created_at_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    organizationIdx: index("abuse_flags_organization_kind_status_idx").on(
+      table.organizationId,
+      table.kind,
+      table.status,
+    ),
   }),
 );

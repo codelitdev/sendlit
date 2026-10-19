@@ -1,5 +1,7 @@
 import type { BillingEngine } from "@codelitdev/billing/workflows";
 import { and, count, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
+import { abuseControlsEnabled } from "../abuse/config";
+import { pacingBudget } from "../abuse/pacing";
 import { db } from "../db/client";
 import {
   contacts,
@@ -39,6 +41,47 @@ type PlanPolicyRow = typeof organizationPlanPolicies.$inferSelect;
 
 /** Creates the organization's plan policy row if it is missing (organization
  * creation and first use) and returns it, locked until the transaction ends. */
+/** An organization's campaign sends from `start` until now: accepted plus
+ * still-live reservations. */
+async function campaignSendsSince(
+  tx: Transaction,
+  organizationId: string,
+  start: Date,
+  now: Date,
+): Promise<number> {
+  const [[accepted], [reserved]] = await Promise.all([
+    tx
+      .select({ value: count() })
+      .from(outboundMessages)
+      .innerJoin(teams, eq(teams.id, outboundMessages.teamId))
+      .where(
+        and(
+          eq(teams.organizationId, organizationId),
+          eq(outboundMessages.sourceType, "campaign"),
+          gte(outboundMessages.acceptedAt, start),
+        ),
+      ),
+    tx
+      .select({ value: count() })
+      .from(outboundMessages)
+      .innerJoin(teams, eq(teams.id, outboundMessages.teamId))
+      .innerJoin(
+        planSendReservations,
+        eq(planSendReservations.outboundMessageId, outboundMessages.id),
+      )
+      .where(
+        and(
+          eq(teams.organizationId, organizationId),
+          eq(outboundMessages.sourceType, "campaign"),
+          eq(planSendReservations.state, "reserved"),
+          gt(planSendReservations.expiresAt, now),
+          gte(planSendReservations.updatedAt, start),
+        ),
+      ),
+  ]);
+  return Number(accepted?.value ?? 0) + Number(reserved?.value ?? 0);
+}
+
 export async function ensureOrganizationPlanPolicy(
   tx: Transaction,
   organizationId: string,
@@ -459,46 +502,14 @@ export async function reserveSend(
       input.organizationId,
       new Date(),
     );
-    const dailyLimit = marketingRampDailyLimit(stage);
+    // An operator-vetted organization skips the ramp and new-account pacing.
+    const dailyLimit = rampState.pacingExempt ? null : marketingRampDailyLimit(stage);
+    const now = new Date();
     if (dailyLimit !== null) {
-      const now = new Date();
       const dayStart = new Date(
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
       );
-      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-      const [[accepted], [reserved]] = await Promise.all([
-        tx
-          .select({ value: count() })
-          .from(outboundMessages)
-          .innerJoin(teams, eq(teams.id, outboundMessages.teamId))
-          .where(
-            and(
-              eq(teams.organizationId, input.organizationId),
-              eq(outboundMessages.sourceType, "campaign"),
-              gte(outboundMessages.acceptedAt, dayStart),
-              lt(outboundMessages.acceptedAt, dayEnd),
-            ),
-          ),
-        tx
-          .select({ value: count() })
-          .from(outboundMessages)
-          .innerJoin(teams, eq(teams.id, outboundMessages.teamId))
-          .innerJoin(
-            planSendReservations,
-            eq(planSendReservations.outboundMessageId, outboundMessages.id),
-          )
-          .where(
-            and(
-              eq(teams.organizationId, input.organizationId),
-              eq(outboundMessages.sourceType, "campaign"),
-              eq(planSendReservations.state, "reserved"),
-              gt(planSendReservations.expiresAt, now),
-              gte(planSendReservations.updatedAt, dayStart),
-              lt(planSendReservations.updatedAt, dayEnd),
-            ),
-          ),
-      ]);
-      const usage = Number(accepted?.value ?? 0) + Number(reserved?.value ?? 0);
+      const usage = await campaignSendsSince(tx, input.organizationId, dayStart, now);
       if (usage + amount > dailyLimit) {
         throw new PlanGateError("plan_limit_reached", {
           organizationId: entitlements.organizationId,
@@ -508,6 +519,42 @@ export async function reserveSend(
           plan: entitlements.plan,
           requiredPlan: entitlements.plan,
         });
+      }
+    }
+    if (abuseControlsEnabled()) {
+      const [organization] = await tx
+        .select({ createdAt: organizations.createdAt })
+        .from(organizations)
+        .where(eq(organizations.id, input.organizationId))
+        .limit(1);
+      const budget = organization
+        ? pacingBudget({
+            organizationCreatedAt: organization.createdAt,
+            pacingExempt: rampState.pacingExempt,
+            rampDailyLimit: dailyLimit,
+            monthlySendsLimit: entitlements.monthlySendsLimit,
+            now,
+          })
+        : null;
+      if (budget) {
+        const hourStart = new Date(now);
+        hourStart.setUTCMinutes(0, 0, 0);
+        const usage = await campaignSendsSince(
+          tx,
+          input.organizationId,
+          hourStart,
+          now,
+        );
+        if (usage + amount > budget.hourlyLimit) {
+          throw new PlanGateError("plan_limit_reached", {
+            organizationId: entitlements.organizationId,
+            capability: "marketing_hourly_pacing",
+            limit: budget.hourlyLimit,
+            usage,
+            plan: entitlements.plan,
+            requiredPlan: entitlements.plan,
+          });
+        }
       }
     }
   }

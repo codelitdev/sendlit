@@ -5,6 +5,7 @@ import {
 } from "@sendlit/api-contract";
 import { and, count, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { recordContactImport } from "../abuse/imports";
 import { getOrganizationEntitlements } from "../billing/entitlements";
 import { db } from "../db/client";
 import { contacts, teams } from "../db/schema";
@@ -83,11 +84,17 @@ export async function importContacts({
   contacts: rows,
   tags: tagsForAll = [],
   pending = "skip",
+  source,
+  userId,
 }: {
   teamId: string;
   contacts: ImportContactRow[];
   tags?: string[];
   pending?: "skip" | "unsubscribed";
+  /** Where the rows came from, e.g. the CSV file name; kept in the audit log. */
+  source?: string;
+  /** The signed-in user who imported, if any. */
+  userId?: string | null;
 }): Promise<ImportContactsResult> {
   const result: ImportContactsResult = {
     created: 0,
@@ -136,7 +143,18 @@ export async function importContacts({
           : undefined,
     });
   }
-  if (prepared.size === 0) return result;
+  if (prepared.size === 0) {
+    await recordContactImport({
+      teamId,
+      userId,
+      createdEmails: [],
+      updated: 0,
+      skipped: result.skipped.length,
+      suppressed: 0,
+      source,
+    });
+    return result;
+  }
 
   const [team] = await db
     .select({ organizationId: teams.organizationId })
@@ -174,6 +192,7 @@ export async function importContacts({
   }
 
   const customFieldUpdates: { contactId: string; customFields: CustomFields }[] = [];
+  const createdEmails: string[] = [];
   const toInsert: (typeof contacts.$inferInsert)[] = [];
   for (const row of prepared.values()) {
     const subscribed = row.status === "subscribed" && !suppressedReasons.has(row.email);
@@ -221,7 +240,12 @@ export async function importContacts({
       .insert(contacts)
       .values(toInsert)
       .onConflictDoNothing({ target: [contacts.teamId, contacts.email] })
-      .returning({ id: contacts.id, customFields: contacts.customFields });
+      .returning({
+        id: contacts.id,
+        email: contacts.email,
+        customFields: contacts.customFields,
+      });
+    createdEmails.push(...created.map((contact) => contact.email));
     result.created += created.length;
     // Created concurrently by someone else between our read and insert.
     result.unchanged += toInsert.length - created.length;
@@ -246,6 +270,15 @@ export async function importContacts({
     result.suppressed++;
   }
 
+  await recordContactImport({
+    teamId,
+    userId,
+    createdEmails,
+    updated: result.updated,
+    skipped: result.skipped.length,
+    suppressed: result.suppressed,
+    source,
+  });
   captureEvent({
     event: "contacts_imported",
     source: "contacts.import",

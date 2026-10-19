@@ -22,7 +22,7 @@ import type { ContactFilterWithAggregator } from "../../contacts/segment";
 import { getSegment } from "../../contacts/segments-queries";
 import { omitInternal } from "../../utils/public";
 import type { McpToolRegistrar } from "../tool-registry";
-import { getTeamId } from "./auth";
+import { getAuthUser, getTeamId } from "./auth";
 import {
   AUTH_ERROR,
   INTERNAL_ERROR,
@@ -56,7 +56,9 @@ export function registerContactTools(server: McpToolRegistrar): void {
       const teamId = getTeamId(extra);
       if (!teamId) return AUTH_ERROR;
       try {
-        return jsonResult(await importContacts({ teamId, ...args }));
+        return jsonResult(
+          await importContacts({ teamId, userId: getAuthUser(extra)?.id, ...args }),
+        );
       } catch (error) {
         if (isPlanGateError(error)) return planGateResult(error);
         return INTERNAL_ERROR;

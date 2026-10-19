@@ -367,6 +367,23 @@ export default function BroadcastEditorPage({
           </Banner>
         )}
 
+        {sequence.pacing && (
+          <Banner variant="info" className="mb-4">
+            Sending gradually because this is a new account: up to{" "}
+            {sequence.pacing.hourlyLimit.toLocaleString()} emails an hour (
+            {sequence.pacing.dailyLimit.toLocaleString()} a day).{" "}
+            {sequence.pacing.remaining.toLocaleString()} to go, expected to finish
+            around {new Date(sequence.pacing.estimatedCompletionAt).toLocaleString()}.
+          </Banner>
+        )}
+
+        {sequence.emails[0]?.contentScanVerdict === "review" && (
+          <Banner variant="warning" className="mb-4">
+            This email is being reviewed by SendLit before it can be sent. You can send
+            it once it&apos;s approved.
+          </Banner>
+        )}
+
         {stats && (
           <SequenceAnalytics className="mb-6" metrics={sequenceStatsMetrics(stats)} />
         )}

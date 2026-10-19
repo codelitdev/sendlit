@@ -1,5 +1,4 @@
 import { and, eq, inArray, isNull, lt, min, or, sql } from "drizzle-orm";
-import { createTransport } from "nodemailer";
 import { db } from "../db/client";
 import {
   billingCatalogRevisions,
@@ -9,6 +8,7 @@ import {
   billingWebhookEvents,
 } from "../db/schema";
 import { captureError, captureEvent } from "../observability";
+import { emailOperators, operatorRecipients } from "../operations/alerts";
 import logger from "../services/log";
 import { recordBillingMetric } from "./metrics";
 
@@ -59,43 +59,6 @@ export function recordWebhookSignatureFailure(now = new Date()): number {
   return signatureFailures.length;
 }
 
-function adminRecipients(): string[] {
-  const raw = process.env.BILLING_ALERT_EMAIL || "";
-  return raw
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
-async function emailAdmins(subject: string, text: string): Promise<void> {
-  const to = adminRecipients();
-  if (to.length === 0) return;
-  if (!process.env.EMAIL_HOST || !process.env.EMAIL_FROM) {
-    logger.warn({ subject }, "billing page email skipped: SMTP is not configured");
-    return;
-  }
-  if (process.env.NODE_ENV !== "production") {
-    logger.info({ to, subject, text }, "[Dev] billing page");
-    return;
-  }
-  const transporter = createTransport({
-    host: process.env.EMAIL_HOST,
-    port: Number(process.env.EMAIL_PORT) || 587,
-    auth: process.env.EMAIL_USER
-      ? {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS || "",
-        }
-      : undefined,
-  });
-  await transporter.sendMail({
-    from: process.env.EMAIL_FROM,
-    to: to.join(", "),
-    subject,
-    text,
-  });
-}
-
 export async function pageBillingAlert(
   alert: BillingAlert,
   now = new Date(),
@@ -118,7 +81,8 @@ export async function pageBillingAlert(
     severity: "critical",
     context: { alert_code: alert.code, error_code: alert.code },
   });
-  await emailAdmins(
+  await emailOperators(
+    operatorRecipients("BILLING_ALERT_EMAIL"),
     `[SendLit billing] ${alert.code}`,
     `${alert.message}\n${JSON.stringify(alert.details)}`,
   );

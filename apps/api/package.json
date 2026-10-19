@@ -2,7 +2,7 @@
   "name": "@sendlit/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Better Auth protected REST API for composing, sending and automating email \u2014 the SendLit backend",
+  "description": "Better Auth protected REST API for composing, sending and automating email — the SendLit backend",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "prebuild": "codelit-billing generate --check --config billing.config.ts",
@@ -26,6 +26,7 @@
     "build:deps": "bun --filter @sendlit/email-editor build && bun --filter @sendlit/email-blocks build"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@better-auth/cimd": "1.7.7",
     "@better-auth/oauth-provider": "1.7.7",
     "@codelitdev/billing": "0.4.1",
@@ -42,6 +43,7 @@
     "better-auth": "1.7.7",
     "bullmq": "^5.79.2",
     "cors": "^2.8.6",
+    "disposable-email-domains": "^1.0.62",
     "dodopayments": "2.48.0",
     "drizzle-orm": "0.45.2",
     "express": "4.21.2",

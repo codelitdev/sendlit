@@ -126,6 +126,7 @@ const impl = s.router(contract.contacts, {
     try {
       const result = await importContacts({
         teamId: (req as any).teamId,
+        userId: (req as any).user?.id,
         ...body,
       });
       return { status: 200, body: result };

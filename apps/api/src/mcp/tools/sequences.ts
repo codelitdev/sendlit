@@ -4,6 +4,7 @@ import {
   sequenceEmailTestResultSchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
+import { broadcastPacing } from "../../abuse/pacing-status";
 import { emailActionTypes, mailTypes } from "../../config/constants";
 import type { HydratedSequence } from "../../sequences/queries";
 import {
@@ -49,7 +50,9 @@ function toPublicSequence(sequence: HydratedSequence) {
       "deliverySourceType",
       "deliverySourceIntent",
     ]),
-    emails: sequence.emails.map((email) => omitInternal(email, ["sequenceId"])),
+    emails: sequence.emails.map((email) =>
+      omitInternal(email, ["sequenceId", "contentScanHash", "contentScanReasons"]),
+    ),
   };
 }
 
@@ -113,7 +116,10 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
       try {
         const sequence = await getSequenceBySequenceId(teamId, args.sequenceId);
         if (!sequence) return NOT_FOUND;
-        return jsonResult(toPublicSequence(sequence));
+        return jsonResult({
+          ...toPublicSequence(sequence),
+          pacing: await broadcastPacing(sequence),
+        });
       } catch {
         return INTERNAL_ERROR;
       }

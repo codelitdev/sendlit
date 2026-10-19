@@ -205,6 +205,7 @@ export function ImportContactsDialog({ onImported }: { onImported: () => void })
           contacts: rows.slice(start, start + CHUNK_SIZE),
           ...(tags.length > 0 && { tags }),
           pending: importPending ? "unsubscribed" : "skip",
+          source: csv.fileName,
         });
         total.created += chunk.created;
         total.updated += chunk.updated;
