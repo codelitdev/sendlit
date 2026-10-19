@@ -1627,6 +1627,13 @@ export function listSuppressions(
   return unwrap<Paginated<Suppression>>(client.suppressions.list({ query: params }));
 }
 
+/** Blocks an address for this team (reason `manual`). */
+export function addSuppression(email: string, note?: string) {
+  return unwrap<Suppression>(
+    client.suppressions.create({ body: { email, ...(note ? { note } : {}) } }),
+  );
+}
+
 export function releaseSuppression(suppressionId: string, explanation?: string) {
   return unwrap<Suppression>(
     client.suppressions.release({

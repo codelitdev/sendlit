@@ -6,7 +6,9 @@ mock.module("../db/client", async () => {
 });
 
 const { db } = await import("../db/client");
-const { emailSuppressionActions } = await import("../db/schema");
+const { contacts, emailSuppressionActions } = await import("../db/schema");
+const { eq } = await import("drizzle-orm");
+const { createContact } = await import("../contacts/queries");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 const {
   addOrStrengthenSuppression,
@@ -123,5 +125,36 @@ describe("suppression queries (integration)", () => {
       explanation: "false positive",
     });
     expect(released.active).toBe(false);
+  });
+
+  it("unsubscribes a contact who complained, also when re-added later", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    await addOrStrengthenSuppression({
+      teamId: team.id,
+      recipientEmail: contact.email.toUpperCase(),
+      reason: "complaint",
+      actorType: "system",
+    });
+    const [after] = await tdb
+      .select()
+      .from(contacts)
+      .where(eq(contacts.id, contact.id));
+    expect(after.subscribed).toBe(false);
+
+    await tdb.delete(contacts).where(eq(contacts.id, contact.id));
+    const recreated = await createContact({ teamId: team.id, email: contact.email });
+    expect(recreated.subscribed).toBe(false);
+
+    await addOrStrengthenSuppression({
+      teamId: team.id,
+      recipientEmail: "bounced@example.com",
+      reason: "hard_bounce",
+      actorType: "system",
+    });
+    const fresh = await createContact({
+      teamId: team.id,
+      email: "bounced@example.com",
+    });
+    expect(fresh.subscribed).toBe(true);
   });
 });

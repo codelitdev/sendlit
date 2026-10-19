@@ -147,7 +147,7 @@ API key management tools are refused when the caller authenticates with an API k
 
 - `get_esp_feedback_connection`, `upsert_esp_feedback_connection`, `test_esp_feedback_connection`, `delete_esp_feedback_connection`
 - `list_delivery_events`, `get_delivery_event`
-- `list_suppressions`, `get_suppression`, `release_suppression`
+- `list_suppressions`, `get_suppression`, `add_suppression`, `release_suppression`
 
 Delivery-feedback connections are supported only for providers with a reviewed asynchronous feedback adapter: Resend, Postmark, SendGrid, Mailgun, and Amazon SES. For SES, pass `expectedTopicArn` (the SNS topic subscribed to the webhook URL) to `upsert_esp_feedback_connection` instead of `credential`; see [Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback). Releasing a SendLit suppression does not remove a provider-native suppression, and complaint suppressions are not releasable through the owner API.
 

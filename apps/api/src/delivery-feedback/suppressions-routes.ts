@@ -5,6 +5,7 @@ import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { captureEvent } from "../observability";
 import {
+  addOrStrengthenSuppression,
   countSuppressions,
   getSuppressionBySuppressionId,
   listSuppressions,
@@ -51,6 +52,19 @@ const impl = s.router(contract.suppressions, {
       status: 200,
       body: { items: items.map(toPublicShape), total },
     };
+  },
+  create: async ({ body, req }) => {
+    const teamId = (req as any).teamId;
+    const suppression = await addOrStrengthenSuppression({
+      teamId,
+      recipientEmail: body.email,
+      reason: "manual",
+      actorType: "workspace_user",
+      actorUserId: (req as any).userId ?? null,
+      explanation: body.note ?? null,
+    });
+    captureEvent({ event: "suppression_added", source: "suppressions.create", teamId });
+    return { status: 201, body: toPublicShape(suppression) };
   },
   get: async ({ params, req }) => {
     const teamId = (req as any).teamId;

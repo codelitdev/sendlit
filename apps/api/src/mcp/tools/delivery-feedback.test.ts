@@ -38,6 +38,7 @@ mock.module("../../delivery-feedback/outbound-queries", () => ({
   getOutboundMessagesByIds: mocks.getOutboundMessagesByIds,
 }));
 mock.module("../../delivery-feedback/suppression-queries", () => ({
+  addOrStrengthenSuppression: vi.fn(),
   listSuppressions: mocks.listSuppressions,
   countSuppressions: mocks.countSuppressions,
   getSuppressionBySuppressionId: mocks.getSuppressionBySuppressionId,

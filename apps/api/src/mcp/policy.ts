@@ -115,6 +115,7 @@ const toolPolicies = {
   list_suppressions: MCP_SCOPES.suppressionsRead,
   get_suppression: MCP_SCOPES.suppressionsRead,
   release_suppression: MCP_SCOPES.suppressionsWrite,
+  add_suppression: MCP_SCOPES.suppressionsWrite,
 } as const satisfies Record<string, McpScope>;
 
 export type McpToolName = keyof typeof toolPolicies;

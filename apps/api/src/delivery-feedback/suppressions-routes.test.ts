@@ -132,4 +132,16 @@ describe("suppression route tenant isolation", () => {
       error: "suppression_not_releasable",
     });
   });
+
+  it("adds a manual suppression", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    requestContext.teamId = team.id;
+    const response = await requestApp(app(), "/suppressions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "Legal@Example.com", note: "legal request" }),
+    });
+    expect(response.status).toBe(201);
+    expect(response.json()).toMatchObject({ reason: "manual", active: true });
+  });
 });

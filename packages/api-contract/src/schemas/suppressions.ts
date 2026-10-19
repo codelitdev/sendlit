@@ -32,3 +32,14 @@ export const listSuppressionsQuerySchema = z.object({
 export const releaseSuppressionBodySchema = z.object({
   explanation: z.string().min(1).max(2000).optional(),
 });
+
+export const createSuppressionBodySchema = z.object({
+  email: z.string().email(),
+  note: z
+    .string()
+    .max(2000)
+    .optional()
+    .describe(
+      "Why the address is blocked, e.g. a legal request; kept in the audit trail",
+    ),
+});

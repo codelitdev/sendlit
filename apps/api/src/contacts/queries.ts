@@ -12,7 +12,9 @@ import {
   sequences,
   teams,
 } from "../db/schema";
+import { getActiveSuppressionReasons } from "../delivery-feedback/suppression-queries";
 import { captureEvent } from "../observability";
+import { normalizeEmail } from "../utils/email";
 // `contacts.contactId` auto-generates via `$defaultFn` (see `db/schema.ts`);
 // `generateUniqueId` is only still needed here for `unsubscribeToken`, an
 // opaque secret rather than a public resource ID.
@@ -39,6 +41,10 @@ export async function createContact({
   tags?: string[];
   customFields?: CustomFields;
 }): Promise<Contact> {
+  // Someone who reported spam stays unsubscribed even when re-added.
+  const complained =
+    (await getActiveSuppressionReasons(teamId, [email])).get(normalizeEmail(email)) ===
+    "complaint";
   const result = await db.transaction(async (tx) => {
     const [team] = await tx
       .select({ organizationId: teams.organizationId })
@@ -58,7 +64,9 @@ export async function createContact({
       .limit(1)
       .for("update");
     if (existing) return { contact: existing, created: false };
-    await reserveSubscribedContactSlot(tx, team.organizationId, teamId);
+    if (!complained) {
+      await reserveSubscribedContactSlot(tx, team.organizationId, teamId);
+    }
     const [created] = await tx
       .insert(contacts)
       .values({
@@ -67,6 +75,7 @@ export async function createContact({
         name,
         tags,
         customFields,
+        subscribed: !complained,
         unsubscribeToken: generateUniqueId(),
       })
       .onConflictDoNothing({ target: [contacts.teamId, contacts.email] })
