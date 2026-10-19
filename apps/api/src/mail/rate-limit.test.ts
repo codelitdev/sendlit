@@ -124,6 +124,30 @@ describe("send rate limit", () => {
     },
   );
 
+  it.skipIf(!hasRedis)(
+    "caps marketing mail at the warm-up's limit for the day",
+    async () => {
+      const tdb = db as unknown as TestDb;
+      // Day 2 of a warm-up to 1,000 a day: 100 today, below the ESP's own 500.
+      const { team } = await seedTeamAndContact(tdb, {
+        espConfig: {
+          provider: "smtp",
+          dailySendLimit: 500,
+          warmupTargetDaily: 1_000,
+          warmupStartedAt: new Date(Date.now() - 86_400_000),
+        },
+      });
+      const [esp] = await tdb
+        .select()
+        .from(espConfigs)
+        .where(eq(espConfigs.teamId, team.id));
+      for (let i = 0; i < 100; i++) await acquireEspSendCapacity(esp.id, "campaign");
+      const capped = await acquireEspSendCapacity(esp.id, "campaign").catch((e) => e);
+      expect(capped).toBeInstanceOf(SendDeferredError);
+      expect(await dailySendCount(esp.id)).toBe(100);
+    },
+  );
+
   it("defers to just after midnight UTC, or when an organization quota resets", () => {
     const now = new Date("2026-10-19T23:00:00Z");
     const wait = untilNextUtcDay(now);

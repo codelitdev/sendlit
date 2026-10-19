@@ -22,6 +22,60 @@ export const defaultMaxSendRates: Partial<
   resend: 2,
 };
 
+/**
+ * Automatic warm-up: the most marketing email a new ESP may send on each UTC
+ * day of its warm-up (index 0 is the day it started), roughly doubling at
+ * first, then growing 40% a day past the table. Mailbox providers trust a
+ * sender whose volume grows gradually, and the first days' mail goes to the
+ * most engaged contacts.
+ */
+export const WARMUP_RAMP = [
+  50, 100, 200, 400, 750, 1_500, 3_000, 5_000, 8_000, 12_000, 18_000, 25_000, 35_000,
+  50_000, 70_000, 100_000,
+] as const;
+
+/** The warm-up's limit on `day` (0-based), never above the target. */
+export function warmupDailyLimit(day: number, targetDailyVolume: number): number {
+  const ramp =
+    day < WARMUP_RAMP.length
+      ? WARMUP_RAMP[Math.max(0, day)]
+      : Math.round(
+          WARMUP_RAMP[WARMUP_RAMP.length - 1] * 1.4 ** (day - WARMUP_RAMP.length + 1),
+        );
+  return Math.min(ramp, targetDailyVolume);
+}
+
+/** Days until the ramp reaches the target, counting the first day as 1. */
+export function warmupDays(targetDailyVolume: number): number {
+  let day = 0;
+  while (warmupDailyLimit(day, Number.POSITIVE_INFINITY) < targetDailyVolume) day++;
+  return day + 1;
+}
+
+export const espWarmupSchema = z.object({
+  targetDailyVolume: z.number().int(),
+  startedAt: z.string(),
+  /** Day of the warm-up, starting at 1. */
+  day: z.number().int(),
+  totalDays: z.number().int(),
+  /** Most marketing email this ESP sends today because of the warm-up. */
+  todayLimit: z.number().int(),
+  complete: z.boolean(),
+});
+
+export type EspWarmup = z.infer<typeof espWarmupSchema>;
+
+const warmupTargetSchema = z
+  .number()
+  .int()
+  .min(100)
+  .max(10_000_000)
+  .nullable()
+  .optional()
+  .describe(
+    "Turns on automatic warm-up up to this many marketing emails a day: the daily limit starts at 50 and grows each UTC day until it reaches the target, with the most engaged contacts sent to first. Setting it starts the warm-up from day 1 (changing the target of a running warm-up keeps its progress). `null` turns it off.",
+  );
+
 /** Public shape only — the encrypted password/secret is never returned to
  * clients, only a `hasPassword` boolean (see
  * `apps/api/src/settings/esp/routes.ts`'s `toPublicShape`). */
@@ -45,6 +99,8 @@ export const espConfigSchema = z.object({
   dailySendLimit: z.number().int().nullable().optional(),
   /** Marketing sends today (UTC), when the ESP has a daily cap. */
   sentToday: z.number().int().nullable().optional(),
+  /** Automatic warm-up, while one is set up. */
+  warmup: espWarmupSchema.nullable().optional(),
   status: z.enum(["draft", "active", "suspended", "draining", "retired"]),
   secretVersion: z.number().int().positive(),
   lastTestedAt: z.string().nullable().optional(),
@@ -92,6 +148,7 @@ export const upsertEspConfigBodySchema = z.object({
     .describe('Where replies go, when not the from address. `""` clears it.'),
   maxSendRate: maxSendRateSchema,
   dailySendLimit: dailySendLimitSchema,
+  warmupTargetDailyVolume: warmupTargetSchema,
 });
 
 export const createEspConfigBodySchema = upsertEspConfigBodySchema.extend({
@@ -112,6 +169,7 @@ export const updateEspConfigBodySchema = z
     replyTo: z.union([z.string().email(), z.literal("")]).optional(),
     maxSendRate: maxSendRateSchema,
     dailySendLimit: dailySendLimitSchema,
+    warmupTargetDailyVolume: warmupTargetSchema,
   })
   .refine((body) => Object.keys(body).length > 0, {
     message: "At least one field is required",

@@ -5,6 +5,7 @@ import {
   contactFilterSchema,
   contract,
   type DomainAuthentication,
+  type EspWarmup,
   type ImportContactRow,
   type ImportContactsResult,
   type PaidPlan,
@@ -616,8 +617,10 @@ export interface EspConfig {
   replyTo?: string | null;
   maxSendRate?: number | null;
   dailySendLimit?: number | null;
-  /** Marketing sends today (UTC), when `dailySendLimit` is set. */
+  /** Marketing sends today (UTC), when `dailySendLimit` or a warm-up is set. */
   sentToday?: number | null;
+  /** Automatic warm-up, while one is set up. */
+  warmup?: EspWarmup | null;
   lastTestedAt: string | null;
   lastTestStatus: "success" | "failed" | null;
   lastTestError: string | null;
@@ -645,7 +648,11 @@ export interface EspConnectionInput {
   maxSendRate?: number | null;
   /** Daily marketing send cap; `null` removes it. */
   dailySendLimit?: number | null;
+  /** Automatic warm-up target per day; `null` turns warm-up off. */
+  warmupTargetDailyVolume?: number | null;
 }
+
+export type { EspWarmup };
 
 // ---- ESP collection (multiple user-managed ESPs per team) -----------------
 

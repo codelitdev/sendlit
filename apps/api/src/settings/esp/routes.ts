@@ -6,6 +6,7 @@ import { requireTeam } from "../../auth/require-team";
 import { getTeamDeliverySetting } from "../../delivery/queries";
 import { dailySendCount } from "../../mail/rate-limit";
 import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
+import { effectiveDailySendLimit, warmupState } from "../../mail/warmup";
 import { captureEvent } from "../../observability";
 import { getTeamMembership } from "../../team/queries";
 import { checkDomainAuthentication } from "./domain-auth";
@@ -48,6 +49,7 @@ function toPublicShape(config: EspConfig) {
     replyTo: config.replyTo,
     maxSendRate: config.maxSendRate,
     dailySendLimit: config.dailySendLimit,
+    warmup: warmupState(config),
     status: config.status as "draft" | "active" | "suspended" | "draining" | "retired",
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt?.toISOString() ?? null,
@@ -113,7 +115,9 @@ const collectionImpl = s.router(contract.settings.esps, {
         ...toPublicShape(config),
         // Warm-up progress, for ESPs with a daily cap.
         sentToday:
-          config.dailySendLimit !== null ? await dailySendCount(config.id) : null,
+          effectiveDailySendLimit(config) !== null || config.warmupTargetDaily
+            ? await dailySendCount(config.id)
+            : null,
       })),
     );
     return { status: 200, body: { items } };

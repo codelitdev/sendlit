@@ -38,7 +38,8 @@ attempt.
 **Daily send limit for warm-up** caps the broadcast and sequence emails sent
 through the ESP per UTC day. Emails over the cap wait for the next day
 instead of failing; transactional email is never held back. Use it to ramp up
-a new domain or SES account, see
+a new domain or SES account, or turn on **Automatic warm-up** to have SendLit
+raise the limit every day, most engaged contacts first; see
 [Warming up a domain or SES account](/email-marketing/warm-up). Shared
 organization ESPs have their own per-team daily and monthly quotas, set by an
 organization admin; campaign mail over those quotas also waits until the
