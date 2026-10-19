@@ -24,6 +24,13 @@ export default defineBillingConfig({
     idType: "text",
     onDelete: "restrict",
   },
-  planIds: ["pro", "business"],
-  requiredOfferKeys: ["pro_month", "pro_year", "business_month", "business_year"],
+  planIds: ["starter", "pro", "business"],
+  requiredOfferKeys: [
+    "starter_month",
+    "starter_year",
+    "pro_month",
+    "pro_year",
+    "business_month",
+    "business_year",
+  ],
 });

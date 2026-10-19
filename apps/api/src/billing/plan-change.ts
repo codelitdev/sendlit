@@ -1,5 +1,6 @@
 import { BillingWorkflowError } from "@codelitdev/billing/core";
 import type { BillingActionGrant } from "@codelitdev/billing/workflows";
+import { type PaidPlan, paidPlans } from "@sendlit/api-contract";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { billingPlanChangeAttempts, organizations } from "../db/schema";
@@ -53,7 +54,7 @@ async function responseFor(row: PlanChangeRow, includePaymentUrl: boolean) {
       | "succeeded"
       | "failed"
       | "conflicted",
-    targetPlan: row.targetPlan as "pro" | "business",
+    targetPlan: row.targetPlan as PaidPlan,
     targetInterval: row.targetInterval as "month" | "year",
     effectiveAt: row.effectiveAt as "immediately" | "next_billing_date",
     paymentUrl,
@@ -61,14 +62,14 @@ async function responseFor(row: PlanChangeRow, includePaymentUrl: boolean) {
   };
 }
 
-function planRank(plan: "pro" | "business"): number {
-  return plan === "business" ? 2 : 1;
+function planRank(plan: PaidPlan): number {
+  return paidPlans.indexOf(plan);
 }
 
 function defaultPolicy(
-  currentPlan: "pro" | "business",
+  currentPlan: PaidPlan,
   currentInterval: "month" | "year",
-  targetPlan: "pro" | "business",
+  targetPlan: PaidPlan,
   targetInterval: "month" | "year",
 ) {
   const upgrade =
@@ -118,7 +119,7 @@ function mapPlanChangeWorkflowError(
 export async function createOrganizationPlanChange(input: {
   organizationId: string;
   actorId: string;
-  plan: "pro" | "business";
+  plan: PaidPlan;
   interval: "month" | "year";
   catalogRevision: number;
   idempotencyKey?: string;
@@ -167,9 +168,9 @@ export async function createOrganizationPlanChange(input: {
   // plan-change capabilities and the catalog when the change starts; these
   // checks only spare the single-use grant for requests that cannot succeed.
   const commercial = await billing.commercialState(input.organizationId);
-  const currentPlan = commercial.activePaidPlan;
+  const currentPlan = commercial.activePaidPlan as PaidPlan | null;
   const currentInterval = commercial.billingInterval;
-  if ((currentPlan !== "pro" && currentPlan !== "business") || !currentInterval) {
+  if (!currentPlan || !paidPlans.includes(currentPlan) || !currentInterval) {
     throw new BillingPlanChangeError("billing_subscription_required", 402);
   }
   const [organization] = await db

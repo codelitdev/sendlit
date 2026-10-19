@@ -12,10 +12,14 @@ const keys = [
   "BILLING_ENABLED_PROVIDERS",
   "BILLING_CATALOG_REVISION",
   "BILLING_CURRENCY",
+  "BILLING_STARTER_MONTH_AMOUNT_MINOR",
+  "BILLING_STARTER_YEAR_AMOUNT_MINOR",
   "BILLING_PRO_MONTH_AMOUNT_MINOR",
   "BILLING_PRO_YEAR_AMOUNT_MINOR",
   "BILLING_BUSINESS_MONTH_AMOUNT_MINOR",
   "BILLING_BUSINESS_YEAR_AMOUNT_MINOR",
+  "DODO_STARTER_MONTH_PRODUCT_ID",
+  "DODO_STARTER_YEAR_PRODUCT_ID",
   "DODO_PRO_MONTH_PRODUCT_ID",
   "DODO_PRO_YEAR_PRODUCT_ID",
   "DODO_BUSINESS_MONTH_PRODUCT_ID",
@@ -40,10 +44,14 @@ function cloudEnv(overrides: Record<string, string | undefined> = {}) {
     BILLING_ENABLED_PROVIDERS: "dodo",
     BILLING_CATALOG_REVISION: "1",
     BILLING_CURRENCY: "USD",
+    BILLING_STARTER_MONTH_AMOUNT_MINOR: "1000",
+    BILLING_STARTER_YEAR_AMOUNT_MINOR: "10000",
     BILLING_PRO_MONTH_AMOUNT_MINOR: "4900",
     BILLING_PRO_YEAR_AMOUNT_MINOR: "49000",
     BILLING_BUSINESS_MONTH_AMOUNT_MINOR: "19900",
     BILLING_BUSINESS_YEAR_AMOUNT_MINOR: "199000",
+    DODO_STARTER_MONTH_PRODUCT_ID: "pdt_starter_month",
+    DODO_STARTER_YEAR_PRODUCT_ID: "pdt_starter_year",
     DODO_PRO_MONTH_PRODUCT_ID: "pdt_pro_month",
     DODO_PRO_YEAR_PRODUCT_ID: "pdt_pro_year",
     DODO_BUSINESS_MONTH_PRODUCT_ID: "pdt_business_month",
@@ -82,7 +90,7 @@ describe("readBillingConfig", () => {
   it("parses a valid cloud catalog without exposing floats", () => {
     cloudEnv();
     const config = readBillingConfig();
-    expect(config.offers).toHaveLength(4);
+    expect(config.offers).toHaveLength(6);
     expect(config.offers.every((offer) => Number.isInteger(offer.amountMinor))).toBe(
       true,
     );
@@ -97,6 +105,8 @@ describe("trialHmacSecrets", () => {
 });
 
 const fakeProductIds = {
+  FAKE_STARTER_MONTH_PRODUCT_ID: "pdt_starter_month",
+  FAKE_STARTER_YEAR_PRODUCT_ID: "pdt_starter_year",
   FAKE_PRO_MONTH_PRODUCT_ID: "pdt_pro_month",
   FAKE_PRO_YEAR_PRODUCT_ID: "pdt_pro_year",
   FAKE_BUSINESS_MONTH_PRODUCT_ID: "pdt_business_month",

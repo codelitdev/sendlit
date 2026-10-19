@@ -15,10 +15,14 @@ const CLOUD_FAKE_ENV = {
   BILLING_ENABLED_PROVIDERS: "fake",
   BILLING_CATALOG_REVISION: "1",
   BILLING_CURRENCY: "USD",
+  BILLING_STARTER_MONTH_AMOUNT_MINOR: "1000",
+  BILLING_STARTER_YEAR_AMOUNT_MINOR: "10000",
   BILLING_PRO_MONTH_AMOUNT_MINOR: "4900",
   BILLING_PRO_YEAR_AMOUNT_MINOR: "49000",
   BILLING_BUSINESS_MONTH_AMOUNT_MINOR: "19900",
   BILLING_BUSINESS_YEAR_AMOUNT_MINOR: "199000",
+  FAKE_STARTER_MONTH_PRODUCT_ID: "pdt_starter_month",
+  FAKE_STARTER_YEAR_PRODUCT_ID: "pdt_starter_year",
   FAKE_PRO_MONTH_PRODUCT_ID: "pdt_pro_month",
   FAKE_PRO_YEAR_PRODUCT_ID: "pdt_pro_year",
   FAKE_BUSINESS_MONTH_PRODUCT_ID: "pdt_business_month",
@@ -70,7 +74,7 @@ export async function seedPaidSubscription(
   input: {
     organizationId: string;
     payerId: string;
-    offerKey?: "pro_month" | "pro_year" | "business_month" | "business_year";
+    offerKey?: import("@sendlit/api-contract").BillingCatalogKey;
     status?: "trialing" | "active" | "past_due" | "cancelled";
     cancelAtPeriodEnd?: boolean;
     paidThroughAt?: Date;

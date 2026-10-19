@@ -1,5 +1,12 @@
 # PRD: Pricing plans, entitlements, and payments integration
 
+> The plan ladder and limits below were superseded by
+> [ADR 0003](../../../docs/decisions/0003-plans-priced-on-sends-and-teams.md):
+> Free, Starter, Pro and Business, priced on sends and teams with unlimited
+> contacts. The Starter catalog keys follow the same pattern as Pro and
+> Business (`starter_month`, `starter_year`, `BILLING_STARTER_*_AMOUNT_MINOR`,
+> `DODO_STARTER_*_PRODUCT_ID`).
+
 _Status: implementation-ready product and architecture specification. Date:
 2026-08-28. Owners: SendLit API, Web, and Operations. Initial payment provider:
 Dodo Payments. Source of truth: the SendLit pricing specification in

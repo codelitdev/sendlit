@@ -1,4 +1,4 @@
-import { contract } from "@sendlit/api-contract";
+import { contract, type PaidPlan, paidPlans } from "@sendlit/api-contract";
 import { createExpressEndpoints, initServer } from "@ts-rest/express";
 import { and, eq } from "drizzle-orm";
 import { Router } from "express";
@@ -32,6 +32,7 @@ import {
   createOrganizationPlanChange,
   getOrganizationPlanChange,
 } from "./plan-change";
+import { planPolicies } from "./policies";
 import { createOrganizationPortal } from "./portal";
 import {
   type BillingAction,
@@ -165,7 +166,7 @@ const impl = s.router(contract.billing, {
             return {
               catalogKey: offer.key as BillingOffer["catalogKey"],
               catalogRevision: active.revision,
-              plan: offer.plan as "pro" | "business",
+              plan: offer.plan as PaidPlan,
               interval: offer.interval as "month" | "year",
               currency: offer.currency,
               amountMinor: offer.amountMinor,
@@ -204,6 +205,18 @@ const impl = s.router(contract.billing, {
               trialDays,
             }),
           ),
+          plans: paidPlans.map((plan) => {
+            const policy = planPolicies[plan];
+            return {
+              plan,
+              teamsLimit: policy.teamsLimit,
+              monthlySendsLimit: policy.monthlySendsLimit,
+              marketingBranding: policy.marketingBranding,
+              sharedOrganizationMailbox: policy.sharedOrganizationMailbox,
+              provisioning: policy.provisioning,
+              organizationApiKeys: policy.organizationApiKeys,
+            };
+          }),
           checkoutAvailable,
         },
       };
@@ -287,7 +300,7 @@ const impl = s.router(contract.billing, {
         pendingPlanChange: pendingPlanChange
           ? {
               changeId: pendingPlanChange.changeId,
-              targetPlan: pendingPlanChange.targetPlan as "pro" | "business",
+              targetPlan: pendingPlanChange.targetPlan as PaidPlan,
               targetInterval: pendingPlanChange.targetInterval as "month" | "year",
               effectiveAt: pendingPlanChange.effectiveAt as
                 | "immediately"

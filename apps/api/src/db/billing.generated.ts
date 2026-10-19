@@ -51,7 +51,7 @@ export const billingPriceEntries = pgTable(
         amountCheck: check("billing_price_entries_amount_check", sql`${table.amountMinor} > 0`),
         trialDaysCheck: check("billing_price_entries_trial_days_check", sql`${table.providerTrialDays} >= 0`),
         currencyCheck: check("billing_price_entries_currency_check", sql`${table.currency} ~ '^[A-Z]{3}$'`),
-        planCheck: check("billing_price_entries_plan_check", sql`${table.plan} IN ('pro', 'business')`),
+        planCheck: check("billing_price_entries_plan_check", sql`${table.plan} IN ('starter', 'pro', 'business')`),
         intervalCheck: check(
             "billing_price_entries_interval_check",
             sql`${table.billingInterval} IN ('month', 'year')`,
@@ -196,7 +196,7 @@ export const billingCheckoutAttempts = pgTable(
         ),
         planCheck: check(
             "billing_checkout_attempts_plan_check",
-            sql`${table.requestedPlan} IN ('pro', 'business')`,
+            sql`${table.requestedPlan} IN ('starter', 'pro', 'business')`,
         ),
         intervalCheck: check(
             "billing_checkout_attempts_interval_check",
@@ -257,7 +257,7 @@ export const billingSubscriptions = pgTable(
             "billing_subscriptions_status_check",
             sql`${table.status} IN ('pending', 'trialing', 'active', 'past_due', 'cancelled', 'expired')`,
         ),
-        planCheck: check("billing_subscriptions_plan_check", sql`${table.plan} IN ('pro', 'business')`),
+        planCheck: check("billing_subscriptions_plan_check", sql`${table.plan} IN ('starter', 'pro', 'business')`),
         intervalCheck: check(
             "billing_subscriptions_interval_check",
             sql`${table.billingInterval} IN ('month', 'year')`,
@@ -325,11 +325,11 @@ export const billingPlanChangeAttempts = pgTable(
         ),
         currentPlanCheck: check(
             "billing_plan_change_attempts_current_plan_check",
-            sql`${table.currentPlan} IN ('pro', 'business')`,
+            sql`${table.currentPlan} IN ('starter', 'pro', 'business')`,
         ),
         targetPlanCheck: check(
             "billing_plan_change_attempts_target_plan_check",
-            sql`${table.targetPlan} IN ('pro', 'business')`,
+            sql`${table.targetPlan} IN ('starter', 'pro', 'business')`,
         ),
     }),
 );

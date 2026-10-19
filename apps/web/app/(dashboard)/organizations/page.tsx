@@ -1,5 +1,6 @@
 "use client";
 
+import { type PaidPlan, paidPlans } from "@sendlit/api-contract";
 import {
   Activity,
   Archive,
@@ -318,9 +319,35 @@ function isOrganizationTab(value: string | null): value is OrganizationTab {
 const PLAN_LABELS: Record<OrganizationBilling["plan"], string> = {
   oss: "OSS",
   free: "Free",
+  starter: "Starter",
   pro: "Pro",
   business: "Business",
 };
+
+function isPaid(plan: OrganizationBilling["plan"]): plan is PaidPlan {
+  return paidPlans.includes(plan as PaidPlan);
+}
+
+/** "3 teams · 125,000 emails a month · unlimited contacts", from the limits the
+ * API reports for the plan. */
+function planSummary(catalog: BillingCatalog | null, plan: PaidPlan): string | null {
+  const features = catalog?.plans?.find((item) => item.plan === plan);
+  if (!features) return null;
+  const teams =
+    features.teamsLimit === null
+      ? "Unlimited teams"
+      : `${features.teamsLimit.toLocaleString()} ${features.teamsLimit === 1 ? "team" : "teams"}`;
+  const sends =
+    features.monthlySendsLimit === null
+      ? "unlimited emails"
+      : `${features.monthlySendsLimit.toLocaleString()} emails a month`;
+  return [
+    teams,
+    sends,
+    "unlimited contacts",
+    ...(features.marketingBranding ? ['"Sent with SendLit" footer'] : []),
+  ].join(" · ");
+}
 
 const PAYMENT_STATUS_LABELS: Record<OrganizationBilling["paymentStatus"], string> = {
   free: "No subscription",
@@ -664,7 +691,7 @@ export default function OrganizationsPage() {
         const nextBilling = await getOrganizationBilling(organizationId);
         if (cancelled) return;
         setBilling(nextBilling);
-        const activated = nextBilling.plan === "pro" || nextBilling.plan === "business";
+        const activated = isPaid(nextBilling.plan);
         if (activated) {
           setCheckoutConfirmation("confirmed");
           const params = new URLSearchParams(searchParams.toString());
@@ -1104,7 +1131,7 @@ function OrganizationPlanSummary({
     billing.paymentStatus === "cancelled";
   const cancellationPending =
     cancellationRequested &&
-    (billing.plan === "pro" || billing.plan === "business") &&
+    isPaid(billing.plan) &&
     hasFutureBillingDate(billing.paidThroughAt);
   const subscriptionExpired =
     billing.paymentStatus === "expired" ||
@@ -1132,7 +1159,7 @@ function OrganizationPlanSummary({
     }
   }
 
-  const isPaidPlan = billing.plan === "pro" || billing.plan === "business";
+  const isPaidPlan = isPaid(billing.plan);
   const canCancel = billing.canManageBilling && isPaidPlan && !cancellationRequested;
   // Resume clears a scheduled cancellation on the still-active subscription;
   // it never starts a new checkout.
@@ -1429,9 +1456,7 @@ function OrganizationPlanSummary({
             </div>
           </Banner>
         ) : null}
-        {!cancellationPending &&
-        cancellationRequested &&
-        (billing.plan === "pro" || billing.plan === "business") ? (
+        {!cancellationPending && cancellationRequested && isPaid(billing.plan) ? (
           <Banner variant="warning" className="rounded-xl p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p>
@@ -1458,7 +1483,7 @@ function CreateOrganizationDialog({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [teamName, setTeamName] = useState("");
-  const [plan, setPlan] = useState<"oss" | "free" | "pro" | "business">("free");
+  const [plan, setPlan] = useState<OrganizationBilling["plan"]>("free");
   const [interval, setInterval] = useState<"month" | "year">("month");
   const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
   const [catalogUnavailable, setCatalogUnavailable] = useState(false);
@@ -1570,9 +1595,7 @@ function CreateOrganizationDialog({
             <Label>Plan</Label>
             <Select
               value={plan}
-              onValueChange={(value) =>
-                setPlan(value as "oss" | "free" | "pro" | "business")
-              }
+              onValueChange={(value) => setPlan(value as OrganizationBilling["plan"])}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -1581,22 +1604,18 @@ function CreateOrganizationDialog({
                 {!hasFreeOrganization ? (
                   <SelectItem value="free">Free</SelectItem>
                 ) : null}
-                <SelectItem
-                  value="pro"
-                  disabled={
-                    catalogUnavailable || Boolean(catalog && !catalog.checkoutAvailable)
-                  }
-                >
-                  Pro
-                </SelectItem>
-                <SelectItem
-                  value="business"
-                  disabled={
-                    catalogUnavailable || Boolean(catalog && !catalog.checkoutAvailable)
-                  }
-                >
-                  Business
-                </SelectItem>
+                {paidPlans.map((paidPlan) => (
+                  <SelectItem
+                    key={paidPlan}
+                    value={paidPlan}
+                    disabled={
+                      catalogUnavailable ||
+                      Boolean(catalog && !catalog.checkoutAvailable)
+                    }
+                  >
+                    {PLAN_LABELS[paidPlan]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             {hasFreeOrganization ? (
@@ -2596,7 +2615,7 @@ function OrganizationBillingDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
-  const [plan, setPlan] = useState<"pro" | "business">("pro");
+  const [plan, setPlan] = useState<PaidPlan>("pro");
   const [interval, setInterval] = useState<"month" | "year">("month");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2677,14 +2696,17 @@ function OrganizationBillingDialog({
                   </Label>
                   <Select
                     value={plan}
-                    onValueChange={(value) => setPlan(value as "pro" | "business")}
+                    onValueChange={(value) => setPlan(value as PaidPlan)}
                   >
                     <SelectTrigger className="h-11 bg-background">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pro">Pro</SelectItem>
-                      <SelectItem value="business">Business</SelectItem>
+                      {paidPlans.map((paidPlan) => (
+                        <SelectItem key={paidPlan} value={paidPlan}>
+                          {PLAN_LABELS[paidPlan]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -2714,16 +2736,14 @@ function OrganizationBillingDialog({
                     <div className="space-y-1.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold">
-                          {plan === "pro" ? "Pro workspace" : "Business workspace"}
+                          {PLAN_LABELS[plan]} workspace
                         </p>
                         {plan === "pro" ? (
                           <Badge variant="success">Most popular</Badge>
                         ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {plan === "pro"
-                          ? "5 teams · 10,000 subscribed contacts"
-                          : "25 teams · unlimited subscribed contacts"}
+                        {planSummary(catalog, plan)}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
@@ -2795,8 +2815,8 @@ function OrganizationPlanChangeDialog({
   onChanged: () => Promise<void>;
 }) {
   const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
-  const [plan, setPlan] = useState<"pro" | "business">(
-    billing.plan === "business" ? "business" : "pro",
+  const [plan, setPlan] = useState<PaidPlan>(
+    isPaid(billing.plan) ? billing.plan : "pro",
   );
   const [interval, setInterval] = useState<"month" | "year">(
     billing.billingInterval ?? "month",
@@ -2806,7 +2826,7 @@ function OrganizationPlanChangeDialog({
 
   useEffect(() => {
     if (!open) return;
-    setPlan(billing.plan === "business" ? "business" : "pro");
+    setPlan(isPaid(billing.plan) ? billing.plan : "pro");
     setInterval(billing.billingInterval ?? "month");
     setError(null);
     setCatalog(null);
@@ -2824,7 +2844,8 @@ function OrganizationPlanChangeDialog({
   );
   const unchanged = billing.plan === plan && billing.billingInterval === interval;
   const isUpgrade =
-    (plan === "business" && billing.plan === "pro") ||
+    (isPaid(billing.plan) &&
+      paidPlans.indexOf(plan) > paidPlans.indexOf(billing.plan)) ||
     (plan === billing.plan &&
       billing.billingInterval === "month" &&
       interval === "year");
@@ -2900,14 +2921,17 @@ function OrganizationPlanChangeDialog({
                   </Label>
                   <Select
                     value={plan}
-                    onValueChange={(value) => setPlan(value as "pro" | "business")}
+                    onValueChange={(value) => setPlan(value as PaidPlan)}
                   >
                     <SelectTrigger className="h-11 bg-background">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pro">Pro</SelectItem>
-                      <SelectItem value="business">Business</SelectItem>
+                      {paidPlans.map((paidPlan) => (
+                        <SelectItem key={paidPlan} value={paidPlan}>
+                          {PLAN_LABELS[paidPlan]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -2934,12 +2958,10 @@ function OrganizationPlanChangeDialog({
                   <div className="relative flex items-start justify-between gap-4">
                     <div className="space-y-1.5">
                       <p className="text-sm font-semibold">
-                        {plan === "pro" ? "Pro workspace" : "Business workspace"}
+                        {PLAN_LABELS[plan]} workspace
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {plan === "pro"
-                          ? "5 teams · 10,000 subscribed contacts"
-                          : "25 teams · unlimited subscribed contacts"}
+                        {planSummary(catalog, plan)}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">

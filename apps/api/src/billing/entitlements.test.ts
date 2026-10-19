@@ -205,9 +205,28 @@ describe("entitlements from the engine's commercial state", () => {
       interval: "year",
       paymentStatus: "cancel_at_period_end",
       cancelAtPeriodEnd: true,
-      teamsLimit: 25,
+      teamsLimit: 15,
     });
     expect(entitlements.paidThroughAt?.toISOString()).toBe(paidThroughAt.toISOString());
+  });
+
+  it("grants Starter's limits to a Starter subscription", async () => {
+    const { account, organization } = await seedTeamAndContact(tdb);
+    await seedPaidSubscription(tdb, {
+      organizationId: organization.id,
+      payerId: account.id,
+      offerKey: "starter_month",
+    });
+    expect(await getOrganizationEntitlements(organization.id)).toMatchObject({
+      plan: "starter",
+      interval: "month",
+      paymentStatus: "active",
+      teamsLimit: 1,
+      monthlySendsLimit: 25_000,
+      subscribedContactsLimit: null,
+      marketingBranding: true,
+      sharedOrganizationMailbox: false,
+    });
   });
 
   it("drops paid access once a scheduled cancellation's paid-through date passes", async () => {

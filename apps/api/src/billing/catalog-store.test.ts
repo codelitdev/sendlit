@@ -26,11 +26,11 @@ beforeEach(async () => {
 });
 
 describe("catalog verification against the fake adapter", () => {
-  it("activates a four-offer revision when products match", async () => {
+  it("activates a six-offer revision when products match", async () => {
     await activateFakeCatalog();
     const active = await getPublicCatalog(readBillingConfig());
     expect(active.revision).toBe(1);
-    expect(active.offers).toHaveLength(4);
+    expect(active.offers).toHaveLength(6);
     expect(active.checkoutAvailable).toBe(true);
     await expect(
       requirePublicCatalog(readBillingConfig(), "pro_month"),

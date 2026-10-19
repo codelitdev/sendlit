@@ -7,15 +7,14 @@ import { BillingConfigurationError } from "@codelitdev/billing/core";
 
 export { BillingConfigurationError };
 
-export const billingCatalogKeys = [
-  "pro_month",
-  "pro_year",
-  "business_month",
-  "business_year",
-] as const;
-export type BillingCatalogKey = (typeof billingCatalogKeys)[number];
+import {
+  type BillingCatalogKey,
+  type BillingPlan,
+  billingCatalogKeys,
+  type PaidPlan,
+} from "@sendlit/api-contract";
 
-export type BillingPlan = "oss" | "free" | "pro" | "business";
+export { type BillingCatalogKey, type BillingPlan, billingCatalogKeys };
 export type BillingInterval = "month" | "year";
 export type BillingProvider = "dodo" | (string & {});
 export type BillingDeploymentMode = "oss" | "cloud";
@@ -23,7 +22,7 @@ export type BillingDeploymentMode = "oss" | "cloud";
 export type BillingOffer = {
   catalogKey: BillingCatalogKey;
   catalogRevision: number;
-  plan: "pro" | "business";
+  plan: PaidPlan;
   interval: BillingInterval;
   currency: string;
   amountMinor: number;
@@ -60,11 +59,25 @@ const offerEnv: Record<
   {
     amount: string;
     productSuffix: string;
-    plan: "pro" | "business";
+    plan: PaidPlan;
     interval: BillingInterval;
     trialDays: number;
   }
 > = {
+  starter_month: {
+    amount: "BILLING_STARTER_MONTH_AMOUNT_MINOR",
+    productSuffix: "STARTER_MONTH_PRODUCT_ID",
+    plan: "starter",
+    interval: "month",
+    trialDays: 0,
+  },
+  starter_year: {
+    amount: "BILLING_STARTER_YEAR_AMOUNT_MINOR",
+    productSuffix: "STARTER_YEAR_PRODUCT_ID",
+    plan: "starter",
+    interval: "year",
+    trialDays: 0,
+  },
   pro_month: {
     amount: "BILLING_PRO_MONTH_AMOUNT_MINOR",
     productSuffix: "PRO_MONTH_PRODUCT_ID",
@@ -228,7 +241,7 @@ export function readBillingConfig(env: NodeJS.ProcessEnv = process.env): Billing
 
 export function getBillingOffer(
   config: BillingConfig,
-  plan: "pro" | "business",
+  plan: PaidPlan,
   interval: BillingInterval,
 ): BillingOffer | null {
   return (

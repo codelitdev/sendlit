@@ -106,6 +106,20 @@
       "when": 1792419874681,
       "tag": "0014_esp_config_daily_send_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792420743192,
+      "tag": "0015_billing_starter_plan",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792420758725,
+      "tag": "0016_grandfather_team_limits",
+      "breakpoints": true
     }
   ]
 }
