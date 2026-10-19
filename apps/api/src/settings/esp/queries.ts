@@ -35,6 +35,8 @@ export interface EspConnectionInput {
   password?: string;
   fromName?: string;
   fromEmail?: string;
+  /** Default Reply-To; an empty string clears it. */
+  replyTo?: string;
 }
 
 export interface CreateEspConfigInput extends EspConnectionInput {
@@ -182,6 +184,7 @@ async function createOwnedEspConfig(
       encryptedSecret: encryptedSecretForInput(input.password),
       fromName: input.fromName || null,
       fromEmail: input.fromEmail || null,
+      replyTo: input.replyTo || null,
     })
     .returning();
   return row;
@@ -258,6 +261,7 @@ async function updateOwnedEspConfig(
       values.encryptedSecret = encryptedSecretForInput(input.password, existing);
     if (input.fromName !== undefined) values.fromName = input.fromName || null;
     if (input.fromEmail !== undefined) values.fromEmail = input.fromEmail || null;
+    if (input.replyTo !== undefined) values.replyTo = input.replyTo || null;
     if (invalidatesTest) {
       values.secretVersion = existing.secretVersion + 1;
       values.lastTestedAt = null;

@@ -5,6 +5,13 @@ description: Configure the team's email sending provider.
 
 Each team can configure its own SMTP provider. The API never returns stored passwords or secrets.
 
+Each ESP has a from name and from email, and an optional **reply-to** address.
+When set, broadcasts, sequences and transactional email sent through the ESP
+carry a `Reply-To` header, so replies reach that inbox (for example
+`support@`) instead of a `noreply@` sender. A transactional send's own
+`replyTo` takes precedence; a shared organization ESP can be given a per-team
+reply-to on the team's grant.
+
 Use the test send endpoint after configuring settings to verify delivery before sending broadcasts or activating sequences.
 
 ## Bounce and complaint feedback

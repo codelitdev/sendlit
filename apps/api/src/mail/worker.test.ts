@@ -82,6 +82,8 @@ async function queuedEmail(
     html?: string;
     trackOpens?: boolean;
     trackClicks?: boolean;
+    replyTo?: string;
+    text?: string;
   } = {},
 ) {
   const [esp] = await tdb
@@ -100,6 +102,8 @@ async function queuedEmail(
       html: options.html ?? "<p>hi</p>",
       trackOpens: options.trackOpens ?? false,
       trackClicks: options.trackClicks ?? false,
+      replyTo: options.replyTo,
+      text: options.text,
       status: "queued",
     })
     .returning();
@@ -132,6 +136,21 @@ describe("mail worker transactional processing", () => {
     await expect(getTransactionalEmailById(row.id)).resolves.toMatchObject({
       status: "sent",
     });
+  });
+
+  it("sends the stored Reply-To and caller text", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const row = await queuedEmail(team.id, {
+      replyTo: "support@example.com",
+      text: "plain hi",
+    });
+    sendMailMock.mockResolvedValueOnce({ messageId: null, providerResponse: null });
+
+    await processor(job(row.id));
+
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replyTo: "support@example.com", text: "plain hi" }),
+    );
   });
 
   it("marks an SMTP 5xx as bounced and suppresses the recipient", async () => {

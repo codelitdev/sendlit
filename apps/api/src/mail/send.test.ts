@@ -148,10 +148,14 @@ describe("sendMail", () => {
       subject: "Hello",
       html: '<p>Hi <a href="https://example.com">there</a></p>',
       text: "Custom text",
+      replyTo: "support@example.com",
       teamId: "team-1",
     });
 
-    expect(sendMailMock.mock.calls.at(-1)?.[0]).toMatchObject({ text: "Custom text" });
+    expect(sendMailMock.mock.calls.at(-1)?.[0]).toMatchObject({
+      text: "Custom text",
+      replyTo: "support@example.com",
+    });
   });
 
   it("sends transactional mail without requiring a mailing address", async () => {

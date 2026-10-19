@@ -25,6 +25,7 @@ export const espConfigSchema = z.object({
   hasPassword: z.boolean(),
   fromName: z.string().nullable().optional(),
   fromEmail: z.string().nullable().optional(),
+  replyTo: z.string().nullable().optional(),
   status: z.enum(["draft", "active", "suspended", "draining", "retired"]),
   secretVersion: z.number().int().positive(),
   lastTestedAt: z.string().nullable().optional(),
@@ -46,6 +47,10 @@ export const upsertEspConfigBodySchema = z.object({
   password: z.string().optional(),
   fromName: z.string().optional(),
   fromEmail: z.string().email().optional(),
+  replyTo: z
+    .union([z.string().email(), z.literal("")])
+    .optional()
+    .describe('Where replies go, when not the from address. `""` clears it.'),
 });
 
 export const createEspConfigBodySchema = upsertEspConfigBodySchema.extend({
@@ -63,6 +68,7 @@ export const updateEspConfigBodySchema = z
     password: z.string().optional(),
     fromName: z.string().optional(),
     fromEmail: z.union([z.string().email(), z.literal("")]).optional(),
+    replyTo: z.union([z.string().email(), z.literal("")]).optional(),
   })
   .refine((body) => Object.keys(body).length > 0, {
     message: "At least one field is required",

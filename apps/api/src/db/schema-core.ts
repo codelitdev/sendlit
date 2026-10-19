@@ -1012,6 +1012,8 @@ export const espConfigs = pgTable(
     encryptedSecret: text("encrypted_secret"),
     fromName: text("from_name"),
     fromEmail: text("from_email"),
+    /** Default `Reply-To` for mail sent through this ESP. */
+    replyTo: text("reply_to"),
     status: text("status").notNull().default("draft"),
     secretVersion: integer("secret_version").notNull().default(1),
     lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),

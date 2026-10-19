@@ -43,6 +43,7 @@ function toPublicShape(config: EspConfig) {
     hasPassword: Boolean(config.encryptedSecret),
     fromName: config.fromName,
     fromEmail: config.fromEmail,
+    replyTo: config.replyTo,
     status: config.status as "draft" | "active" | "suspended" | "draining" | "retired",
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt?.toISOString() ?? null,

@@ -580,6 +580,7 @@ export interface EspConfig {
   hasPassword: boolean;
   fromName: string | null;
   fromEmail: string | null;
+  replyTo?: string | null;
   lastTestedAt: string | null;
   lastTestStatus: "success" | "failed" | null;
   lastTestError: string | null;
@@ -601,6 +602,8 @@ export interface EspConnectionInput {
   password?: string;
   fromName?: string;
   fromEmail?: string;
+  /** "" clears it. */
+  replyTo?: string;
 }
 
 // ---- ESP collection (multiple user-managed ESPs per team) -----------------

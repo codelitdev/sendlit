@@ -207,6 +207,7 @@ export const espConfigSchema = z.object({
   hasPassword: z.boolean(),
   fromName: z.string().nullable().optional(),
   fromEmail: z.string().nullable().optional(),
+  replyTo: z.string().nullable().optional(),
   status: z.string(),
   secretVersion: z.number(),
   lastTestedAt: z.string().nullable().optional(),
