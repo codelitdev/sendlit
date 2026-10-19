@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import {
   itemsPerPage as defaultItemsPerPage,
   ownerReleasableSuppressionReasons,
@@ -33,6 +33,37 @@ export async function isRecipientSuppressed(
     )
     .limit(1);
   return Boolean(row);
+}
+
+/** Active suppression reasons for many recipients at once, keyed by
+ * normalized email. Recipients that aren't suppressed are absent. */
+export async function getActiveSuppressionReasons(
+  teamId: string,
+  emails: string[],
+): Promise<Map<string, SuppressionReason>> {
+  const byHash = new Map(
+    emails.map((email) => {
+      const normalized = normalizeEmail(email);
+      return [hashRecipient(normalized), normalized] as const;
+    }),
+  );
+  const reasons = new Map<string, SuppressionReason>();
+  if (byHash.size === 0) return reasons;
+  const rows = await db
+    .select({ hash: emailSuppressions.recipientHash, reason: emailSuppressions.reason })
+    .from(emailSuppressions)
+    .where(
+      and(
+        eq(emailSuppressions.teamId, teamId),
+        inArray(emailSuppressions.recipientHash, [...byHash.keys()]),
+        eq(emailSuppressions.active, true),
+      ),
+    );
+  for (const row of rows) {
+    const email = byHash.get(row.hash);
+    if (email) reasons.set(email, row.reason as SuppressionReason);
+  }
+  return reasons;
 }
 
 export async function getActiveSuppression(

@@ -10,6 +10,8 @@ import { requireTeam } from "../auth/require-team";
 import { isPlanGateError } from "../billing/errors";
 import { omitInternal } from "../utils/public";
 import { serializeDates } from "../utils/serialize";
+import { exportContactsCsv } from "./export";
+import { importContacts } from "./import";
 import {
   addTagToContact,
   countContacts,
@@ -36,6 +38,36 @@ const s = initServer();
  * to `{ status, body }`. No business logic lives here \u2014 if Express is ever
  * swapped for something else, only this file (and its siblings) would change.
  */
+/** The saved segment's and inline filters of a list/export query, ANDed. */
+async function resolveContactFilters(
+  teamId: string,
+  query: { segmentId?: string; filter?: string },
+): Promise<
+  | { filter?: ContactFilterWithAggregator[] }
+  | { error: { status: 400 | 404; body: { error: string } } }
+> {
+  const filters: ContactFilterWithAggregator[] = [];
+  if (query.segmentId) {
+    const segment = await getSegment(query.segmentId);
+    if (!segment || segment.teamId !== teamId) {
+      return { error: { status: 404, body: { error: "Segment not found" } } };
+    }
+    const parsedSegmentFilter = contactFilterSchema.safeParse(segment.filter);
+    if (!parsedSegmentFilter.success) {
+      return { error: { status: 400, body: { error: "Invalid segment filter" } } };
+    }
+    filters.push(parsedSegmentFilter.data as ContactFilterWithAggregator);
+  }
+  if (query.filter) {
+    const parsedFilter = parseContactFilterQueryParam(query.filter);
+    if (!parsedFilter.success) {
+      return { error: { status: 400, body: { error: "Invalid filter" } } };
+    }
+    filters.push(parsedFilter.data as ContactFilterWithAggregator);
+  }
+  return { filter: filters.length ? filters : undefined };
+}
+
 const impl = s.router(contract.contacts, {
   create: async ({ body, req }) => {
     try {
@@ -57,29 +89,9 @@ const impl = s.router(contract.contacts, {
   list: async ({ query, req }) => {
     const teamId = (req as any).teamId;
 
-    const filters = [];
-    if (query.segmentId) {
-      const segment = await getSegment(query.segmentId);
-      if (!segment || segment.teamId !== teamId) {
-        return { status: 404, body: { error: "Segment not found" } };
-      }
-      const parsedSegmentFilter = contactFilterSchema.safeParse(segment.filter);
-      if (!parsedSegmentFilter.success) {
-        return {
-          status: 400,
-          body: { error: "Invalid segment filter" },
-        };
-      }
-      filters.push(parsedSegmentFilter.data as any);
-    }
-    if (query.filter) {
-      const parsedFilter = parseContactFilterQueryParam(query.filter);
-      if (!parsedFilter.success) {
-        return { status: 400, body: { error: "Invalid filter" } };
-      }
-      filters.push(parsedFilter.data as any);
-    }
-    const filter = filters.length ? filters : undefined;
+    const resolved = await resolveContactFilters(teamId, query);
+    if ("error" in resolved) return resolved.error;
+    const filter = resolved.filter;
     let excludeFilter: ContactFilterWithAggregator | undefined;
     if (query.excludeFilter) {
       const parsedExclude = parseContactFilterQueryParam(query.excludeFilter);
@@ -107,6 +119,30 @@ const impl = s.router(contract.contacts, {
         total,
       },
     };
+  },
+  // Before `get`: ts-rest registers routes in this order, and Express would
+  // otherwise match `/contacts/export` as `/contacts/:contactId`.
+  import: async ({ body, req }) => {
+    try {
+      const result = await importContacts({
+        teamId: (req as any).teamId,
+        ...body,
+      });
+      return { status: 200, body: result };
+    } catch (error: any) {
+      return { status: 400, body: { error: error.message } };
+    }
+  },
+  export: async ({ query, req, res }) => {
+    const teamId = (req as any).teamId;
+    const resolved = await resolveContactFilters(teamId, query);
+    if ("error" in resolved) return resolved.error;
+    const { csv } = await exportContactsCsv({ teamId, filter: resolved.filter });
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="contacts-${new Date().toISOString().slice(0, 10)}.csv"`,
+    );
+    return { status: 200, body: csv };
   },
   get: async ({ params, req }) => {
     const contact = await getContactByContactId(params.contactId);

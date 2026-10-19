@@ -81,7 +81,12 @@ async function forward(
   if (upstream.status === 401) {
     res.headers.set("X-Auth-Error", "session_expired");
   }
-  for (const header of ["Cache-Control", "ETag", "Referrer-Policy"]) {
+  for (const header of [
+    "Cache-Control",
+    "Content-Disposition",
+    "ETag",
+    "Referrer-Policy",
+  ]) {
     const value = upstream.headers.get(header);
     if (value) res.headers.set(header, value);
   }

@@ -1,3 +1,4 @@
+export * from "./contact-import";
 export { type Contract, contract } from "./contract";
 export {
   type McpParityExemption,

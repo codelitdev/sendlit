@@ -1,5 +1,12 @@
-import { contactFilterSchema, customFieldsSchema } from "@sendlit/api-contract";
+import {
+  contactFilterSchema,
+  customFieldsSchema,
+  importContactsBodySchema,
+  importContactsResultSchema,
+} from "@sendlit/api-contract";
 import { z } from "zod";
+import { exportContactsCsv } from "../../contacts/export";
+import { importContacts } from "../../contacts/import";
 import {
   addTagToContact,
   countContacts,
@@ -11,6 +18,7 @@ import {
   removeTagFromContact,
   updateContact,
 } from "../../contacts/queries";
+import type { ContactFilterWithAggregator } from "../../contacts/segment";
 import { getSegment } from "../../contacts/segments-queries";
 import { omitInternal } from "../../utils/public";
 import type { McpToolRegistrar } from "../tool-registry";
@@ -31,6 +39,69 @@ import {
 } from "./schemas";
 
 export function registerContactTools(server: McpToolRegistrar): void {
+  server.registerTool(
+    "import_contacts",
+    {
+      description:
+        "Imports up to 1000 contacts per call from another platform's export (beehiiv, Mailchimp, Substack, Kit, ...), matched by email. Pass each row's source status as-is (e.g. Active, Paused, Inactive, Pending, unsubscribed, cleaned): a status only gets stricter, so an import never re-subscribes anyone, bounced/complained rows are imported unsubscribed and suppressed, and paused contacts get the `paused` tag. Tags and custom fields merge into existing contacts and an earlier createdAt is kept. Imports don't trigger sequences. Returns created/updated/unchanged counts and the skipped rows with reasons.",
+      inputSchema: importContactsBodySchema.shape,
+      outputSchema: importContactsResultSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        return jsonResult(await importContacts({ teamId, ...args }));
+      } catch (error) {
+        if (isPlanGateError(error)) return planGateResult(error);
+        return INTERNAL_ERROR;
+      }
+    },
+  );
+
+  server.registerTool(
+    "export_contacts",
+    {
+      description:
+        "Exports every contact, or those matching a saved segment and/or inline filter, as CSV text: email, name, status (subscribed/unsubscribed/bounced/complained), tags, created_at, suppression_reason, then one column per custom field.",
+      inputSchema: {
+        segmentId: z.string().optional().describe("Only export this saved segment"),
+        filter: contactFilterSchema
+          .optional()
+          .describe("Inline contact filter; combines with segmentId using AND"),
+      },
+      outputSchema: z.object({ csv: z.string(), contacts: z.number().int() }),
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const filters: ContactFilterWithAggregator[] = [];
+      if (args.segmentId) {
+        const segment = await getSegment(args.segmentId);
+        if (!segment || segment.teamId !== teamId) return NOT_FOUND;
+        const parsed = contactFilterSchema.safeParse(segment.filter);
+        if (!parsed.success) return INTERNAL_ERROR;
+        filters.push(parsed.data as ContactFilterWithAggregator);
+      }
+      if (args.filter) filters.push(args.filter);
+      const { csv, count } = await exportContactsCsv({
+        teamId,
+        filter: filters.length ? filters : undefined,
+      });
+      return jsonResult({ csv, contacts: count });
+    },
+  );
+
   server.registerTool(
     "list_contacts",
     {

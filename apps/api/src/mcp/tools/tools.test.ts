@@ -86,6 +86,9 @@ mock.module("../../contacts/queries", () => ({
   deleteContact: mocks.deleteContact,
 }));
 
+mock.module("../../contacts/import", () => ({ importContacts: vi.fn() }));
+mock.module("../../contacts/export", () => ({ exportContactsCsv: vi.fn() }));
+
 mock.module("../../contacts/segments-queries", () => ({
   createSegment: vi.fn(),
   deleteSegment: vi.fn(),

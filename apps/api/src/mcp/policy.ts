@@ -42,6 +42,8 @@ const toolPolicies = {
   delete_contact: MCP_SCOPES.contactsWrite,
   add_contact_tag: MCP_SCOPES.contactsWrite,
   remove_contact_tag: MCP_SCOPES.contactsWrite,
+  import_contacts: MCP_SCOPES.contactsWrite,
+  export_contacts: MCP_SCOPES.contactsRead,
 
   list_segments: MCP_SCOPES.contactsRead,
   get_segment: MCP_SCOPES.contactsRead,

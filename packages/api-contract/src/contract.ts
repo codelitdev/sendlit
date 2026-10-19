@@ -22,6 +22,9 @@ import {
   type contactDeliverySchema,
   contactSchema,
   createContactBodySchema,
+  exportContactsQuerySchema,
+  importContactsBodySchema,
+  importContactsResultSchema,
   listContactsQuerySchema,
   updateContactBodySchema,
 } from "./schemas/contacts";
@@ -173,6 +176,31 @@ const contactsContract = c.router(
       summary: "List contacts",
       description:
         "Returns a paginated list of contacts. Pass filter as serialized ContactFilterWithAggregator JSON for inline filtering, or segmentId to only return contacts currently matching that saved segment's filter (404 if the segment doesn't exist). SendLit supports fixed generic contact filters over first-class fields, tags, and custom fields; client-specific concepts should be synced into namespaced tags or customFields. q, filter, and segmentId combine with AND. The response's total reflects the combined filters.",
+    },
+    import: {
+      method: "POST",
+      path: "/contacts/import",
+      body: importContactsBodySchema,
+      responses: {
+        200: importContactsResultSchema,
+        400: errorSchema,
+      },
+      summary: "Import contacts",
+      description:
+        "Creates or updates up to 1000 contacts per request, matched by email. A status can only get stricter (subscribed < unsubscribed < bounced < complained): an import never re-subscribes an unsubscribed or suppressed contact, and bounced or complained rows are imported unsubscribed and added to the suppression list. Paused contacts stay subscribed with the `paused` tag. Tags and custom fields are merged into existing contacts, and an earlier createdAt replaces a later one. Imports don't trigger sequences. Subscribed contacts over the plan's limit are skipped with `plan_limit_reached`.",
+    },
+    export: {
+      method: "GET",
+      path: "/contacts/export",
+      query: exportContactsQuerySchema,
+      responses: {
+        200: c.otherResponse({ contentType: "text/csv", body: z.string() }),
+        400: errorSchema,
+        404: errorSchema,
+      },
+      summary: "Export contacts as CSV",
+      description:
+        "Returns every contact, or those matching segmentId and/or filter, as CSV: email, name, status (subscribed, unsubscribed, bounced or complained), tags, created_at, suppression_reason, then one column per custom field.",
     },
     get: {
       method: "GET",
