@@ -32,6 +32,8 @@ provisioning.
 
 Manage keys from the Teams page or through the Teams API. Keys are team-scoped and shown in full only once when created. Store the secret immediately; if it is lost or exposed, revoke it and create a replacement.
 
-For multi-tenant provisioning, use an organization API key with the
-`teams:provision` scope. It is sent as a Bearer token to the provisioning API;
-the old shared provisioning secret is not used.
+For multi-tenant provisioning, use an organization API key with
+`organization:read`, `teams:provision`, and `teams:read`. It is sent as a
+Bearer token to the provisioning API; the old shared provisioning secret is
+not used. See [Headless organization setup](/developers/headless-provisioning)
+for the complete setup and key handoff.

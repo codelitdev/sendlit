@@ -1,0 +1,3 @@
+[test]
+# Runs before each test file: the env defaults app modules read at import time.
+preload = ["./src/test/setup.ts"]

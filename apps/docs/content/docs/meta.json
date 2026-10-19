@@ -1,14 +1,14 @@
 {
-    "title": "SendLit",
-    "pages": [
-        "index",
-        "getting-started",
-        "email-marketing",
-        "email-blocks",
-        "workspace",
-        "activity",
-        "self-hosting",
-        "developers",
-        "api-reference"
-    ]
+  "title": "SendLit",
+  "pages": [
+    "index",
+    "getting-started",
+    "email-marketing",
+    "email-blocks",
+    "workspace",
+    "activity",
+    "self-hosting",
+    "developers",
+    "api-reference"
+  ]
 }

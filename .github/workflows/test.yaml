@@ -1,28 +1,23 @@
 name: Testing
 on:
+    pull_request:
     push:
         branches:
             - "**"
         tags-ignore:
             - "*"
 
+permissions:
+    contents: read
+
 jobs:
     test:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
-            - uses: pnpm/action-setup@v4
-            - uses: actions/setup-node@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+            - uses: oven-sh/setup-bun@v2
               with:
-                  node-version: "24"
-                  cache: pnpm
-            - run: pnpm install --frozen-lockfile
-            - name: Build packages
-              run: |
-                  pnpm --filter @sendlit/api-contract build
-                  pnpm --filter @sendlit/email-editor build
-                  pnpm --filter @sendlit/email-blocks build
-            - name: Running tests
-              run: |
-                  pnpm test
-              working-directory: ./
+                  bun-version: 1.4.1
+            - run: bun install --frozen-lockfile
+            - run: bun run build:packages
+            - run: bun run test

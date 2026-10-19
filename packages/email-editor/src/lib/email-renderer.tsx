@@ -1,181 +1,167 @@
+import { Body, Container, Head, Html, Preview } from "@react-email/components";
+import { pretty, render } from "@react-email/render";
 import React from "react";
-import { render, pretty } from "@react-email/render";
-import { Html, Head, Preview, Body, Container } from "@react-email/components";
-import type { Email, EmailBlock } from "../types/email-editor";
+import { Image, Link as LinkBlock, Separator, Text } from "@/blocks";
 import type { LinkBlockSettings } from "@/blocks/link/types";
 import type { BlockComponent, BlockRegistry } from "../types/block-registry";
-import { Text, Link as LinkBlock, Separator, Image } from "@/blocks";
+import type { Email, EmailBlock } from "../types/email-editor";
 
 export interface UtmParams {
-    source: string;
-    medium: string;
-    campaign: string;
+  source: string;
+  medium: string;
+  campaign: string;
 }
 
 function stringifyUnknownError(err: unknown): string {
-    if (err instanceof Error) {
-        return err.message;
-    }
+  if (err instanceof Error) {
+    return err.message;
+  }
 
-    if (typeof err === "string") {
-        return err;
-    }
+  if (typeof err === "string") {
+    return err;
+  }
 
-    try {
-        return JSON.stringify(err);
-    } catch {
-        return String(err);
-    }
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
 }
 
 function appendUtmParams(url: string, utm: UtmParams): string {
-    try {
-        const urlObj = new URL(url);
-        urlObj.searchParams.set("utm_source", utm.source);
-        urlObj.searchParams.set("utm_medium", utm.medium);
-        urlObj.searchParams.set("utm_campaign", utm.campaign);
-        return urlObj.toString();
-    } catch {
-        // If URL is invalid, return original
-        return url;
-    }
+  try {
+    const urlObj = new URL(url);
+    urlObj.searchParams.set("utm_source", utm.source);
+    urlObj.searchParams.set("utm_medium", utm.medium);
+    urlObj.searchParams.set("utm_campaign", utm.campaign);
+    return urlObj.toString();
+  } catch {
+    // If URL is invalid, return original
+    return url;
+  }
 }
 
 // Create the email template component
 export function EmailTemplate({
-    email,
-    utmParams,
-    blockRegistry,
-    renderContext,
+  email,
+  utmParams,
+  blockRegistry,
+  renderContext,
 }: {
-    email: Email;
-    utmParams?: UtmParams;
-    blockRegistry: BlockRegistry;
-    renderContext?: unknown;
+  email: Email;
+  utmParams?: UtmParams;
+  blockRegistry: BlockRegistry;
+  renderContext?: unknown;
 }) {
-    // Function to render a block based on its type
-    const renderBlock = (block: EmailBlock) => {
-        const blockComponent = blockRegistry[block.blockType];
-        if (!blockComponent) {
-            return (
-                <div key={block.id}>Unknown block type: {block.blockType}</div>
-            );
-        }
+  // Function to render a block based on its type
+  const renderBlock = (block: EmailBlock) => {
+    const blockComponent = blockRegistry[block.blockType];
+    if (!blockComponent) {
+      return <div key={block.id}>Unknown block type: {block.blockType}</div>;
+    }
 
-        // Clone the block and modify URLs if UTM params are provided
-        let modifiedBlock = block;
-        if (
-            utmParams &&
-            block.blockType === "link" &&
-            (block.settings as LinkBlockSettings).url
-        ) {
-            modifiedBlock = {
-                ...block,
-                settings: {
-                    ...block.settings,
-                    url: appendUtmParams(
-                        (block.settings as LinkBlockSettings).url,
-                        utmParams,
-                    ),
-                },
-            };
-        }
+    // Clone the block and modify URLs if UTM params are provided
+    let modifiedBlock = block;
+    if (
+      utmParams &&
+      block.blockType === "link" &&
+      (block.settings as LinkBlockSettings).url
+    ) {
+      modifiedBlock = {
+        ...block,
+        settings: {
+          ...block.settings,
+          url: appendUtmParams((block.settings as LinkBlockSettings).url, utmParams),
+        },
+      };
+    }
 
-        // Use the block component directly
-        const BlockComponent = blockComponent.block;
-        return (
-            <BlockComponent
-                key={block.id}
-                block={modifiedBlock}
-                style={email.style}
-                renderContext={renderContext}
-            />
-        );
-    };
-
+    // Use the block component directly
+    const BlockComponent = blockComponent.block;
     return (
-        <Html>
-            <Head />
-            {email.meta?.previewText && (
-                <Preview>{email.meta.previewText}</Preview>
-            )}
-            <Body
-                style={{
-                    backgroundColor: email.style.colors.background,
-                    color: email.style.colors.foreground,
-                    fontFamily: email.style.typography.text.fontFamily,
-                    padding: `${email.style.structure.page.marginY || "0"} 0`,
-                }}
-            >
-                <Container
-                    style={{
-                        maxWidth: email.style.structure.page.width,
-                        backgroundColor: email.style.structure.page.background,
-                        color:
-                            email.style.structure.page.foreground ||
-                            email.style.colors.foreground,
-                        borderWidth: email.style.structure.page.borderWidth,
-                        borderStyle: email.style.structure.page.borderStyle,
-                        borderColor: email.style.colors.border,
-                        borderRadius: email.style.structure.page.borderRadius,
-                        overflow: "hidden",
-                    }}
-                >
-                    {email.content.map((block, index) => (
-                        <React.Fragment key={block.id || index}>
-                            {renderBlock(block)}
-                        </React.Fragment>
-                    ))}
-                </Container>
-            </Body>
-        </Html>
+      <BlockComponent
+        key={block.id}
+        block={modifiedBlock}
+        style={email.style}
+        renderContext={renderContext}
+      />
     );
+  };
+
+  return (
+    <Html>
+      <Head />
+      {email.meta?.previewText && <Preview>{email.meta.previewText}</Preview>}
+      <Body
+        style={{
+          backgroundColor: email.style.colors.background,
+          color: email.style.colors.foreground,
+          fontFamily: email.style.typography.text.fontFamily,
+          padding: `${email.style.structure.page.marginY || "0"} 0`,
+        }}
+      >
+        <Container
+          style={{
+            maxWidth: email.style.structure.page.width,
+            backgroundColor: email.style.structure.page.background,
+            color:
+              email.style.structure.page.foreground || email.style.colors.foreground,
+            borderWidth: email.style.structure.page.borderWidth,
+            borderStyle: email.style.structure.page.borderStyle,
+            borderColor: email.style.colors.border,
+            borderRadius: email.style.structure.page.borderRadius,
+            overflow: "hidden",
+          }}
+        >
+          {email.content.map((block, index) => (
+            <React.Fragment key={block.id || index}>
+              {renderBlock(block)}
+            </React.Fragment>
+          ))}
+        </Container>
+      </Body>
+    </Html>
+  );
 }
 
 export async function renderEmailToHtml({
-    email,
-    utmParams,
-    blocks,
-    renderContext,
+  email,
+  utmParams,
+  blocks,
+  renderContext,
 }: {
-    email: Email;
-    utmParams?: UtmParams;
-    blocks?: BlockComponent<any, any>[];
-    renderContext?: unknown;
+  email: Email;
+  utmParams?: UtmParams;
+  blocks?: BlockComponent<any, any>[];
+  renderContext?: unknown;
 }): Promise<string> {
-    try {
-        // Create block registry from blocks or use defaults
-        const blockRegistry: BlockRegistry = {};
-        const defaultBlocks = [
-            Text,
-            LinkBlock,
-            Separator,
-            Image,
-            ...(blocks ?? []),
-        ];
+  try {
+    // Create block registry from blocks or use defaults
+    const blockRegistry: BlockRegistry = {};
+    const defaultBlocks = [Text, LinkBlock, Separator, Image, ...(blocks ?? [])];
 
-        for (const block of defaultBlocks) {
-            blockRegistry[block.metadata.name] = block;
-        }
-
-        const template = (
-            <EmailTemplate
-                email={email}
-                utmParams={utmParams}
-                blockRegistry={blockRegistry}
-                renderContext={renderContext}
-            />
-        );
-        const renderedHtml = await render(template);
-
-        try {
-            return await pretty(renderedHtml);
-        } catch {
-            // Pretty-printing is optional. If formatting fails in a given
-            // runtime, return the valid rendered markup instead of an error page.
-            return renderedHtml;
-        }
-    } catch (err) {
-        return `<h1>Error: ${stringifyUnknownError(err)}</h1>`;
+    for (const block of defaultBlocks) {
+      blockRegistry[block.metadata.name] = block;
     }
+
+    const template = (
+      <EmailTemplate
+        email={email}
+        utmParams={utmParams}
+        blockRegistry={blockRegistry}
+        renderContext={renderContext}
+      />
+    );
+    const renderedHtml = await render(template);
+
+    try {
+      return await pretty(renderedHtml);
+    } catch {
+      // Pretty-printing is optional. If formatting fails in a given
+      // runtime, return the valid rendered markup instead of an error page.
+      return renderedHtml;
+    }
+  } catch (err) {
+    return `<h1>Error: ${stringifyUnknownError(err)}</h1>`;
+  }
 }

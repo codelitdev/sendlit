@@ -1,24 +1,24 @@
-import { initClient } from "@ts-rest/core";
 import {
-    contactFilterSchema,
-    contract,
-    type CustomFields,
+  type CustomFields,
+  contactFilterSchema,
+  contract,
 } from "@sendlit/api-contract";
-import { ApiError } from "./api-client";
-import {
-    clearTeamIdCookie,
-    isStaleTeamSelectionError,
-    needsTeamSelection,
-} from "./tokens";
 import type {
-    Contact,
-    ContactFilterWithAggregator,
-    EmailTemplate,
-    MailType,
-    Sequence,
-    SequenceStats,
+  Contact,
+  ContactFilterWithAggregator,
+  EmailTemplate,
+  MailType,
+  Sequence,
+  SequenceStats,
 } from "@sendlit/email-blocks";
 import type { Email } from "@sendlit/email-editor";
+import { initClient } from "@ts-rest/core";
+import { ApiError } from "./api-client";
+import {
+  clearTeamIdCookie,
+  isStaleTeamSelectionError,
+  needsTeamSelection,
+} from "./tokens";
 
 /**
  * Typed client generated from `@sendlit/api-contract` \u2014 the same contract
@@ -29,623 +29,605 @@ import type { Email } from "@sendlit/email-editor";
  * of them needed to change when this replaced the hand-written fetch client.
  */
 const client = initClient(contract, {
-    baseUrl: "/api/proxy",
-    baseHeaders: {},
+  baseUrl: "/api/proxy",
+  baseHeaders: {},
 });
 
 function toApiContactFilter(filter?: ContactFilterWithAggregator) {
-    if (!filter) return undefined;
+  if (!filter) return undefined;
 
-    const parsedFilter = contactFilterSchema.safeParse(filter);
-    if (!parsedFilter.success) {
-        throw new ApiError(400, "Invalid filter");
-    }
-    return parsedFilter.data;
+  const parsedFilter = contactFilterSchema.safeParse(filter);
+  if (!parsedFilter.success) {
+    throw new ApiError(400, "Invalid filter");
+  }
+  return parsedFilter.data;
 }
 
 async function unwrap<T>(
-    promise: Promise<{ status: number; body: unknown }>,
+  promise: Promise<{ status: number; body: unknown }>,
 ): Promise<T> {
-    const result = await promise;
+  const result = await promise;
 
-    if (result.status >= 200 && result.status < 300) {
-        return result.body as T;
+  if (result.status >= 200 && result.status < 300) {
+    return result.body as T;
+  }
+
+  if (result.status === 401 && typeof window !== "undefined") {
+    window.location.href = "/login";
+    // Never resolves \u2014 the browser is navigating away.
+    return new Promise<T>(() => {});
+  }
+
+  const errorBody = result.body as { error?: string } | undefined;
+  if (typeof window !== "undefined") {
+    if (
+      needsTeamSelection(result.status, errorBody?.error) &&
+      !window.location.pathname.startsWith("/team-selection")
+    ) {
+      if (isStaleTeamSelectionError(errorBody?.error)) {
+        clearTeamIdCookie();
+      }
+      window.location.href = "/team-selection";
+      return new Promise<T>(() => {});
     }
+  }
 
-    if (result.status === 401 && typeof window !== "undefined") {
-        window.location.href = "/login";
-        // Never resolves \u2014 the browser is navigating away.
-        return new Promise<T>(() => {});
-    }
-
-    const errorBody = result.body as { error?: string } | undefined;
-    if (typeof window !== "undefined") {
-        if (
-            needsTeamSelection(result.status, errorBody?.error) &&
-            !window.location.pathname.startsWith("/team-selection")
-        ) {
-            if (isStaleTeamSelectionError(errorBody?.error)) {
-                clearTeamIdCookie();
-            }
-            window.location.href = "/team-selection";
-            return new Promise<T>(() => {});
-        }
-    }
-
-    throw new ApiError(
-        result.status,
-        errorBody?.error || `Request failed (${result.status})`,
-    );
+  throw new ApiError(
+    result.status,
+    errorBody?.error || `Request failed (${result.status})`,
+  );
 }
 
 export interface Paginated<T> {
-    items: T[];
-    total: number;
+  items: T[];
+  total: number;
 }
 
 export interface Media {
-    mediaId: string;
-    url: string;
-    thumbnailUrl?: string | null;
-    mediaLitId: string;
-    fileName?: string | null;
-    mimeType?: string | null;
-    size?: number | null;
-    width?: number | null;
-    height?: number | null;
-    alt?: string | null;
-    caption?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
+  mediaId: string;
+  url: string;
+  thumbnailUrl?: string | null;
+  mediaLitId: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  size?: number | null;
+  width?: number | null;
+  height?: number | null;
+  alt?: string | null;
+  caption?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface MediaReference {
-    resourceType: "TEMPLATE" | "SEQUENCE_EMAIL";
-    resourcePublicId: string;
-    parentResourcePublicId?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
+  resourceType: "TEMPLATE" | "SEQUENCE_EMAIL";
+  resourcePublicId: string;
+  parentResourcePublicId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 // ---- Teams ----------------------------------------------------------------
 
 export interface Team {
-    teamId: string;
-    organizationId?: string;
-    organizationName?: string;
-    name: string;
-    ownerAccountId?: string;
-    externalId?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
+  teamId: string;
+  organizationId?: string;
+  organizationName?: string;
+  name: string;
+  ownerAccountId?: string;
+  externalId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface ApiKey {
-    keyId: string;
-    keyPrefix: string;
-    name: string;
-    expiresAt?: string | null;
-    lastUsedAt?: string | null;
-    revokedAt?: string | null;
-    createdAt?: string | null;
+  keyId: string;
+  keyPrefix: string;
+  name: string;
+  expiresAt?: string | null;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+  createdAt?: string | null;
 }
 
 export interface CreatedApiKey extends ApiKey {
-    key: string;
+  key: string;
 }
 
 export function listTeams() {
-    return client.teams.list().then((result) => {
-        if (result.status >= 200 && result.status < 300) {
-            return result.body as { items: Team[] };
-        }
+  return client.teams.list().then((result) => {
+    if (result.status >= 200 && result.status < 300) {
+      return result.body as { items: Team[] };
+    }
 
-        const errorBody = result.body as
-            | { error?: string; teams?: Pick<Team, "teamId" | "name">[] }
-            | undefined;
-        if (result.status === 409 && errorBody?.teams) {
-            return { items: errorBody.teams };
-        }
+    const errorBody = result.body as
+      | { error?: string; teams?: Pick<Team, "teamId" | "name">[] }
+      | undefined;
+    if (result.status === 409 && errorBody?.teams) {
+      return { items: errorBody.teams };
+    }
 
-        return unwrap<{ items: Team[] }>(Promise.resolve(result));
-    });
+    return unwrap<{ items: Team[] }>(Promise.resolve(result));
+  });
 }
 
 export function createTeam(name: string) {
-    return unwrap<Team>(client.teams.create({ body: { name } }));
+  return unwrap<Team>(client.teams.create({ body: { name } }));
 }
 
 export function renameTeam(teamId: string, name: string) {
-    return unwrap<Team>(
-        client.teams.rename({ params: { teamId }, body: { name } }),
-    );
+  return unwrap<Team>(client.teams.rename({ params: { teamId }, body: { name } }));
 }
 
 export function deleteTeam(teamId: string) {
-    return unwrap<void>(client.teams.remove({ params: { teamId } }));
+  return unwrap<void>(client.teams.remove({ params: { teamId } }));
 }
 
 export function listTeamKeys(teamId: string) {
-    return unwrap<{ items: ApiKey[] }>(
-        client.teams.listKeys({ params: { teamId } }),
-    );
+  return unwrap<{ items: ApiKey[] }>(client.teams.listKeys({ params: { teamId } }));
 }
 
 export function createTeamKey(teamId: string, name: string) {
-    return unwrap<CreatedApiKey>(
-        client.teams.createKey({ params: { teamId }, body: { name } }),
-    );
+  return unwrap<CreatedApiKey>(
+    client.teams.createKey({ params: { teamId }, body: { name } }),
+  );
 }
 
 export function deleteTeamKey(teamId: string, key: string) {
-    return unwrap<void>(
-        client.teams.removeKey({ params: { teamId, keyId: key } }),
-    );
+  return unwrap<void>(client.teams.removeKey({ params: { teamId, keyId: key } }));
 }
 
 // ---- Contacts ----------------------------------------------------------
 
 export function listContacts(
-    params: {
-        q?: string;
-        segmentId?: string;
-        filter?: ContactFilterWithAggregator;
-        offset?: number;
-    } = {},
+  params: {
+    q?: string;
+    segmentId?: string;
+    filter?: ContactFilterWithAggregator;
+    offset?: number;
+  } = {},
 ) {
-    const filter = toApiContactFilter(params.filter);
-    return unwrap<Paginated<Contact>>(
-        client.contacts.list({
-            query: {
-                q: params.q,
-                segmentId: params.segmentId,
-                filter: filter ? JSON.stringify(filter) : undefined,
-                offset: params.offset,
-            },
-        }),
-    );
+  const filter = toApiContactFilter(params.filter);
+  return unwrap<Paginated<Contact>>(
+    client.contacts.list({
+      query: {
+        q: params.q,
+        segmentId: params.segmentId,
+        filter: filter ? JSON.stringify(filter) : undefined,
+        offset: params.offset,
+      },
+    }),
+  );
 }
 
 export function createContact(input: {
-    email: string;
-    name?: string;
-    tags?: string[];
-    customFields?: CustomFields;
+  email: string;
+  name?: string;
+  tags?: string[];
+  customFields?: CustomFields;
 }) {
-    return unwrap<Contact>(client.contacts.create({ body: input }));
+  return unwrap<Contact>(client.contacts.create({ body: input }));
 }
 
 export function getContact(contactId: string) {
-    return unwrap<Contact>(client.contacts.get({ params: { contactId } }));
+  return unwrap<Contact>(client.contacts.get({ params: { contactId } }));
 }
 
 export function updateContact(
-    contactId: string,
-    patch: Partial<
-        Pick<Contact, "name" | "subscribed" | "tags" | "customFields">
-    >,
+  contactId: string,
+  patch: Partial<Pick<Contact, "name" | "subscribed" | "tags" | "customFields">>,
 ) {
-    return unwrap<Contact>(
-        client.contacts.update({ params: { contactId }, body: patch as any }),
-    );
+  return unwrap<Contact>(
+    client.contacts.update({ params: { contactId }, body: patch as any }),
+  );
 }
 
 export function addContactTag(contactId: string, tag: string) {
-    return unwrap<Contact>(
-        client.contacts.addTag({ params: { contactId, tag } }),
-    );
+  return unwrap<Contact>(client.contacts.addTag({ params: { contactId, tag } }));
 }
 
 export function removeContactTag(contactId: string, tag: string) {
-    return unwrap<Contact>(
-        client.contacts.removeTag({ params: { contactId, tag } }),
-    );
+  return unwrap<Contact>(client.contacts.removeTag({ params: { contactId, tag } }));
 }
 
 export function deleteContact(contactId: string) {
-    return unwrap<void>(client.contacts.remove({ params: { contactId } }));
+  return unwrap<void>(client.contacts.remove({ params: { contactId } }));
 }
 
 export interface ContactDelivery {
-    sequenceId: string;
-    sequenceTitle: string;
-    sequenceType: MailType;
-    emailId: string;
-    createdAt: string;
+  sequenceId: string;
+  sequenceTitle: string;
+  sequenceType: MailType;
+  emailId: string;
+  createdAt: string;
 }
 
 export function getContactDeliveries(contactId: string) {
-    return unwrap<ContactDelivery[]>(
-        client.contacts.deliveries({ params: { contactId } }),
-    );
+  return unwrap<ContactDelivery[]>(
+    client.contacts.deliveries({ params: { contactId } }),
+  );
 }
 
 // ---- Segments --------------------------------------------------------------
 
 export interface Segment {
-    segmentId: string;
-    name: string;
-    filter: ContactFilterWithAggregator;
-    createdAt: string | null;
-    updatedAt: string | null;
+  segmentId: string;
+  name: string;
+  filter: ContactFilterWithAggregator;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export function listSegments() {
-    return unwrap<Segment[]>(client.segments.list());
+  return unwrap<Segment[]>(client.segments.list());
 }
 
 export function createSegment(input: {
-    name: string;
-    filter: ContactFilterWithAggregator;
+  name: string;
+  filter: ContactFilterWithAggregator;
 }) {
-    const filter = toApiContactFilter(input.filter);
-    if (!filter) throw new ApiError(400, "Invalid filter");
-    return unwrap<Segment>(
-        client.segments.create({ body: { name: input.name, filter } }),
-    );
+  const filter = toApiContactFilter(input.filter);
+  if (!filter) throw new ApiError(400, "Invalid filter");
+  return unwrap<Segment>(
+    client.segments.create({ body: { name: input.name, filter } }),
+  );
 }
 
 export function deleteSegment(segmentId: string) {
-    return unwrap<void>(client.segments.remove({ params: { segmentId } }));
+  return unwrap<void>(client.segments.remove({ params: { segmentId } }));
 }
 
 // ---- Media --------------------------------------------------------------
 
 export function listMedia(
-    params: { query?: string; page?: number; pageSize?: number } = {},
+  params: { query?: string; page?: number; pageSize?: number } = {},
 ) {
-    return unwrap<Paginated<Media>>(
-        client.media.list({
-            query: {
-                query: params.query,
-                page: params.page,
-                pageSize: params.pageSize,
-            },
-        }),
-    );
+  return unwrap<Paginated<Media>>(
+    client.media.list({
+      query: {
+        query: params.query,
+        page: params.page,
+        pageSize: params.pageSize,
+      },
+    }),
+  );
 }
 
 export function getMedia(mediaId: string) {
-    return unwrap<Media>(client.media.get({ params: { mediaId } }));
+  return unwrap<Media>(client.media.get({ params: { mediaId } }));
 }
 
 export function updateMediaMetadata(
-    mediaId: string,
-    patch: { alt?: string | null; caption?: string | null },
+  mediaId: string,
+  patch: { alt?: string | null; caption?: string | null },
 ) {
-    return unwrap<Media>(
-        client.media.update({ params: { mediaId }, body: patch }),
-    );
+  return unwrap<Media>(client.media.update({ params: { mediaId }, body: patch }));
 }
 
 export function deleteMedia(mediaId: string) {
-    return unwrap<void>(client.media.remove({ params: { mediaId } }));
+  return unwrap<void>(client.media.remove({ params: { mediaId } }));
 }
 
 export function listMediaReferences(mediaId: string) {
-    return unwrap<{ items: MediaReference[] }>(
-        client.media.references({ params: { mediaId } }),
-    );
+  return unwrap<{ items: MediaReference[] }>(
+    client.media.references({ params: { mediaId } }),
+  );
 }
 
 // ---- Templates -----------------------------------------------------------
 
 export interface SystemTemplate {
-    templateId: string;
-    title: string;
+  templateId: string;
+  title: string;
+  description: string;
+  purpose: import("@sendlit/api-contract").TemplatePurpose;
+  content: Email;
+  requiredVariables: string[];
+  variableDefinitions?: Array<{
+    path: string;
     description: string;
-    purpose: import("@sendlit/api-contract").TemplatePurpose;
-    content: Email;
-    requiredVariables: string[];
-    variableDefinitions?: Array<{
-        path: string;
-        description: string;
-        example: unknown;
-    }>;
+    example: unknown;
+  }>;
 }
 
 /** Built-in starting templates (Announcement, New user welcome, Upsell
  * products, Newsletter, Blank) offered alongside a team's own templates. */
 export function listSystemTemplates(
-    purpose?: import("@sendlit/api-contract").TemplatePurpose,
+  purpose?: import("@sendlit/api-contract").TemplatePurpose,
 ) {
-    return unwrap<{ items: SystemTemplate[] }>(
-        client.templates.listSystem({ query: { purpose } }),
-    ).then((res) => res.items);
+  return unwrap<{ items: SystemTemplate[] }>(
+    client.templates.listSystem({ query: { purpose } }),
+  ).then((res) => res.items);
 }
 
 export function listTemplates(
-    purpose?: import("@sendlit/api-contract").TemplatePurpose,
+  purpose?: import("@sendlit/api-contract").TemplatePurpose,
 ) {
-    return unwrap<EmailTemplate[]>(
-        client.templates.list({ query: { purpose } }),
-    );
+  return unwrap<EmailTemplate[]>(client.templates.list({ query: { purpose } }));
 }
 
 export function createTemplate(input: {
-    title: string;
-    purpose: import("@sendlit/api-contract").TemplatePurpose;
-    content: Email;
+  title: string;
+  purpose: import("@sendlit/api-contract").TemplatePurpose;
+  content: Email;
 }) {
-    return unwrap<EmailTemplate>(
-        client.templates.create({ body: input as any }),
-    );
+  return unwrap<EmailTemplate>(client.templates.create({ body: input as any }));
 }
 
 export function duplicateTemplate(
-    templateId: string,
-    input: {
-        title?: string;
-    } = {},
+  templateId: string,
+  input: {
+    title?: string;
+  } = {},
 ) {
-    return unwrap<EmailTemplate>(
-        client.templates.duplicate({
-            params: { templateId },
-            body: input,
-        }),
-    );
+  return unwrap<EmailTemplate>(
+    client.templates.duplicate({
+      params: { templateId },
+      body: input,
+    }),
+  );
 }
 
 export function getTemplate(templateId: string) {
-    return unwrap<EmailTemplate>(
-        client.templates.get({ params: { templateId } }),
-    );
+  return unwrap<EmailTemplate>(client.templates.get({ params: { templateId } }));
 }
 
 export function updateTemplate(
-    templateId: string,
-    patch: { title?: string; content?: Email },
+  templateId: string,
+  patch: { title?: string; content?: Email },
 ) {
-    return unwrap<EmailTemplate>(
-        client.templates.update({ params: { templateId }, body: patch as any }),
-    );
+  return unwrap<EmailTemplate>(
+    client.templates.update({ params: { templateId }, body: patch as any }),
+  );
 }
 
 export function deleteTemplate(templateId: string) {
-    return unwrap<void>(client.templates.remove({ params: { templateId } }));
+  return unwrap<void>(client.templates.remove({ params: { templateId } }));
 }
 
 // ---- Sequences / broadcasts ----------------------------------------------
 
 export function listSequences(
-    type: MailType,
-    params: { offset?: number; itemsPerPage?: number } = {},
+  type: MailType,
+  params: { offset?: number; itemsPerPage?: number } = {},
 ) {
-    return unwrap<Paginated<Sequence>>(
-        client.sequences.list({ query: { type, ...params } }),
-    );
+  return unwrap<Paginated<Sequence>>(
+    client.sequences.list({ query: { type, ...params } }),
+  );
 }
 
 export type DeliverySourceSelection =
-    { type: "organization" } | { type: "team"; espId?: string };
+  | { type: "organization" }
+  | { type: "team"; espId?: string };
 
 export type SendingOption =
-    | {
-          type: "organization";
-          name: string;
-          fromName: string | null;
-          fromEmail: string | null;
-          replyTo: string | null;
-          isDefault: boolean;
-          available: boolean;
-          countsAgainstQuota: true;
-      }
-    | {
-          type: "team";
-          espId: string;
-          name: string;
-          fromName: string | null;
-          fromEmail: string | null;
-          isDefault: boolean;
-          available: boolean;
-          countsAgainstQuota: false;
-      };
+  | {
+      type: "organization";
+      name: string;
+      fromName: string | null;
+      fromEmail: string | null;
+      replyTo: string | null;
+      isDefault: boolean;
+      available: boolean;
+      countsAgainstQuota: true;
+    }
+  | {
+      type: "team";
+      espId: string;
+      name: string;
+      fromName: string | null;
+      fromEmail: string | null;
+      isDefault: boolean;
+      available: boolean;
+      countsAgainstQuota: false;
+    };
 
 export function createSequence(input: {
-    type: MailType;
-    templateId: string;
-    deliverySource?: DeliverySourceSelection;
+  type: MailType;
+  templateId: string;
+  deliverySource?: DeliverySourceSelection;
 }) {
-    return unwrap<Sequence>(client.sequences.create({ body: input }));
+  return unwrap<Sequence>(client.sequences.create({ body: input }));
 }
 
 export function getSequence(sequenceId: string) {
-    return unwrap<Sequence>(client.sequences.get({ params: { sequenceId } }));
+  return unwrap<Sequence>(client.sequences.get({ params: { sequenceId } }));
 }
 
 export function updateSequence(
-    sequenceId: string,
-    patch: {
-        title?: string;
-        triggerType?: string;
-        triggerData?: string;
-        filter?: ContactFilterWithAggregator;
-        emailsOrder?: string[];
-        /** `undefined` leaves the current selection unchanged; `null` clears
-         * it so the team's default delivery source resolves at start. Only settable while
-         * the sequence/broadcast is still `draft` or `paused`. */
-        deliverySource?: DeliverySourceSelection | null;
-    },
+  sequenceId: string,
+  patch: {
+    title?: string;
+    triggerType?: string;
+    triggerData?: string;
+    filter?: ContactFilterWithAggregator;
+    emailsOrder?: string[];
+    /** `undefined` leaves the current selection unchanged; `null` clears
+     * it so the team's default delivery source resolves at start. Only settable while
+     * the sequence/broadcast is still `draft` or `paused`. */
+    deliverySource?: DeliverySourceSelection | null;
+  },
 ) {
-    const { filter, ...rest } = patch;
-    return unwrap<Sequence>(
-        client.sequences.update({
-            params: { sequenceId },
-            body: { ...rest, filter: toApiContactFilter(filter) },
-        }),
-    );
+  const { filter, ...rest } = patch;
+  return unwrap<Sequence>(
+    client.sequences.update({
+      params: { sequenceId },
+      body: { ...rest, filter: toApiContactFilter(filter) },
+    }),
+  );
 }
 
 export function deleteSequence(sequenceId: string) {
-    return unwrap<void>(client.sequences.remove({ params: { sequenceId } }));
+  return unwrap<void>(client.sequences.remove({ params: { sequenceId } }));
 }
 
 export function addSequenceEmail(sequenceId: string, templateId: string) {
-    return unwrap<Sequence>(
-        client.sequences.addEmail({
-            params: { sequenceId },
-            body: { templateId },
-        }),
-    );
+  return unwrap<Sequence>(
+    client.sequences.addEmail({
+      params: { sequenceId },
+      body: { templateId },
+    }),
+  );
 }
 
 export function updateSequenceEmail(
-    sequenceId: string,
-    emailId: string,
-    patch: {
-        subject?: string;
-        content?: Email;
-        delayInMillis?: number;
-        actionType?: string | null;
-        actionData?: Record<string, unknown> | null;
-        published?: boolean;
-    },
+  sequenceId: string,
+  emailId: string,
+  patch: {
+    subject?: string;
+    content?: Email;
+    delayInMillis?: number;
+    actionType?: string | null;
+    actionData?: Record<string, unknown> | null;
+    published?: boolean;
+  },
 ) {
-    return unwrap<Sequence>(
-        client.sequences.updateEmail({
-            params: { sequenceId, emailId },
-            body: patch as any,
-        }),
-    );
+  return unwrap<Sequence>(
+    client.sequences.updateEmail({
+      params: { sequenceId, emailId },
+      body: patch as any,
+    }),
+  );
 }
 
 export function deleteSequenceEmail(sequenceId: string, emailId: string) {
-    return unwrap<Sequence>(
-        client.sequences.removeEmail({ params: { sequenceId, emailId } }),
-    );
+  return unwrap<Sequence>(
+    client.sequences.removeEmail({ params: { sequenceId, emailId } }),
+  );
 }
 
 export function startSequence(sequenceId: string) {
-    return unwrap<Sequence>(client.sequences.start({ params: { sequenceId } }));
+  return unwrap<Sequence>(client.sequences.start({ params: { sequenceId } }));
 }
 
 export function pauseSequence(sequenceId: string) {
-    return unwrap<Sequence>(client.sequences.pause({ params: { sequenceId } }));
+  return unwrap<Sequence>(client.sequences.pause({ params: { sequenceId } }));
 }
 
 export function getSequenceStats(sequenceId: string) {
-    return unwrap<SequenceStats>(
-        client.sequences.stats({ params: { sequenceId } }),
-    );
+  return unwrap<SequenceStats>(client.sequences.stats({ params: { sequenceId } }));
 }
 
 export interface Overview {
-    activeSequences: number;
-    ongoingContacts: number;
-    scheduledBroadcasts: number;
-    mail: { sent: number; queued: number; failed: number; bounced: number };
-    quota: {
-        dailyUsed: number;
-        dailyLimit: number;
-        monthlyUsed: number;
-        monthlyLimit: number;
-    };
+  activeSequences: number;
+  ongoingContacts: number;
+  scheduledBroadcasts: number;
+  mail: { sent: number; queued: number; failed: number; bounced: number };
+  quota: {
+    dailyUsed: number;
+    dailyLimit: number;
+    monthlyUsed: number;
+    monthlyLimit: number;
+  };
 }
 export function getOverview(rangeDays = 7) {
-    return unwrap<Overview>(client.overview.get({ query: { rangeDays } }));
+  return unwrap<Overview>(client.overview.get({ query: { rangeDays } }));
 }
 
 // ---- ESP (email sending provider) ----------------------------------------
 
 export type EspProvider =
-    "smtp" | "sendgrid" | "mailgun" | "postmark" | "ses" | "resend";
+  | "smtp"
+  | "sendgrid"
+  | "mailgun"
+  | "postmark"
+  | "ses"
+  | "resend";
 
 export interface EspConfig {
-    espId: string;
-    name: string;
-    provider: EspProvider;
-    host: string;
-    port: number;
-    secure: boolean;
-    username: string | null;
-    hasPassword: boolean;
-    fromName: string | null;
-    fromEmail: string | null;
-    lastTestedAt: string | null;
-    lastTestStatus: "success" | "failed" | null;
-    lastTestError: string | null;
-    status: "draft" | "active" | "suspended" | "draining" | "retired";
-    secretVersion: number;
-    activatedAt: string | null;
-    drainUntil: string | null;
-    retiredAt: string | null;
-    updatedAt: string;
+  espId: string;
+  name: string;
+  provider: EspProvider;
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string | null;
+  hasPassword: boolean;
+  fromName: string | null;
+  fromEmail: string | null;
+  lastTestedAt: string | null;
+  lastTestStatus: "success" | "failed" | null;
+  lastTestError: string | null;
+  status: "draft" | "active" | "suspended" | "draining" | "retired";
+  secretVersion: number;
+  activatedAt: string | null;
+  drainUntil: string | null;
+  retiredAt: string | null;
+  updatedAt: string;
 }
 
 export interface EspConnectionInput {
-    provider: EspProvider;
-    host: string;
-    port: number;
-    secure: boolean;
-    username?: string;
-    /** Omit to keep the existing secret unchanged; send "" to clear it. */
-    password?: string;
-    fromName?: string;
-    fromEmail?: string;
+  provider: EspProvider;
+  host: string;
+  port: number;
+  secure: boolean;
+  username?: string;
+  /** Omit to keep the existing secret unchanged; send "" to clear it. */
+  password?: string;
+  fromName?: string;
+  fromEmail?: string;
 }
 
 // ---- ESP collection (multiple user-managed ESPs per team) -----------------
 
 export function listEsps() {
-    return unwrap<{ items: EspConfig[] }>(client.settings.esps.list());
+  return unwrap<{ items: EspConfig[] }>(client.settings.esps.list());
 }
 
 /** All sources available to the active team. Shared organization ESPs are
  * deliberately redacted and expose only safe sender metadata. */
 export function listSendingOptions() {
-    return unwrap<{ items: SendingOption[] }>(client.delivery.sendingOptions());
+  return unwrap<{ items: SendingOption[] }>(client.delivery.sendingOptions());
 }
 
 export function createEsp(input: EspConnectionInput & { name: string }) {
-    return unwrap<EspConfig>(client.settings.esps.create({ body: input }));
+  return unwrap<EspConfig>(client.settings.esps.create({ body: input }));
 }
 
 export function getEsp(espId: string) {
-    return unwrap<EspConfig>(client.settings.esps.get({ params: { espId } }));
+  return unwrap<EspConfig>(client.settings.esps.get({ params: { espId } }));
 }
 
 export function updateEsp(
-    espId: string,
-    patch: Partial<EspConnectionInput> & {
-        name?: string;
-    },
+  espId: string,
+  patch: Partial<EspConnectionInput> & {
+    name?: string;
+  },
 ) {
-    return unwrap<EspConfig>(
-        client.settings.esps.update({ params: { espId }, body: patch }),
-    );
+  return unwrap<EspConfig>(
+    client.settings.esps.update({ params: { espId }, body: patch }),
+  );
 }
 
 export function getTeamDeliverySettings() {
-    return unwrap<{
-        defaultSource: "organization" | "team" | null;
-        defaultTeamEspId: string | null;
-    }>(client.delivery.getSettings());
+  return unwrap<{
+    defaultSource: "organization" | "team" | null;
+    defaultTeamEspId: string | null;
+  }>(client.delivery.getSettings());
 }
 
 export function setTeamEspAsDefault(espId: string) {
-    return unwrap(
-        client.delivery.updateSettings({
-            body: { deliverySource: { type: "team", espId } },
-        }),
-    );
+  return unwrap(
+    client.delivery.updateSettings({
+      body: { deliverySource: { type: "team", espId } },
+    }),
+  );
 }
 
 /** Throws `ApiError(409, ...)` when the ESP is referenced by an
  * active/paused sequence or a queued transactional email. */
 export function deleteEsp(espId: string) {
-    return unwrap<void>(client.settings.esps.remove({ params: { espId } }));
+  return unwrap<void>(client.settings.esps.remove({ params: { espId } }));
 }
 
 export function testEsp(espId: string, to?: string) {
-    return unwrap<{ success: boolean; error?: string }>(
-        client.settings.esps.test({ params: { espId }, body: { to } }),
-    );
+  return unwrap<{ success: boolean; error?: string }>(
+    client.settings.esps.test({ params: { espId }, body: { to } }),
+  );
 }
 
 export function activateEsp(espId: string) {
-    return unwrap<EspConfig>(
-        client.settings.esps.activate({ params: { espId } }),
-    );
+  return unwrap<EspConfig>(client.settings.esps.activate({ params: { espId } }));
 }
 
 // ---- Bounce/complaint delivery feedback ------------------------------------
@@ -653,71 +635,68 @@ export function activateEsp(espId: string) {
 /** Providers with a reviewed webhook adapter — see
  * `docs/bounces-and-complaints.md`. Only these can configure feedback. */
 export const feedbackCapableProviders: EspProvider[] = [
-    "resend",
-    "postmark",
-    "sendgrid",
-    "mailgun",
-    "ses",
+  "resend",
+  "postmark",
+  "sendgrid",
+  "mailgun",
+  "ses",
 ];
 
 export type FeedbackConnectionStatus =
-    "pending" | "healthy" | "stale" | "error" | "retiring" | "disabled";
+  | "pending"
+  | "healthy"
+  | "stale"
+  | "error"
+  | "retiring"
+  | "disabled";
 
 export interface FeedbackConnection {
-    connectionId: string;
-    espId: string;
-    provider: string;
-    webhookUrl: string;
-    hasCredential: boolean;
-    /** SES only: the SNS topic this connection accepts messages from. */
-    expectedTopicArn?: string | null;
-    /** SES only: when SendLit confirmed the SNS subscription. */
-    subscriptionConfirmedAt?: string | null;
-    status: FeedbackConnectionStatus;
-    lastReceivedAt?: string | null;
-    lastVerifiedAt?: string | null;
-    lastErrorCode?: string | null;
+  connectionId: string;
+  espId: string;
+  provider: string;
+  webhookUrl: string;
+  hasCredential: boolean;
+  /** SES only: the SNS topic this connection accepts messages from. */
+  expectedTopicArn?: string | null;
+  /** SES only: when SendLit confirmed the SNS subscription. */
+  subscriptionConfirmedAt?: string | null;
+  status: FeedbackConnectionStatus;
+  lastReceivedAt?: string | null;
+  lastVerifiedAt?: string | null;
+  lastErrorCode?: string | null;
 }
 
 /** `credential` for every provider except SES, which takes the SNS
  * `expectedTopicArn` instead. */
 export interface FeedbackConnectionInput {
-    credential?: string;
-    expectedTopicArn?: string;
+  credential?: string;
+  expectedTopicArn?: string;
 }
 
 export function getEspFeedback(espId: string) {
-    return unwrap<FeedbackConnection | null>(
-        client.feedback.get({ params: { espId } }),
-    );
+  return unwrap<FeedbackConnection | null>(client.feedback.get({ params: { espId } }));
 }
 
-export function upsertEspFeedback(
-    espId: string,
-    input: FeedbackConnectionInput,
-) {
-    return unwrap<FeedbackConnection>(
-        client.feedback.upsert({ params: { espId }, body: input }),
-    );
+export function upsertEspFeedback(espId: string, input: FeedbackConnectionInput) {
+  return unwrap<FeedbackConnection>(
+    client.feedback.upsert({ params: { espId }, body: input }),
+  );
 }
 
-export function rotateEspFeedback(
-    espId: string,
-    input: FeedbackConnectionInput,
-) {
-    return unwrap<FeedbackConnection>(
-        client.feedback.rotate({ params: { espId }, body: input }),
-    );
+export function rotateEspFeedback(espId: string, input: FeedbackConnectionInput) {
+  return unwrap<FeedbackConnection>(
+    client.feedback.rotate({ params: { espId }, body: input }),
+  );
 }
 
 export function testEspFeedback(espId: string) {
-    return unwrap<{ success: boolean; error?: string }>(
-        client.feedback.test({ params: { espId } }),
-    );
+  return unwrap<{ success: boolean; error?: string }>(
+    client.feedback.test({ params: { espId } }),
+  );
 }
 
 export function deleteEspFeedback(espId: string) {
-    return unwrap<void>(client.feedback.remove({ params: { espId } }));
+  return unwrap<void>(client.feedback.remove({ params: { espId } }));
 }
 
 // ---- Organizations --------------------------------------------------------
@@ -726,663 +705,916 @@ export function deleteEspFeedback(espId: string) {
  * team. These calls still go through the session-cookie BFF, so organization
  * keys and ESP credentials never enter browser storage. */
 async function organizationRequest<T>(
-    path: string,
-    init: RequestInit = {},
+  path: string,
+  init: RequestInit = {},
 ): Promise<T> {
-    const response = await fetch(`/api/proxy${path}`, {
-        ...init,
-        headers: {
-            ...(init.body ? { "Content-Type": "application/json" } : {}),
-            ...init.headers,
-        },
-    });
-    if (response.ok) {
-        if (response.status === 204) return undefined as T;
-        return (await response.json()) as T;
+  const csrf =
+    typeof document !== "undefined"
+      ? document.cookie.match(/(?:^|;\s*)sendlit_csrf=([^;]+)/)?.[1]
+      : undefined;
+  const response = await fetch(`/api/proxy${path}`, {
+    ...init,
+    headers: {
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(csrf ? { "X-Sendlit-CSRF": decodeURIComponent(csrf) } : {}),
+      ...init.headers,
+    },
+  });
+  if (response.ok) {
+    if (response.status === 204) return undefined as T;
+    return (await response.json()) as T;
+  }
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+  if (response.status === 401 && typeof window !== "undefined") {
+    // Step-up auth for billing, not a dead session. Keep the dashboard
+    // signed in and let the billing dialog show the error.
+    if (body?.error === "recent_authentication_required") {
+      throw new ApiError(401, "recent_authentication_required");
     }
-    if (response.status === 401 && typeof window !== "undefined") {
-        window.location.href = "/login";
-        return new Promise<T>(() => {});
-    }
-    const body = (await response.json().catch(() => null)) as {
-        error?: string;
-    } | null;
-    throw new ApiError(
-        response.status,
-        body?.error || `Request failed (${response.status})`,
-    );
+    window.location.href = "/login";
+    return new Promise<T>(() => {});
+  }
+  throw new ApiError(
+    response.status,
+    body?.error || `Request failed (${response.status})`,
+  );
+}
+
+type BillingAction =
+  | "organization_checkout"
+  | "checkout"
+  | "portal"
+  | "plan_change"
+  | "cancellation"
+  | "organization_close"
+  | "pending_hide";
+
+/** Sensitive billing writes use a short-lived, single-use token bound to the
+ * current human session, action, and target organization. */
+async function billingActionRequest<T>(
+  action: BillingAction,
+  target: string,
+  path: string,
+  init: RequestInit,
+): Promise<T> {
+  const authorization = await organizationRequest<{
+    token: string;
+    expiresAt: string;
+  }>("/billing/action-token", {
+    method: "POST",
+    body: JSON.stringify({ action, target }),
+  });
+  return organizationRequest<T>(path, {
+    ...init,
+    headers: {
+      ...init.headers,
+      "X-Sendlit-Billing-Action-Token": authorization.token,
+    },
+  });
 }
 
 export interface Organization {
-    organizationId: string;
-    name: string;
-    status: "active" | "suspended" | "closed";
-    createdAt: string;
-    updatedAt: string;
+  organizationId: string;
+  name: string;
+  status: "pending_payment" | "active" | "suspended" | "abandoned" | "closed";
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface OrganizationTeam {
-    teamId: string;
-    name: string;
-    status: "active" | "sending_suspended" | "archived";
-    externalId: string | null;
-    createdAt: string | null;
-    updatedAt: string | null;
-    viewerIsMember?: boolean;
+  teamId: string;
+  name: string;
+  status: "active" | "sending_suspended" | "archived";
+  externalId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  viewerIsMember?: boolean;
 }
 
 export interface OrganizationMember {
-    userId: string;
-    email: string;
-    name: string;
-    image: string | null;
-    role: "owner" | "admin" | "member";
-    createdAt: string;
-    updatedAt: string;
+  userId: string;
+  email: string;
+  name: string;
+  image: string | null;
+  role: "owner" | "admin" | "member";
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface OrganizationUsageWindow {
-    limit: number | null;
-    accepted: number;
-    reserved: number;
-    remaining: number | null;
-    resetsAt: string;
+  limit: number | null;
+  accepted: number;
+  reserved: number;
+  remaining: number | null;
+  resetsAt: string;
 }
 
 export interface OrganizationUsage {
-    day: OrganizationUsageWindow;
-    month: OrganizationUsageWindow;
+  day: OrganizationUsageWindow;
+  month: OrganizationUsageWindow;
 }
 
 export type OrganizationMailActivityRangeDays = 1 | 3 | 7 | 30;
 
 export interface OrganizationMailCounts {
-    sent: number;
-    queued: number;
-    failed: number;
-    bounced: number;
+  sent: number;
+  queued: number;
+  failed: number;
+  bounced: number;
 }
 
 export interface OrganizationMailActivityTeam {
-    teamId: string;
-    name: string;
-    status: OrganizationTeam["status"];
-    externalId: string | null;
-    mail: OrganizationMailCounts;
+  teamId: string;
+  name: string;
+  status: OrganizationTeam["status"];
+  externalId: string | null;
+  mail: OrganizationMailCounts;
 }
 
 export interface OrganizationMailActivity {
-    rangeDays: OrganizationMailActivityRangeDays;
-    totals: OrganizationMailCounts;
-    teams: OrganizationMailActivityTeam[];
+  rangeDays: OrganizationMailActivityRangeDays;
+  totals: OrganizationMailCounts;
+  teams: OrganizationMailActivityTeam[];
 }
 
 export interface OrganizationEnterTeamResult {
-    teamId: string;
-    role: "admin" | "member";
-    created: boolean;
+  teamId: string;
+  role: "admin" | "member";
+  created: boolean;
 }
 
 export interface OrganizationAuditEvent {
-    action: string;
-    actorType: "user" | "organization_key" | "team_key" | "system";
-    teamId: string | null;
-    espId: string | null;
-    grantId: string | null;
-    metadata: Record<string, unknown>;
-    createdAt: string;
+  action: string;
+  actorType: "user" | "organization_key" | "team_key" | "system";
+  teamId: string | null;
+  espId: string | null;
+  grantId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface OrganizationApiKey {
-    keyId: string;
-    name: string;
-    keyPrefix: string;
-    scopes: OrganizationApiKeyScope[];
-    expiresAt: string | null;
-    lastUsedAt: string | null;
-    revokedAt: string | null;
-    createdAt: string;
+  keyId: string;
+  name: string;
+  keyPrefix: string;
+  scopes: OrganizationApiKeyScope[];
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
 }
 
 export interface CreatedOrganizationApiKey extends OrganizationApiKey {
-    key: string;
+  key: string;
 }
 
 export type OrganizationApiKeyScope =
-    | "organization:read"
-    | "teams:provision"
-    | "teams:read"
-    | "teams:manage"
-    | "teams:keys"
-    | "esps:read"
-    | "esps:manage"
-    | "grants:manage"
-    | "usage:read";
+  | "organization:read"
+  | "teams:provision"
+  | "teams:read"
+  | "teams:manage"
+  | "teams:keys"
+  | "esps:read"
+  | "esps:manage"
+  | "grants:manage"
+  | "usage:read";
 
 export interface OrganizationEspGrant {
-    grantId: string;
-    teamId: string;
-    espId: string;
-    status: "active" | "draining" | "suspended" | "revoked";
-    drainUntil: string | null;
-    fromName: string | null;
-    replyTo: string | null;
-    dailyLimit: number | null;
-    monthlyLimit: number | null;
-    createdAt: string;
-    updatedAt: string;
+  grantId: string;
+  teamId: string;
+  espId: string;
+  status: "active" | "draining" | "suspended" | "revoked";
+  drainUntil: string | null;
+  fromName: string | null;
+  replyTo: string | null;
+  dailyLimit: number | null;
+  monthlyLimit: number | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface OrganizationDeliveryPolicy {
-    defaultEspId: string | null;
-    autoGrantDefaultEsp: boolean;
-    defaultDailyLimit: number | null;
-    defaultMonthlyLimit: number | null;
-    aggregateDailyLimit: number | null;
-    aggregateMonthlyLimit: number | null;
-    teamEspEnabledByDefault: boolean;
-    teamCanChangeDefault: boolean;
-    updatedAt: string;
+  defaultEspId: string | null;
+  autoGrantDefaultEsp: boolean;
+  defaultDailyLimit: number | null;
+  defaultMonthlyLimit: number | null;
+  aggregateDailyLimit: number | null;
+  aggregateMonthlyLimit: number | null;
+  teamEspEnabledByDefault: boolean;
+  teamCanChangeDefault: boolean;
+  updatedAt: string;
 }
 
 export function listOrganizations() {
-    return organizationRequest<{ items: Organization[] }>("/organizations");
+  return organizationRequest<{
+    items: Organization[];
+    ownsFreeOrganization: boolean;
+  }>("/organizations");
+}
+
+export function abandonPendingOrganization(organizationId: string) {
+  return billingActionRequest<void>(
+    "pending_hide",
+    organizationId,
+    `/organizations/${organizationId}/abandon`,
+    { method: "POST" },
+  );
 }
 
 export function createOrganization(name: string) {
-    return organizationRequest<Organization>("/organizations", {
-        method: "POST",
-        body: JSON.stringify({ name }),
-    });
+  return organizationRequest<Organization>("/organizations", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function createPaidOrganizationBillingCheckout(input: {
+  organizationName: string;
+  teamName: string;
+  plan: "pro" | "business";
+  interval: "month" | "year";
+  catalogRevision: number;
+}) {
+  return billingActionRequest<{
+    organizationId: string;
+    checkoutUrl: string;
+    expiresAt: string;
+  }>("organization_checkout", "new", "/billing/organization-checkouts", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface SendingDomain {
+  domainId: string;
+  domain: string;
+  status: "pending" | "verified" | "revoked" | "failed";
+  verifiedAt: string | null;
+  lastCheckedAt: string | null;
+  nextCheckAt: string | null;
+  challengeToken: string | null;
+  challengeRecordName: string | null;
+  challengeRecordValue: string | null;
+}
+
+export function listOrganizationSendingDomains(organizationId: string) {
+  return organizationRequest<{ items: SendingDomain[] }>(
+    `/organizations/${organizationId}/sending-domains`,
+  );
+}
+
+export function createOrganizationSendingDomain(
+  organizationId: string,
+  domain: string,
+) {
+  return organizationRequest<SendingDomain>(
+    `/organizations/${organizationId}/sending-domains`,
+    { method: "POST", body: JSON.stringify({ domain }) },
+  );
+}
+
+export function verifyOrganizationSendingDomain(
+  organizationId: string,
+  domainId: string,
+) {
+  return organizationRequest<SendingDomain>(
+    `/organizations/${organizationId}/sending-domains/${domainId}/verify`,
+    { method: "POST" },
+  );
+}
+
+export function revokeOrganizationSendingDomain(
+  organizationId: string,
+  domainId: string,
+) {
+  return organizationRequest<void>(
+    `/organizations/${organizationId}/sending-domains/${domainId}`,
+    { method: "DELETE" },
+  );
 }
 
 export function updateOrganization(organizationId: string, name: string) {
-    return organizationRequest<Organization>(
-        `/organizations/${organizationId}`,
-        {
-            method: "PATCH",
-            body: JSON.stringify({ name }),
-        },
-    );
+  return organizationRequest<Organization>(`/organizations/${organizationId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
 }
 
 export function listOrganizationMembers(organizationId: string) {
-    return organizationRequest<{ items: OrganizationMember[] }>(
-        `/organizations/${organizationId}/members`,
-    );
+  return organizationRequest<{ items: OrganizationMember[] }>(
+    `/organizations/${organizationId}/members`,
+  );
 }
 
 export function addOrganizationMember(
-    organizationId: string,
-    input: { email: string; role: OrganizationMember["role"] },
+  organizationId: string,
+  input: { email: string; role: OrganizationMember["role"] },
 ) {
-    return organizationRequest<OrganizationMember>(
-        `/organizations/${organizationId}/members`,
-        { method: "POST", body: JSON.stringify(input) },
-    );
+  return organizationRequest<OrganizationMember>(
+    `/organizations/${organizationId}/members`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
 }
 
 export function updateOrganizationMember(
-    organizationId: string,
-    userId: string,
-    role: OrganizationMember["role"],
+  organizationId: string,
+  userId: string,
+  role: OrganizationMember["role"],
 ) {
-    return organizationRequest<OrganizationMember>(
-        `/organizations/${organizationId}/members/${userId}`,
-        { method: "PATCH", body: JSON.stringify({ role }) },
-    );
+  return organizationRequest<OrganizationMember>(
+    `/organizations/${organizationId}/members/${userId}`,
+    { method: "PATCH", body: JSON.stringify({ role }) },
+  );
 }
 
-export function removeOrganizationMember(
-    organizationId: string,
-    userId: string,
-) {
-    return organizationRequest<void>(
-        `/organizations/${organizationId}/members/${userId}`,
-        { method: "DELETE" },
-    );
+export function removeOrganizationMember(organizationId: string, userId: string) {
+  return organizationRequest<void>(
+    `/organizations/${organizationId}/members/${userId}`,
+    { method: "DELETE" },
+  );
 }
 
 export function listOrganizationTeams(organizationId: string) {
-    return organizationRequest<{ items: OrganizationTeam[] }>(
-        `/organizations/${organizationId}/teams`,
-    );
+  return organizationRequest<{ items: OrganizationTeam[] }>(
+    `/organizations/${organizationId}/teams`,
+  );
 }
 
 export function getOrganizationDeliveryPolicy(organizationId: string) {
-    return organizationRequest<OrganizationDeliveryPolicy>(
-        `/organizations/${organizationId}/delivery-policy`,
-    );
+  return organizationRequest<OrganizationDeliveryPolicy>(
+    `/organizations/${organizationId}/delivery-policy`,
+  );
 }
 
 export function updateOrganizationDeliveryPolicy(
-    organizationId: string,
-    input: Partial<
-        Pick<
-            OrganizationDeliveryPolicy,
-            | "defaultEspId"
-            | "autoGrantDefaultEsp"
-            | "defaultDailyLimit"
-            | "defaultMonthlyLimit"
-            | "aggregateDailyLimit"
-            | "aggregateMonthlyLimit"
-            | "teamEspEnabledByDefault"
-            | "teamCanChangeDefault"
-        >
-    >,
+  organizationId: string,
+  input: Partial<
+    Pick<
+      OrganizationDeliveryPolicy,
+      | "defaultEspId"
+      | "autoGrantDefaultEsp"
+      | "defaultDailyLimit"
+      | "defaultMonthlyLimit"
+      | "aggregateDailyLimit"
+      | "aggregateMonthlyLimit"
+      | "teamEspEnabledByDefault"
+      | "teamCanChangeDefault"
+    >
+  >,
 ) {
-    return organizationRequest<OrganizationDeliveryPolicy>(
-        `/organizations/${organizationId}/delivery-policy`,
-        { method: "PUT", body: JSON.stringify(input) },
-    );
+  return organizationRequest<OrganizationDeliveryPolicy>(
+    `/organizations/${organizationId}/delivery-policy`,
+    { method: "PUT", body: JSON.stringify(input) },
+  );
 }
 
 export function getOrganizationUsage(organizationId: string) {
-    return organizationRequest<OrganizationUsage>(
-        `/organizations/${organizationId}/usage`,
-    );
+  return organizationRequest<OrganizationUsage>(
+    `/organizations/${organizationId}/usage`,
+  );
 }
 
 export function getOrganizationMailActivity(
-    organizationId: string,
-    rangeDays: OrganizationMailActivityRangeDays = 7,
+  organizationId: string,
+  rangeDays: OrganizationMailActivityRangeDays = 7,
 ) {
-    return organizationRequest<OrganizationMailActivity>(
-        `/organizations/${organizationId}/mail-activity?rangeDays=${rangeDays}`,
-    );
+  return organizationRequest<OrganizationMailActivity>(
+    `/organizations/${organizationId}/mail-activity?rangeDays=${rangeDays}`,
+  );
 }
 
 export function enterOrganizationTeam(organizationId: string, teamId: string) {
-    return organizationRequest<OrganizationEnterTeamResult>(
-        `/organizations/${organizationId}/teams/${teamId}/enter`,
-        { method: "POST", body: JSON.stringify({}) },
-    );
+  return organizationRequest<OrganizationEnterTeamResult>(
+    `/organizations/${organizationId}/teams/${teamId}/enter`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
 }
 
 export function listOrganizationAuditEvents(organizationId: string) {
-    return organizationRequest<{ items: OrganizationAuditEvent[] }>(
-        `/organizations/${organizationId}/audit-events`,
-    );
+  return organizationRequest<{ items: OrganizationAuditEvent[] }>(
+    `/organizations/${organizationId}/audit-events`,
+  );
 }
 
 export function createOrganizationTeam(organizationId: string, name: string) {
-    return organizationRequest<OrganizationTeam>(
-        `/organizations/${organizationId}/teams`,
-        { method: "POST", body: JSON.stringify({ name }) },
-    );
+  return organizationRequest<OrganizationTeam>(
+    `/organizations/${organizationId}/teams`,
+    { method: "POST", body: JSON.stringify({ name }) },
+  );
 }
 
 export function renameOrganizationTeam(
-    organizationId: string,
-    teamId: string,
-    name: string,
+  organizationId: string,
+  teamId: string,
+  name: string,
 ) {
-    return organizationRequest<OrganizationTeam>(
-        `/organizations/${organizationId}/teams/${teamId}`,
-        { method: "PATCH", body: JSON.stringify({ name }) },
-    );
+  return organizationRequest<OrganizationTeam>(
+    `/organizations/${organizationId}/teams/${teamId}`,
+    { method: "PATCH", body: JSON.stringify({ name }) },
+  );
 }
 
-export function archiveOrganizationTeam(
-    organizationId: string,
-    teamId: string,
-) {
-    return organizationRequest<void>(
-        `/organizations/${organizationId}/teams/${teamId}`,
-        { method: "DELETE" },
-    );
+export function archiveOrganizationTeam(organizationId: string, teamId: string) {
+  return organizationRequest<void>(`/organizations/${organizationId}/teams/${teamId}`, {
+    method: "DELETE",
+  });
 }
 
 export function listOrganizationEsps(organizationId: string) {
-    return organizationRequest<{ items: EspConfig[] }>(
-        `/organizations/${organizationId}/esps`,
-    );
+  return organizationRequest<{ items: EspConfig[] }>(
+    `/organizations/${organizationId}/esps`,
+  );
 }
 
 export function createOrganizationEsp(
-    organizationId: string,
-    input: EspConnectionInput & { name: string },
+  organizationId: string,
+  input: EspConnectionInput & { name: string },
 ) {
-    return organizationRequest<EspConfig>(
-        `/organizations/${organizationId}/esps`,
-        {
-            method: "POST",
-            body: JSON.stringify(input),
-        },
-    );
+  return organizationRequest<EspConfig>(`/organizations/${organizationId}/esps`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function updateOrganizationEsp(
-    organizationId: string,
-    espId: string,
-    input: Partial<EspConnectionInput> & { name?: string },
+  organizationId: string,
+  espId: string,
+  input: Partial<EspConnectionInput> & { name?: string },
 ) {
-    return organizationRequest<EspConfig>(
-        `/organizations/${organizationId}/esps/${espId}`,
-        { method: "PATCH", body: JSON.stringify(input) },
-    );
+  return organizationRequest<EspConfig>(
+    `/organizations/${organizationId}/esps/${espId}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
 }
 
 export function testOrganizationEsp(
-    organizationId: string,
-    espId: string,
-    to?: string,
+  organizationId: string,
+  espId: string,
+  to?: string,
 ) {
-    return organizationRequest<{ success: boolean; error?: string }>(
-        `/organizations/${organizationId}/esps/${espId}/test`,
-        { method: "POST", body: JSON.stringify({ to }) },
-    );
+  return organizationRequest<{ success: boolean; error?: string }>(
+    `/organizations/${organizationId}/esps/${espId}/test`,
+    { method: "POST", body: JSON.stringify({ to }) },
+  );
 }
 
 export function activateOrganizationEsp(organizationId: string, espId: string) {
-    return organizationRequest<EspConfig>(
-        `/organizations/${organizationId}/esps/${espId}/activate`,
-        { method: "POST" },
-    );
+  return organizationRequest<EspConfig>(
+    `/organizations/${organizationId}/esps/${espId}/activate`,
+    { method: "POST" },
+  );
 }
 
 export function suspendOrganizationEsp(organizationId: string, espId: string) {
-    return organizationRequest<EspConfig>(
-        `/organizations/${organizationId}/esps/${espId}/suspend`,
-        { method: "POST" },
-    );
+  return organizationRequest<EspConfig>(
+    `/organizations/${organizationId}/esps/${espId}/suspend`,
+    { method: "POST" },
+  );
 }
 
 export function resumeOrganizationEsp(organizationId: string, espId: string) {
-    return organizationRequest<EspConfig>(
-        `/organizations/${organizationId}/esps/${espId}/resume`,
-        { method: "POST" },
-    );
+  return organizationRequest<EspConfig>(
+    `/organizations/${organizationId}/esps/${espId}/resume`,
+    { method: "POST" },
+  );
 }
 
 export function retireOrganizationEsp(
-    organizationId: string,
-    espId: string,
-    input:
-        { transition: "drain"; drainUntil?: string } | { transition: "cancel" },
+  organizationId: string,
+  espId: string,
+  input: { transition: "drain"; drainUntil?: string } | { transition: "cancel" },
 ) {
-    return organizationRequest<EspConfig>(
-        `/organizations/${organizationId}/esps/${espId}/retire`,
-        { method: "POST", body: JSON.stringify(input) },
-    );
+  return organizationRequest<EspConfig>(
+    `/organizations/${organizationId}/esps/${espId}/retire`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
 }
 
 export function deleteOrganizationEsp(organizationId: string, espId: string) {
-    return organizationRequest<void>(
-        `/organizations/${organizationId}/esps/${espId}`,
-        { method: "DELETE" },
-    );
+  return organizationRequest<void>(`/organizations/${organizationId}/esps/${espId}`, {
+    method: "DELETE",
+  });
 }
 
-export function getOrganizationEspFeedback(
-    organizationId: string,
-    espId: string,
-) {
-    return organizationRequest<FeedbackConnection | null>(
-        `/organizations/${organizationId}/esps/${espId}/feedback`,
-    );
+export function getOrganizationEspFeedback(organizationId: string, espId: string) {
+  return organizationRequest<FeedbackConnection | null>(
+    `/organizations/${organizationId}/esps/${espId}/feedback`,
+  );
 }
 
 export function upsertOrganizationEspFeedback(
-    organizationId: string,
-    espId: string,
-    input: FeedbackConnectionInput,
+  organizationId: string,
+  espId: string,
+  input: FeedbackConnectionInput,
 ) {
-    return organizationRequest<FeedbackConnection>(
-        `/organizations/${organizationId}/esps/${espId}/feedback`,
-        { method: "PUT", body: JSON.stringify(input) },
-    );
+  return organizationRequest<FeedbackConnection>(
+    `/organizations/${organizationId}/esps/${espId}/feedback`,
+    { method: "PUT", body: JSON.stringify(input) },
+  );
 }
 
-export function testOrganizationEspFeedback(
-    organizationId: string,
-    espId: string,
-) {
-    return organizationRequest<{ success: boolean; error?: string }>(
-        `/organizations/${organizationId}/esps/${espId}/feedback/test`,
-        { method: "POST" },
-    );
+export function testOrganizationEspFeedback(organizationId: string, espId: string) {
+  return organizationRequest<{ success: boolean; error?: string }>(
+    `/organizations/${organizationId}/esps/${espId}/feedback/test`,
+    { method: "POST" },
+  );
 }
 
-export function deleteOrganizationEspFeedback(
-    organizationId: string,
-    espId: string,
-) {
-    return organizationRequest<void>(
-        `/organizations/${organizationId}/esps/${espId}/feedback`,
-        { method: "DELETE" },
-    );
+export function deleteOrganizationEspFeedback(organizationId: string, espId: string) {
+  return organizationRequest<void>(
+    `/organizations/${organizationId}/esps/${espId}/feedback`,
+    { method: "DELETE" },
+  );
 }
 
 export function listOrganizationKeys(organizationId: string) {
-    return organizationRequest<{ items: OrganizationApiKey[] }>(
-        `/organizations/${organizationId}/keys`,
-    );
+  return organizationRequest<{ items: OrganizationApiKey[] }>(
+    `/organizations/${organizationId}/keys`,
+  );
 }
 
 export function createOrganizationKey(
-    organizationId: string,
-    input: {
-        name: string;
-        scopes: OrganizationApiKeyScope[];
-        expiresAt?: string | null;
-    },
+  organizationId: string,
+  input: {
+    name: string;
+    scopes: OrganizationApiKeyScope[];
+    expiresAt?: string | null;
+  },
 ) {
-    return organizationRequest<CreatedOrganizationApiKey>(
-        `/organizations/${organizationId}/keys`,
-        { method: "POST", body: JSON.stringify(input) },
-    );
+  return organizationRequest<CreatedOrganizationApiKey>(
+    `/organizations/${organizationId}/keys`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
 }
 
 export function revokeOrganizationKey(organizationId: string, keyId: string) {
-    return organizationRequest<void>(
-        `/organizations/${organizationId}/keys/${keyId}`,
-        { method: "DELETE" },
-    );
+  return organizationRequest<void>(`/organizations/${organizationId}/keys/${keyId}`, {
+    method: "DELETE",
+  });
 }
 
-export function getOrganizationEspGrant(
-    organizationId: string,
-    teamId: string,
-) {
-    return organizationRequest<OrganizationEspGrant | null>(
-        `/organizations/${organizationId}/teams/${teamId}/esp-grant`,
-    );
+export function getOrganizationEspGrant(organizationId: string, teamId: string) {
+  return organizationRequest<OrganizationEspGrant | null>(
+    `/organizations/${organizationId}/teams/${teamId}/esp-grant`,
+  );
 }
 
 export function upsertOrganizationEspGrant(
-    organizationId: string,
-    teamId: string,
-    input: {
-        espId: string;
-        fromName?: string | null;
-        replyTo?: string | null;
-        dailyLimit?: number | null;
-        monthlyLimit?: number | null;
-        makeDefault?: boolean;
-    },
+  organizationId: string,
+  teamId: string,
+  input: {
+    espId: string;
+    fromName?: string | null;
+    replyTo?: string | null;
+    dailyLimit?: number | null;
+    monthlyLimit?: number | null;
+    makeDefault?: boolean;
+  },
 ) {
-    return organizationRequest<OrganizationEspGrant>(
-        `/organizations/${organizationId}/teams/${teamId}/esp-grant`,
-        { method: "PUT", body: JSON.stringify(input) },
-    );
+  return organizationRequest<OrganizationEspGrant>(
+    `/organizations/${organizationId}/teams/${teamId}/esp-grant`,
+    { method: "PUT", body: JSON.stringify(input) },
+  );
 }
 
 export function transitionOrganizationEspGrant(
-    organizationId: string,
-    teamId: string,
-    input:
-        | { action: "suspend" }
-        | { action: "resume" }
-        | { action: "drain"; drainUntil?: string }
-        | { action: "cancel" },
+  organizationId: string,
+  teamId: string,
+  input:
+    | { action: "suspend" }
+    | { action: "resume" }
+    | { action: "drain"; drainUntil?: string }
+    | { action: "cancel" },
 ) {
-    return organizationRequest<OrganizationEspGrant>(
-        `/organizations/${organizationId}/teams/${teamId}/esp-grant/transition`,
-        { method: "POST", body: JSON.stringify(input) },
-    );
+  return organizationRequest<OrganizationEspGrant>(
+    `/organizations/${organizationId}/teams/${teamId}/esp-grant/transition`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+// ---- Billing --------------------------------------------------------------
+
+export interface BillingOffer {
+  catalogKey: "pro_month" | "pro_year" | "business_month" | "business_year";
+  plan: "pro" | "business";
+  interval: "month" | "year";
+  currency: string;
+  amountMinor: number;
+  trialDays: number;
+}
+
+export interface BillingCatalog {
+  catalogRevision: number | null;
+  currency: string | null;
+  offers: BillingOffer[];
+  checkoutAvailable: boolean;
+}
+
+export type OrganizationPaymentStatus =
+  | "free"
+  | "checkout_pending"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "cancel_at_period_end"
+  | "cancelled"
+  | "expired";
+
+export interface OrganizationPlanUsage {
+  plan: "oss" | "free" | "pro" | "business";
+  paymentStatus: OrganizationPaymentStatus;
+  teams: number;
+  subscribedContacts: number;
+  monthlySends: number;
+  monthlySendsReserved: number;
+  bucketStartsAt: string;
+  bucketEndsAt: string;
+  teamsLimit: number | null;
+  subscribedContactsLimit: number | null;
+  monthlySendsLimit: number | null;
+}
+
+export interface OrganizationEntitlements {
+  teamsLimit: number | null;
+  subscribedContactsLimit: number | null;
+  monthlySendsLimit: number | null;
+  sharedOrganizationMailbox: boolean;
+  provisioning: boolean;
+  organizationApiKeys: boolean;
+  marketingBranding: boolean;
+}
+
+export interface OrganizationBilling {
+  plan: "oss" | "free" | "pro" | "business";
+  billingInterval: "month" | "year" | null;
+  paymentStatus: OrganizationPaymentStatus;
+  trialEndsAt: string | null;
+  currentPeriodEndsAt: string | null;
+  /** When paid access ends if the subscription is not renewed. With
+   * `cancelAtPeriodEnd`, this is the "access until" date. */
+  paidThroughAt: string | null;
+  cancelAtPeriodEnd: boolean;
+  graceEndsAt: string | null;
+  canManageBilling: boolean;
+  entitlements: OrganizationEntitlements;
+  usage: OrganizationPlanUsage;
+  pendingPlanChange: {
+    changeId: string;
+    targetPlan: "pro" | "business";
+    targetInterval: "month" | "year";
+    effectiveAt: "immediately" | "next_billing_date";
+  } | null;
+}
+
+export function getBillingCatalog() {
+  return organizationRequest<BillingCatalog>("/billing/catalog");
+}
+
+export function getOrganizationBilling(organizationId: string) {
+  return organizationRequest<OrganizationBilling>(
+    `/organizations/${organizationId}/billing`,
+  );
+}
+
+export function createOrganizationBillingCheckout(
+  organizationId: string,
+  input: {
+    plan: "pro" | "business";
+    interval: "month" | "year";
+    catalogRevision: number;
+  },
+) {
+  return billingActionRequest<{ checkoutUrl: string; expiresAt: string }>(
+    "checkout",
+    organizationId,
+    `/organizations/${organizationId}/billing/checkout`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function createOrganizationBillingPortal(organizationId: string) {
+  return billingActionRequest<{ portalUrl: string }>(
+    "portal",
+    organizationId,
+    `/organizations/${organizationId}/billing/portal`,
+    { method: "POST" },
+  );
+}
+
+export interface OrganizationCancellationResult {
+  accepted: true;
+  subscriptionId: string;
+}
+
+/** Schedules cancellation at the end of the paid period. Idempotent. */
+export function cancelOrganizationSubscription(organizationId: string) {
+  return billingActionRequest<OrganizationCancellationResult>(
+    "cancellation",
+    organizationId,
+    `/organizations/${organizationId}/billing/cancel`,
+    { method: "POST" },
+  );
+}
+
+/** Clears a scheduled cancellation before the paid period ends. Idempotent. */
+export function resumeOrganizationSubscription(organizationId: string) {
+  return billingActionRequest<OrganizationCancellationResult>(
+    "cancellation",
+    organizationId,
+    `/organizations/${organizationId}/billing/resume`,
+    { method: "POST" },
+  );
+}
+
+export interface OrganizationPlanChange {
+  changeId: string;
+  status: "pending" | "succeeded" | "failed" | "conflicted";
+  targetPlan: "pro" | "business";
+  targetInterval: "month" | "year";
+  effectiveAt: "immediately" | "next_billing_date";
+  paymentUrl: string | null;
+  completedAt: string | null;
+}
+
+export function createOrganizationBillingPlanChange(
+  organizationId: string,
+  input: {
+    plan: "pro" | "business";
+    interval: "month" | "year";
+    catalogRevision: number;
+    idempotencyKey?: string;
+  },
+) {
+  return billingActionRequest<OrganizationPlanChange>(
+    "plan_change",
+    organizationId,
+    `/organizations/${organizationId}/billing/plan-change`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function getOrganizationBillingPlanChange(
+  organizationId: string,
+  changeId: string,
+) {
+  return organizationRequest<OrganizationPlanChange>(
+    `/organizations/${organizationId}/billing/plan-changes/${changeId}`,
+  );
 }
 
 export type DeliveryEventType =
-    | "accepted"
-    | "delivered"
-    | "delayed"
-    | "soft_bounce"
-    | "hard_bounce"
-    | "failed"
-    | "complaint"
-    | "suppressed"
-    | "rejected"
-    | "unknown";
+  | "accepted"
+  | "delivered"
+  | "delayed"
+  | "soft_bounce"
+  | "hard_bounce"
+  | "failed"
+  | "complaint"
+  | "suppressed"
+  | "rejected"
+  | "unknown";
 
 export interface DeliveryEvent {
-    eventId: string;
-    provider: string;
-    espId: string | null;
-    deliverySourceType: "organization" | "team" | null;
-    messageId: string | null;
-    recipientEmail: string | null;
-    eventType: DeliveryEventType;
-    bounceClass?: "permanent" | "transient" | "undetermined" | null;
-    reason?: string | null;
-    occurredAt: string;
-    receivedAt: string;
+  eventId: string;
+  provider: string;
+  espId: string | null;
+  deliverySourceType: "organization" | "team" | null;
+  messageId: string | null;
+  recipientEmail: string | null;
+  eventType: DeliveryEventType;
+  bounceClass?: "permanent" | "transient" | "undetermined" | null;
+  reason?: string | null;
+  occurredAt: string;
+  receivedAt: string;
 }
 
 export function listDeliveryEvents(
-    params: {
-        espId?: string;
-        eventType?: DeliveryEventType;
-        offset?: number;
-        itemsPerPage?: number;
-    } = {},
+  params: {
+    espId?: string;
+    eventType?: DeliveryEventType;
+    offset?: number;
+    itemsPerPage?: number;
+  } = {},
 ) {
-    return unwrap<Paginated<DeliveryEvent>>(
-        client.deliveryEvents.list({ query: params }),
-    );
+  return unwrap<Paginated<DeliveryEvent>>(
+    client.deliveryEvents.list({ query: params }),
+  );
 }
 
 export type SuppressionReason =
-    | "hard_bounce"
-    | "complaint"
-    | "repeated_soft_bounce"
-    | "provider_suppression"
-    | "manual";
+  | "hard_bounce"
+  | "complaint"
+  | "repeated_soft_bounce"
+  | "provider_suppression"
+  | "manual";
 
 export interface Suppression {
-    suppressionId: string;
-    recipientEmail: string | null;
-    reason: SuppressionReason;
-    active: boolean;
-    firstSuppressedAt: string;
-    lastSuppressedAt: string;
-    releasedAt?: string | null;
-    releaseReason?: string | null;
+  suppressionId: string;
+  recipientEmail: string | null;
+  reason: SuppressionReason;
+  active: boolean;
+  firstSuppressedAt: string;
+  lastSuppressedAt: string;
+  releasedAt?: string | null;
+  releaseReason?: string | null;
 }
 
 const ownerReleasableSuppressionReasons: SuppressionReason[] = [
-    "hard_bounce",
-    "repeated_soft_bounce",
-    "manual",
+  "hard_bounce",
+  "repeated_soft_bounce",
+  "manual",
 ];
 
-export function isSuppressionOwnerReleasable(
-    reason: SuppressionReason,
-): boolean {
-    return ownerReleasableSuppressionReasons.includes(reason);
+export function isSuppressionOwnerReleasable(reason: SuppressionReason): boolean {
+  return ownerReleasableSuppressionReasons.includes(reason);
 }
 
 export function listSuppressions(
-    params: {
-        active?: boolean;
-        reason?: SuppressionReason;
-        offset?: number;
-        itemsPerPage?: number;
-    } = {},
+  params: {
+    active?: boolean;
+    reason?: SuppressionReason;
+    offset?: number;
+    itemsPerPage?: number;
+  } = {},
 ) {
-    return unwrap<Paginated<Suppression>>(
-        client.suppressions.list({ query: params }),
-    );
+  return unwrap<Paginated<Suppression>>(client.suppressions.list({ query: params }));
 }
 
-export function releaseSuppression(
-    suppressionId: string,
-    explanation?: string,
-) {
-    return unwrap<Suppression>(
-        client.suppressions.release({
-            params: { suppressionId },
-            body: { explanation },
-        }),
-    );
+export function releaseSuppression(suppressionId: string, explanation?: string) {
+  return unwrap<Suppression>(
+    client.suppressions.release({
+      params: { suppressionId },
+      body: { explanation },
+    }),
+  );
 }
 
 // ---- General settings -----------------------------------------------------
 
 export interface GeneralSettings {
-    mailingAddress: string | null;
-    updatedAt?: string | null;
+  mailingAddress: string | null;
+  updatedAt?: string | null;
 }
 
 export function getGeneralSettings() {
-    return unwrap<GeneralSettings>(client.settings.general.get());
+  return unwrap<GeneralSettings>(client.settings.general.get());
 }
 
 export function updateGeneralSettings(input: { mailingAddress?: string }) {
-    return unwrap<GeneralSettings>(
-        client.settings.general.update({ body: input }),
-    );
+  return unwrap<GeneralSettings>(client.settings.general.update({ body: input }));
 }
 
 // ---- Transactional emails --------------------------------------------------
 
 export interface TransactionalEmail {
-    txeId: string;
-    to: string;
-    from: string | null;
-    replyTo: string | null;
-    subject: string;
-    templateId: string | null;
-    variables: Record<string, any>;
-    status: "queued" | "sent" | "failed" | "bounced";
-    error: string | null;
-    trackOpens: boolean;
-    trackClicks: boolean;
-    openCount: number;
-    clickCount: number;
-    sentAt: string | null;
-    createdAt: string | null;
-    updatedAt: string | null;
+  txeId: string;
+  to: string;
+  from: string | null;
+  replyTo: string | null;
+  subject: string;
+  templateId: string | null;
+  variables: Record<string, any>;
+  status: "queued" | "sent" | "failed" | "bounced";
+  error: string | null;
+  trackOpens: boolean;
+  trackClicks: boolean;
+  openCount: number;
+  clickCount: number;
+  sentAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface TransactionalEmailDetail extends TransactionalEmail {
-    html: string | null;
+  html: string | null;
 }
 
 export function listTransactionalEmails(
-    params: {
-        status?: TransactionalEmail["status"];
-        createdAfter?: number;
-        createdBefore?: number;
-        offset?: number;
-        itemsPerPage?: number;
-    } = {},
+  params: {
+    status?: TransactionalEmail["status"];
+    createdAfter?: number;
+    createdBefore?: number;
+    offset?: number;
+    itemsPerPage?: number;
+  } = {},
 ) {
-    return unwrap<Paginated<TransactionalEmail>>(
-        client.transactional.list({
-            query: {
-                status: params.status,
-                createdAfter: params.createdAfter,
-                createdBefore: params.createdBefore,
-                offset: params.offset,
-                itemsPerPage: params.itemsPerPage,
-            },
-        }),
-    );
+  return unwrap<Paginated<TransactionalEmail>>(
+    client.transactional.list({
+      query: {
+        status: params.status,
+        createdAfter: params.createdAfter,
+        createdBefore: params.createdBefore,
+        offset: params.offset,
+        itemsPerPage: params.itemsPerPage,
+      },
+    }),
+  );
 }
 
 export function getTransactionalEmail(txeId: string) {
-    return unwrap<TransactionalEmailDetail>(
-        client.transactional.get({ params: { txeId } }),
-    );
+  return unwrap<TransactionalEmailDetail>(
+    client.transactional.get({ params: { txeId } }),
+  );
 }

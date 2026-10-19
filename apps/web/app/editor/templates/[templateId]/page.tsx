@@ -1,80 +1,72 @@
 "use client";
 
+import type { TemplatePurpose } from "@sendlit/api-contract";
+import type { Email } from "@sendlit/email-editor";
 import { use, useEffect, useState } from "react";
+import { Banner } from "@/components/dashboard/banner";
+import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
+import { Loading } from "@/components/dashboard/loading";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
-import { Banner } from "@/components/dashboard/banner";
-import { Loading } from "@/components/dashboard/loading";
-import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
-import { ApiError } from "@/lib/api-client";
 import { getTemplate, updateTemplate } from "@/lib/api";
-import type { Email } from "@sendlit/email-editor";
-import type { TemplatePurpose } from "@sendlit/api-contract";
+import { ApiError } from "@/lib/api-client";
 
 export default function TemplateEditorPage({
-    params,
+  params,
 }: {
-    params: Promise<{ templateId: string }>;
+  params: Promise<{ templateId: string }>;
 }) {
-    const { templateId } = use(params);
-    const [title, setTitle] = useState<string | null>(null);
-    const [content, setContent] = useState<Email | null>(null);
-    const [purpose, setPurpose] = useState<TemplatePurpose | null>(null);
-    const [requiredVariables, setRequiredVariables] = useState<string[]>([]);
-    const [error, setError] = useState<string | null>(null);
+  const { templateId } = use(params);
+  const [title, setTitle] = useState<string | null>(null);
+  const [content, setContent] = useState<Email | null>(null);
+  const [purpose, setPurpose] = useState<TemplatePurpose | null>(null);
+  const [requiredVariables, setRequiredVariables] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        getTemplate(templateId)
-            .then((template) => {
-                setTitle(template.title);
-                setContent(template.content);
-                setPurpose(template.purpose);
-                setRequiredVariables(template.requiredVariables);
-            })
-            .catch((err) =>
-                setError(
-                    err instanceof ApiError
-                        ? err.message
-                        : "Failed to load template",
-                ),
-            );
-    }, [templateId]);
+  useEffect(() => {
+    getTemplate(templateId)
+      .then((template) => {
+        setTitle(template.title);
+        setContent(template.content);
+        setPurpose(template.purpose);
+        setRequiredVariables(template.requiredVariables);
+      })
+      .catch((err) =>
+        setError(err instanceof ApiError ? err.message : "Failed to load template"),
+      );
+  }, [templateId]);
 
-    if (error) return <Banner>{error}</Banner>;
-    if (title === null || content === null || purpose === null)
-        return <Loading />;
+  if (error) return <Banner>{error}</Banner>;
+  if (title === null || content === null || purpose === null) return <Loading />;
 
-    return (
-        <EmailEditorScreen
-            exitFallbackHref="/templates"
-            screenTitle="Editing template"
-            saveLabel="Save template"
-            initialContent={content}
-            purpose={purpose}
-            requiredVariables={requiredVariables}
-            onSave={async (nextContent) => {
-                const updated = await updateTemplate(templateId, {
-                    title,
-                    content: nextContent,
-                });
-                setRequiredVariables(updated.requiredVariables);
-            }}
-            header={
-                <div className="flex max-w-md items-center gap-3">
-                    <Label
-                        htmlFor="template-title"
-                        className="shrink-0 text-muted-foreground"
-                    >
-                        Title
-                    </Label>
-                    <Input
-                        id="template-title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="e.g. Welcome email"
-                    />
-                </div>
-            }
-        />
-    );
+  return (
+    <EmailEditorScreen
+      exitFallbackHref="/templates"
+      screenTitle="Editing template"
+      saveLabel="Save template"
+      initialContent={content}
+      purpose={purpose}
+      requiredVariables={requiredVariables}
+      onSave={async (nextContent) => {
+        const updated = await updateTemplate(templateId, {
+          title,
+          content: nextContent,
+        });
+        setRequiredVariables(updated.requiredVariables);
+      }}
+      header={
+        <div className="flex max-w-md items-center gap-3">
+          <Label htmlFor="template-title" className="shrink-0 text-muted-foreground">
+            Title
+          </Label>
+          <Input
+            id="template-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Welcome email"
+          />
+        </div>
+      }
+    />
+  );
 }

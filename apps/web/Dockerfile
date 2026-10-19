@@ -1,38 +1,37 @@
-FROM node:24-alpine AS base
-RUN corepack enable pnpm
-
-FROM base AS deps
-RUN apk add --no-cache libc6-compat
+FROM oven/bun:1.4.1 AS builder
 WORKDIR /app
 
-COPY package.json ./
-COPY pnpm-lock.yaml ./
-COPY pnpm-workspace.yaml ./
-COPY apps/web ./apps/web
+COPY package.json bun.lock ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY packages/api-contract/package.json ./packages/api-contract/package.json
+COPY packages/test-utils/package.json ./packages/test-utils/package.json
+COPY packages/email-editor/package.json ./packages/email-editor/package.json
+COPY packages/email-blocks/package.json ./packages/email-blocks/package.json
+
+RUN bun install --frozen-lockfile --ignore-scripts --filter @sendlit/web --filter @sendlit/email-editor --filter @sendlit/email-blocks
+
 COPY packages/api-contract ./packages/api-contract
+COPY packages/test-utils ./packages/test-utils
 COPY packages/email-editor ./packages/email-editor
 COPY packages/email-blocks ./packages/email-blocks
+COPY apps/web ./apps/web
 
-RUN pnpm install --frozen-lockfile
+ENV NEXT_TELEMETRY_DISABLED=1
 
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/ ./
+RUN bun --filter @sendlit/email-editor build \
+    && bun --filter @sendlit/email-blocks build \
+    && bun --filter @sendlit/web build
 
-RUN pnpm --filter=@sendlit/email-editor build
-RUN pnpm --filter=@sendlit/api-contract build
-RUN pnpm --filter=@sendlit/email-blocks build
-RUN pnpm --filter=@sendlit/web build
-
-FROM base AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 --ingroup nodejs nextjs
 
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static

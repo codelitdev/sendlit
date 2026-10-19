@@ -1,395 +1,383 @@
-import type { McpToolRegistrar } from "../tool-registry";
 import { z } from "zod";
+import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
 import {
-    createEspConfig,
-    deleteEspConfig,
-    getEspConfig,
-    getEspConfigByEspId,
-    listEspConfigs,
-    transitionEspConfig,
-    updateEspConfig,
-    upsertEspConfig,
-    type EspConfig,
+  createEspConfig,
+  deleteEspConfig,
+  type EspConfig,
+  getEspConfig,
+  getEspConfigByEspId,
+  listEspConfigs,
+  transitionEspConfig,
+  updateEspConfig,
+  upsertEspConfig,
 } from "../../settings/esp/queries";
 import { testEspConfig } from "../../settings/esp/test";
-import {
-    invalidateEspTransport,
-    invalidateTeamTransport,
-} from "../../mail/transport";
-import { AUTH_ERROR, NOT_FOUND, errorResult, jsonResult } from "./responses";
-import {
-    espConfigListSchema,
-    espConfigSchema,
-    espProviders,
-    successMessageSchema,
-    testEspResultSchema,
-} from "./schemas";
+import type { McpToolRegistrar } from "../tool-registry";
 import { getAuthUser, getTeamId } from "./auth";
+import { AUTH_ERROR, errorResult, jsonResult, NOT_FOUND } from "./responses";
+import {
+  espConfigListSchema,
+  espConfigSchema,
+  espProviders,
+  successMessageSchema,
+  testEspResultSchema,
+} from "./schemas";
 
 function toPublicShape(config: EspConfig | null) {
-    if (!config) return null;
-    return {
-        espId: config.espId,
-        name: config.name,
-        provider: config.provider,
-        host: config.host,
-        port: config.port,
-        secure: config.secure,
-        username: config.username,
-        hasPassword: Boolean(config.encryptedSecret),
-        fromName: config.fromName,
-        fromEmail: config.fromEmail,
-        status: config.status,
-        secretVersion: config.secretVersion,
-        lastTestedAt: config.lastTestedAt,
-        lastTestStatus: config.lastTestStatus,
-        lastTestError: config.lastTestError,
-    };
+  if (!config) return null;
+  return {
+    espId: config.espId,
+    name: config.name,
+    provider: config.provider,
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    username: config.username,
+    hasPassword: Boolean(config.encryptedSecret),
+    fromName: config.fromName,
+    fromEmail: config.fromEmail,
+    status: config.status,
+    secretVersion: config.secretVersion,
+    lastTestedAt: config.lastTestedAt,
+    lastTestStatus: config.lastTestStatus,
+    lastTestError: config.lastTestError,
+  };
 }
 
 const connectionFields = {
-    provider: z
-        .enum(espProviders)
-        .describe(
-            "A label for which ESP this is — the transport is always SMTP",
-        ),
-    host: z.string().min(1).describe("SMTP host, e.g. smtp.sendgrid.net"),
-    port: z.number().int().min(1).max(65535).describe("SMTP port, e.g. 587"),
-    secure: z
-        .boolean()
-        .describe("Use implicit TLS (usually true only for port 465)"),
-    username: z.string().optional(),
-    password: z
-        .string()
-        .optional()
-        .describe("Omit to keep unchanged; empty string clears it"),
-    fromName: z.string().optional(),
-    fromEmail: z.string().email().optional(),
+  provider: z
+    .enum(espProviders)
+    .describe("A label for which ESP this is — the transport is always SMTP"),
+  host: z.string().min(1).describe("SMTP host, e.g. smtp.sendgrid.net"),
+  port: z.number().int().min(1).max(65535).describe("SMTP port, e.g. 587"),
+  secure: z.boolean().describe("Use implicit TLS (usually true only for port 465)"),
+  username: z.string().optional(),
+  password: z
+    .string()
+    .optional()
+    .describe("Omit to keep unchanged; empty string clears it"),
+  fromName: z.string().optional(),
+  fromEmail: z.string().email().optional(),
 };
 
 export function registerEspTools(server: McpToolRegistrar): void {
-    server.registerTool(
-        "get_esp_config",
-        {
-            description:
-                "Returns the team's configured email sending provider (ESP/SMTP), or null if none is configured yet. Teams without ESP cannot send campaign mail. Never includes the password.",
-            outputSchema: z.object({ config: espConfigSchema.nullable() }),
-            annotations: {
-                readOnlyHint: true,
-                idempotentHint: true,
-                openWorldHint: false,
-            },
-        },
-        async (extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            const config = await getEspConfig(teamId);
-            return jsonResult({ config: toPublicShape(config) });
-        },
-    );
+  server.registerTool(
+    "get_esp_config",
+    {
+      description:
+        "Returns the team's configured email sending provider (ESP/SMTP), or null if none is configured yet. Teams without ESP cannot send campaign mail. Never includes the password.",
+      outputSchema: z.object({ config: espConfigSchema.nullable() }),
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const config = await getEspConfig(teamId);
+      return jsonResult({ config: toPublicShape(config) });
+    },
+  );
 
-    server.registerTool(
-        "update_esp_config",
-        {
-            description:
-                "Creates or updates the team's *default* ESP (SMTP) configuration — an alias over the first/default row in the team's ESP collection (see `create_esp`/`update_esp` for named, non-default configurations). Works with any provider that exposes an SMTP relay (SendGrid, Mailgun, Postmark, SES, Resend, or a custom/self-hosted SMTP server). Omit `password` to keep the existing secret; send an empty string to clear it.",
-            inputSchema: connectionFields,
-            outputSchema: espConfigSchema,
-            annotations: {
-                readOnlyHint: false,
-                destructiveHint: false,
-                openWorldHint: false,
-            },
-        },
-        async (args: any, extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            try {
-                const config = await upsertEspConfig(teamId, args);
-                invalidateTeamTransport(teamId);
-                return jsonResult(toPublicShape(config));
-            } catch (err: any) {
-                return errorResult(err.message);
-            }
-        },
-    );
+  server.registerTool(
+    "update_esp_config",
+    {
+      description:
+        "Creates or updates the team's *default* ESP (SMTP) configuration — an alias over the first/default row in the team's ESP collection (see `create_esp`/`update_esp` for named, non-default configurations). Works with any provider that exposes an SMTP relay (SendGrid, Mailgun, Postmark, SES, Resend, or a custom/self-hosted SMTP server). Omit `password` to keep the existing secret; send an empty string to clear it.",
+      inputSchema: connectionFields,
+      outputSchema: espConfigSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        const config = await upsertEspConfig(teamId, args);
+        invalidateTeamTransport(teamId);
+        return jsonResult(toPublicShape(config));
+      } catch (err: any) {
+        return errorResult(err.message);
+      }
+    },
+  );
 
-    server.registerTool(
-        "delete_esp_config",
-        {
-            description:
-                "Removes the team's default ESP configuration. If another user ESP exists, it's promoted to default; otherwise campaign/transactional sends fail until a new ESP is configured.",
-            outputSchema: successMessageSchema,
-            annotations: {
-                readOnlyHint: false,
-                destructiveHint: true,
-                openWorldHint: false,
-            },
-        },
-        async (extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            try {
-                await deleteEspConfig(teamId);
-            } catch (err: any) {
-                return errorResult(
-                    err.message === "esp_in_use"
-                        ? "ESP is in use by an active sequence or a queued transactional email and cannot be removed."
-                        : err.message,
-                );
-            }
-            invalidateTeamTransport(teamId);
-            return jsonResult({ message: "ESP configuration removed." });
-        },
-    );
+  server.registerTool(
+    "delete_esp_config",
+    {
+      description:
+        "Removes the team's default ESP configuration. If another user ESP exists, it's promoted to default; otherwise campaign/transactional sends fail until a new ESP is configured.",
+      outputSchema: successMessageSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        await deleteEspConfig(teamId);
+      } catch (err: any) {
+        return errorResult(
+          err.message === "esp_in_use"
+            ? "ESP is in use by an active sequence or a queued transactional email and cannot be removed."
+            : err.message,
+        );
+      }
+      invalidateTeamTransport(teamId);
+      return jsonResult({ message: "ESP configuration removed." });
+    },
+  );
 
-    server.registerTool(
-        "send_test_email",
-        {
-            description:
-                "Sends a test email through the team's default ESP to verify it works. Requires a mailing address. Defaults to the current user's own email address if `to` is omitted (OAuth sessions only — API-key sessions must supply `to`).",
-            inputSchema: {
-                to: z.string().email().optional(),
-            },
-            outputSchema: testEspResultSchema,
-            annotations: {
-                readOnlyHint: false,
-                destructiveHint: false,
-                openWorldHint: true,
-            },
-        },
-        async (args: any, extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
+  server.registerTool(
+    "send_test_email",
+    {
+      description:
+        "Sends a test email through the team's default ESP to verify it works. Defaults to the current user's own email address if `to` is omitted (OAuth sessions only — API-key sessions must supply `to`).",
+      inputSchema: {
+        to: z.string().email().optional(),
+      },
+      outputSchema: testEspResultSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
 
-            const config = await getEspConfig(teamId);
-            if (!config) {
-                return jsonResult({
-                    success: false,
-                    error: "No ESP configured for this team yet.",
-                });
-            }
+      const config = await getEspConfig(teamId);
+      if (!config) {
+        return jsonResult({
+          success: false,
+          error: "No ESP configured for this team yet.",
+        });
+      }
 
-            const result = await testEspConfig({
-                config,
-                to: args.to,
-                account: getAuthUser(extra),
-                source: "mcp.send_test_email",
-            });
-            return jsonResult({
-                success: result.success,
-                error: result.error,
-            });
-        },
-    );
+      const result = await testEspConfig({
+        config,
+        to: args.to,
+        account: getAuthUser(extra),
+        source: "mcp.send_test_email",
+      });
+      return jsonResult({
+        success: result.success,
+        error: result.error,
+      });
+    },
+  );
 
-    server.registerTool(
-        "list_esps",
-        {
-            description:
-                "Lists every user-managed ESP configuration the team has created. Never includes passwords.",
-            outputSchema: espConfigListSchema,
-            annotations: {
-                readOnlyHint: true,
-                idempotentHint: true,
-                openWorldHint: false,
-            },
-        },
-        async (extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            const configs = await listEspConfigs(teamId);
-            return jsonResult({ items: configs.map(toPublicShape) });
-        },
-    );
+  server.registerTool(
+    "list_esps",
+    {
+      description:
+        "Lists every user-managed ESP configuration the team has created. Never includes passwords.",
+      outputSchema: espConfigListSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const configs = await listEspConfigs(teamId);
+      return jsonResult({ items: configs.map(toPublicShape) });
+    },
+  );
 
-    server.registerTool(
-        "create_esp",
-        {
-            description:
-                "Creates a new team-owned ESP configuration. Delivery selection is managed separately.",
-            inputSchema: {
-                name: z.string().trim().min(1).max(100),
-                ...connectionFields,
-            },
-            outputSchema: espConfigSchema,
-            annotations: {
-                readOnlyHint: false,
-                destructiveHint: false,
-                openWorldHint: false,
-            },
-        },
-        async (args: any, extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            try {
-                const config = await createEspConfig(teamId, args);
-                invalidateTeamTransport(teamId);
-                return jsonResult(toPublicShape(config));
-            } catch (err: any) {
-                return errorResult(err.message);
-            }
-        },
-    );
+  server.registerTool(
+    "create_esp",
+    {
+      description:
+        "Creates a new team-owned ESP configuration. Delivery selection is managed separately.",
+      inputSchema: {
+        name: z.string().trim().min(1).max(100),
+        ...connectionFields,
+      },
+      outputSchema: espConfigSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        const config = await createEspConfig(teamId, args);
+        invalidateTeamTransport(teamId);
+        return jsonResult(toPublicShape(config));
+      } catch (err: any) {
+        return errorResult(err.message);
+      }
+    },
+  );
 
-    server.registerTool(
-        "get_esp",
-        {
-            description:
-                "Returns a single user-managed ESP configuration by its ESP ID.",
-            inputSchema: { espId: z.string().min(1) },
-            outputSchema: espConfigSchema,
-            annotations: {
-                readOnlyHint: true,
-                idempotentHint: true,
-                openWorldHint: false,
-            },
-        },
-        async (args: any, extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            const config = await getEspConfigByEspId(teamId, args.espId);
-            if (!config) return NOT_FOUND;
-            return jsonResult(toPublicShape(config));
-        },
-    );
+  server.registerTool(
+    "get_esp",
+    {
+      description: "Returns a single user-managed ESP configuration by its ESP ID.",
+      inputSchema: { espId: z.string().min(1) },
+      outputSchema: espConfigSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const config = await getEspConfigByEspId(teamId, args.espId);
+      if (!config) return NOT_FOUND;
+      return jsonResult(toPublicShape(config));
+    },
+  );
 
-    server.registerTool(
-        "update_esp",
-        {
-            description:
-                "Updates a team-owned ESP configuration by its ESP ID. Omit `password` to keep the existing secret; send an empty string to clear it.",
-            inputSchema: {
-                espId: z.string().min(1),
-                name: z.string().trim().min(1).max(100).optional(),
-                provider: connectionFields.provider.optional(),
-                host: connectionFields.host.optional(),
-                port: connectionFields.port.optional(),
-                secure: connectionFields.secure.optional(),
-                username: connectionFields.username,
-                password: connectionFields.password,
-                fromName: connectionFields.fromName,
-                fromEmail: connectionFields.fromEmail,
-            },
-            outputSchema: espConfigSchema,
-            annotations: {
-                readOnlyHint: false,
-                destructiveHint: false,
-                openWorldHint: false,
-            },
-        },
-        async (args: any, extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            const { espId, ...patch } = args;
-            try {
-                const config = await updateEspConfig(teamId, espId, patch);
-                if (!config) return NOT_FOUND;
-                invalidateEspTransport(teamId, config.id);
-                return jsonResult(toPublicShape(config));
-            } catch (err: any) {
-                return errorResult(err.message);
-            }
-        },
-    );
+  server.registerTool(
+    "update_esp",
+    {
+      description:
+        "Updates a team-owned ESP configuration by its ESP ID. Omit `password` to keep the existing secret; send an empty string to clear it.",
+      inputSchema: {
+        espId: z.string().min(1),
+        name: z.string().trim().min(1).max(100).optional(),
+        provider: connectionFields.provider.optional(),
+        host: connectionFields.host.optional(),
+        port: connectionFields.port.optional(),
+        secure: connectionFields.secure.optional(),
+        username: connectionFields.username,
+        password: connectionFields.password,
+        fromName: connectionFields.fromName,
+        fromEmail: connectionFields.fromEmail,
+      },
+      outputSchema: espConfigSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const { espId, ...patch } = args;
+      try {
+        const config = await updateEspConfig(teamId, espId, patch);
+        if (!config) return NOT_FOUND;
+        invalidateEspTransport(teamId, config.id);
+        return jsonResult(toPublicShape(config));
+      } catch (err: any) {
+        return errorResult(err.message);
+      }
+    },
+  );
 
-    server.registerTool(
-        "delete_esp",
-        {
-            description:
-                "Removes an ESP that has no active or queued delivery work. Draft, paused, and completed sequences are detached first.",
-            inputSchema: { espId: z.string().min(1) },
-            outputSchema: successMessageSchema,
-            annotations: {
-                readOnlyHint: false,
-                destructiveHint: true,
-                openWorldHint: false,
-            },
-        },
-        async (args: any, extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            const config = await getEspConfigByEspId(teamId, args.espId);
-            if (!config) return NOT_FOUND;
-            try {
-                await deleteEspConfig(teamId, args.espId);
-            } catch (err: any) {
-                return errorResult(
-                    err.message === "delivery_source_in_use"
-                        ? "ESP is in use and cannot be removed."
-                        : err.message,
-                );
-            }
-            invalidateEspTransport(teamId, config.id);
-            return jsonResult({ message: "ESP configuration removed." });
-        },
-    );
+  server.registerTool(
+    "delete_esp",
+    {
+      description:
+        "Removes an ESP that has no active or queued delivery work. Draft, paused, and completed sequences are detached first.",
+      inputSchema: { espId: z.string().min(1) },
+      outputSchema: successMessageSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const config = await getEspConfigByEspId(teamId, args.espId);
+      if (!config) return NOT_FOUND;
+      try {
+        await deleteEspConfig(teamId, args.espId);
+      } catch (err: any) {
+        return errorResult(
+          err.message === "delivery_source_in_use"
+            ? "ESP is in use and cannot be removed."
+            : err.message,
+        );
+      }
+      invalidateEspTransport(teamId, config.id);
+      return jsonResult({ message: "ESP configuration removed." });
+    },
+  );
 
-    server.registerTool(
-        "activate_esp",
-        {
-            description:
-                "Activates a verified team-owned ESP so it can be selected as the team's default or pinned for delivery. Run test_esp successfully after the latest credential or sender change before activating.",
-            inputSchema: { espId: z.string().min(1) },
-            outputSchema: espConfigSchema,
-            annotations: {
-                readOnlyHint: false,
-                destructiveHint: false,
-                openWorldHint: false,
-            },
-        },
-        async (args: any, extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            const config = await getEspConfigByEspId(teamId, args.espId);
-            if (!config) return NOT_FOUND;
-            try {
-                return jsonResult(
-                    toPublicShape(
-                        await transitionEspConfig(config, "activate"),
-                    ),
-                );
-            } catch (err: any) {
-                return errorResult(
-                    err.message === "esp_verification_required"
-                        ? "ESP verification is required: send a successful test after its latest configuration change, and configure a sender email."
-                        : err.message,
-                );
-            }
-        },
-    );
+  server.registerTool(
+    "activate_esp",
+    {
+      description:
+        "Activates a verified team-owned ESP so it can be selected as the team's default or pinned for delivery. Run test_esp successfully after the latest credential or sender change before activating.",
+      inputSchema: { espId: z.string().min(1) },
+      outputSchema: espConfigSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const config = await getEspConfigByEspId(teamId, args.espId);
+      if (!config) return NOT_FOUND;
+      try {
+        return jsonResult(toPublicShape(await transitionEspConfig(config, "activate")));
+      } catch (err: any) {
+        return errorResult(
+          err.message === "esp_verification_required"
+            ? "ESP verification is required: send a successful test after its latest configuration change, and configure a sender email."
+            : err.message,
+        );
+      }
+    },
+  );
 
-    server.registerTool(
-        "test_esp",
-        {
-            description:
-                "Sends a test email through a user-managed ESP (by its ESP ID) to verify it works. Requires a mailing address. Defaults to the current user's own email address if `to` is omitted (OAuth sessions only — API-key sessions must supply `to`).",
-            inputSchema: {
-                espId: z.string().min(1),
-                to: z.string().email().optional(),
-            },
-            outputSchema: testEspResultSchema,
-            annotations: {
-                readOnlyHint: false,
-                destructiveHint: false,
-                openWorldHint: true,
-            },
-        },
-        async (args: any, extra: any) => {
-            const teamId = getTeamId(extra);
-            if (!teamId) return AUTH_ERROR;
-            const config = await getEspConfigByEspId(teamId, args.espId);
-            if (!config) return NOT_FOUND;
-            const result = await testEspConfig({
-                config,
-                to: args.to,
-                account: getAuthUser(extra),
-                source: "mcp.test_esp",
-            });
-            return jsonResult({
-                success: result.success,
-                error: result.error,
-            });
-        },
-    );
+  server.registerTool(
+    "test_esp",
+    {
+      description:
+        "Sends a test email through a user-managed ESP (by its ESP ID) to verify it works. Defaults to the current user's own email address if `to` is omitted (OAuth sessions only — API-key sessions must supply `to`).",
+      inputSchema: {
+        espId: z.string().min(1),
+        to: z.string().email().optional(),
+      },
+      outputSchema: testEspResultSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const config = await getEspConfigByEspId(teamId, args.espId);
+      if (!config) return NOT_FOUND;
+      const result = await testEspConfig({
+        config,
+        to: args.to,
+        account: getAuthUser(extra),
+        source: "mcp.test_esp",
+      });
+      return jsonResult({
+        success: result.success,
+        error: result.error,
+      });
+    },
+  );
 }

@@ -1,0 +1,305 @@
+---
+title: Headless organization setup
+description: Configure shared delivery once, then provision teams with a least-privilege organization key.
+---
+
+This guide configures shared delivery without a dashboard session or a key
+copied from startup logs. It separates a short-lived delivery setup key from
+the narrower key used by integrations such as CourseLit to provision teams.
+
+The complete plain Markdown version is in the repository at
+[`apps/docs/integrations/headless-provisioning.md`](https://github.com/codelitdev/sendlit/blob/main/apps/docs/integrations/headless-provisioning.md).
+The machine-readable REST contract is served at `GET /openapi.json`; Swagger
+UI is at `GET /docs`.
+
+## Credentials
+
+Organization API keys are sent as `Authorization: Bearer <key>`. Keep them in
+a server-side secret manager or deployment environment, never in browser or
+mobile code.
+
+| Key               | Bootstrap display name              | Scopes                                                                              | Use                                            |
+| ----------------- | ----------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Delivery setup    | `[Auto-generated] Delivery Setup` | `organization:read`, `esps:read`, `esps:manage`, `delivery:read`, `delivery:manage` | One-time ESP and delivery-policy configuration |
+| Team provisioning | `[Auto-generated] Team Provisioning` | `organization:read`, `teams:provision`, `teams:read`                                | Ongoing server-to-server team provisioning     |
+
+`delivery:manage` authorizes every field in the delivery-policy update schema,
+including shared quotas and team-delivery controls—not only the default ESP
+and automatic grants. Revoke the setup key after use if no further policy
+automation is needed.
+
+## Configure bootstrap keys
+
+Set `BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` to the initial owner. It selects an
+ordinary organization owner; it does not grant a special global-admin role.
+Bootstrap finds or creates that user's default organization and registers
+configured keys even when the user already exists. If the user is not an
+owner of that organization, key registration fails closed; bootstrap does not
+promote a member or administrator automatically.
+
+Create two distinct high-entropy organization keys and put both in the SendLit
+Compose `.env`, alongside the other deployment secrets. Generate one value
+per key with:
+
+```sh
+node -e 'process.stdout.write(`sl_org_live_${require("node:crypto").randomBytes(32).toString("base64url")}\n`)'
+```
+
+Copy one generated value to each variable:
+
+```dotenv
+BOOTSTRAP_ORGANIZATION_OWNER_EMAIL=admin@example.com
+BOOTSTRAP_DELIVERY_SETUP_API_KEY=sl_org_live_<generated-value>
+BOOTSTRAP_TEAM_PROVISIONING_API_KEY=sl_org_live_<different-generated-value>
+```
+
+Keep both values server-side. Compose passes them to the one-shot `init`
+service to register their hashes, then explicitly clears them in the
+long-running API and web containers. Give the delivery key only to the
+one-shot delivery setup client. Give CourseLit the team-provisioning key in
+its server-side runtime environment. Never expose either key in browser or
+mobile code.
+
+Bootstrap stores only a hash and display prefix. Re-running with the same
+active key, organization, and exact scopes is a no-op. Invalid-format,
+revoked, expired, cross-organization, or differently scoped keys fail closed;
+bootstrap will not recreate a revoked key or expand its scopes. After revoking
+the delivery key, clear `BOOTSTRAP_DELIVERY_SETUP_API_KEY` before the next
+bootstrap run.
+
+## Configure shared delivery once
+
+Run delivery setup as an explicit one-time job; do not reset the policy on
+every stack startup. Reuse the intended ESP by its stored public ID. ESP names
+are not unique, so fail clearly if a name matches multiple records.
+
+The examples use generic SMTP settings. Choose host, port, TLS, credentials,
+and recipient for your deployment. These are normal API fields, not Compose-
+specific behavior.
+
+```sh
+SENDLIT_API_URL=https://api.sendlit.example
+: "${BOOTSTRAP_DELIVERY_SETUP_API_KEY:?Load it from the SendLit .env before running this script}"
+: "${BOOTSTRAP_TEAM_PROVISIONING_API_KEY:?Load it from the integration environment}"
+TEST_RECIPIENT_EMAIL=operator@example.com
+```
+
+Discover the organization bound to the key. The endpoint has no organization
+ID input and returns only that key's organization:
+
+```sh
+ORGANIZATION_RESPONSE="$(curl --silent --show-error --fail-with-body \
+  "$SENDLIT_API_URL/provisioning/organization" \
+  -H "Authorization: Bearer $BOOTSTRAP_DELIVERY_SETUP_API_KEY")"
+ORGANIZATION_ID="$(printf '%s' "$ORGANIZATION_RESPONSE" | jq -er '.organizationId')"
+printf '%s\n' "$ORGANIZATION_RESPONSE" | jq .
+```
+
+Example response:
+
+```json
+{
+    "organizationId": "org_01J...",
+    "name": "Example Organization",
+    "status": "active",
+    "createdAt": "2026-09-01T10:00:00.000Z",
+    "updatedAt": "2026-09-01T10:00:00.000Z"
+}
+```
+
+Use its public `organizationId` for organization routes.
+
+List ESPs with `esps:read` or `esps:manage`, then reuse the desired `espId` or
+create an organization-owned ESP:
+
+```sh
+curl --fail-with-body \
+  "$SENDLIT_API_URL/organizations/$ORGANIZATION_ID/esps" \
+  -H "Authorization: Bearer $BOOTSTRAP_DELIVERY_SETUP_API_KEY"
+```
+
+Reuse a stored `espId` if exactly one ESP is intended. Otherwise create the
+ESP and capture its public ID:
+
+```sh
+ESP_RESPONSE="$(curl --silent --show-error --fail-with-body --request POST \
+  "$SENDLIT_API_URL/organizations/$ORGANIZATION_ID/esps" \
+  -H "Authorization: Bearer $BOOTSTRAP_DELIVERY_SETUP_API_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "name": "Shared delivery",
+    "provider": "smtp",
+    "host": "smtp.example.net",
+    "port": 587,
+    "secure": true,
+    "username": "smtp-user",
+    "password": "<SMTP_SECRET>",
+    "fromName": "Example",
+    "fromEmail": "mail@example.com"
+  }')"
+ESP_ID="$(printf '%s' "$ESP_RESPONSE" | jq -er '.espId')"
+printf 'Using ESP %s\n' "$ESP_ID"
+```
+
+The response contains `espId` and starts with `status: "draft"`; the encrypted
+provider secret is never returned. Send a test with an explicit recipient
+because an organization API key has no signed-in user email fallback:
+
+```json
+{
+  "espId": "esp_01J...",
+  "name": "Shared delivery",
+  "provider": "smtp",
+  "host": "smtp.example.net",
+  "port": 587,
+  "secure": true,
+  "username": "smtp-user",
+  "hasPassword": true,
+  "fromName": "Example",
+  "fromEmail": "mail@example.com",
+  "status": "draft",
+  "secretVersion": 1,
+  "lastTestedAt": null,
+  "lastTestStatus": null,
+  "lastTestError": null,
+  "activatedAt": null,
+  "drainUntil": null,
+  "retiredAt": null,
+  "updatedAt": "2026-09-01T10:02:00.000Z"
+}
+```
+
+```sh
+curl --fail-with-body --request POST \
+  "$SENDLIT_API_URL/organizations/$ORGANIZATION_ID/esps/$ESP_ID/test" \
+  -H "Authorization: Bearer $BOOTSTRAP_DELIVERY_SETUP_API_KEY" \
+  -H 'Content-Type: application/json' \
+  --data "{\"to\":\"$TEST_RECIPIENT_EMAIL\"}"
+```
+
+Successful test response:
+
+```json
+{ "success": true }
+```
+
+After a successful test, activate the ESP:
+
+```sh
+curl --fail-with-body --request POST \
+  "$SENDLIT_API_URL/organizations/$ORGANIZATION_ID/esps/$ESP_ID/activate" \
+  -H "Authorization: Bearer $BOOTSTRAP_DELIVERY_SETUP_API_KEY"
+```
+
+The response is the ESP projection with `status: "active"` and its public
+`espId`.
+
+Set it as the default for new teams and enable automatic grants:
+
+```sh
+curl --fail-with-body --request PUT \
+  "$SENDLIT_API_URL/organizations/$ORGANIZATION_ID/delivery-policy" \
+  -H "Authorization: Bearer $BOOTSTRAP_DELIVERY_SETUP_API_KEY" \
+  -H 'Content-Type: application/json' \
+  --data "{\"defaultEspId\":\"$ESP_ID\",\"autoGrantDefaultEsp\":true}"
+```
+
+The policy response includes `defaultEspId`, `autoGrantDefaultEsp`, nullable
+quota fields, team-delivery defaults, and `updatedAt`, for example:
+
+```json
+{
+    "defaultEspId": "esp_01J...",
+    "autoGrantDefaultEsp": true,
+    "defaultDailyLimit": null,
+    "defaultMonthlyLimit": null,
+    "aggregateDailyLimit": null,
+    "aggregateMonthlyLimit": null,
+    "teamEspEnabledByDefault": true,
+    "teamCanChangeDefault": true,
+    "updatedAt": "2026-09-01T10:05:00.000Z"
+}
+```
+
+The API checks that the selected ESP belongs to the organization and is
+active. Owner/admin dashboard sessions remain supported. Organization keys
+need `delivery:read` to read this policy and `delivery:manage` to update it;
+ESP or grant scopes do not imply policy authority.
+
+Before writing the policy, inspect it with the setup key:
+
+```sh
+curl --fail-with-body \
+  "$SENDLIT_API_URL/organizations/$ORGANIZATION_ID/delivery-policy" \
+  -H "Authorization: Bearer $BOOTSTRAP_DELIVERY_SETUP_API_KEY"
+```
+
+If a policy is already configured, do not overwrite an operator's later
+choices on every application restart. Run setup as an explicit one-shot job
+or record a completion marker in the consuming integration; reruns should
+confirm the intended ESP ID and skip the write when setup is complete.
+
+Revoke the setup key after successful setup if you do not need further policy
+automation. Clear `BOOTSTRAP_DELIVERY_SETUP_API_KEY` before the next SendLit
+bootstrap run.
+
+## Provision teams with the runtime key
+
+CourseLit should use only the team-provisioning key at runtime. It does not
+need ESP management, grant management, or delivery-policy authority. Provision
+one team per stable external tenant ID:
+
+```sh
+curl --fail-with-body --request POST \
+  "$SENDLIT_API_URL/provisioning/teams" \
+  -H "Authorization: Bearer $BOOTSTRAP_TEAM_PROVISIONING_API_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "externalId": "school:school-123",
+    "name": "School 123",
+    "sender": { "fromName": "School 123" },
+    "mailingAddress": "123 Example Street, Example City",
+    "delivery": { "useOrganizationDefault": true }
+  }'
+```
+
+The first response has `created: true` and returns the team API key in
+`apiKey`; persist it securely if the integration sends via team-scoped APIs.
+An identical retry for the same `(organization, externalId)` returns
+`created: false` and `apiKey: null`. With automatic grants enabled, the new
+team receives the active organization ESP grant and uses it as its default.
+First creation returns:
+
+```json
+{
+    "teamId": "team_01J...",
+    "externalId": "school:school-123",
+    "name": "School 123",
+    "deliverySource": { "type": "organization" },
+    "created": true,
+    "apiKey": "sl_live_..."
+}
+```
+
+Persist the one-time team key immediately. An identical replay returns
+`"created": false` and `"apiKey": null`.
+See [Provisioning teams](/developers/provisioning) for lifecycle and retry
+details.
+
+## Rotation, migration, and agent clients
+
+Rotate by registering a new key, switching the consumer, verifying it, and
+then explicitly revoking the old key. Bootstrap does not revoke older keys.
+For deployments using the old key printed in `init` logs, keep it active while
+registering and verifying the new team-provisioning key. Switch CourseLit,
+then revoke the old broad key from the dashboard or authenticated API.
+
+Use `/openapi.json` as the machine-readable API source for SDKs and agents.
+Organization provisioning and shared-delivery setup use REST; organization
+keys do not authenticate to MCP. MCP remains team-scoped and accepts team keys
+or user OAuth.
+
+The local Compose/Mailpit transport initializer is a separate integration
+concern. It owns local SMTP host configuration, service health checks, and a
+configurable test recipient; SendLit’s general REST API does not special-case
+Mailpit.

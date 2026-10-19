@@ -12,10 +12,11 @@ email rendering behavior.
 
 The immediate production symptom is that `codelit/sendlit-api:latest` is much
 larger than expected. `docker history` shows the final runtime
-`pnpm install --prod --frozen-lockfile --ignore-scripts` layer at roughly
-1.14GB uncompressed. Inspecting `/app/node_modules/.pnpm` inside the image shows
-large packages that do not belong in an API runtime image, including `next`,
-`@next/swc-linux-x64-musl`, `lucide-react`, and build/test tooling.
+`bun install --frozen-lockfile --production --ignore-scripts --filter @sendlit/api`
+layer at roughly 840MB uncompressed. Inspecting `/app/node_modules/.bun` inside
+the image shows large packages that do not belong in an API runtime image,
+including `next`, `@next/swc-linux-x64-gnu`, `@next/swc-linux-x64-musl`, and
+`lucide-react`.
 
 ## Problem
 
@@ -129,31 +130,32 @@ The API path must not pull `next`, `@next/swc-*`, `lucide-react`,
   proven necessary for server rendering.
 - Update Dockerfile build order so API builds `email-core` instead of
   `email-editor`.
-- Prefer `pnpm deploy --filter @sendlit/api --prod` or another pruned runtime
-  install only after the dependency graph is corrected.
+- Keep the runner's filtered production install
+  (`bun install --production --filter @sendlit/api`); it prunes correctly
+  once the dependency graph is corrected.
 
 ## Commands
 
 Baseline checks:
 
 ```sh
-pnpm --filter @sendlit/api test
-pnpm --filter @sendlit/api run typecheck
-pnpm --filter @sendlit/email-editor build
-pnpm --filter @sendlit/email-blocks build
-pnpm --filter @sendlit/api-contract build
-pnpm --filter @sendlit/api build
+bun --filter @sendlit/api test
+bun --filter @sendlit/api typecheck
+bun --filter @sendlit/email-editor build
+bun --filter @sendlit/email-blocks build
+bun --filter @sendlit/api-contract typecheck
+bun --filter @sendlit/api build
 docker build -f apps/api/Dockerfile -t codelit/sendlit-api:local .
 docker history codelit/sendlit-api:local
-docker run --rm --entrypoint sh codelit/sendlit-api:local -c "du -sh /app /app/node_modules /app/node_modules/.pnpm 2>/dev/null"
+docker run --rm --entrypoint sh codelit/sendlit-api:local -c "for d in /app /app/node_modules /app/node_modules/.bun; do du -sh \$d; done"
 ```
 
 Regression checks for unwanted API runtime packages:
 
 ```sh
-docker run --rm --entrypoint sh codelit/sendlit-api:local -c "test ! -d /app/node_modules/.pnpm/next@*"
-docker run --rm --entrypoint sh codelit/sendlit-api:local -c "test ! -d /app/node_modules/.pnpm/@next+swc-*"
-docker run --rm --entrypoint sh codelit/sendlit-api:local -c "test ! -d /app/node_modules/.pnpm/lucide-react@*"
+docker run --rm --entrypoint sh codelit/sendlit-api:local -c "! ls -d /app/node_modules/.bun/next@* >/dev/null 2>&1"
+docker run --rm --entrypoint sh codelit/sendlit-api:local -c "! ls -d /app/node_modules/.bun/@next+swc-* >/dev/null 2>&1"
+docker run --rm --entrypoint sh codelit/sendlit-api:local -c "! ls -d /app/node_modules/.bun/lucide-react@* >/dev/null 2>&1"
 ```
 
 ## Success Metrics
@@ -161,8 +163,8 @@ docker run --rm --entrypoint sh codelit/sendlit-api:local -c "test ! -d /app/nod
 - API image compressed size is reduced from the observed ~328MB to under 180MB.
 - API image uncompressed size is reduced from the observed ~1.64GB to under
   700MB.
-- Final runtime `pnpm install` or equivalent runtime dependency layer is under
-  400MB uncompressed.
+- Final runtime `bun install --production` dependency layer is under 400MB
+  uncompressed.
 - `next`, `@next/swc-*`, `lucide-react`, and `@radix-ui/*` are absent from the
   final API image.
 - Full API test suite passes.
@@ -198,17 +200,16 @@ docker run --rm --entrypoint sh codelit/sendlit-api:local -c "test ! -d /app/nod
 
 ### Phase 4: Prune Runtime Install
 
-- Evaluate `pnpm deploy --filter @sendlit/api --prod` for the final Docker
-  runtime stage.
-- If adopted, update Dockerfile so the runner copies the deploy output instead
-  of running a broad workspace-root production install.
+- The runner stage already installs only `@sendlit/api`'s production
+  dependencies (`bun install --production --filter @sendlit/api`).
 - Confirm the final image contains only runtime files and production
-  dependencies needed by `apps/api`.
+  dependencies needed by `apps/api` once `email-core` replaces
+  `email-editor` in its graph.
 
 ### Phase 5: Validate Image Size
 
 - Rebuild `codelit/sendlit-api:local`.
-- Record `docker images`, `docker history`, and top `node_modules/.pnpm`
+- Record `docker images`, `docker history`, and top `node_modules/.bun`
   directory sizes.
 - Confirm success metrics.
 
@@ -255,5 +256,5 @@ docker run --rm --entrypoint sh codelit/sendlit-api:local -c "test ! -d /app/nod
   workspace-only for now?
 - Should `renderEmailToHtml` continue using React Email internally if it can be
   kept isolated, or should it move to a non-React renderer?
-- Should Docker optimization with `pnpm deploy` be part of the same PR or a
+- Should any further Docker runtime pruning be part of the same PR or a
   follow-up after the dependency split lands?

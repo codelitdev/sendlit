@@ -1,68 +1,67 @@
 {
-    "name": "sendlit",
-    "version": "0.1.0",
-    "description": "Official server-side TypeScript SDK for the SendLit email marketing API",
-    "author": "SendLit",
-    "license": "MIT",
-    "keywords": [
-        "sendlit",
-        "email",
-        "email-marketing",
-        "newsletter",
-        "transactional-email",
-        "sdk"
-    ],
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/codelitdev/sendlit.git",
-        "directory": "packages/sendlit"
-    },
-    "engines": {
-        "node": ">=18"
-    },
-    "main": "dist/index.js",
-    "module": "dist/index.mjs",
-    "types": "dist/index.d.ts",
-    "files": [
-        "dist",
-        "README.md",
-        "LICENSE"
-    ],
-    "exports": {
-        ".": {
-            "import": {
-                "types": "./dist/index.d.mts",
-                "default": "./dist/index.mjs"
-            },
-            "require": {
-                "types": "./dist/index.d.ts",
-                "default": "./dist/index.js"
-            }
-        }
-    },
-    "sideEffects": false,
-    "publishConfig": {
-        "access": "public"
-    },
-    "scripts": {
-        "test": "vitest run",
-        "clean": "rimraf dist/",
-        "prebuild": "pnpm --filter @sendlit/api-contract build",
-        "build": "tsup && node -e \"require('fs').copyFileSync('dist/index.d.ts', 'dist/index.d.mts')\"",
-        "prepublishOnly": "pnpm run build",
-        "dev": "tsup --watch",
-        "check-types": "tsc --noEmit"
-    },
-    "dependencies": {
-        "@ts-rest/core": "^3.52.1",
-        "zod": "^3.25.76"
-    },
-    "devDependencies": {
-        "@sendlit/api-contract": "workspace:*",
-        "@types/node": "^22.20.0",
-        "rimraf": "^4.4.1",
-        "tsup": "6.6.0",
-        "typescript": "^5.9.3",
-        "vitest": "^4.1.11"
+  "name": "sendlit",
+  "version": "0.1.0",
+  "description": "Official server-side TypeScript SDK for the SendLit email marketing API",
+  "author": "SendLit",
+  "license": "MIT",
+  "keywords": [
+    "sendlit",
+    "email",
+    "email-marketing",
+    "newsletter",
+    "transactional-email",
+    "sdk"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codelitdev/sendlit.git",
+    "directory": "packages/sendlit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
     }
+  },
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "bun test --parallel --timeout 20000 src",
+    "clean": "rimraf dist/",
+    "build": "tsup && node -e \"require('fs').copyFileSync('dist/index.d.ts', 'dist/index.d.mts')\"",
+    "prepublishOnly": "bun run build",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ts-rest/core": "3.52.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@sendlit/api-contract": "workspace:*",
+    "@sendlit/test-utils": "workspace:*",
+    "@types/node": "^22.20.0",
+    "rimraf": "^4.4.1",
+    "tsup": "6.6.0",
+    "typescript": "5.9.3"
+  }
 }

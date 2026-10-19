@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { appRedirect } from "@/lib/safe-app-redirect";
 import { ORGANIZATION_ID_COOKIE, TEAM_ID_COOKIE } from "@/lib/tokens";
 
@@ -15,35 +15,35 @@ import { ORGANIZATION_ID_COOKIE, TEAM_ID_COOKIE } from "@/lib/tokens";
  * don't get bounced to `http://localhost:3000`.
  */
 export async function POST(req: NextRequest) {
-    const form = await req.formData();
-    const teamId = String(form.get("teamId") || "");
-    const organizationId = String(form.get("organizationId") || "");
-    const redirectTo = String(form.get("redirectTo") || "/");
+  const form = await req.formData();
+  const teamId = String(form.get("teamId") || "");
+  const organizationId = String(form.get("organizationId") || "");
+  const redirectTo = String(form.get("redirectTo") || "/");
 
-    // 303: after a form POST, follow the redirect with GET (not re-POST).
-    const res = appRedirect(redirectTo);
-    if (teamId) {
-        const isProd = process.env.NODE_ENV === "production";
-        // Not httpOnly, deliberately: this is just a "which team am I looking
-        // at" selection, not a credential — the dashboard reads it client-side
-        // to render the current team, and every API call is re-validated
-        // against team membership server-side regardless of what it says.
-        res.cookies.set(TEAM_ID_COOKIE, teamId, {
-            httpOnly: false,
-            sameSite: "lax",
-            secure: isProd,
-            path: "/",
-            maxAge: 60 * 60 * 24 * 365,
-        });
-        if (organizationId) {
-            res.cookies.set(ORGANIZATION_ID_COOKIE, organizationId, {
-                httpOnly: false,
-                sameSite: "lax",
-                secure: isProd,
-                path: "/",
-                maxAge: 60 * 60 * 24 * 365,
-            });
-        }
+  // 303: after a form POST, follow the redirect with GET (not re-POST).
+  const res = appRedirect(redirectTo);
+  if (teamId) {
+    const isProd = process.env.NODE_ENV === "production";
+    // Not httpOnly, deliberately: this is just a "which team am I looking
+    // at" selection, not a credential — the dashboard reads it client-side
+    // to render the current team, and every API call is re-validated
+    // against team membership server-side regardless of what it says.
+    res.cookies.set(TEAM_ID_COOKIE, teamId, {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: isProd,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+    if (organizationId) {
+      res.cookies.set(ORGANIZATION_ID_COOKIE, organizationId, {
+        httpOnly: false,
+        sameSite: "lax",
+        secure: isProd,
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+      });
     }
-    return res;
+  }
+  return res;
 }

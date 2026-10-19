@@ -1,96 +1,91 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { API_URL } from "@/lib/config";
 import { appRedirect } from "@/lib/safe-app-redirect";
 
 async function proxyAuth(req: NextRequest, path: string[]) {
-    const upstreamUrl = new URL(
-        `/api/auth/${path.map(encodeURIComponent).join("/")}`,
-        API_URL,
-    );
-    req.nextUrl.searchParams.forEach((value, key) => {
-        upstreamUrl.searchParams.append(key, value);
-    });
+  const upstreamUrl = new URL(
+    `/api/auth/${path.map(encodeURIComponent).join("/")}`,
+    API_URL,
+  );
+  req.nextUrl.searchParams.forEach((value, key) => {
+    upstreamUrl.searchParams.append(key, value);
+  });
 
-    const headers = new Headers(req.headers);
-    headers.set("host", upstreamUrl.host);
-    headers.set("x-forwarded-host", req.headers.get("host") || "");
-    headers.set("x-forwarded-proto", req.nextUrl.protocol.replace(":", ""));
+  const headers = new Headers(req.headers);
+  headers.set("host", upstreamUrl.host);
+  headers.set("x-forwarded-host", req.headers.get("host") || "");
+  headers.set("x-forwarded-proto", req.nextUrl.protocol.replace(":", ""));
 
-    const body =
-        req.method === "GET" || req.method === "HEAD"
-            ? undefined
-            : await req.arrayBuffer();
+  const body =
+    req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer();
 
-    const upstream = await fetch(upstreamUrl, {
-        method: req.method,
-        headers,
-        body,
-        redirect: "manual",
-    });
+  const upstream = await fetch(upstreamUrl, {
+    method: req.method,
+    headers,
+    body,
+    redirect: "manual",
+  });
 
-    const responseHeaders = new Headers(upstream.headers);
-    const location = responseHeaders.get("location");
-    if (location?.startsWith(API_URL)) {
-        responseHeaders.set(
-            "location",
-            location.replace(API_URL, req.nextUrl.origin),
-        );
+  const responseHeaders = new Headers(upstream.headers);
+  const location = responseHeaders.get("location");
+  if (location?.startsWith(API_URL)) {
+    responseHeaders.set("location", location.replace(API_URL, req.nextUrl.origin));
+  }
+
+  if (
+    req.method === "POST" &&
+    path.length === 1 &&
+    path[0] === "sign-out" &&
+    upstream.ok
+  ) {
+    // Relative Location — behind a reverse proxy req.url can be the
+    // container bind host (0.0.0.0:3000), and WEB_CLIENT can disagree
+    // with the origin the user is actually browsing.
+    const response = appRedirect("/login");
+    for (const cookie of upstream.headers.getSetCookie()) {
+      response.headers.append("set-cookie", cookie);
     }
+    return response;
+  }
 
-    if (
-        req.method === "POST" &&
-        path.length === 1 &&
-        path[0] === "sign-out" &&
-        upstream.ok
-    ) {
-        // Relative Location — behind a reverse proxy req.url can be the
-        // container bind host (0.0.0.0:3000), and WEB_CLIENT can disagree
-        // with the origin the user is actually browsing.
-        const response = appRedirect("/login");
-        for (const cookie of upstream.headers.getSetCookie()) {
-            response.headers.append("set-cookie", cookie);
-        }
-        return response;
-    }
-
-    return new NextResponse(upstream.body, {
-        status: upstream.status,
-        statusText: upstream.statusText,
-        headers: responseHeaders,
-    });
+  return new NextResponse(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: responseHeaders,
+  });
 }
 
 export async function GET(
-    req: NextRequest,
-    ctx: { params: Promise<{ path: string[] }> },
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> },
 ) {
-    return proxyAuth(req, (await ctx.params).path);
+  return proxyAuth(req, (await ctx.params).path);
 }
 
 export async function POST(
-    req: NextRequest,
-    ctx: { params: Promise<{ path: string[] }> },
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> },
 ) {
-    return proxyAuth(req, (await ctx.params).path);
+  return proxyAuth(req, (await ctx.params).path);
 }
 
 export async function PUT(
-    req: NextRequest,
-    ctx: { params: Promise<{ path: string[] }> },
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> },
 ) {
-    return proxyAuth(req, (await ctx.params).path);
+  return proxyAuth(req, (await ctx.params).path);
 }
 
 export async function PATCH(
-    req: NextRequest,
-    ctx: { params: Promise<{ path: string[] }> },
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> },
 ) {
-    return proxyAuth(req, (await ctx.params).path);
+  return proxyAuth(req, (await ctx.params).path);
 }
 
 export async function DELETE(
-    req: NextRequest,
-    ctx: { params: Promise<{ path: string[] }> },
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> },
 ) {
-    return proxyAuth(req, (await ctx.params).path);
+  return proxyAuth(req, (await ctx.params).path);
 }

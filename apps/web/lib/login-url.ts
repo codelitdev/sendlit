@@ -1,11 +1,11 @@
 type LoginUrlInput = {
-    apiPublicUrl: string;
-    webClient: string;
+  apiPublicUrl: string;
+  webClient: string;
 };
 
 export function getDashboardLoginUrl({
-    apiPublicUrl,
-    webClient,
+  apiPublicUrl,
+  webClient,
 }: LoginUrlInput): string {
-    return `${apiPublicUrl}/login?redirect=${encodeURIComponent(`${webClient}/`)}`;
+  return `${apiPublicUrl}/login?redirect=${encodeURIComponent(`${webClient}/`)}`;
 }

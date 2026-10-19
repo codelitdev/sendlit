@@ -11,22 +11,16 @@ import redis from "../services/redis";
  * so the poller and the worker share one retry policy.
  */
 const feedbackQueue = new Queue("esp-feedback", {
-    connection: redis,
-    defaultJobOptions: {
-        removeOnComplete: true,
-        removeOnFail: true,
-        attempts: 1,
-    },
+  connection: redis,
+  defaultJobOptions: {
+    removeOnComplete: true,
+    removeOnFail: true,
+    attempts: 1,
+  },
 });
 
 export default feedbackQueue;
 
-export async function enqueueReceiptForProcessing(
-    receiptId: string,
-): Promise<void> {
-    await feedbackQueue.add(
-        "process-receipt",
-        { receiptId },
-        { jobId: receiptId },
-    );
+export async function enqueueReceiptForProcessing(receiptId: string): Promise<void> {
+  await feedbackQueue.add("process-receipt", { receiptId }, { jobId: receiptId });
 }

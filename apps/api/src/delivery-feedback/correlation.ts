@@ -35,69 +35,67 @@ const CORRELATION_WINDOW_DAYS = 7;
  * to one team-owned ESP — a payload can never select its own workspace.
  */
 export async function correlateOutboundMessage({
-    connectionId,
-    sendlitMessageId,
-    providerMessageId,
-    recipientEmail,
+  connectionId,
+  sendlitMessageId,
+  providerMessageId,
+  recipientEmail,
 }: {
-    connectionId: string;
-    sendlitMessageId?: string | null;
-    providerMessageId?: string | null;
-    recipientEmail?: string | null;
+  connectionId: string;
+  sendlitMessageId?: string | null;
+  providerMessageId?: string | null;
+  recipientEmail?: string | null;
 }): Promise<OutboundMessage | null> {
-    if (sendlitMessageId) {
-        const [row] = await db
-            .select()
-            .from(outboundMessages)
-            .where(
-                and(
-                    eq(outboundMessages.feedbackConnectionId, connectionId),
-                    eq(outboundMessages.messageId, sendlitMessageId),
-                ),
-            )
-            .limit(1);
-        if (row) return row;
-    }
+  if (sendlitMessageId) {
+    const [row] = await db
+      .select()
+      .from(outboundMessages)
+      .where(
+        and(
+          eq(outboundMessages.feedbackConnectionId, connectionId),
+          eq(outboundMessages.messageId, sendlitMessageId),
+        ),
+      )
+      .limit(1);
+    if (row) return row;
+  }
 
-    if (providerMessageId) {
-        const rows = await db
-            .select()
-            .from(outboundMessages)
-            .where(
-                and(
-                    eq(outboundMessages.feedbackConnectionId, connectionId),
-                    eq(outboundMessages.providerMessageId, providerMessageId),
-                ),
-            );
-        if (rows.length === 1) return rows[0];
-        if (rows.length > 1 && recipientEmail) {
-            const normalized = normalizeEmail(recipientEmail);
-            const narrowed = rows.filter(
-                (row) => row.normalizedRecipient === normalized,
-            );
-            if (narrowed.length === 1) return narrowed[0];
-        }
+  if (providerMessageId) {
+    const rows = await db
+      .select()
+      .from(outboundMessages)
+      .where(
+        and(
+          eq(outboundMessages.feedbackConnectionId, connectionId),
+          eq(outboundMessages.providerMessageId, providerMessageId),
+        ),
+      );
+    if (rows.length === 1) return rows[0];
+    if (rows.length > 1 && recipientEmail) {
+      const normalized = normalizeEmail(recipientEmail);
+      const narrowed = rows.filter((row) => row.normalizedRecipient === normalized);
+      if (narrowed.length === 1) return narrowed[0];
     }
+  }
 
-    if (recipientEmail) {
-        const normalized = normalizeEmail(recipientEmail);
-        const windowStart = new Date(
-            Date.now() - CORRELATION_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-        );
-        const [row] = await db
-            .select()
-            .from(outboundMessages)
-            .where(
-                and(
-                    eq(outboundMessages.feedbackConnectionId, connectionId),
-                    eq(outboundMessages.normalizedRecipient, normalized),
-                    gte(outboundMessages.createdAt, windowStart),
-                ),
-            )
-            .orderBy(desc(outboundMessages.createdAt))
-            .limit(1);
-        if (row) return row;
-    }
+  if (recipientEmail) {
+    const normalized = normalizeEmail(recipientEmail);
+    const windowStart = new Date(
+      Date.now() - CORRELATION_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const [row] = await db
+      .select()
+      .from(outboundMessages)
+      .where(
+        and(
+          eq(outboundMessages.feedbackConnectionId, connectionId),
+          eq(outboundMessages.normalizedRecipient, normalized),
+          gte(outboundMessages.createdAt, windowStart),
+        ),
+      )
+      .orderBy(desc(outboundMessages.createdAt))
+      .limit(1);
+    if (row) return row;
+  }
 
-    return null;
+  return null;
 }

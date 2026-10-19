@@ -1,0 +1,22 @@
+{
+  "name": "@sendlit/test-utils",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Bun test helpers shared by SendLit workspaces",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dom": "./src/dom.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@happy-dom/global-registrator": "21.0.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.1",
+    "typescript": "5.9.3"
+  }
+}
