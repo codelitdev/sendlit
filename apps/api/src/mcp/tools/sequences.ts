@@ -5,6 +5,7 @@ import {
 } from "@sendlit/api-contract";
 import { z } from "zod";
 import { broadcastPacing } from "../../abuse/pacing-status";
+import { sequenceDeliveryRates } from "../../automation/sending-health";
 import { emailActionTypes, mailTypes } from "../../config/constants";
 import type { HydratedSequence } from "../../sequences/queries";
 import {
@@ -462,17 +463,21 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
       try {
         const sequence = await getSequenceBySequenceId(teamId, args.sequenceId);
         if (!sequence) return NOT_FOUND;
-        const [sent, openRate, clickThroughRate, subscribersCount] = await Promise.all([
-          getEmailSentCount(args.sequenceId),
-          getSequenceOpenRate(args.sequenceId),
-          getSequenceClickThroughRate(args.sequenceId),
-          getSubscribersCount(args.sequenceId),
-        ]);
+        const [sent, openRate, clickThroughRate, subscribersCount, rates] =
+          await Promise.all([
+            getEmailSentCount(args.sequenceId),
+            getSequenceOpenRate(args.sequenceId),
+            getSequenceClickThroughRate(args.sequenceId),
+            getSubscribersCount(args.sequenceId),
+            sequenceDeliveryRates(sequence.id),
+          ]);
         return jsonResult({
           sent,
           openRate,
           clickThroughRate,
           subscribersCount,
+          bounceRate: rates.bounceRate,
+          complaintRate: rates.complaintRate,
         });
       } catch {
         return INTERNAL_ERROR;

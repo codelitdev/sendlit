@@ -27,6 +27,23 @@ web version shows their merge-tag data and their unsubscribe link. It has no
 open or click tracking and isn't indexed by search engines. To place the link
 elsewhere in your content, use the `{{ view_in_browser_url }}` merge tag.
 
+## Automatic pause on bounces and complaints
+
+While a broadcast or sequence sends, SendLit watches its bounce and spam
+complaint rates. Once at least 100 of its emails went out, it pauses
+automatically when more than 2% bounce or more than 0.08% are marked as spam.
+It also pauses after five failed sends in a row, or straight away when your
+email provider refuses to send at all (for example an account that is
+suspended or a sender that isn't verified). Throttling never pauses it; those
+emails just wait.
+
+The broadcast's page then explains why and shows the bounce and complaint
+rates, and the organization's owners get an email. Emails that haven't gone
+out yet stay queued: clean your list or fix your provider, then choose
+**Resume**. Rates after a resume start over. Self-hosters can tune the
+thresholds with `AUTO_PAUSE_MIN_SENT`, `AUTO_PAUSE_BOUNCE_BPS`,
+`AUTO_PAUSE_COMPLAINT_BPS` and `AUTO_PAUSE_CONSECUTIVE_FAILURES`.
+
 ## Send a test
 
 Use **Send test** in the broadcast editor (or the full-screen content editor)

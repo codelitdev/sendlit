@@ -15,6 +15,7 @@ import {
 import { Check, Pause, Pencil, Play } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { AutoPauseBanner } from "@/components/dashboard/auto-pause-banner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
@@ -299,6 +300,10 @@ export default function SequenceEditorPage({
           <Banner className="mb-4">
             <SendErrorMessage error={error} />
           </Banner>
+        )}
+
+        {sequence.status === "paused" && (
+          <AutoPauseBanner report={sequence.report} onResume={toggleStatus} />
         )}
 
         {stats && (

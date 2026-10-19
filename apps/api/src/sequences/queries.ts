@@ -60,14 +60,18 @@ export type HydratedSequence = Sequence & {
   entrantsCount?: number;
 };
 
+/** The report of a (re)started sequence: drops the deleted-delivery-source
+ * marker and the auto-pause state (#25) along with its failure streak. */
 function clearDeletedDeliverySourceMarker(report: unknown): Record<string, unknown> {
   if (!report || typeof report !== "object" || Array.isArray(report)) {
     return {};
   }
-  const { deliverySourceDeleted: _deleted, ...rest } = report as Record<
-    string,
-    unknown
-  >;
+  const {
+    deliverySourceDeleted: _deleted,
+    autoPause: _autoPause,
+    health: _health,
+    ...rest
+  } = report as Record<string, unknown>;
   return rest;
 }
 
@@ -645,6 +649,35 @@ export async function startSequence({
   for (const email of sequence.emails.filter((e) => e.published)) {
     await assertEmailContentAllowed({ teamId, email });
   }
+
+  // A broadcast paused mid-send (automatically, #25) resumes its queued
+  // deliveries; running its audience again would email people twice.
+  if (
+    sequence.type === "broadcast" &&
+    sequence.status === "paused" &&
+    (sequence.report as { broadcast?: { lockedAt?: number | null } } | null)?.broadcast
+      ?.lockedAt
+  ) {
+    const [resumed] = await db
+      .update(sequences)
+      .set({
+        status: "active",
+        report: {
+          ...clearDeletedDeliverySourceMarker(sequence.report),
+          healthSince: Date.now(),
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(sequences.id, sequence.id))
+      .returning();
+    captureEvent({
+      event: "sequence_resumed",
+      source: "sequences.start",
+      teamId,
+      properties: { sequence_id: sequence.sequenceId, sequence_type: sequence.type },
+    });
+    return hydrate(resumed);
+  }
   await db.transaction(async (tx) => {
     await assertMarketingAllowedForContactUsage(tx, team.organizationId);
   });
@@ -739,7 +772,11 @@ export async function startSequence({
       deliverySourceType: pin.type,
       outboxId: pin.espConfigId,
       espGrantId: pin.espGrantId,
-      report: clearDeletedDeliverySourceMarker(sequence.report),
+      report: {
+        ...clearDeletedDeliverySourceMarker(sequence.report),
+        // A restarted sequence's bounce/complaint rates start over (#25).
+        ...(sequence.status === "paused" && { healthSince: Date.now() }),
+      },
       updatedAt: new Date(),
     })
     .where(eq(sequences.id, sequence.id))

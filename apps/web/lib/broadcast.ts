@@ -10,7 +10,7 @@ import type { Sequence } from "@sendlit/email-blocks";
  * holds the absolute send time in epoch millis (0 / past = send now).
  */
 export function presentBroadcastStatus(sequence: Sequence): {
-  label: "draft" | "scheduled" | "sending" | "sent";
+  label: "draft" | "scheduled" | "sending" | "paused" | "sent";
   variant: "success" | "warning" | "neutral";
 } {
   if (sequence.status === "completed") {
@@ -20,6 +20,10 @@ export function presentBroadcastStatus(sequence: Sequence): {
     return broadcastScheduledFor(sequence)
       ? { label: "scheduled", variant: "warning" }
       : { label: "sending", variant: "success" };
+  }
+  // Paused mid-send (#25); a cancelled schedule is a draft again.
+  if (sequence.status === "paused" && sequence.report?.broadcast?.lockedAt) {
+    return { label: "paused", variant: "warning" };
   }
   return { label: "draft", variant: "neutral" };
 }

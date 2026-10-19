@@ -220,6 +220,9 @@ export const sequenceStatsSchema = z.object({
   openRate: z.number(),
   clickThroughRate: z.number(),
   subscribersCount: z.number(),
+  /** Share of accepted emails that bounced / were marked as spam (0-1). */
+  bounceRate: z.number().optional(),
+  complaintRate: z.number().optional(),
 });
 
 export const listSubscribersQuerySchema = z.object({

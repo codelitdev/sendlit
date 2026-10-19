@@ -116,6 +116,9 @@ mock.module("../../sequences/queries", () => ({
 }));
 
 mock.module("../../abuse/pacing-status", () => ({ broadcastPacing: async () => null }));
+mock.module("../../automation/sending-health", () => ({
+  sequenceDeliveryRates: async () => ({ bounceRate: 0, complaintRate: 0 }),
+}));
 mock.module("../../sequences/test-send", () => ({
   sendSequenceEmailTest: mocks.sendSequenceEmailTest,
 }));
