@@ -41,6 +41,10 @@ export const espConfigSchema = z.object({
   replyTo: z.string().nullable().optional(),
   /** Configured messages per second; `null` means the provider default. */
   maxSendRate: z.number().nullable().optional(),
+  /** Daily cap on marketing sends (UTC days); `null` means none. */
+  dailySendLimit: z.number().int().nullable().optional(),
+  /** Marketing sends today (UTC), when the ESP has a daily cap. */
+  sentToday: z.number().int().nullable().optional(),
   status: z.enum(["draft", "active", "suspended", "draining", "retired"]),
   secretVersion: z.number().int().positive(),
   lastTestedAt: z.string().nullable().optional(),
@@ -62,6 +66,16 @@ const maxSendRateSchema = z
     "Messages per second to send through this ESP, across all workers. `null` uses the provider default (Amazon SES 14, Resend 2, others unlimited).",
   );
 
+const dailySendLimitSchema = z
+  .number()
+  .int()
+  .positive()
+  .nullable()
+  .optional()
+  .describe(
+    "Most marketing emails (broadcasts and sequences) to send through this ESP per UTC day, e.g. while warming up a new domain. Emails over the cap wait for the next day. `null` removes the cap; transactional email is never capped.",
+  );
+
 export const upsertEspConfigBodySchema = z.object({
   provider: z.enum(espProviders),
   host: z.string().min(1),
@@ -77,6 +91,7 @@ export const upsertEspConfigBodySchema = z.object({
     .optional()
     .describe('Where replies go, when not the from address. `""` clears it.'),
   maxSendRate: maxSendRateSchema,
+  dailySendLimit: dailySendLimitSchema,
 });
 
 export const createEspConfigBodySchema = upsertEspConfigBodySchema.extend({
@@ -96,6 +111,7 @@ export const updateEspConfigBodySchema = z
     fromEmail: z.union([z.string().email(), z.literal("")]).optional(),
     replyTo: z.union([z.string().email(), z.literal("")]).optional(),
     maxSendRate: maxSendRateSchema,
+    dailySendLimit: dailySendLimitSchema,
   })
   .refine((body) => Object.keys(body).length > 0, {
     message: "At least one field is required",

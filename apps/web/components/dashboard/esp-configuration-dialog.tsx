@@ -45,6 +45,7 @@ type FormState = {
   fromEmail: string;
   replyTo: string;
   maxSendRate: string;
+  dailySendLimit: string;
 };
 
 const emptyForm: FormState = {
@@ -59,6 +60,7 @@ const emptyForm: FormState = {
   fromEmail: "",
   replyTo: "",
   maxSendRate: "",
+  dailySendLimit: "",
 };
 
 function formFor(esp: EspConfig | null): FormState {
@@ -75,6 +77,7 @@ function formFor(esp: EspConfig | null): FormState {
     fromEmail: esp.fromEmail ?? "",
     replyTo: esp.replyTo ?? "",
     maxSendRate: esp.maxSendRate ? String(esp.maxSendRate) : "",
+    dailySendLimit: esp.dailySendLimit ? String(esp.dailySendLimit) : "",
   };
 }
 
@@ -132,6 +135,16 @@ export function EspConfigurationDialog({
       setError("Enter a send rate between 0 and 10,000 emails per second.");
       return;
     }
+    const dailySendLimit = form.dailySendLimit.trim()
+      ? Number(form.dailySendLimit)
+      : null;
+    if (
+      dailySendLimit !== null &&
+      !(Number.isInteger(dailySendLimit) && dailySendLimit > 0)
+    ) {
+      setError("Enter a whole number of emails per day.");
+      return;
+    }
     const replyTo = form.replyTo.trim();
     if (replyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo)) {
       setError("Enter a valid reply-to email address.");
@@ -154,6 +167,7 @@ export function EspConfigurationDialog({
         // "" clears a previously saved reply-to on edit.
         ...(replyTo || esp?.replyTo ? { replyTo } : {}),
         maxSendRate,
+        dailySendLimit,
       });
       onOpenChange(false);
     } catch (err) {
@@ -326,6 +340,30 @@ export function EspConfigurationDialog({
             <p className="text-sm text-muted-foreground">
               Sends through this ESP are spaced to stay under this rate. For Amazon SES,
               use your account&apos;s maximum send rate.
+            </p>
+          </div>
+          <div className="col-span-full space-y-1.5">
+            <Label htmlFor="esp-daily-send-limit">
+              Daily send limit for warm-up (optional)
+            </Label>
+            <Input
+              id="esp-daily-send-limit"
+              type="number"
+              min="1"
+              step="1"
+              value={form.dailySendLimit}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  dailySendLimit: event.target.value,
+                })
+              }
+              placeholder="No limit"
+            />
+            <p className="text-sm text-muted-foreground">
+              Most broadcast and sequence emails sent per day (UTC). The rest wait for
+              the next day. Raise it as your new domain warms up. Transactional email is
+              never held back.
             </p>
           </div>
           <div className="col-span-full flex items-center gap-3">

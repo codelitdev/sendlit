@@ -209,6 +209,7 @@ export const espConfigSchema = z.object({
   fromEmail: z.string().nullable().optional(),
   replyTo: z.string().nullable().optional(),
   maxSendRate: z.number().nullable().optional(),
+  dailySendLimit: z.number().int().nullable().optional(),
   status: z.string(),
   secretVersion: z.number(),
   lastTestedAt: z.string().nullable().optional(),

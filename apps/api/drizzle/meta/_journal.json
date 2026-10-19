@@ -99,6 +99,13 @@
       "when": 1792418220753,
       "tag": "0013_esp_config_max_send_rate",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792419874681,
+      "tag": "0014_esp_config_daily_send_limit",
+      "breakpoints": true
     }
   ]
 }

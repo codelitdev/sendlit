@@ -575,7 +575,13 @@ export default function SettingsPage() {
                           </TableCell>
                           <TableCell>{PROVIDER_LABEL[esp.provider]}</TableCell>
                           <TableCell className="text-muted-foreground">
-                            {esp.fromEmail ?? "Not set"}
+                            <div>{esp.fromEmail ?? "Not set"}</div>
+                            {esp.dailySendLimit ? (
+                              <div className="text-xs">
+                                Today: {(esp.sentToday ?? 0).toLocaleString()} /{" "}
+                                {esp.dailySendLimit.toLocaleString()} marketing emails
+                              </div>
+                            ) : null}
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-2">

@@ -23,7 +23,7 @@ import {
 } from "../delivery-feedback/outbound-send";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
 import { renderCampaignHtml } from "../mail/campaign";
-import { SendDeferredError } from "../mail/rate-limit";
+import { quotaExhaustionDeferral, SendDeferredError } from "../mail/rate-limit";
 import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
@@ -128,7 +128,7 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
     if (err instanceof SendDeferredError) {
       logger.info(
         { ongoing_sequence_id: ongoingSequenceId, retry_after_ms: err.retryAfterMs },
-        "send deferred by the ESP rate limit",
+        "send deferred until the ESP has capacity",
       );
       return;
     }
@@ -320,14 +320,17 @@ async function attemptMailSending({
     await commitSendReservation(outbound.id);
     await applyEmailAction({ team, contact, sequence, email });
   } catch (err: any) {
-    if (err instanceof SendDeferredError) {
-      // Try again once the ESP has capacity. Not a failed attempt, so the
-      // retry count (which eventually marks the contact failed) stays put.
+    const deferral =
+      err instanceof SendDeferredError ? err : quotaExhaustionDeferral(err);
+    if (deferral) {
+      // Try again once the ESP has capacity (rate limit, daily warm-up cap
+      // or quota). Not a failed attempt, so the retry count (which
+      // eventually marks the contact failed) stays put.
       await db
         .update(ongoingSequences)
-        .set({ nextEmailScheduledTime: Date.now() + err.retryAfterMs })
+        .set({ nextEmailScheduledTime: Date.now() + deferral.retryAfterMs })
         .where(eq(ongoingSequences.id, ongoingSequence.id));
-      throw err;
+      throw deferral;
     }
     const retryCount = ongoingSequence.retryCount + 1;
     if (retryCount >= sequenceBounceLimit) {

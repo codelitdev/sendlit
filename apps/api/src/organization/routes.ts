@@ -216,6 +216,7 @@ function serializeOrganizationEsp(config: EspConfig) {
     fromEmail: config.fromEmail,
     replyTo: config.replyTo,
     maxSendRate: config.maxSendRate,
+    dailySendLimit: config.dailySendLimit,
     status: config.status as "draft" | "active" | "suspended" | "draining" | "retired",
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt?.toISOString() ?? null,

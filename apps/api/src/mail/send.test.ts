@@ -13,7 +13,7 @@ mock.module("./transport", () => ({
   getTeamTransport: getTeamTransportMock,
 }));
 
-const throttleForEspMock = mock(async () => undefined);
+const acquireCapacityMock = mock(async () => async () => undefined);
 mock.module("./rate-limit", () => {
   class SendDeferredError extends Error {
     constructor(
@@ -25,7 +25,7 @@ mock.module("./rate-limit", () => {
   }
   return {
     SendDeferredError,
-    throttleForEsp: throttleForEspMock,
+    acquireEspSendCapacity: acquireCapacityMock,
     throttlingRetryDelay: (error: { responseCode?: number }) =>
       error?.responseCode === 454 ? 60_000 : null,
   };
@@ -147,7 +147,7 @@ describe("sendMail", () => {
     };
 
     await sendMail(input);
-    expect(throttleForEspMock).toHaveBeenCalledWith("esp-internal");
+    expect(acquireCapacityMock).toHaveBeenCalledWith("esp-internal", "transactional");
 
     const deferred = await sendMail(input).catch((error) => error);
     expect(deferred.retryAfterMs).toBe(60_000);

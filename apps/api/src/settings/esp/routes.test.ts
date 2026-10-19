@@ -8,6 +8,9 @@ const transportMocks = {
   invalidateTeam: vi.fn(),
 };
 
+mock.module("../../mail/rate-limit", () => ({
+  dailySendCount: async () => 0,
+}));
 mock.module("../../db/client", async () => {
   const { makeTestDb } = await import("../../test/db");
   return { db: await makeTestDb() };

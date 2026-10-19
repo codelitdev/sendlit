@@ -2,7 +2,11 @@ import { renderEmailToPlainText } from "@sendlit/email-editor";
 import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
-import { SendDeferredError, throttleForEsp, throttlingRetryDelay } from "./rate-limit";
+import {
+  acquireEspSendCapacity,
+  SendDeferredError,
+  throttlingRetryDelay,
+} from "./rate-limit";
 import { getEspTransport, getTeamTransport } from "./transport";
 
 const MISSING_TEAM_ESP_ERROR = "Team ESP is not configured.";
@@ -87,17 +91,26 @@ export async function sendMail({
       espConfigId,
       secretVersion,
     );
-    if (espConfigId) await throttleForEsp(espConfigId);
-    const info = await transporter.sendMail({
-      from,
-      to,
-      subject,
-      html,
-      text: text ?? renderEmailToPlainText(html),
-      ...(replyTo ? { replyTo } : {}),
-      headers,
-      messageId,
-    });
+    const releaseCapacity = espConfigId
+      ? await acquireEspSendCapacity(espConfigId, purpose)
+      : undefined;
+    let info: Awaited<ReturnType<typeof transporter.sendMail>>;
+    try {
+      info = await transporter.sendMail({
+        from,
+        to,
+        subject,
+        html,
+        text: text ?? renderEmailToPlainText(html),
+        ...(replyTo ? { replyTo } : {}),
+        headers,
+        messageId,
+      });
+    } catch (error) {
+      // Not sent, so it doesn't count against today's cap.
+      await releaseCapacity?.();
+      throw error;
+    }
     result = {
       messageId: info?.messageId ?? null,
       providerResponse: info?.response ?? null,

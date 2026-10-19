@@ -11,8 +11,9 @@ import type { EspProvider } from "../settings/esp/queries";
  * deferred and retried later instead of tying up a worker. */
 const MAX_WAIT_MS = 30_000;
 
-/** A send that couldn't go out now, because of the ESP's rate limit (ours or
- * the provider's). Callers reschedule it instead of counting a failure. */
+/** A send that couldn't go out now: the ESP's rate limit (ours or the
+ * provider's) or its daily warm-up cap. Callers reschedule it instead of
+ * counting a failure. */
 export class SendDeferredError extends Error {
   constructor(
     readonly retryAfterMs: number,
@@ -93,16 +94,119 @@ export async function waitForSendSlot(
   if (wait > 0) await sleep(wait);
 }
 
-/** Holds a send through `espConfigId` (internal id) until its rate limit
- * allows it. */
-export async function throttleForEsp(espConfigId: string): Promise<void> {
+// Counts today's (UTC) marketing sends per ESP. Returns 0 without counting
+// when the cap is already reached.
+const COUNT_DAILY_SEND = `
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[2]) end
+if count > tonumber(ARGV[1]) then
+  redis.call('DECR', KEYS[1])
+  return 0
+end
+return 1
+`;
+
+function dailySendKey(espConfigId: string, now = new Date()) {
+  return `sendlit:daily-sends:${espConfigId}:${now.toISOString().slice(0, 10)}`;
+}
+
+/** How long until the next UTC day, plus up to 10 minutes so a capped
+ * broadcast doesn't wake up all at once at midnight. */
+export function untilNextUtcDay(now = new Date()): number {
+  const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return next - now.getTime() + Math.floor(Math.random() * 600_000);
+}
+
+/**
+ * Counts one marketing send against the ESP's daily warm-up cap, or throws
+ * `SendDeferredError` until the next UTC day when the cap is reached.
+ * Returns a function that gives the send back (when it then fails). Like the
+ * rate limit, a Redis outage lets the send through.
+ */
+export async function reserveDailySend(
+  espConfigId: string,
+  limit: number,
+): Promise<() => Promise<void>> {
+  const key = dailySendKey(espConfigId);
+  let granted: number;
+  try {
+    granted = Number(
+      await redis().eval(COUNT_DAILY_SEND, 1, key, limit, 2 * 86_400_000),
+    );
+  } catch (error) {
+    captureError({ error, source: "mail.daily_send_limit", severity: "warning" });
+    return async () => undefined;
+  }
+  if (!granted)
+    throw new SendDeferredError(untilNextUtcDay(), "daily_send_limit_reached");
+  return async () => {
+    await redis()
+      .decr(key)
+      .catch(() => undefined);
+  };
+}
+
+/** Marketing sends through one ESP today (UTC), for showing warm-up
+ * progress; `null` when Redis can't say. */
+export async function dailySendCount(espConfigId: string): Promise<number | null> {
+  try {
+    return Number((await redis().get(dailySendKey(espConfigId))) ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Holds a send through `espConfigId` (internal id) until the ESP has
+ * capacity: within its daily warm-up cap (marketing mail only, so
+ * transactional mail like sign-in codes keeps flowing) and its per-second
+ * rate. Returns a function to call if the send then fails, so it doesn't
+ * count against today's cap.
+ */
+export async function acquireEspSendCapacity(
+  espConfigId: string,
+  purpose: "campaign" | "transactional",
+): Promise<() => Promise<void>> {
   const [esp] = await db
-    .select({ provider: espConfigs.provider, maxSendRate: espConfigs.maxSendRate })
+    .select({
+      provider: espConfigs.provider,
+      maxSendRate: espConfigs.maxSendRate,
+      dailySendLimit: espConfigs.dailySendLimit,
+    })
     .from(espConfigs)
     .where(eq(espConfigs.id, espConfigId))
     .limit(1);
-  const rate = esp ? effectiveMaxSendRate(esp) : null;
-  if (rate) await waitForSendSlot(espConfigId, rate);
+  if (!esp) return async () => undefined;
+  const release =
+    purpose === "campaign" && esp.dailySendLimit !== null
+      ? await reserveDailySend(espConfigId, esp.dailySendLimit)
+      : async () => undefined;
+  const rate = effectiveMaxSendRate(esp);
+  try {
+    if (rate) await waitForSendSlot(espConfigId, rate);
+  } catch (error) {
+    await release();
+    throw error;
+  }
+  return release;
+}
+
+/** An organization ESP grant's daily/monthly quota being used up (see
+ * `delivery/quota.ts`) as a deferral until it resets, so campaign mail waits
+ * instead of failing. */
+export function quotaExhaustionDeferral(error: unknown): SendDeferredError | null {
+  const err = error as { message?: unknown; retryAfter?: unknown };
+  if (
+    err?.message !== "organization_team_quota_exhausted" &&
+    err?.message !== "organization_quota_exhausted"
+  ) {
+    return null;
+  }
+  const seconds = typeof err.retryAfter === "number" ? err.retryAfter : 3600;
+  return new SendDeferredError(
+    seconds * 1000 + Math.floor(Math.random() * 600_000),
+    err.message,
+  );
 }
 
 /** SMTP replies that mean "slow down" or "come back later" rather than a

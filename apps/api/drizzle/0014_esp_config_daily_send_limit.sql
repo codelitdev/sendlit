@@ -1,0 +1,1 @@
+ALTER TABLE "esp_configs" ADD COLUMN "daily_send_limit" integer;

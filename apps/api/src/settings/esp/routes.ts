@@ -4,6 +4,7 @@ import { Router } from "express";
 import { requireAuth } from "../../auth/middleware";
 import { requireTeam } from "../../auth/require-team";
 import { getTeamDeliverySetting } from "../../delivery/queries";
+import { dailySendCount } from "../../mail/rate-limit";
 import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
 import { captureEvent } from "../../observability";
 import { getTeamMembership } from "../../team/queries";
@@ -45,6 +46,7 @@ function toPublicShape(config: EspConfig) {
     fromEmail: config.fromEmail,
     replyTo: config.replyTo,
     maxSendRate: config.maxSendRate,
+    dailySendLimit: config.dailySendLimit,
     status: config.status as "draft" | "active" | "suspended" | "draining" | "retired",
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt?.toISOString() ?? null,
@@ -105,10 +107,15 @@ async function testConfig({
 const collectionImpl = s.router(contract.settings.esps, {
   list: async ({ req }) => {
     const configs = await listEspConfigs((req as any).teamId);
-    return {
-      status: 200,
-      body: { items: configs.map(toPublicShape) },
-    };
+    const items = await Promise.all(
+      configs.map(async (config) => ({
+        ...toPublicShape(config),
+        // Warm-up progress, for ESPs with a daily cap.
+        sentToday:
+          config.dailySendLimit !== null ? await dailySendCount(config.id) : null,
+      })),
+    );
+    return { status: 200, body: { items } };
   },
   create: async ({ body, req }) => {
     const teamId = (req as any).teamId;

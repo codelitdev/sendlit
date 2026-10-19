@@ -13,6 +13,10 @@ SES → SNS topic → POST https://<your-domain>/webhooks/esp/ses/<connection-id
 
 There is no shared secret to copy around. SendLit checks every message's Amazon signature and accepts only messages from the one topic you configure. It also confirms the SNS subscription for you.
 
+If the SES account or the sending domain is new, also read
+[Warming up a domain or SES account](/email-marketing/warm-up) before your
+first large send.
+
 ## Before you start
 
 - **An SES ESP in SendLit.** Add Amazon SES under **Settings → Email service providers (ESP)** using your SES SMTP credentials, and send a test email.
