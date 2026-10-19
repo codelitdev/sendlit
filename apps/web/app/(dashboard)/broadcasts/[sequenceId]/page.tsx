@@ -12,6 +12,7 @@ import {
 import { CalendarClock, Check, Pencil, Send, X } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { AutoPauseBanner } from "@/components/dashboard/auto-pause-banner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
@@ -287,7 +288,11 @@ export default function BroadcastEditorPage({
   const status = presentBroadcastStatus(sequence);
   const scheduledFor = broadcastScheduledFor(sequence);
   const scheduledForLabel = scheduledFor?.toLocaleString();
-  const editable = sequence.status === "draft" || sequence.status === "paused";
+  // A broadcast paused mid-send is resumed, not edited or re-sent.
+  const autoPaused =
+    sequence.status === "paused" && Boolean(sequence.report?.autoPause);
+  const editable =
+    (sequence.status === "draft" || sequence.status === "paused") && !autoPaused;
 
   return (
     <ScrollablePage>
@@ -365,6 +370,28 @@ export default function BroadcastEditorPage({
               Cancel
             </Button>
           </Banner>
+        )}
+
+        {autoPaused && (
+          <AutoPauseBanner
+            report={sequence.report}
+            resuming={working}
+            onResume={async () => {
+              setWorking(true);
+              setError(null);
+              try {
+                setSequence(await startSequence(sequenceId));
+              } catch (err) {
+                setError(
+                  err instanceof ApiError
+                    ? presentDeliverySourceError(err.message)
+                    : "Action failed",
+                );
+              } finally {
+                setWorking(false);
+              }
+            }}
+          />
         )}
 
         {sequence.pacing && (

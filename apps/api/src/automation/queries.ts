@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, count, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { assertMarketingAllowedForContactUsage } from "../billing/entitlements";
 import { EventType, sequenceBounceLimit } from "../config/constants";
 import {
@@ -159,13 +159,16 @@ export async function markBroadcastSent(sequenceId: string) {
 
 export async function getDueOngoingSequences() {
   const currentTime = Date.now();
-  return db
-    .select()
+  const rows = await db
+    .select({ row: ongoingSequences })
     .from(ongoingSequences)
+    .innerJoin(sequences, eq(sequences.id, ongoingSequences.sequenceId))
     .where(
       and(
         lt(ongoingSequences.nextEmailScheduledTime, currentTime),
         lt(ongoingSequences.retryCount, sequenceBounceLimit),
+        // A paused sequence keeps its deliveries queued until it resumes.
+        ne(sequences.status, "paused"),
         or(
           isNull(ongoingSequences.processingStartedAt),
           lt(
@@ -175,6 +178,7 @@ export async function getDueOngoingSequences() {
         ),
       ),
     );
+  return rows.map(({ row }) => row);
 }
 
 const PROCESSING_LEASE_MS = 10 * 60 * 1000;

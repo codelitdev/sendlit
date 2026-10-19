@@ -82,6 +82,15 @@ export interface SequenceReport {
     unsubscribers?: string[];
     failed?: string[];
   };
+  /** Set when SendLit paused a running send because of its bounce or
+   * complaint rate, failures, or an ESP error. */
+  autoPause?: {
+    reason: "bounce_rate" | "complaint_rate" | "consecutive_failures" | "esp_error";
+    at: number;
+    bounceRate?: number;
+    complaintRate?: number;
+    error?: string;
+  };
 }
 
 export interface Sequence {
@@ -117,4 +126,7 @@ export interface SequenceStats {
   openRate: number;
   clickThroughRate: number;
   subscribersCount: number;
+  /** Share of accepted emails that bounced / were marked as spam (0-1). */
+  bounceRate?: number;
+  complaintRate?: number;
 }

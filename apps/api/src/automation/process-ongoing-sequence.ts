@@ -38,6 +38,19 @@ import {
   markBroadcastSent,
   releaseOngoingSequenceClaim,
 } from "./queries";
+import {
+  autoPauseSequence,
+  isFatalEspError,
+  isSequencePaused,
+  pauseIfUnhealthy,
+  readSendingHealthConfig,
+  recordSendFailure,
+  recordSendSuccess,
+} from "./sending-health";
+
+/** The sequence was paused while sending this email; the delivery stays
+ * queued for when it resumes. */
+class SequencePausedError extends Error {}
 
 type OngoingSequenceRow = typeof ongoingSequences.$inferSelect;
 type SequenceEmailRow = typeof sequenceEmails.$inferSelect;
@@ -60,6 +73,13 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
 
     if (!sequenceRow || !contact || !team) {
       return cleanUpResources(ongoingSequence);
+    }
+    // Paused (by the team or automatically): keep the delivery queued for
+    // when it is resumed. Also stop when its bounce/complaint rates got too
+    // high (#25).
+    if (sequenceRow.status === "paused" || (await pauseIfUnhealthy(sequenceRow))) {
+      await releaseOngoingSequenceClaim(ongoingSequence.id);
+      return;
     }
 
     const emails = await db
@@ -124,7 +144,9 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
       .where(eq(ongoingSequences.id, ongoingSequence.id));
   } catch (err: any) {
     await releaseOngoingSequenceClaim(ongoingSequenceId);
-    // Rate limited: the row was rescheduled, so this isn't a job failure.
+    // Rate limited (the row was rescheduled) or the sequence was just paused:
+    // not a job failure.
+    if (err instanceof SequencePausedError) return;
     if (err instanceof SendDeferredError) {
       logger.info(
         { ongoing_sequence_id: ongoingSequenceId, retry_after_ms: err.retryAfterMs },
@@ -284,6 +306,8 @@ async function attemptMailSending({
       await applyEmailAction({ team, contact, sequence, email });
       return;
     }
+    // Paused while other deliveries were sending (#25): keep this one queued.
+    if (await isSequencePaused(sequence.id)) throw new SequencePausedError();
     const result = await sendMail({
       purpose: "campaign",
       from,
@@ -318,8 +342,12 @@ async function attemptMailSending({
     });
     await commitQuotaForOutbound(outbound.id);
     await commitSendReservation(outbound.id);
+    if ((sequence.report as { health?: unknown } | null)?.health) {
+      await recordSendSuccess(sequence.id);
+    }
     await applyEmailAction({ team, contact, sequence, email });
   } catch (err: any) {
+    if (err instanceof SequencePausedError) throw err;
     const deferral =
       err instanceof SendDeferredError ? err : quotaExhaustionDeferral(err);
     if (deferral) {
@@ -331,6 +359,17 @@ async function attemptMailSending({
         .set({ nextEmailScheduledTime: Date.now() + deferral.retryAfterMs })
         .where(eq(ongoingSequences.id, ongoingSequence.id));
       throw deferral;
+    }
+    // Five failures in a row, or the ESP refusing outright, pause the whole
+    // sequence instead of failing every remaining recipient.
+    const failures = await recordSendFailure(sequence.id);
+    const fatal = isFatalEspError(err);
+    if (fatal || failures >= readSendingHealthConfig().consecutiveFailures) {
+      await autoPauseSequence(sequence, fatal ? "esp_error" : "consecutive_failures", {
+        error: String(err?.message ?? err).slice(0, 300),
+        failures,
+      });
+      throw new SequencePausedError();
     }
     const retryCount = ongoingSequence.retryCount + 1;
     if (retryCount >= sequenceBounceLimit) {

@@ -558,14 +558,14 @@ const sequencesContract = c.router(
     stats: {
       method: "GET",
       path: "/sequences/:sequenceId/stats",
-      responses: { 200: sequenceStatsSchema },
+      responses: { 200: sequenceStatsSchema, 404: errorSchema },
       summary: "Delivery / open-rate / click-through-rate stats for a sequence",
     },
     subscribers: {
       method: "GET",
       path: "/sequences/:sequenceId/subscribers",
       query: listSubscribersQuerySchema,
-      responses: { 200: c.type<string[]>() },
+      responses: { 200: c.type<string[]>(), 404: errorSchema },
       summary: "List contact ids that have received this sequence",
     },
   },

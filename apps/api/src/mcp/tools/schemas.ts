@@ -166,6 +166,8 @@ export const sequenceStatsSchema = z.object({
   openRate: z.number(),
   clickThroughRate: z.number(),
   subscribersCount: z.number(),
+  bounceRate: z.number().optional(),
+  complaintRate: z.number().optional(),
 });
 
 export const successMessageSchema = z.object({

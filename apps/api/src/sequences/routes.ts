@@ -4,6 +4,7 @@ import { Router } from "express";
 import { broadcastPacing } from "../abuse/pacing-status";
 import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
+import { sequenceDeliveryRates } from "../automation/sending-health";
 import { planGateHttp } from "../billing/errors";
 import { MAILING_ADDRESS_REQUIRED } from "../settings/general/constants";
 import { omitInternal } from "../utils/public";
@@ -235,20 +236,34 @@ const impl = s.router(contract.sequences, {
       return { status: 400, body: { error: err.message } };
     }
   },
-  stats: async ({ params }) => {
+  stats: async ({ params, req }) => {
     const { sequenceId } = params;
-    const [sent, openRate, clickThroughRate, subscribersCount] = await Promise.all([
-      getEmailSentCount(sequenceId),
-      getSequenceOpenRate(sequenceId),
-      getSequenceClickThroughRate(sequenceId),
-      getSubscribersCount(sequenceId),
-    ]);
+    const sequence = await getSequenceBySequenceId((req as any).teamId, sequenceId);
+    if (!sequence) return { status: 404, body: { error: "Sequence not found" } };
+    const [sent, openRate, clickThroughRate, subscribersCount, rates] =
+      await Promise.all([
+        getEmailSentCount(sequenceId),
+        getSequenceOpenRate(sequenceId),
+        getSequenceClickThroughRate(sequenceId),
+        getSubscribersCount(sequenceId),
+        sequenceDeliveryRates(sequence.id),
+      ]);
     return {
       status: 200,
-      body: { sent, openRate, clickThroughRate, subscribersCount },
+      body: {
+        sent,
+        openRate,
+        clickThroughRate,
+        subscribersCount,
+        bounceRate: rates.bounceRate,
+        complaintRate: rates.complaintRate,
+      },
     };
   },
-  subscribers: async ({ params, query }) => {
+  subscribers: async ({ params, query, req }) => {
+    if (!(await getSequenceBySequenceId((req as any).teamId, params.sequenceId))) {
+      return { status: 404, body: { error: "Sequence not found" } };
+    }
     const subscribers = await getSubscribers({
       sequenceId: params.sequenceId,
       page: query.page,
