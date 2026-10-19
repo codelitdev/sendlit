@@ -134,6 +134,13 @@
       "when": 1792427132449,
       "tag": "0018_signup_forms",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792430185093,
+      "tag": "0019_web_publishing",
+      "breakpoints": true
     }
   ]
 }

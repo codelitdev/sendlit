@@ -52,6 +52,11 @@ const MARKETING_VARIABLES = [
     tag: "{{ view_in_browser_url }}",
     description: "Link to the web version of this email",
   },
+  {
+    tag: "{{ web_version_url }}",
+    description:
+      "Public web page of this broadcast once published, else its web version",
+  },
 ];
 
 function EmailImageUploader({ children, onChange }: UploaderProps) {

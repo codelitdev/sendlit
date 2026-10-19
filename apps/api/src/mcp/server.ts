@@ -11,6 +11,7 @@ import { registerSequenceTools } from "./tools/sequences";
 import { registerTeamTools } from "./tools/teams";
 import { registerTemplateTools } from "./tools/templates";
 import { registerTransactionalTools } from "./tools/transactional";
+import { registerWebTools } from "./tools/web";
 
 export const SENDLIT_MCP_VERSION = "2.0.0";
 
@@ -50,6 +51,7 @@ export function buildMcpServer(): McpServer {
   registerContactTools(tools);
   registerSegmentTools(tools);
   registerFormTools(tools);
+  registerWebTools(tools);
   registerTemplateTools(tools);
   registerMediaTools(tools);
   registerSequenceTools(tools);

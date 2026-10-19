@@ -1,0 +1,79 @@
+---
+title: Web archive
+description: Give every broadcast a public web page, with an archive, RSS feed and sitemap.
+---
+
+Publish a broadcast to the web and it gets its own public page that search
+engines can find, listed in your team's archive. Readers who find it can
+subscribe from the archive or from under each issue.
+
+## Turn on the archive
+
+In **Settings → Web archive**, turn on **Host the archive on SendLit** and
+save. SendLit picks a handle from your workspace name (you can change it) and
+creates a "Web archive" [signup form](/email-marketing/signup-forms) unless
+you pick one. The archive lives at:
+
+| Page | URL |
+| --- | --- |
+| Archive, newest first | `https://<your SendLit API>/w/<handle>` |
+| One issue | `https://<your SendLit API>/w/<handle>/p/<slug>` |
+| RSS feed | `https://<your SendLit API>/w/<handle>/feed.xml` |
+| Sitemap | `https://<your SendLit API>/w/<handle>/sitemap.xml` |
+
+Add the sitemap in Google Search Console to get new issues indexed quickly.
+
+## Publish a broadcast
+
+On the broadcast, choose **Web page** and turn on **Publish to the web**. You
+can do this before or after sending; the page goes live once the broadcast is
+sent. You can also set:
+
+- **URL slug**: made from the title when you leave it empty. It stays the same
+  afterwards, so links keep working.
+- **SEO title** and **description**: used for the page title, search results
+  and link previews. The description defaults to the start of the email.
+- **Social image**: shown when the link is shared.
+- **Canonical URL**: set it when the issue also lives on your own site, so
+  search engines credit that page.
+- **Hide from search engines**: adds `noindex` and leaves the issue out of the
+  sitemap.
+
+Turn **Publish to the web** off to take the page down; it then returns 404
+and leaves the archive, the RSS feed and the sitemap. Deleting the broadcast
+does the same.
+
+## What the public page shows
+
+The page is the email as sent, without anything personal:
+
+- subscriber merge tags such as `{{ subscriber.name }}` render empty; wrap
+  personal lines in `{% if subscriber.name %}...{% endif %}` to leave them
+  out of the public page;
+- no open or click tracking, and no unsubscribe link;
+- no scripts.
+
+Each page has a title, description, canonical URL, Open Graph and Twitter
+tags and `Article` structured data.
+
+## Link to the web version from the email
+
+The managed footer's **View in browser** link goes to the public page once the
+broadcast is published. To link it yourself, use `{{ web_version_url }}`. For
+a broadcast that isn't published, both go to the recipient's own web version.
+
+## Show issues on your own site
+
+Platforms such as CourseLit can render the archive inside their own site
+instead. Turn **Host the archive on SendLit** off and use the API with a team
+API key:
+
+- `GET /web/issues`: published, sent issues, newest first, with slug, title,
+  date, excerpt and SEO fields;
+- `GET /web/issues/:slug`: one issue with its HTML, already stripped of
+  personal data and tracking.
+
+Set each issue's canonical URL to its page on your site. Publishing itself is
+`PATCH /sequences/:sequenceId/web`, and the archive settings are
+`/settings/web`; see the [API reference](/api-reference). The same actions
+are available as MCP tools.

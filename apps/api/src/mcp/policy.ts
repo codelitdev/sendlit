@@ -87,6 +87,12 @@ const toolPolicies = {
   list_emails: MCP_SCOPES.emailsRead,
   send_email: MCP_SCOPES.emailsSend,
 
+  get_broadcast_web_publishing: MCP_SCOPES.sequencesRead,
+  update_broadcast_web_publishing: MCP_SCOPES.sequencesWrite,
+  list_web_issues: MCP_SCOPES.sequencesRead,
+  get_web_issue: MCP_SCOPES.sequencesRead,
+  get_web_settings: MCP_SCOPES.settingsRead,
+  update_web_settings: MCP_SCOPES.settingsWrite,
   get_general_settings: MCP_SCOPES.settingsRead,
   update_general_settings: MCP_SCOPES.settingsWrite,
 

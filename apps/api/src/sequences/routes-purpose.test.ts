@@ -22,6 +22,11 @@ mock.module("../abuse/pacing-status", () => ({ broadcastPacing: async () => null
 mock.module("../automation/sending-health", () => ({
   sequenceDeliveryRates: async () => ({ bounceRate: 0, complaintRate: 0 }),
 }));
+mock.module("../web/queries", () => ({
+  toWebPublishing: mock(),
+  updateWebPublishing: mock(),
+  WebPublishingError: class extends Error {},
+}));
 mock.module("./test-send", () => ({
   sendSequenceEmailTest: mocks.sendSequenceEmailTest,
 }));

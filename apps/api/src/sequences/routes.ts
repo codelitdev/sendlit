@@ -10,6 +10,11 @@ import { MAILING_ADDRESS_REQUIRED } from "../settings/general/constants";
 import { omitInternal } from "../utils/public";
 import { serializeDates } from "../utils/serialize";
 import {
+  toWebPublishing,
+  updateWebPublishing,
+  WebPublishingError,
+} from "../web/queries";
+import {
   addMailToSequence,
   countSequences,
   createSequence,
@@ -48,6 +53,14 @@ function toBody(sequence: HydratedSequence): any {
       "espGrantId",
       "deliverySourceType",
       "deliverySourceIntent",
+      // Served by `/sequences/:sequenceId/web`.
+      "webPublished",
+      "webSlug",
+      "webSeoTitle",
+      "webSeoDescription",
+      "webOgImage",
+      "webNoindex",
+      "webCanonicalUrl",
     ]),
     emails: sequence.emails.map((email) =>
       omitInternal(email, ["sequenceId", "contentScanHash", "contentScanReasons"]),
@@ -234,6 +247,29 @@ const impl = s.router(contract.sequences, {
       return { status: 200, body: toBody(sequence) };
     } catch (err: any) {
       return { status: 400, body: { error: err.message } };
+    }
+  },
+  getWeb: async ({ params, req }) => {
+    const sequence = await getSequenceBySequenceId(
+      (req as any).teamId,
+      params.sequenceId,
+    );
+    if (!sequence) return { status: 404, body: { error: "Sequence not found" } };
+    return { status: 200, body: await toWebPublishing(sequence) };
+  },
+  updateWeb: async ({ params, body, req }) => {
+    const sequence = await getSequenceBySequenceId(
+      (req as any).teamId,
+      params.sequenceId,
+    );
+    if (!sequence) return { status: 404, body: { error: "Sequence not found" } };
+    try {
+      return { status: 200, body: await updateWebPublishing(sequence, body) };
+    } catch (error) {
+      if (error instanceof WebPublishingError) {
+        return { status: error.status, body: { error: error.message } };
+      }
+      throw error;
     }
   },
   stats: async ({ params, req }) => {

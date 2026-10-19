@@ -15,6 +15,7 @@ import { use, useEffect, useState } from "react";
 import { AutoPauseBanner } from "@/components/dashboard/auto-pause-banner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { BroadcastWebDialog } from "@/components/dashboard/broadcast-web-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import { MARKETING_EMAIL_EDITOR_BLOCKS } from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
@@ -305,6 +306,7 @@ export default function BroadcastEditorPage({
             <Badge variant={status.variant}>{status.label}</Badge>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <BroadcastWebDialog sequenceId={sequenceId} />
             {editable && (
               <>
                 <Button variant="outline" onClick={() => save()} disabled={saving}>

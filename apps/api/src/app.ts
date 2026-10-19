@@ -38,6 +38,8 @@ import templatesRoutes from "./templates/routes";
 import trackingRoutes from "./tracking/routes";
 import webViewRoutes from "./tracking/web-view";
 import transactionalRoutes from "./transactional/routes";
+import webPublicRoutes from "./web/public-routes";
+import webRoutes from "./web/routes";
 
 export const SERVICE_NAME = "sendlit-api";
 
@@ -134,6 +136,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(trackingRoutes);
   app.use(webViewRoutes);
   app.use(signupFormPublicRoutes);
+  app.use(webPublicRoutes);
   app.use(billingRoutes);
   app.use(provisioningRoutes);
   app.use(organizationRoutes);
@@ -157,6 +160,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(deliveryEventsRoutes);
   app.use(suppressionsRoutes);
   app.use(signupFormRoutes);
+  app.use(webRoutes);
 
   app.use(
     (

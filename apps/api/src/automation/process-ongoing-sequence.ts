@@ -279,6 +279,7 @@ async function attemptMailSending({
       emailId: email.emailId,
     },
     unsubscribeToken: contact.unsubscribeToken,
+    publication: sequence.type === "broadcast" ? sequence : null,
   });
 
   let outboundForReservation: { id: string } | null = null;

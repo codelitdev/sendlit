@@ -146,6 +146,15 @@ import {
   transactionalEmailDetailSchema,
   transactionalEmailSchema,
 } from "./schemas/transactional";
+import {
+  listWebIssuesQuerySchema,
+  updateWebPublishingBodySchema,
+  updateWebSettingsBodySchema,
+  webIssueSchema,
+  webIssueSummarySchema,
+  webPublishingSchema,
+  webSettingsSchema,
+} from "./schemas/web";
 
 const c = initContract();
 
@@ -562,6 +571,26 @@ const sequencesContract = c.router(
       responses: { 200: sequenceSchema, 400: errorSchema },
       summary: "Pause an active sequence",
     },
+    getWeb: {
+      method: "GET",
+      path: "/sequences/:sequenceId/web",
+      responses: { 200: webPublishingSchema, 404: errorSchema },
+      summary: "Get a broadcast's web publishing settings",
+    },
+    updateWeb: {
+      method: "PATCH",
+      path: "/sequences/:sequenceId/web",
+      body: updateWebPublishingBodySchema,
+      responses: {
+        200: webPublishingSchema,
+        400: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+      },
+      summary: "Publish a broadcast to the web, or change how it's published",
+      description:
+        "Only broadcasts can be published. The page goes live once the broadcast is sent. Publishing without a slug makes one from the title; 409 `slug_taken` when another issue of the team uses the slug.",
+    },
     stats: {
       method: "GET",
       path: "/sequences/:sequenceId/stats",
@@ -786,10 +815,55 @@ const generalSettingsContract = c.router(
   { metadata: { tag: "Settings" } },
 );
 
+const webSettingsContract = c.router(
+  {
+    get: {
+      method: "GET",
+      path: "/settings/web",
+      responses: { 200: webSettingsSchema },
+      summary: "Get the team's web archive settings",
+    },
+    update: {
+      method: "PATCH",
+      path: "/settings/web",
+      body: updateWebSettingsBodySchema,
+      responses: { 200: webSettingsSchema, 400: errorSchema, 409: errorSchema },
+      summary: "Update the team's web archive settings",
+      description:
+        "Turning hosted pages on picks a handle from the team name and creates a signup form for the archive when none is set. 409 `handle_taken` when another team uses the handle.",
+    },
+  },
+  { metadata: { tag: "Web publishing" } },
+);
+
 const settingsContract = c.router({
   esps: espCollectionContract,
   general: generalSettingsContract,
+  web: webSettingsContract,
 });
+
+const webIssuesContract = c.router(
+  {
+    list: {
+      method: "GET",
+      path: "/web/issues",
+      query: listWebIssuesQuerySchema,
+      responses: { 200: paginated(webIssueSummarySchema) },
+      summary: "List the team's published issues",
+      description:
+        "Broadcasts published to the web that have been sent, newest first. Works whether or not SendLit hosts the pages, so a platform can render the archive itself.",
+    },
+    get: {
+      method: "GET",
+      path: "/web/issues/:slug",
+      responses: { 200: webIssueSchema, 404: errorSchema },
+      summary: "Get a published issue with its HTML",
+      description:
+        "The HTML has no personal data, tracking or unsubscribe links. Merge tags fall back to their defaults.",
+    },
+  },
+  { metadata: { tag: "Web publishing" } },
+);
 
 const teamsContract = c.router(
   {
@@ -1865,6 +1939,7 @@ export const contract = c.router({
   deliveryEvents: deliveryEventsContract,
   suppressions: suppressionsContract,
   forms: formsContract,
+  web: webIssuesContract,
   billing: billingContract,
 });
 

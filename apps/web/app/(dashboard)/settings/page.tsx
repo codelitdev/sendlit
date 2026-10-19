@@ -24,6 +24,7 @@ import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
+import { WebArchiveSettings } from "@/components/dashboard/web-archive-settings";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -83,7 +84,7 @@ const PROVIDER_LABEL: Record<EspProvider, string> = Object.fromEntries(
   PROVIDERS.map((p) => [p.value, p.label]),
 ) as Record<EspProvider, string>;
 
-const SETTINGS_TABS = ["general", "esp", "api-keys"] as const;
+const SETTINGS_TABS = ["general", "esp", "api-keys", "web"] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 function isSettingsTab(value: string | null): value is SettingsTab {
@@ -329,6 +330,7 @@ export default function SettingsPage() {
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="esp">Email service providers (ESP)</TabsTrigger>
             <TabsTrigger value="api-keys">API keys</TabsTrigger>
+            <TabsTrigger value="web">Web archive</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general">
@@ -372,6 +374,10 @@ export default function SettingsPage() {
                 </CardFooter>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="web">
+            <WebArchiveSettings />
           </TabsContent>
 
           <TabsContent value="api-keys">

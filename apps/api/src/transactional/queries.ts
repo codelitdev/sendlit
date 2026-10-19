@@ -229,9 +229,13 @@ export async function createTransactionalEmail({
   }
   if (
     templateId &&
-    ["address", "unsubscribe_link", "view_in_browser_url", "subscriber"].some((key) =>
-      Object.hasOwn(variables, key),
-    )
+    [
+      "address",
+      "unsubscribe_link",
+      "view_in_browser_url",
+      "web_version_url",
+      "subscriber",
+    ].some((key) => Object.hasOwn(variables, key))
   ) {
     throw new Error("marketing_variables_not_allowed");
   }
