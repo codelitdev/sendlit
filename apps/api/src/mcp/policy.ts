@@ -50,6 +50,11 @@ const toolPolicies = {
   create_segment: MCP_SCOPES.contactsWrite,
   update_segment: MCP_SCOPES.contactsWrite,
   delete_segment: MCP_SCOPES.contactsWrite,
+  list_signup_forms: MCP_SCOPES.contactsRead,
+  get_signup_form: MCP_SCOPES.contactsRead,
+  create_signup_form: MCP_SCOPES.contactsWrite,
+  update_signup_form: MCP_SCOPES.contactsWrite,
+  delete_signup_form: MCP_SCOPES.contactsWrite,
 
   list_system_templates: MCP_SCOPES.templatesRead,
   list_templates: MCP_SCOPES.templatesRead,

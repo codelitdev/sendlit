@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ClipboardList,
   Home,
   Images,
   Mail,
@@ -45,6 +46,7 @@ const NAV: NavMainItem[] = [
   { url: "/broadcasts", title: "Broadcasts", icon: Radio },
   { url: "/sequences", title: "Sequences", icon: Workflow },
   { url: "/contacts", title: "Contacts", icon: Users },
+  { url: "/forms", title: "Signup forms", icon: ClipboardList },
 ];
 
 const LIBRARY_NAV: NavMainItem[] = [

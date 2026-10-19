@@ -2209,3 +2209,55 @@ export const abuseFlags = pgTable(
     ),
   }),
 );
+
+/** A public signup form (#27): anyone may subscribe through it, so it is
+ * rate limited and, by default, double opt-in. */
+export const signupForms = pgTable(
+  "signup_forms",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    formId: text("form_id")
+      .notNull()
+      .unique()
+      .$defaultFn(() => genPublicId("frm")),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Added to everyone who subscribes through the form. */
+    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+    doubleOptIn: boolean("double_opt_in").notNull().default(true),
+    /** Where the hosted form sends people after they submit. */
+    redirectUrl: text("redirect_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    formIdCheck: publicIdCheck("signup_forms_form_id_check", table.formId, "frm"),
+    teamIdx: index("signup_forms_team_id_idx").on(table.teamId),
+  }),
+);
+
+/** A double opt-in signup waiting for the person to click the link in the
+ * confirmation email. */
+export const signupConfirmations = pgTable(
+  "signup_confirmations",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    token: text("token").notNull().unique(),
+    formId: uuid("form_id")
+      .notNull()
+      .references(() => signupForms.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    name: text("name"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    formEmailIdx: index("signup_confirmations_form_id_email_idx").on(
+      table.formId,
+      table.email,
+    ),
+  }),
+);

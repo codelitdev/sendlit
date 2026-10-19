@@ -56,6 +56,11 @@ import {
   upsertFeedbackConnectionBodySchema,
 } from "./schemas/feedback";
 import {
+  createSignupFormBodySchema,
+  signupFormSchema,
+  updateSignupFormBodySchema,
+} from "./schemas/forms";
+import {
   listMediaQuerySchema,
   mediaReferenceSchema,
   mediaSchema,
@@ -1596,6 +1601,46 @@ const deliveryEventsContract = c.router(
  * `docs/bounces-and-complaints.md#8-suppression-model`. Workspace-wide and
  * route-independent; intentionally has no ESP filter that changes
  * enforcement semantics. */
+const formsContract = c.router(
+  {
+    list: {
+      method: "GET",
+      path: "/forms",
+      responses: { 200: z.object({ items: z.array(signupFormSchema) }) },
+      summary: "List signup forms",
+    },
+    create: {
+      method: "POST",
+      path: "/forms",
+      body: createSignupFormBodySchema,
+      responses: { 201: signupFormSchema, 400: errorSchema },
+      summary: "Create a signup form",
+      description:
+        "A public signup form for the team. People subscribe on its hosted page (`url`) or through an HTML form on your site that posts `email` (and optionally `name`) to the same URL, as a form post or JSON. Double opt-in (the default) emails a confirmation link through the team's delivery source and subscribes only once it is clicked; single opt-in never resubscribes someone who unsubscribed. Submissions are rate limited per IP and per form, and suppressed or disposable addresses are dropped. A new subscriber triggers `subscriber:added` sequences.",
+    },
+    get: {
+      method: "GET",
+      path: "/forms/:formId",
+      responses: { 200: signupFormSchema, 404: errorSchema },
+      summary: "Get a signup form",
+    },
+    update: {
+      method: "PATCH",
+      path: "/forms/:formId",
+      body: updateSignupFormBodySchema,
+      responses: { 200: signupFormSchema, 404: errorSchema },
+      summary: "Update a signup form",
+    },
+    remove: {
+      method: "DELETE",
+      path: "/forms/:formId",
+      responses: { 204: c.noBody(), 404: errorSchema },
+      summary: "Delete a signup form",
+    },
+  },
+  { metadata: { tag: "Contacts" } },
+);
+
 const suppressionsContract = c.router(
   {
     list: {
@@ -1804,6 +1849,7 @@ export const contract = c.router({
   feedback: feedbackContract,
   deliveryEvents: deliveryEventsContract,
   suppressions: suppressionsContract,
+  forms: formsContract,
   billing: billingContract,
 });
 
