@@ -125,6 +125,7 @@ describe("sendMail", () => {
       to: "contact@example.com",
       subject: "Hello",
       html: "<p>Hello</p>",
+      text: "Hello",
       headers: { "List-Unsubscribe": "<mailto:unsubscribe@example.com>" },
     });
     expect(captureEventMock).toHaveBeenCalledWith(
@@ -134,6 +135,23 @@ describe("sendMail", () => {
         teamId: "team-1",
       }),
     );
+  });
+
+  it("sends the caller's plain text instead of generating one", async () => {
+    getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
+    const { sendMail } = await loadSend();
+
+    await sendMail({
+      purpose: "transactional",
+      from: "Sender <sender@example.com>",
+      to: "contact@example.com",
+      subject: "Hello",
+      html: '<p>Hi <a href="https://example.com">there</a></p>',
+      text: "Custom text",
+      teamId: "team-1",
+    });
+
+    expect(sendMailMock.mock.calls.at(-1)?.[0]).toMatchObject({ text: "Custom text" });
   });
 
   it("sends transactional mail without requiring a mailing address", async () => {

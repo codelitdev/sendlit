@@ -50,7 +50,13 @@ export function createFooterBlock({
         },
       },
     },
-    block: (props) => <FooterBlock {...props} unsubscribeLabel={labels.unsubscribe} />,
+    block: (props) => (
+      <FooterBlock
+        {...props}
+        unsubscribeLabel={labels.unsubscribe}
+        viewInBrowserLabel={labels.viewInBrowser}
+      />
+    ),
     settings: (props) => <FooterSettingsPanel {...props} labels={labels} />,
     defaultSettings: () => ({ ...DEFAULT_FOOTER_SETTINGS }),
     capabilities: {

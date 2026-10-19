@@ -6,8 +6,10 @@ export function FooterBlock({
   block,
   renderContext,
   unsubscribeLabel,
+  viewInBrowserLabel,
 }: BlockRenderProps<FooterSettings, SendLitEmailRenderContext> & {
   unsubscribeLabel: string;
+  viewInBrowserLabel?: string;
 }) {
   const footer = renderContext?.footer;
   if (!footer?.mailingAddress || !footer.unsubscribeUrl) {
@@ -24,6 +26,8 @@ export function FooterBlock({
     paddingBottom = "16px",
     paddingX = "24px",
   } = block.settings;
+
+  const linkStyle = { color: foregroundColor, textDecoration: "underline" };
 
   // HTML email renderers collapse raw newlines in text nodes. Emit <br>
   // so multi-line physical addresses stay multi-line in the delivered mail.
@@ -52,13 +56,15 @@ export function FooterBlock({
         ))}
       </div>
       <div style={{ marginTop: "8px" }}>
-        <a
-          href={footer.unsubscribeUrl}
-          style={{
-            color: foregroundColor,
-            textDecoration: "underline",
-          }}
-        >
+        {footer.viewInBrowserUrl && viewInBrowserLabel ? (
+          <>
+            <a href={footer.viewInBrowserUrl} style={linkStyle}>
+              {viewInBrowserLabel}
+            </a>
+            {" · "}
+          </>
+        ) : null}
+        <a href={footer.unsubscribeUrl} style={linkStyle}>
           {unsubscribeLabel}
         </a>
       </div>

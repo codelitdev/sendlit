@@ -61,7 +61,9 @@ export function toPublicTransactionalEmail(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
-  return serializeDates(includeHtml ? { ...base, html: row.html } : base);
+  return serializeDates(
+    includeHtml ? { ...base, html: row.html, text: row.text } : base,
+  );
 }
 
 export async function findTransactionalEmailByIdempotencyKey(
@@ -195,6 +197,7 @@ export async function createTransactionalEmail({
   subject,
   templateId,
   html,
+  text,
   variables = {},
   replyTo,
   headers,
@@ -208,6 +211,8 @@ export async function createTransactionalEmail({
   subject: string;
   templateId?: string;
   html?: string;
+  /** Plain-text part, sent verbatim; generated from the HTML when omitted. */
+  text?: string;
   variables?: Record<string, unknown>;
   replyTo?: string;
   headers?: Record<string, string>;
@@ -224,7 +229,7 @@ export async function createTransactionalEmail({
   }
   if (
     templateId &&
-    ["address", "unsubscribe_link", "subscriber"].some((key) =>
+    ["address", "unsubscribe_link", "view_in_browser_url", "subscriber"].some((key) =>
       Object.hasOwn(variables, key),
     )
   ) {
@@ -329,6 +334,7 @@ export async function createTransactionalEmail({
     subject,
     templateId: resolvedTemplateId,
     html: renderedHtml,
+    text: text ?? null,
     variables,
     headers: headers ?? null,
     contactId: contact?.id ?? null,

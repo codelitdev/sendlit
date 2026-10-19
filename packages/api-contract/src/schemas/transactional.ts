@@ -37,6 +37,8 @@ export const transactionalEmailSchema = z.object({
  * pages light. */
 export const transactionalEmailDetailSchema = transactionalEmailSchema.extend({
   html: z.string().nullable(),
+  /** Caller-supplied plain text; `null` when it was generated from `html`. */
+  text: z.string().nullable().optional(),
 });
 
 /** Headers the send pipeline owns — caller-supplied values would spoof the
@@ -65,6 +67,13 @@ export const sendEmailBodySchema = z
     subject: z.string().min(1),
     templateId: z.string().min(1).optional(),
     html: z.string().min(1).optional(),
+    text: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Plain-text part, sent verbatim. When omitted it is generated from the HTML.",
+      ),
     variables: z.record(z.any()).optional(),
     replyTo: z.string().email().optional(),
     headers: emailHeadersSchema.optional(),

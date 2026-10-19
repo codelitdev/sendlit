@@ -59,6 +59,13 @@ export function registerTransactionalTools(server: McpToolRegistrar): void {
           .describe(
             "Sent verbatim (no Liquid pass); mutually exclusive with `templateId`",
           ),
+        text: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "Plain-text part, sent verbatim; generated from the HTML when omitted",
+          ),
         variables: z
           .record(z.any())
           .optional()
@@ -111,6 +118,7 @@ export function registerTransactionalTools(server: McpToolRegistrar): void {
           subject: args.subject,
           templateId: args.templateId,
           html: args.html,
+          text: args.text,
           variables: args.variables,
           replyTo: args.replyTo,
           headers: args.headers,

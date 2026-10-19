@@ -96,12 +96,30 @@ describe("createTransactionalEmail validation", () => {
       variables: {},
     });
     expect(row.status).toBe("queued");
+    expect(row.text).toBeNull();
+  });
+
+  it("stores the caller's plain-text part", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const row = await createTransactionalEmail({
+      teamId: team.id,
+      to: "a@example.com",
+      subject: "Hi",
+      html: "<p>hi</p>",
+      text: "hi in text",
+    });
+    expect(row.text).toBe("hi in text");
   });
 
   it("rejects marketing-owned variables in template sends", async () => {
     const { team } = await seedTeamAndContact(tdb);
 
-    for (const key of ["address", "unsubscribe_link", "subscriber"]) {
+    for (const key of [
+      "address",
+      "unsubscribe_link",
+      "view_in_browser_url",
+      "subscriber",
+    ]) {
       await expect(
         createTransactionalEmail({
           teamId: team.id,

@@ -8,6 +8,7 @@ export { EmailEditor } from "./email-editor";
 export { defaultEmail } from "./lib/default-email";
 export { renderEmailToHtml } from "./lib/email-renderer";
 export { normalizeEmail } from "./lib/normalize-email";
+export { renderEmailToPlainText } from "./lib/plain-text";
 export type {
   BlockCapabilities,
   BlockComponent,

@@ -38,3 +38,12 @@ export function getTrackedClickUrl(token: string): string {
 export function isTrackingUrl(url: string): boolean {
   return url.startsWith(`${getSiteUrl()}/track/`);
 }
+
+/** Hosted web version of one email ("view in browser"). */
+export function getViewInBrowserUrl(token: string): string {
+  return `${getSiteUrl()}/view/${token}`;
+}
+
+export function isViewInBrowserUrl(url: string): boolean {
+  return url.startsWith(`${getSiteUrl()}/view/`);
+}

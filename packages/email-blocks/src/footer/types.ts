@@ -13,6 +13,9 @@ export interface SendLitEmailRenderContext {
   footer?: {
     mailingAddress: string;
     unsubscribeUrl: string;
+    /** Hosted web version of this email; rendered next to the unsubscribe
+     * link when the footer has a `viewInBrowser` label. */
+    viewInBrowserUrl?: string;
     /** Server-owned plan branding; never part of editable template data. */
     brandingText?: string;
   };
@@ -22,6 +25,8 @@ export interface FooterLabels {
   displayName: string;
   description: string;
   unsubscribe: string;
+  /** Label of the optional "view in browser" link. */
+  viewInBrowser?: string;
   alignment: string;
   alignmentLeft: string;
   alignmentCenter: string;

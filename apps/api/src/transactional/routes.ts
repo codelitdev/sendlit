@@ -73,6 +73,7 @@ const impl = s.router(contract.transactional, {
         subject: body.subject,
         templateId: body.templateId,
         html: body.html,
+        text: body.text,
         variables: body.variables,
         replyTo: body.replyTo,
         headers: body.headers,
