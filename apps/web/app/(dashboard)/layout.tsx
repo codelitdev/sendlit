@@ -3,6 +3,7 @@ import { BreadcrumbProvider } from "@/components/dashboard/breadcrumb-context";
 import { DashboardBreadcrumb } from "@/components/dashboard/dashboard-breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { getStatusPageUrl } from "@/lib/config";
 import { requireAuth } from "@/lib/server-auth";
 
 export default async function DashboardLayout({
@@ -14,7 +15,7 @@ export default async function DashboardLayout({
 
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar statusPageUrl={getStatusPageUrl()} />
 
       <SidebarInset className="min-w-0">
         <BreadcrumbProvider>

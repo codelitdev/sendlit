@@ -1,0 +1,40 @@
+---
+title: Monitoring and status page
+description: What to watch on a SendLit deployment, and how to publish a status page.
+---
+
+Point an uptime monitor (Uptime Kuma, Upptime, Better Stack, ...) at these
+endpoints. None of them needs a credential. Check every minute or so.
+
+| Component | Check | Healthy |
+| --- | --- | --- |
+| API process | `GET <api>/health` | `200` |
+| API dependencies (Postgres, Redis) | `GET <api>/ready` | `200`; `503` while starting, shutting down, or when Postgres or Redis is unreachable |
+| Dashboard | `GET <web>/api/health` | `200` |
+| MCP endpoint | `POST <api>/mcp` with body `{}` | `401` (it's up and asking for a credential) |
+| Open tracking | `GET <api>/track/open?d=check` | `200` with an image |
+| Unsubscribe pages | `GET <api>/unsubscribe/check` | `404` page reading "Invalid unsubscribe link" |
+| API reference | `GET <api>/openapi.json` | `200` |
+
+`/ready` is the one to alert on: it fails when the API can't reach its
+database or Redis, which stops sending. Its JSON body lists each check:
+
+```json
+{"status":"ready","checks":{"started":true,"accepting_requests":true,"database":true,"redis":true}}
+```
+
+## Publish a status page
+
+A public status page shows readers and customers whether sending, the
+dashboard and links work, with past incidents. Two common options:
+
+- **Upptime**: open source, runs on GitHub Actions and GitHub Pages, and
+  records incidents as GitHub issues. Create a repository from the Upptime
+  template, list the checks above in `.upptimerc.yml`, and point a domain such
+  as `status.example.com` at its GitHub Pages site with a `CNAME` record.
+- **Uptime Kuma**: open source and self-hosted (one Docker container), with
+  built-in status pages and incident posts. Run it somewhere other than the
+  SendLit server, so it still works when that server is down.
+
+Set `STATUS_PAGE_URL` on the web app to the page's address and the dashboard
+shows a **System status** link in the user menu.

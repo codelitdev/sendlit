@@ -20,6 +20,14 @@ export function getMaxUploadSizeBytes() {
   return parsed > 0 ? parsed : DEFAULT_MAX_UPLOAD_SIZE_BYTES;
 }
 
+/** Public status page linked from the dashboard ("System status"), e.g.
+ * `https://status.sendlit.app`. Server-only, like the settings below; unset
+ * hides the link. */
+export function getStatusPageUrl(): string | null {
+  const url = process.env.STATUS_PAGE_URL?.trim();
+  return url && /^https?:\/\//i.test(url) ? url : null;
+}
+
 export const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 
 /**
