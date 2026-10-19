@@ -281,6 +281,7 @@ async function attemptMailSending({
       to,
       subject,
       html: contentWithTrackedLinks,
+      replyTo: pin.replyTo,
       headers: withCorrelationHeaders(
         outbound,
         getListUnsubscribeHeaders(contact.unsubscribeToken),

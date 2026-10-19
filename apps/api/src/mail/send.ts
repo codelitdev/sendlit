@@ -13,6 +13,8 @@ interface MailInput {
   html: string;
   /** The `text/plain` alternative. Generated from `html` when omitted. */
   text?: string;
+  /** `Reply-To` header; replies go to `from` when omitted. */
+  replyTo?: string | null;
   headers?: Record<string, string>;
   /** Required for campaign mail; resolves to the team's configured ESP. */
   teamId: string;
@@ -64,6 +66,7 @@ export async function sendMail({
   subject,
   html,
   text,
+  replyTo,
   headers,
   teamId,
   espConfigId,
@@ -89,6 +92,7 @@ export async function sendMail({
       subject,
       html,
       text: text ?? renderEmailToPlainText(html),
+      ...(replyTo ? { replyTo } : {}),
       headers,
       messageId,
     });

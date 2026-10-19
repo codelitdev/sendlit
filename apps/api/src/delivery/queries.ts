@@ -139,7 +139,7 @@ export async function resolveDeliverySource(
       secretVersion: row.esp.secretVersion,
       fromName: row.grant.fromName ?? row.esp.fromName ?? context.team.name,
       fromEmail: row.esp.fromEmail,
-      replyTo: row.grant.replyTo,
+      replyTo: row.grant.replyTo ?? row.esp.replyTo,
     };
   }
 
@@ -195,7 +195,7 @@ export async function resolveDeliverySource(
     secretVersion: esp.secretVersion,
     fromName: esp.fromName ?? context.team.name,
     fromEmail: esp.fromEmail,
-    replyTo: null,
+    replyTo: esp.replyTo,
   };
 }
 
@@ -258,7 +258,7 @@ export async function resolvePinnedDeliverySource(input: {
       secretVersion: row.esp.secretVersion,
       fromName: row.esp.fromName ?? row.team.name,
       fromEmail: row.esp.fromEmail,
-      replyTo: null,
+      replyTo: row.esp.replyTo,
     };
   }
   if (!input.espGrantId) throw new Error("invalid_delivery_pin");
@@ -314,7 +314,7 @@ export async function resolvePinnedDeliverySource(input: {
     secretVersion: row.esp.secretVersion,
     fromName: row.grant.fromName ?? row.esp.fromName ?? row.team.name,
     fromEmail: row.esp.fromEmail,
-    replyTo: row.grant.replyTo,
+    replyTo: row.grant.replyTo ?? row.esp.replyTo,
   };
 }
 

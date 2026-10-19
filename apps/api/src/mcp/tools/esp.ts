@@ -36,6 +36,7 @@ function toPublicShape(config: EspConfig | null) {
     hasPassword: Boolean(config.encryptedSecret),
     fromName: config.fromName,
     fromEmail: config.fromEmail,
+    replyTo: config.replyTo,
     status: config.status,
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt,
@@ -58,6 +59,10 @@ const connectionFields = {
     .describe("Omit to keep unchanged; empty string clears it"),
   fromName: z.string().optional(),
   fromEmail: z.string().email().optional(),
+  replyTo: z
+    .union([z.string().email(), z.literal("")])
+    .optional()
+    .describe("Reply-To for mail sent through this ESP; empty string clears it"),
 };
 
 export function registerEspTools(server: McpToolRegistrar): void {
@@ -262,6 +267,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
         password: connectionFields.password,
         fromName: connectionFields.fromName,
         fromEmail: connectionFields.fromEmail,
+        replyTo: connectionFields.replyTo,
       },
       outputSchema: espConfigSchema,
       annotations: {

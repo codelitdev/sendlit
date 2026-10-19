@@ -143,6 +143,7 @@ export async function sendSequenceEmailTest({
       to: recipient,
       subject: `[Test] ${email.subject}`,
       html,
+      replyTo: pin.replyTo,
       headers: getListUnsubscribeHeaders(TEST_UNSUBSCRIBE_TOKEN),
       teamId,
       espConfigId: pin.espConfigId,

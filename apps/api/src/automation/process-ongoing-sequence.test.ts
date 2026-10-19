@@ -282,6 +282,25 @@ describe("processOngoingSequence", () => {
     expect(after.tags).toEqual(["bol"]);
   });
 
+  it("sends with the ESP's Reply-To", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb, {
+      espConfig: { replyTo: "support@example.com" },
+    });
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const row = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+
+    await processOngoingSequence(row.id);
+
+    expect(mockedSendMail.mock.calls[0][0].replyTo).toBe("support@example.com");
+  });
+
   it("renders merge tags, the tracking pixel, and click-tracked links", async () => {
     const { team, contact } = await seedTeamAndContact(tdb);
     const { sequenceRow } = await seedSequence(tdb, {

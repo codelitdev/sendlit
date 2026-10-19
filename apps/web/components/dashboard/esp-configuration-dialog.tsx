@@ -42,6 +42,7 @@ type FormState = {
   password: string;
   fromName: string;
   fromEmail: string;
+  replyTo: string;
 };
 
 const emptyForm: FormState = {
@@ -54,6 +55,7 @@ const emptyForm: FormState = {
   password: "",
   fromName: "",
   fromEmail: "",
+  replyTo: "",
 };
 
 function formFor(esp: EspConfig | null): FormState {
@@ -68,6 +70,7 @@ function formFor(esp: EspConfig | null): FormState {
     password: "",
     fromName: esp.fromName ?? "",
     fromEmail: esp.fromEmail ?? "",
+    replyTo: esp.replyTo ?? "",
   };
 }
 
@@ -119,6 +122,11 @@ export function EspConfigurationDialog({
       setError("Enter a valid sender email address.");
       return;
     }
+    const replyTo = form.replyTo.trim();
+    if (replyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo)) {
+      setError("Enter a valid reply-to email address.");
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -133,6 +141,8 @@ export function EspConfigurationDialog({
         ...(form.password ? { password: form.password } : {}),
         fromName: form.fromName.trim() || undefined,
         fromEmail,
+        // "" clears a previously saved reply-to on edit.
+        ...(replyTo || esp?.replyTo ? { replyTo } : {}),
       });
       onOpenChange(false);
     } catch (err) {
@@ -265,6 +275,24 @@ export function EspConfigurationDialog({
               }
               placeholder="you@yourdomain.com"
             />
+          </div>
+          <div className="col-span-full space-y-1.5">
+            <Label htmlFor="esp-reply-to">Reply-to email (optional)</Label>
+            <Input
+              id="esp-reply-to"
+              type="email"
+              value={form.replyTo}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  replyTo: event.target.value,
+                })
+              }
+              placeholder="support@yourdomain.com"
+            />
+            <p className="text-sm text-muted-foreground">
+              Replies go here instead of the from address.
+            </p>
           </div>
           <div className="col-span-full flex items-center gap-3">
             <Switch
