@@ -152,6 +152,16 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("sequences.updateWeb", "update_broadcast_web_publishing", "write"),
   required("web.list", "list_web_issues", "read"),
   required("web.get", "get_web_issue", "read"),
+  required("reputation.get", "get_reputation", "read"),
+  required("reputation.connectGoogle", "connect_google_postmaster", "write"),
+  required(
+    "reputation.disconnectGoogle",
+    "disconnect_google_postmaster",
+    "destructive",
+  ),
+  required("reputation.connectSnds", "connect_snds", "write"),
+  required("reputation.disconnectSnds", "disconnect_snds", "destructive"),
+  required("reputation.sync", "sync_reputation", "write"),
   required("sequences.subscribers", "get_sequence_subscribers", "read"),
 
   // Transactional email

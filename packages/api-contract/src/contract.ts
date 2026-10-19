@@ -87,6 +87,7 @@ import {
   updateOrganizationMemberBodySchema,
 } from "./schemas/organizations";
 import { overviewQuerySchema, overviewSchema } from "./schemas/overview";
+import { connectSndsBodySchema, reputationSchema } from "./schemas/reputation";
 import {
   createSegmentBodySchema,
   segmentSchema,
@@ -841,6 +842,63 @@ const settingsContract = c.router({
   general: generalSettingsContract,
   web: webSettingsContract,
 });
+
+const reputationContract = c.router(
+  {
+    get: {
+      method: "GET",
+      path: "/reputation",
+      responses: { 200: reputationSchema },
+      summary: "Get mailbox provider reputation data for the last 30 days",
+      description:
+        "Google Postmaster Tools (spam rate, SPF/DKIM/DMARC pass rates, delivery errors and compliance per sending domain) and Microsoft SNDS (filter result, complaint rate and trap hits per IP), with current alerts.",
+    },
+    connectGoogle: {
+      method: "POST",
+      path: "/reputation/google/connect",
+      body: c.noBody(),
+      responses: {
+        200: z.object({ authorizationUrl: z.string() }),
+        403: errorSchema,
+        409: errorSchema,
+      },
+      summary: "Start connecting Google Postmaster Tools",
+      description:
+        "Returns the Google sign-in URL to open in a browser. After consent, Google redirects back to SendLit and the data syncs daily. 409 `google_postmaster_not_configured` when this deployment has no Google OAuth client.",
+    },
+    disconnectGoogle: {
+      method: "DELETE",
+      path: "/reputation/google",
+      responses: { 204: c.noBody(), 403: errorSchema, 404: errorSchema },
+      summary: "Disconnect Google Postmaster Tools and delete its data",
+    },
+    connectSnds: {
+      method: "PUT",
+      path: "/reputation/snds",
+      body: connectSndsBodySchema,
+      responses: { 200: reputationSchema, 403: errorSchema, 422: errorSchema },
+      summary: "Connect Microsoft SNDS with its automated data access link",
+      description:
+        "The link is checked by downloading the data once. 422 `snds_link_invalid` for links that aren't SNDS links or don't return SNDS data.",
+    },
+    disconnectSnds: {
+      method: "DELETE",
+      path: "/reputation/snds",
+      responses: { 204: c.noBody(), 403: errorSchema, 404: errorSchema },
+      summary: "Disconnect Microsoft SNDS and delete its data",
+    },
+    sync: {
+      method: "POST",
+      path: "/reputation/sync",
+      body: c.noBody(),
+      responses: { 200: reputationSchema, 429: errorSchema },
+      summary: "Refresh reputation data now",
+      description:
+        "Data also refreshes daily on its own. Limited to once every 5 minutes.",
+    },
+  },
+  { metadata: { tag: "Reputation" } },
+);
 
 const webIssuesContract = c.router(
   {
@@ -1940,6 +1998,7 @@ export const contract = c.router({
   suppressions: suppressionsContract,
   forms: formsContract,
   web: webIssuesContract,
+  reputation: reputationContract,
   billing: billingContract,
 });
 

@@ -8,6 +8,7 @@ import {
   type ImportContactRow,
   type ImportContactsResult,
   type PaidPlan,
+  type Reputation,
   type SignupForm,
   type SignupFormInput,
   type WebPublishing,
@@ -1782,4 +1783,30 @@ export function updateWebSettings(
   }>,
 ) {
   return unwrap<WebSettings>(client.settings.web.update({ body }));
+}
+
+export type { Reputation };
+
+export function getReputation() {
+  return unwrap<Reputation>(client.reputation.get());
+}
+
+export function connectGooglePostmaster() {
+  return unwrap<{ authorizationUrl: string }>(client.reputation.connectGoogle());
+}
+
+export function disconnectGooglePostmaster() {
+  return unwrap<void>(client.reputation.disconnectGoogle());
+}
+
+export function connectSnds(dataUrl: string) {
+  return unwrap<Reputation>(client.reputation.connectSnds({ body: { dataUrl } }));
+}
+
+export function disconnectSnds() {
+  return unwrap<void>(client.reputation.disconnectSnds());
+}
+
+export function syncReputation() {
+  return unwrap<Reputation>(client.reputation.sync());
 }

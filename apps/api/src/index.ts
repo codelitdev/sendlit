@@ -27,6 +27,7 @@ import sequenceQueue from "./mail/sequence-queue";
 import sequenceWorker from "./mail/sequence-worker";
 import mailWorker from "./mail/worker";
 import { captureError, getTeamId, shutdownObservability } from "./observability";
+import { startReputationSync, stopReputationSync } from "./reputation/sync";
 import logger from "./services/log";
 import { assertEspEncryptionKeyConfigured } from "./utils/secret-crypto";
 
@@ -42,6 +43,7 @@ const app = createApp({
 
 startMailDispatchOutbox();
 startDeliveryLifecycleJobs();
+startReputationSync();
 
 process.on("unhandledRejection", (reason) => {
   logger.error({ error: (reason as Error)?.message }, "Unhandled promise rejection");
@@ -69,6 +71,7 @@ checkConfig()
       steps: [
         { name: "mail_dispatch_outbox", run: stopMailDispatchOutbox },
         { name: "delivery_lifecycle_jobs", run: stopDeliveryLifecycleJobs },
+        { name: "reputation_sync", run: stopReputationSync },
         { name: "billing_maintenance", run: () => billingMaintenance.stop() },
         // Closing a BullMQ worker waits for the job it is running.
         { name: "mail_worker", run: () => mailWorker.close() },

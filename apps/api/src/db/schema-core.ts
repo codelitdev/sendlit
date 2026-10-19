@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   doublePrecision,
   foreignKey,
   index,
@@ -2281,5 +2282,73 @@ export const signupConfirmations = pgTable(
       table.formId,
       table.email,
     ),
+  }),
+);
+
+/** A team's link to a mailbox provider's sender reputation data: Google
+ * Postmaster Tools (OAuth) or Microsoft SNDS (automated data access link). */
+export const reputationConnections = pgTable(
+  "reputation_connections",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(), // google_postmaster | microsoft_snds
+    /** Google's refresh token, or the SNDS data link (it carries a key). */
+    encryptedSecret: text("encrypted_secret").notNull(),
+    /** Who connected it, e.g. the Google account's email. */
+    accountLabel: text("account_label"),
+    status: text("status").notNull().default("active"), // active | error
+    lastError: text("last_error"),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    nextSyncAt: timestamp("next_sync_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Alert level last emailed per subject and signal, so an ongoing
+     * problem is reported once. */
+    alertState: jsonb("alert_state").notNull().default({}),
+    /** Latest per-subject state that isn't a daily number: Google's
+     * compliance verdict, or that a domain isn't in Postmaster Tools. */
+    subjectState: jsonb("subject_state").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    teamProviderIdx: uniqueIndex("reputation_connections_team_id_provider_idx").on(
+      table.teamId,
+      table.provider,
+    ),
+    providerCheck: check(
+      "reputation_connections_provider_check",
+      sql`${table.provider} IN ('google_postmaster', 'microsoft_snds')`,
+    ),
+    statusCheck: check(
+      "reputation_connections_status_check",
+      sql`${table.status} IN ('active', 'error')`,
+    ),
+    nextSyncIdx: index("reputation_connections_next_sync_at_idx").on(table.nextSyncAt),
+  }),
+);
+
+/** One day of reputation data for a sending domain (Google) or IP (SNDS). */
+export const reputationDailyStats = pgTable(
+  "reputation_daily_stats",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => reputationConnections.id, { onDelete: "cascade" }),
+    /** A domain for Google, an IP address for SNDS. */
+    subject: text("subject").notNull(),
+    day: date("day", { mode: "string" }).notNull(),
+    metrics: jsonb("metrics").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    connectionSubjectDayIdx: uniqueIndex(
+      "reputation_daily_stats_connection_subject_day_idx",
+    ).on(table.connectionId, table.subject, table.day),
   }),
 );
