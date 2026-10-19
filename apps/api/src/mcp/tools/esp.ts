@@ -38,6 +38,7 @@ function toPublicShape(config: EspConfig | null) {
     fromEmail: config.fromEmail,
     replyTo: config.replyTo,
     maxSendRate: config.maxSendRate,
+    dailySendLimit: config.dailySendLimit,
     status: config.status,
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt,
@@ -72,6 +73,15 @@ const connectionFields = {
     .optional()
     .describe(
       "Messages per second across all workers; null uses the provider default (SES 14, Resend 2, others unlimited). Set SES to your account's MaxSendRate.",
+    ),
+  dailySendLimit: z
+    .number()
+    .int()
+    .positive()
+    .nullable()
+    .optional()
+    .describe(
+      "Most broadcast/sequence emails per UTC day through this ESP, e.g. a warm-up ramp; emails over it wait for the next day. null removes the cap.",
     ),
 };
 
@@ -279,6 +289,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
         fromEmail: connectionFields.fromEmail,
         replyTo: connectionFields.replyTo,
         maxSendRate: connectionFields.maxSendRate,
+        dailySendLimit: connectionFields.dailySendLimit,
       },
       outputSchema: espConfigSchema,
       annotations: {

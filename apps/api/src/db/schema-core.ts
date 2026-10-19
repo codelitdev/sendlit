@@ -1017,6 +1017,9 @@ export const espConfigs = pgTable(
     /** Messages per second this ESP accepts; `null` uses the provider
      * default (see `mail/rate-limit.ts`). */
     maxSendRate: doublePrecision("max_send_rate"),
+    /** Daily cap on marketing sends through this ESP (UTC days), e.g. while
+     * warming up a new domain; `null` means no cap. */
+    dailySendLimit: integer("daily_send_limit"),
     status: text("status").notNull().default("draft"),
     secretVersion: integer("secret_version").notNull().default(1),
     lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),

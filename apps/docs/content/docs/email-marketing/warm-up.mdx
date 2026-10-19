@@ -1,0 +1,105 @@
+---
+title: Warming up a domain or SES account
+description: Ramp up sending on a new domain, IP or Amazon SES account without hurting deliverability.
+---
+
+Mailbox providers such as Gmail, Outlook and Yahoo judge mail by the
+reputation of the sending domain and the IP addresses it comes from. A
+domain or account with no history that suddenly sends tens of thousands of
+emails looks like a spammer, so mail lands in spam or is throttled. Warming
+up means building that history gradually: sending to your most engaged
+readers first and raising the volume over two to four weeks.
+
+SendLit doesn't warm up automatically yet. Until it does, the
+**daily send limit** on an ESP lets you ramp up by hand.
+
+## Do you need to warm up?
+
+Usually less than you fear, if you keep what already has a reputation:
+
+- **Same sending domain.** Gmail and Outlook weigh domain reputation heavily.
+  If you sent from `news.example.com` with SPF, DKIM and DMARC set up on your
+  old platform (beehiiv, Mailchimp, Substack custom domains), keep sending
+  from that domain. Its history comes with you.
+- **Same ESP account or IP.** If you already send through your own Amazon SES,
+  Postmark, SendGrid or Mailgun account, connect that account to SendLit.
+  Nothing about your sending infrastructure changes.
+- **A clean list.** Import your list with its statuses so unsubscribed,
+  bounced and complained addresses stay suppressed (see
+  [Import contacts](/email-marketing/contacts#import-contacts)).
+
+You do need to warm up when you move to a **new domain**, a **new Amazon SES
+account** or a **new dedicated IP**, or when your list is much bigger than
+what you sent before. Even with an existing domain, a new SES account's
+shared IPs and quota benefit from a short ramp.
+
+## Amazon SES before you start
+
+- **Leave the sandbox.** New SES accounts can only send to verified
+  addresses. In the SES console, request production access for your region,
+  describing your newsletter, how people subscribe and how you handle
+  bounces and complaints.
+- **Check your quotas.** SES gives each account a daily sending quota
+  (`Max24HourSend`) and a maximum send rate per second (`MaxSendRate`). Set
+  the ESP's **Max send rate** in SendLit to your account's `MaxSendRate`
+  (see [Send rate](/email-marketing/settings#send-rate)), and ask AWS for a
+  higher daily quota before your list outgrows it.
+- **Send bounces and complaints back to SendLit**, so bad addresses are
+  suppressed straight away. See
+  [Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback).
+- **Authenticate your domain** with SPF, DKIM and DMARC, and verify it in SES.
+
+## Set a daily send limit
+
+Open **Settings → Email service providers**, edit the ESP and set
+**Daily send limit for warm-up**. It caps how many broadcast and sequence
+emails go through that ESP per UTC day. Emails over the cap aren't lost or
+marked failed: they wait and go out from midnight UTC, and a large broadcast
+simply takes several days. Transactional email (sign-in codes, receipts) is
+never held back. The ESP list shows today's count against the limit.
+
+Raise the limit every day or two as long as bounces and complaints stay low,
+and clear it once you're sending your full volume. You can also set it with
+`PATCH /settings/esps/{espId}` (`dailySendLimit`, or `null` to remove it) or
+the MCP `update_esp` tool.
+
+## A sample ramp
+
+Adjust the steps to your list size; stop raising the limit if bounce or
+complaint rates climb.
+
+| Days | Daily send limit |
+| --- | --- |
+| 1-2 | 500 |
+| 3-4 | 1,000 |
+| 5-6 | 2,500 |
+| 7-8 | 5,000 |
+| 9-10 | 10,000 |
+| 11-14 | 20,000 |
+| 15-21 | 50,000 |
+| 22-28 | 100,000 or your full list |
+
+## Send to your most engaged readers first
+
+Early sends should go to people who open and click, because their engagement
+builds reputation fastest. Readers who signed up recently are usually the
+most engaged, so a segment of recent signups (**Signed up after** a date) is
+a good first audience. If your old platform exports engagement, import it as
+a tag or custom field and build a segment from it. Send your first issues to
+that segment, then widen the audience as you raise the limit. Leave long
+inactive readers until last, or consider not mailing them at all.
+
+## Watch the numbers
+
+- **Bounces:** keep the bounce rate under 2%. A hard bounce suppresses the
+  address automatically; check the [Suppressions](/activity/suppressions)
+  page after each send.
+- **Spam complaints:** keep them under 0.1%. Gmail and Yahoo require
+  bulk senders to stay below 0.3%.
+- **Opens and clicks** on the broadcast's stats. A sudden drop often means
+  mail is going to spam.
+- **Google Postmaster Tools** and **Microsoft SNDS** show how those providers
+  rate your domain and IPs.
+
+If the numbers get worse, lower the daily limit, send only to your engaged
+segment for a few days, and clean addresses that bounce.

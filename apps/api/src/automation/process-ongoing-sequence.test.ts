@@ -552,6 +552,33 @@ describe("processOngoingSequence", () => {
     expect(after.sentEmailIds).toEqual([]);
   });
 
+  it("waits for an exhausted organization quota instead of failing", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const row = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+    mockedSendMail.mockRejectedValueOnce(
+      Object.assign(new Error("organization_team_quota_exhausted"), {
+        retryAfter: 600,
+      }),
+    );
+
+    await expect(processOngoingSequence(row.id)).resolves.toBeUndefined();
+
+    const [after] = await tdb
+      .select()
+      .from(ongoingSequences)
+      .where(eq(ongoingSequences.id, row.id));
+    expect(after.retryCount).toBe(0);
+    expect(after.nextEmailScheduledTime).toBeGreaterThan(Date.now() + 590_000);
+  });
+
   it("increments retryCount and keeps the row on a send failure below the bounce limit", async () => {
     const { team, contact } = await seedTeamAndContact(tdb);
     const { sequenceRow } = await seedSequence(tdb, {

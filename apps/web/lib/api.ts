@@ -605,6 +605,9 @@ export interface EspConfig {
   fromEmail: string | null;
   replyTo?: string | null;
   maxSendRate?: number | null;
+  dailySendLimit?: number | null;
+  /** Marketing sends today (UTC), when `dailySendLimit` is set. */
+  sentToday?: number | null;
   lastTestedAt: string | null;
   lastTestStatus: "success" | "failed" | null;
   lastTestError: string | null;
@@ -630,6 +633,8 @@ export interface EspConnectionInput {
   replyTo?: string;
   /** Messages per second; `null` uses the provider default. */
   maxSendRate?: number | null;
+  /** Daily marketing send cap; `null` removes it. */
+  dailySendLimit?: number | null;
 }
 
 // ---- ESP collection (multiple user-managed ESPs per team) -----------------
