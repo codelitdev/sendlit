@@ -107,9 +107,10 @@ Broadcasts use the sequence resource with one email and an audience filter. `upd
 
 - `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`
 - `add_sequence_email`, `update_sequence_email`, `delete_sequence_email`
+- `send_sequence_email_test` sends a `[Test]` copy of one email to you (or up to five addresses)
 - `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_subscribers`
 
-Use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.
+Send a test with `send_sequence_email_test` and use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.
 
 ### Transactional email
 

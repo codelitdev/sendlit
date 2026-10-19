@@ -505,6 +505,26 @@ export function updateSequenceEmail(
   );
 }
 
+export interface SequenceEmailTestResult {
+  sent: string[];
+  skipped: { email: string; reason: "suppressed" }[];
+  lastTestSentAt: string | null;
+}
+
+/** Sends a `[Test]` copy of one email; `to` defaults to the signed-in user. */
+export function sendSequenceEmailTest(
+  sequenceId: string,
+  emailId: string,
+  to?: string[],
+) {
+  return unwrap<SequenceEmailTestResult>(
+    client.sequences.sendEmailTest({
+      params: { sequenceId, emailId },
+      body: { to: to?.length ? to : undefined },
+    }),
+  );
+}
+
 export function deleteSequenceEmail(sequenceId: string, emailId: string) {
   return unwrap<Sequence>(
     client.sequences.removeEmail({ params: { sequenceId, emailId } }),

@@ -26,3 +26,10 @@ export function invalidUnsubscribeLinkPage() {
     `<h1>Invalid unsubscribe link</h1><p>This link is not valid. Reply to the email you received to ask the sender to unsubscribe you.</p>`,
   );
 }
+
+export function testUnsubscribePage() {
+  return page(
+    "Test email",
+    `<h1>This was a test email</h1><p>Unsubscribe links in test emails don't change anything. Your recipients get a working link.</p>`,
+  );
+}

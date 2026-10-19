@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
+import { SendTestDialog } from "@/components/dashboard/send-test-dialog";
 import { getSequence, updateSequenceEmail } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 
@@ -25,6 +26,7 @@ export function SequenceEmailEditor({
     emailId: string;
     subject: string;
     content: Email;
+    lastTestSentAt?: string | null;
   }>();
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +44,7 @@ export function SequenceEmailEditor({
           emailId: found.emailId,
           subject: found.subject,
           content: found.content,
+          lastTestSentAt: found.lastTestSentAt,
         });
       })
       .catch((err) =>
@@ -67,6 +70,15 @@ export function SequenceEmailEditor({
           content,
         });
       }}
+      actions={(saveContent) => (
+        <SendTestDialog
+          sequenceId={sequenceId}
+          emailId={email.emailId}
+          lastTestSentAt={email.lastTestSentAt}
+          beforeSend={saveContent}
+          onSent={(lastTestSentAt) => setEmail({ ...email, lastTestSentAt })}
+        />
+      )}
     />
   );
 }

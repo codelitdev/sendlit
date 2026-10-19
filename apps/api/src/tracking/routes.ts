@@ -1,6 +1,6 @@
 import { type Request, type Response, Router } from "express";
 import { getSequenceRowBySequenceId } from "../automation/queries";
-import { EmailEventAction } from "../config/constants";
+import { EmailEventAction, TEST_UNSUBSCRIBE_TOKEN } from "../config/constants";
 import {
   getContactByContactId,
   getContactByUnsubscribeToken,
@@ -18,6 +18,7 @@ import {
 import { verifyPixelToken } from "../utils/pixel-jwt";
 import {
   invalidUnsubscribeLinkPage,
+  testUnsubscribePage,
   unsubscribeConfirmPage,
   unsubscribedPage,
 } from "./unsubscribe-page";
@@ -174,6 +175,9 @@ router.get("/track/click", async (req: Request, res: Response) => {
 // page's form (`source=page`) and RFC 8058 one-click requests sent by mailbox
 // providers (`List-Unsubscribe=One-Click`), which only need a 2xx.
 router.get("/unsubscribe/:unsubscribeToken", async (req: Request, res: Response) => {
+  if (req.params.unsubscribeToken === TEST_UNSUBSCRIBE_TOKEN) {
+    return res.type("html").send(testUnsubscribePage());
+  }
   try {
     const contact = await getContactByUnsubscribeToken(req.params.unsubscribeToken);
     if (!contact) {
@@ -193,6 +197,11 @@ router.get("/unsubscribe/:unsubscribeToken", async (req: Request, res: Response)
 });
 
 router.post("/unsubscribe/:unsubscribeToken", async (req: Request, res: Response) => {
+  if (req.params.unsubscribeToken === TEST_UNSUBSCRIBE_TOKEN) {
+    return req.body?.source === "page"
+      ? res.type("html").send(testUnsubscribePage())
+      : res.status(200).end();
+  }
   try {
     const contact = await getContactByUnsubscribeToken(req.params.unsubscribeToken);
     if (!contact) {

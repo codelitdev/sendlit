@@ -19,6 +19,7 @@ import { MARKETING_EMAIL_EDITOR_BLOCKS } from "@/components/dashboard/email-edit
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
+import { SendTestDialog } from "@/components/dashboard/send-test-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/codelit/badge";
 import { Button } from "@/components/ui/codelit/button";
@@ -304,6 +305,27 @@ export default function BroadcastEditorPage({
                   {saved ? <Check className="size-4" /> : null}
                   {saved ? "Saved" : saving ? "Saving…" : "Save"}
                 </Button>
+                {sequence.emails[0] && (
+                  <SendTestDialog
+                    sequenceId={sequenceId}
+                    emailId={sequence.emails[0].emailId}
+                    lastTestSentAt={sequence.emails[0].lastTestSentAt}
+                    beforeSend={() => save()}
+                    onSent={(lastTestSentAt) =>
+                      setSequence((current) =>
+                        current
+                          ? {
+                              ...current,
+                              emails: current.emails.map((e, i) =>
+                                i === 0 ? { ...e, lastTestSentAt } : e,
+                              ),
+                            }
+                          : current,
+                      )
+                    }
+                    disabled={working}
+                  />
+                )}
                 <Button variant="outline" onClick={openSchedule} disabled={working}>
                   <CalendarClock className="size-4" />
                   Schedule

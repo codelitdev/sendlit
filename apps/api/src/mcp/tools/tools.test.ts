@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
 const mocks = {
+  sendSequenceEmailTest: vi.fn(),
   countContacts: vi.fn(),
   createContact: vi.fn(),
   getContactByContactId: vi.fn(),
@@ -109,6 +110,10 @@ mock.module("../../sequences/queries", () => ({
   deleteMailFromSequence: mocks.deleteMailFromSequence,
   startSequence: mocks.startSequence,
   pauseSequence: mocks.pauseSequence,
+}));
+
+mock.module("../../sequences/test-send", () => ({
+  sendSequenceEmailTest: mocks.sendSequenceEmailTest,
 }));
 
 mock.module("../../settings/esp/queries", () => ({
@@ -468,6 +473,37 @@ describe("MCP ESP tools", () => {
       hasPassword: true,
     });
     expect(result.structuredContent).not.toHaveProperty("encryptedSecret");
+  });
+
+  it("sends a sequence email test to the signed-in user by default", async () => {
+    const tools = makeToolRegistry(registerSequenceTools);
+    mocks.sendSequenceEmailTest.mockResolvedValue({
+      sent: ["owner@example.com"],
+      skipped: [],
+      lastTestSentAt: "2026-10-19T00:00:00.000Z",
+    });
+
+    await expect(
+      tools
+        .get("send_sequence_email_test")!
+        .handler({ sequenceId: "seq_1", emailId: "email_1" }, auth),
+    ).resolves.toMatchObject({
+      structuredContent: { sent: ["owner@example.com"] },
+    });
+    expect(mocks.sendSequenceEmailTest).toHaveBeenCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq_1",
+      emailId: "email_1",
+      to: undefined,
+      fallbackRecipient: "owner@example.com",
+    });
+
+    mocks.sendSequenceEmailTest.mockRejectedValue(new Error("email_not_found"));
+    await expect(
+      tools
+        .get("send_sequence_email_test")!
+        .handler({ sequenceId: "seq_1", emailId: "email_x" }, teamKeyAuth),
+    ).resolves.toMatchObject({ isError: true });
   });
 
   it("requires an explicit destination for API-key test sends", async () => {

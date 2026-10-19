@@ -16,6 +16,24 @@ Marketing templates contain one final managed footer. SendLit renders the
 workspace mailing address and recipient-specific unsubscribe URL at delivery
 time.
 
+## Send a test
+
+Use **Send test** in the broadcast editor (or the full-screen content editor)
+to send yourself a copy before launching. It saves your changes first, then
+sends the email exactly as recipients will get it (merge tags, footer,
+tracking) with `[Test]` added to the subject, through the delivery source the
+real send will use. It defaults to your own address and accepts up to five.
+When the recipient is one of your contacts, merge tags use their data.
+Opens, clicks and the unsubscribe link in a test change nothing, suppressed
+addresses are skipped, and each team can send 50 test emails per hour.
+The email's `lastTestSentAt` records when the last test went out.
+
+Over the API: `POST /sequences/{sequenceId}/emails/{emailId}/test` with an
+optional `{ "to": ["you@example.com"] }`. API keys have no signed-in user, so
+they must pass `to`. The MCP tool is `send_sequence_email_test`.
+
+## Unsubscribing
+
 Opening the unsubscribe URL shows a confirmation page; the contact is
 unsubscribed only when they confirm. Security scanners and mail clients that
 prefetch links therefore can't unsubscribe anyone. A `POST` to the same URL

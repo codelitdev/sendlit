@@ -19,6 +19,8 @@ export const sequenceEmailSchema = z.object({
   // Plain string (see `contactSchema.lead`'s comment) — validated on write.
   actionType: z.string().nullable().optional(),
   actionData: z.record(z.any()).nullable().optional(),
+  /** When a test of this email was last sent; `null` if never. */
+  lastTestSentAt: z.string().nullable().optional(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
 });
@@ -178,6 +180,24 @@ export const updateSequenceEmailBodySchema = z.object({
   actionType: z.enum(emailActionTypes).optional(),
   actionData: z.record(z.any()).optional(),
   published: z.boolean().optional(),
+});
+
+export const sendSequenceEmailTestBodySchema = z.object({
+  to: z
+    .array(z.string().email())
+    .max(5)
+    .optional()
+    .describe(
+      "Up to 5 addresses. Defaults to the signed-in user's address; API keys must set it.",
+    ),
+});
+
+export const sequenceEmailTestResultSchema = z.object({
+  sent: z.array(z.string()).describe("Addresses the test was sent to"),
+  skipped: z
+    .array(z.object({ email: z.string(), reason: z.enum(["suppressed"]) }))
+    .describe("Addresses on the suppression list, which never get mail"),
+  lastTestSentAt: z.string().nullable(),
 });
 
 export const sequenceStatsSchema = z.object({

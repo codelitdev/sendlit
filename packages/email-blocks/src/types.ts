@@ -67,6 +67,8 @@ export interface SequenceEmail {
   templateId?: string | null;
   actionType?: EmailActionType | null;
   actionData?: Record<string, unknown> | null;
+  /** When a test of this email was last sent; `null` if never. */
+  lastTestSentAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -87,6 +87,8 @@ import {
   createSequenceBodySchema,
   listSequencesQuerySchema,
   listSubscribersQuerySchema,
+  sendSequenceEmailTestBodySchema,
+  sequenceEmailTestResultSchema,
   sequenceSchema,
   sequenceStatsSchema,
   updateSequenceBodySchema,
@@ -479,6 +481,20 @@ const sequencesContract = c.router(
       summary: "Update an email within a sequence",
       description:
         "When templateId is supplied, it must identify a marketing template; transactional templates return 422 template_not_marketing.",
+    },
+    sendEmailTest: {
+      method: "POST",
+      path: "/sequences/:sequenceId/emails/:emailId/test",
+      body: sendSequenceEmailTestBodySchema,
+      responses: {
+        200: sequenceEmailTestResultSchema,
+        400: errorSchema,
+        404: errorSchema,
+        429: errorSchema,
+      },
+      summary: "Send a test of a broadcast or sequence email",
+      description:
+        "Renders the email exactly like a real send (merge tags, footer, tracking) and sends it with a `[Test]` subject prefix through the delivery source the real send would use. Merge tags use the recipient's contact data when they are a contact. Opens, clicks and the unsubscribe link in a test change nothing. Suppressed addresses are skipped. Each team can send 50 test emails per hour.",
     },
     removeEmail: {
       method: "DELETE",
