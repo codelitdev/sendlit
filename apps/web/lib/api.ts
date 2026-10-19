@@ -4,6 +4,7 @@ import {
   type CustomFields,
   contactFilterSchema,
   contract,
+  type DomainAuthentication,
   type ImportContactRow,
   type ImportContactsResult,
   type PaidPlan,
@@ -698,6 +699,17 @@ export function deleteEsp(espId: string) {
 export function testEsp(espId: string, to?: string) {
   return unwrap<{ success: boolean; error?: string }>(
     client.settings.esps.test({ params: { espId }, body: { to } }),
+  );
+}
+
+export type { DomainAuthentication };
+
+export function checkEspDomainAuthentication(espId: string, dkimSelector?: string) {
+  return unwrap<DomainAuthentication>(
+    client.settings.esps.domainAuthentication({
+      params: { espId },
+      query: dkimSelector ? { dkimSelector } : {},
+    }),
   );
 }
 

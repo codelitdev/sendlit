@@ -131,6 +131,7 @@ send. Broadcast and sequence tools accept only marketing templates and report
 - `get_general_settings`, `update_general_settings`
 - `get_esp_config`, `update_esp_config`, `delete_esp_config`, `send_test_email`
 - `list_esps`, `create_esp`, `get_esp`, `update_esp`, `delete_esp`, `test_esp`
+- `check_esp_domain_authentication` (live SPF, DKIM and DMARC check of the From domain, with the records to add)
 
 The ESP tools manage the team’s sending providers and default provider. Secrets are accepted for writes but are not returned in read responses.
 
