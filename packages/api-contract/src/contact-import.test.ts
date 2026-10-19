@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { guessContactImportField, normalizeImportStatus } from "./contact-import";
+import {
+  guessContactImportField,
+  guessImportStatusFromFileName,
+  normalizeImportStatus,
+} from "./contact-import";
 
 describe("guessContactImportField", () => {
   it("recognises common export headers", () => {
@@ -35,5 +39,22 @@ describe("normalizeImportStatus", () => {
     });
     expect(normalizeImportStatus("Pending")).toEqual({ skip: "pending_confirmation" });
     expect(normalizeImportStatus("archived")).toEqual({ skip: "unknown_status" });
+    expect(normalizeImportStatus("deactivated")).toEqual({ status: "unsubscribed" });
+  });
+});
+
+describe("guessImportStatusFromFileName", () => {
+  it("reads Mailchimp's per-type export files", () => {
+    expect(
+      guessImportStatusFromFileName("subscribed_email_audience_export_3f2a.csv"),
+    ).toBe("subscribed");
+    expect(
+      guessImportStatusFromFileName("unsubscribed_email_audience_export_3f2a.csv"),
+    ).toBe("unsubscribed");
+    expect(
+      guessImportStatusFromFileName("nonsubscribed_email_audience_export.csv"),
+    ).toBe("unsubscribed");
+    expect(guessImportStatusFromFileName("Cleaned_members_export.csv")).toBe("bounced");
+    expect(guessImportStatusFromFileName("beehiiv-subscribers.csv")).toBeNull();
   });
 });

@@ -18,7 +18,13 @@ automatically: email, name (or first and last name), tags, status, signup
 date (`created_at`, `OPTIN_TIME`, ...), and beehiiv's `tier`, which becomes a
 `tier:<value>` tag. Other columns become custom fields, or choose
 "Don't import". You can add tags to every imported contact, for example
-`beehiiv`.
+`beehiiv`. Step-by-step guides for [beehiiv](/migrate/beehiiv),
+[Substack](/migrate/substack) and [Mailchimp](/migrate/mailchimp) cover each
+tool's export.
+
+If the file has no status column, the importer asks for the status of
+everyone in it, and suggests one from Mailchimp's file names
+(`unsubscribed_…`, `cleaned_…`).
 
 An import never makes a contact's status less strict. The order is
 subscribed, then unsubscribed, then bounced, then complained:
@@ -27,7 +33,7 @@ subscribed, then unsubscribed, then bounced, then complained:
 | --- | --- |
 | Active, subscribed, empty | Subscribed |
 | Paused (beehiiv) | Subscribed, tagged `paused` |
-| Inactive, unsubscribed | Unsubscribed |
+| Inactive, unsubscribed, deactivated | Unsubscribed |
 | Bounced, cleaned (Mailchimp) | Unsubscribed and added to the suppression list |
 | Complained, spam | Unsubscribed and suppressed as a complaint |
 | Pending, Needs approval | Skipped, or imported unsubscribed and tagged `pending` if you choose |

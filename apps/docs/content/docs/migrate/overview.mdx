@@ -1,0 +1,56 @@
+---
+title: Moving your newsletter
+description: Bring your subscribers from beehiiv, Substack or Mailchimp to SendLit without hurting deliverability.
+---
+
+Moving a newsletter is mostly about two things: bringing every subscriber
+over with the right status, and sending from your own domain without landing
+in spam. Pick your current tool for the export steps:
+
+- [From beehiiv](/migrate/beehiiv)
+- [From Substack](/migrate/substack)
+- [From Mailchimp](/migrate/mailchimp)
+
+Kit (ConvertKit) and other tools work the same way: export a CSV and import
+it under **Contacts → Import**; see [Import contacts](/email-marketing/contacts#import-contacts).
+
+## The steps
+
+1. **Export your subscribers** from the old tool (see its page). Keep the
+   export of your past posts too.
+2. **Connect your email provider.** SendLit sends through your own Amazon SES,
+   Resend, Postmark, SendGrid or Mailgun account. Add it in **Settings → Email
+   service providers**, send a test and activate it. For Amazon SES, ask for
+   production access first; see [Warming up](/email-marketing/warm-up#amazon-ses-before-you-start).
+3. **Authenticate your domain.** Use the shield button on the provider to
+   check SPF, DKIM and DMARC and add the missing DNS records; see
+   [Domain authentication](/email-marketing/domain-authentication).
+4. **Import the CSV** under **Contacts → Import**. Check the column mapping,
+   and add a tag such as `beehiiv` to everyone so you can find them later.
+   Unsubscribed, bounced and complained contacts stay that way.
+5. **Recreate signup forms and your welcome email.** Create a
+   [signup form](/email-marketing/signup-forms) and replace the old embed on
+   your site. Rebuild your welcome email as a [sequence](/email-marketing/sequences)
+   triggered when a subscriber is added. Imported contacts don't trigger it,
+   so your existing readers won't get a second welcome.
+6. **Turn on your web archive** if your old tool hosted your posts; see
+   [Web archive](/email-marketing/web-archive).
+7. **Send a test, then your first broadcast.** Use **Send test** on the
+   broadcast, check it in Gmail and Outlook, then schedule it.
+
+## Before you switch
+
+- [ ] Mailing address saved in **Settings → General** (it's in every email's
+      footer, and required by anti-spam law).
+- [ ] Provider active, with SPF, DKIM and DMARC all set up.
+- [ ] Reply-To set on the provider if replies should go somewhere other than
+      the From address.
+- [ ] Contact counts match the old tool: subscribed, unsubscribed and
+      bounced. The import summary lists every skipped row and why.
+- [ ] A test email received, with a working unsubscribe link.
+- [ ] Old signup forms replaced, so new subscribers don't keep going to the
+      old tool.
+- [ ] A [warm-up plan](/email-marketing/warm-up) if the domain or provider
+      account is new: start with your most engaged readers and grow daily.
+- [ ] Old tool kept until the first few sends look healthy; then stop sending
+      from it so nobody gets two copies.

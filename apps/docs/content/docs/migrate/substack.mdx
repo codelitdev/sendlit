@@ -1,0 +1,50 @@
+---
+title: From Substack
+description: Export your Substack subscribers and import them into SendLit.
+---
+
+## Export from Substack
+
+1. In your Substack dashboard, open **Subscribers**.
+2. Scroll to **All subscribers**, open the **⋯** menu above the list and
+   choose **Export**.
+3. Export **all columns** to get a CSV of your subscribers.
+
+Substack's menus change from time to time; if yours look different, search
+Substack's help for "export my email list".
+
+Compare the number of rows in the file with the subscriber count Substack
+shows before you import.
+
+## Import into SendLit
+
+In **Contacts → Import**, upload the CSV and check the mapping screen:
+
+- the email column is detected automatically, and so are name and signup
+  date (`created_at`) columns;
+- if there is a column telling paid subscribers apart (for example a plan or
+  paid flag), import it as **Tag from value**, so paid subscribers get a tag
+  you can target;
+- set columns you don't need, such as revenue or activity stats, to "Don't
+  import".
+
+| Substack status | In SendLit |
+| --- | --- |
+| Active, subscribed | Subscribed |
+| Unsubscribed, deactivated, email disabled | Unsubscribed |
+| Anything else | Skipped and listed in the import summary |
+
+If the file has no status column, the importer asks for everyone's status;
+the Substack export only lists current subscribers, so choose
+**Subscribed**.
+
+SendLit doesn't take payments. Paid subscribers keep paying through Substack
+until you move billing to your own payment provider; tell them before you do.
+
+## Next
+
+Connect your provider, authenticate your domain, recreate your forms and
+welcome email, and go through the checklist in
+[Moving your newsletter](/migrate/overview#the-steps). Substack hosted your posts: turn
+on the [web archive](/email-marketing/web-archive) so new issues get public
+pages.
