@@ -1,6 +1,11 @@
 "use client";
 
-import { BadgeCheckIcon, ChevronsUpDownIcon, LogOutIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  BadgeCheckIcon,
+  ChevronsUpDownIcon,
+  LogOutIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -30,7 +35,14 @@ function initialsFor(account: CurrentAccount | null) {
   return source.slice(0, 1).toUpperCase();
 }
 
-export function NavUser({ user }: { user: CurrentAccount | null }) {
+export function NavUser({
+  user,
+  statusPageUrl = null,
+}: {
+  user: CurrentAccount | null;
+  /** Public status page, when the deployment has one. */
+  statusPageUrl?: string | null;
+}) {
   const { isMobile } = useSidebar();
 
   return (
@@ -83,6 +95,14 @@ export function NavUser({ user }: { user: CurrentAccount | null }) {
                   Account
                 </Link>
               </DropdownMenuItem>
+              {statusPageUrl && (
+                <DropdownMenuItem asChild>
+                  <a href={statusPageUrl} target="_blank" rel="noreferrer">
+                    <ActivityIcon />
+                    System status
+                  </a>
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>

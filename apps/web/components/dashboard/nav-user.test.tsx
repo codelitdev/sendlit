@@ -63,4 +63,15 @@ describe("NavUser", () => {
     fireEvent.submit(form);
     expect(mocks.resetPosthogUser).toHaveBeenCalledTimes(1);
   });
+
+  it("links the status page only when the deployment has one", () => {
+    const { getByRole, queryByRole, rerender } = render(
+      <NavUser user={null} statusPageUrl="https://status.example.com" />,
+    );
+    expect(getByRole("link", { name: "System status" }).getAttribute("href")).toBe(
+      "https://status.example.com",
+    );
+    rerender(<NavUser user={null} />);
+    expect(queryByRole("link", { name: "System status" })).toBeNull();
+  });
 });

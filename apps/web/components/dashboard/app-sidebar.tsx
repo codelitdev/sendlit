@@ -63,7 +63,11 @@ const SECONDARY_NAV: NavMainItem[] = [
   { url: "/settings", title: "Settings", icon: Settings },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({
+  statusPageUrl = null,
+}: {
+  statusPageUrl?: string | null;
+}) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
@@ -220,7 +224,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-0">
         <NavMain items={SECONDARY_NAV} />
         <div className="p-2">
-          <NavUser user={account} />
+          <NavUser user={account} statusPageUrl={statusPageUrl} />
         </div>
       </SidebarFooter>
 
