@@ -1,10 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { type Event, EventType } from "../config/constants";
+import { sequenceAudience } from "../contacts/segment";
 import { db } from "../db/client";
 import { rules, sequences } from "../db/schema";
 import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
-import { enrollContactsInOngoingSequence } from "./queries";
+import { contactMatchesAudience, enrollContactsInOngoingSequence } from "./queries";
 
 /**
  * Tag/subscriber-based sequence triggers are event driven rather than polled
@@ -38,13 +39,27 @@ export async function fireEvent({
     }
 
     const [sequenceRow] = await db
-      .select({ id: sequences.id, status: sequences.status })
+      .select({
+        id: sequences.id,
+        status: sequences.status,
+        filter: sequences.filter,
+        excludeFilter: sequences.excludeFilter,
+      })
       .from(sequences)
       .where(and(eq(sequences.teamId, teamId), eq(sequences.id, rule.sequenceId)))
       .limit(1);
     if (sequenceRow?.status !== "active") continue;
 
     try {
+      if (
+        !(await contactMatchesAudience(
+          teamId,
+          contactId,
+          sequenceAudience(sequenceRow),
+        ))
+      ) {
+        continue;
+      }
       await enrollContactsInOngoingSequence({
         teamId,
         sequenceId: sequenceRow.id,

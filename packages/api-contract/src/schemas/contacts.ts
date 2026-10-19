@@ -50,6 +50,12 @@ export const listContactsQuerySchema = z.object({
     .describe(
       "Serialized ContactFilterWithAggregator JSON; combines with q and segmentId using AND",
     ),
+  excludeFilter: z
+    .string()
+    .optional()
+    .describe(
+      "Serialized ContactFilterWithAggregator JSON; contacts matching it are left out",
+    ),
   offset: z.coerce.number().int().min(1).optional(),
   rowsPerPage: z.coerce.number().int().min(1).optional(),
 });

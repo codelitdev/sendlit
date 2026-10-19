@@ -8,7 +8,7 @@ mock.module("../db/client", async () => {
 
 const { EventType } = await import("../config/constants");
 const { db } = await import("../db/client");
-const { ongoingSequences, rules } = await import("../db/schema");
+const { ongoingSequences, rules, sequences } = await import("../db/schema");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
 const { seedSequence } = await import("../test/fixtures");
@@ -136,5 +136,35 @@ describe("fireEvent", () => {
     });
 
     expect(await enrolledContactIds(sequenceRow.id)).toEqual([contact.id]);
+  });
+
+  it("skips contacts matching the sequence's exclusion filter", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    await tdb
+      .update(sequences)
+      .set({
+        excludeFilter: {
+          aggregator: "or",
+          filters: [{ name: "email", condition: "is", value: contact.email }],
+        },
+      })
+      .where(eq(sequences.id, sequenceRow.id));
+    await seedRule({
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      event: EventType.SUBSCRIBER_ADDED,
+    });
+
+    await fireEvent({
+      teamId: team.id,
+      event: EventType.SUBSCRIBER_ADDED,
+      contactId: contact.id,
+    });
+
+    expect(await enrolledContactIds(sequenceRow.id)).toEqual([]);
   });
 });

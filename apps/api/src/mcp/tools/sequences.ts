@@ -1,4 +1,4 @@
-import { emailContentInputSchema } from "@sendlit/api-contract";
+import { contactFilterSchema, emailContentInputSchema } from "@sendlit/api-contract";
 import { z } from "zod";
 import { emailActionTypes, mailTypes } from "../../config/constants";
 import type { HydratedSequence } from "../../sequences/queries";
@@ -161,7 +161,7 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
     "update_sequence",
     {
       description:
-        "Updates a broadcast/sequence's title, trigger, audience filter, or selected user ESP.",
+        "Updates a broadcast/sequence's title, trigger, audience filter, exclusion filter, or selected user ESP.",
       inputSchema: {
         sequenceId: z.string(),
         title: z.string().optional(),
@@ -179,7 +179,15 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
             filters: z.array(z.record(z.any())),
           })
           .optional()
-          .describe("Audience filter for broadcasts (tag/email/subscription/signedUp)"),
+          .describe(
+            "Audience filter (tag/email/subscription/signedUp/customField); empty means every subscribed contact",
+          ),
+        excludeFilter: contactFilterSchema
+          .nullable()
+          .optional()
+          .describe(
+            "Contacts matching this filter never receive the email, even if they match `filter` (e.g. leave out customers). null clears it.",
+          ),
         emailsOrder: z.array(z.string()).optional(),
         deliverySource: z
           .discriminatedUnion("type", [

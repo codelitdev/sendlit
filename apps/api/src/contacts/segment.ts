@@ -15,6 +15,24 @@ export interface ContactFilterWithAggregator {
   filters: ContactFilterCondition[];
 }
 
+/** Who a broadcast or sequence targets: subscribed contacts of the team that
+ * match `filter` (everyone when empty) and don't match `excludeFilter`. */
+export interface AudienceFilters {
+  filter?: ContactFilterWithAggregator | null;
+  excludeFilter?: ContactFilterWithAggregator | null;
+}
+
+/** The audience stored on a sequence row (jsonb columns are `unknown`). */
+export function sequenceAudience(row: {
+  filter: unknown;
+  excludeFilter: unknown;
+}): AudienceFilters {
+  return {
+    filter: row.filter as ContactFilterWithAggregator | null,
+    excludeFilter: row.excludeFilter as ContactFilterWithAggregator | null,
+  };
+}
+
 /**
  * Translates a segmentation filter (tag / email / subscription status / signup
  * date) into a Drizzle SQL condition over the `contacts` table. This is the
@@ -40,6 +58,19 @@ export function buildContactFilterCondition(
   if (conditions.length === 0) return undefined;
 
   return filter.aggregator === "and" ? and(...conditions) : or(...conditions);
+}
+
+/**
+ * The inverse of `buildContactFilterCondition`, for "everyone except" audiences
+ * (`sequences.excludeFilter`). A contact is excluded only when it definitely
+ * matches; `coalesce` keeps SQL NULLs (e.g. a missing tag array) from
+ * dropping contacts the filter never matched.
+ */
+export function buildContactExclusionCondition(
+  filter: ContactFilterWithAggregator | null | undefined,
+): SQL | undefined {
+  const condition = buildContactFilterCondition(filter);
+  return condition ? sql`not coalesce((${condition}), false)` : undefined;
 }
 
 function toCondition(filter: ContactFilterCondition): SQL | undefined {
