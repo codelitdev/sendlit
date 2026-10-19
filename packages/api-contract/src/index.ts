@@ -17,6 +17,7 @@ export * from "./schemas/feedback";
 export * from "./schemas/forms";
 export * from "./schemas/media";
 export * from "./schemas/organizations";
+export * from "./schemas/reputation";
 export * from "./schemas/sequences";
 export * from "./schemas/settings";
 export * from "./schemas/suppressions";

@@ -4,6 +4,7 @@ import { Activity, ArrowRight, Circle, Mail, Workflow } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { ReputationCard } from "@/components/dashboard/reputation-card";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -165,6 +166,9 @@ export function OverviewDashboard() {
             </Link>
           </CardContent>
         </Card>
+      </section>
+      <section>
+        <ReputationCard />
       </section>
     </main>
   );

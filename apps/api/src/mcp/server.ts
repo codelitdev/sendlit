@@ -6,6 +6,7 @@ import { registerEspTools } from "./tools/esp";
 import { registerFormTools } from "./tools/forms";
 import { registerGeneralSettingsTools } from "./tools/general-settings";
 import { registerMediaTools } from "./tools/media";
+import { registerReputationTools } from "./tools/reputation";
 import { registerSegmentTools } from "./tools/segments";
 import { registerSequenceTools } from "./tools/sequences";
 import { registerTeamTools } from "./tools/teams";
@@ -52,6 +53,7 @@ export function buildMcpServer(): McpServer {
   registerSegmentTools(tools);
   registerFormTools(tools);
   registerWebTools(tools);
+  registerReputationTools(tools);
   registerTemplateTools(tools);
   registerMediaTools(tools);
   registerSequenceTools(tools);

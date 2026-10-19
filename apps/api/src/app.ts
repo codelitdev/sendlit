@@ -29,6 +29,7 @@ import { captureError, getTeamId } from "./observability";
 import organizationRoutes from "./organization/routes";
 import overviewRoutes from "./overview/routes";
 import provisioningRoutes from "./provisioning/routes";
+import reputationRoutes from "./reputation/routes";
 import sequencesRoutes from "./sequences/routes";
 import logger from "./services/log";
 import espRoutes from "./settings/esp/routes";
@@ -161,6 +162,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(suppressionsRoutes);
   app.use(signupFormRoutes);
   app.use(webRoutes);
+  app.use(reputationRoutes);
 
   app.use(
     (
