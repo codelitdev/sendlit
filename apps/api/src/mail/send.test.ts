@@ -13,6 +13,24 @@ mock.module("./transport", () => ({
   getTeamTransport: getTeamTransportMock,
 }));
 
+const throttleForEspMock = mock(async () => undefined);
+mock.module("./rate-limit", () => {
+  class SendDeferredError extends Error {
+    constructor(
+      readonly retryAfterMs: number,
+      message = "send_rate_limited",
+    ) {
+      super(message);
+    }
+  }
+  return {
+    SendDeferredError,
+    throttleForEsp: throttleForEspMock,
+    throttlingRetryDelay: (error: { responseCode?: number }) =>
+      error?.responseCode === 454 ? 60_000 : null,
+  };
+});
+
 mock.module("../observability", () => ({
   captureError: captureErrorMock,
   captureEvent: captureEventMock,
@@ -21,6 +39,7 @@ mock.module("../observability", () => ({
 mock.module("../services/log", () => ({
   default: {
     info: mock(),
+    warn: mock(),
   },
 }));
 
@@ -104,6 +123,35 @@ describe("sendMail", () => {
         teamId: "team-1",
       }),
     ).rejects.toThrow("Team ESP is not configured.");
+  });
+
+  it("waits for the ESP's send slot and defers on provider throttling", async () => {
+    const espSendMail = mock()
+      .mockResolvedValueOnce({ messageId: "<a>", response: "250 ok" })
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Throttling failure: Maximum sending rate exceeded."), {
+          responseCode: 454,
+        }),
+      );
+    const { getEspTransport } = await import("./transport");
+    (getEspTransport as any).mockResolvedValue({ sendMail: espSendMail });
+    const { sendMail } = await loadSend();
+    const input = {
+      purpose: "transactional" as const,
+      from: "Sender <sender@example.com>",
+      to: "contact@example.com",
+      subject: "Hello",
+      html: "<p>Hello</p>",
+      teamId: "team-1",
+      espConfigId: "esp-internal",
+    };
+
+    await sendMail(input);
+    expect(throttleForEspMock).toHaveBeenCalledWith("esp-internal");
+
+    const deferred = await sendMail(input).catch((error) => error);
+    expect(deferred.retryAfterMs).toBe(60_000);
+    expect(captureErrorMock).not.toHaveBeenCalled();
   });
 
   it("sends through the team's configured ESP", async () => {

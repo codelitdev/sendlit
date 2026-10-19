@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultMaxSendRates } from "@sendlit/api-contract";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { Button } from "@/components/ui/codelit/button";
@@ -43,6 +44,7 @@ type FormState = {
   fromName: string;
   fromEmail: string;
   replyTo: string;
+  maxSendRate: string;
 };
 
 const emptyForm: FormState = {
@@ -56,6 +58,7 @@ const emptyForm: FormState = {
   fromName: "",
   fromEmail: "",
   replyTo: "",
+  maxSendRate: "",
 };
 
 function formFor(esp: EspConfig | null): FormState {
@@ -71,6 +74,7 @@ function formFor(esp: EspConfig | null): FormState {
     fromName: esp.fromName ?? "",
     fromEmail: esp.fromEmail ?? "",
     replyTo: esp.replyTo ?? "",
+    maxSendRate: esp.maxSendRate ? String(esp.maxSendRate) : "",
   };
 }
 
@@ -96,6 +100,7 @@ export function EspConfigurationDialog({
   namePlaceholder?: string;
 }) {
   const [form, setForm] = useState<FormState>(emptyForm);
+  const providerDefaultRate = defaultMaxSendRates[form.provider];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,6 +127,11 @@ export function EspConfigurationDialog({
       setError("Enter a valid sender email address.");
       return;
     }
+    const maxSendRate = form.maxSendRate.trim() ? Number(form.maxSendRate) : null;
+    if (maxSendRate !== null && !(maxSendRate > 0 && maxSendRate <= 10_000)) {
+      setError("Enter a send rate between 0 and 10,000 emails per second.");
+      return;
+    }
     const replyTo = form.replyTo.trim();
     if (replyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo)) {
       setError("Enter a valid reply-to email address.");
@@ -143,6 +153,7 @@ export function EspConfigurationDialog({
         fromEmail,
         // "" clears a previously saved reply-to on edit.
         ...(replyTo || esp?.replyTo ? { replyTo } : {}),
+        maxSendRate,
       });
       onOpenChange(false);
     } catch (err) {
@@ -292,6 +303,29 @@ export function EspConfigurationDialog({
             />
             <p className="text-sm text-muted-foreground">
               Replies go here instead of the from address.
+            </p>
+          </div>
+          <div className="col-span-full space-y-1.5">
+            <Label htmlFor="esp-max-send-rate">Max send rate (emails per second)</Label>
+            <Input
+              id="esp-max-send-rate"
+              type="number"
+              min="0"
+              step="any"
+              value={form.maxSendRate}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  maxSendRate: event.target.value,
+                })
+              }
+              placeholder={
+                providerDefaultRate ? `Default: ${providerDefaultRate}` : "No limit"
+              }
+            />
+            <p className="text-sm text-muted-foreground">
+              Sends through this ESP are spaced to stay under this rate. For Amazon SES,
+              use your account&apos;s maximum send rate.
             </p>
           </div>
           <div className="col-span-full flex items-center gap-3">

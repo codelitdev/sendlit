@@ -44,6 +44,7 @@ function toPublicShape(config: EspConfig) {
     fromName: config.fromName,
     fromEmail: config.fromEmail,
     replyTo: config.replyTo,
+    maxSendRate: config.maxSendRate,
     status: config.status as "draft" | "active" | "suspended" | "draining" | "retired",
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt?.toISOString() ?? null,

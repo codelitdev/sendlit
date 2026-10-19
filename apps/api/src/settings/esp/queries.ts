@@ -37,6 +37,8 @@ export interface EspConnectionInput {
   fromEmail?: string;
   /** Default Reply-To; an empty string clears it. */
   replyTo?: string;
+  /** Messages per second; `null` uses the provider default. */
+  maxSendRate?: number | null;
 }
 
 export interface CreateEspConfigInput extends EspConnectionInput {
@@ -185,6 +187,7 @@ async function createOwnedEspConfig(
       fromName: input.fromName || null,
       fromEmail: input.fromEmail || null,
       replyTo: input.replyTo || null,
+      maxSendRate: input.maxSendRate ?? null,
     })
     .returning();
   return row;
@@ -262,6 +265,7 @@ async function updateOwnedEspConfig(
     if (input.fromName !== undefined) values.fromName = input.fromName || null;
     if (input.fromEmail !== undefined) values.fromEmail = input.fromEmail || null;
     if (input.replyTo !== undefined) values.replyTo = input.replyTo || null;
+    if (input.maxSendRate !== undefined) values.maxSendRate = input.maxSendRate;
     if (invalidatesTest) {
       values.secretVersion = existing.secretVersion + 1;
       values.lastTestedAt = null;

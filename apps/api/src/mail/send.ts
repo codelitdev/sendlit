@@ -2,6 +2,7 @@ import { renderEmailToPlainText } from "@sendlit/email-editor";
 import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
+import { SendDeferredError, throttleForEsp, throttlingRetryDelay } from "./rate-limit";
 import { getEspTransport, getTeamTransport } from "./transport";
 
 const MISSING_TEAM_ESP_ERROR = "Team ESP is not configured.";
@@ -86,6 +87,7 @@ export async function sendMail({
       espConfigId,
       secretVersion,
     );
+    if (espConfigId) await throttleForEsp(espConfigId);
     const info = await transporter.sendMail({
       from,
       to,
@@ -101,6 +103,15 @@ export async function sendMail({
       providerResponse: info?.response ?? null,
     };
   } catch (error) {
+    if (error instanceof SendDeferredError) throw error;
+    const retryAfterMs = throttlingRetryDelay(error);
+    if (retryAfterMs !== null) {
+      logger.warn(
+        { teamId, error: (error as Error).message },
+        "ESP throttled the send",
+      );
+      throw new SendDeferredError(retryAfterMs, (error as Error).message);
+    }
     captureError({
       error,
       source: "mail.send",

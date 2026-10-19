@@ -1014,6 +1014,9 @@ export const espConfigs = pgTable(
     fromEmail: text("from_email"),
     /** Default `Reply-To` for mail sent through this ESP. */
     replyTo: text("reply_to"),
+    /** Messages per second this ESP accepts; `null` uses the provider
+     * default (see `mail/rate-limit.ts`). */
+    maxSendRate: doublePrecision("max_send_rate"),
     status: text("status").notNull().default("draft"),
     secretVersion: integer("secret_version").notNull().default(1),
     lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),

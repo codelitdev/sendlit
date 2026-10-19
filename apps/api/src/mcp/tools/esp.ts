@@ -37,6 +37,7 @@ function toPublicShape(config: EspConfig | null) {
     fromName: config.fromName,
     fromEmail: config.fromEmail,
     replyTo: config.replyTo,
+    maxSendRate: config.maxSendRate,
     status: config.status,
     secretVersion: config.secretVersion,
     lastTestedAt: config.lastTestedAt,
@@ -63,6 +64,15 @@ const connectionFields = {
     .union([z.string().email(), z.literal("")])
     .optional()
     .describe("Reply-To for mail sent through this ESP; empty string clears it"),
+  maxSendRate: z
+    .number()
+    .positive()
+    .max(10_000)
+    .nullable()
+    .optional()
+    .describe(
+      "Messages per second across all workers; null uses the provider default (SES 14, Resend 2, others unlimited). Set SES to your account's MaxSendRate.",
+    ),
 };
 
 export function registerEspTools(server: McpToolRegistrar): void {
@@ -268,6 +278,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
         fromName: connectionFields.fromName,
         fromEmail: connectionFields.fromEmail,
         replyTo: connectionFields.replyTo,
+        maxSendRate: connectionFields.maxSendRate,
       },
       outputSchema: espConfigSchema,
       annotations: {
