@@ -1,6 +1,7 @@
 import type { Email as EmailType } from "@sendlit/email-editor";
+import { JSDOM } from "jsdom";
 import { getOrganizationEntitlements } from "../billing/entitlements";
-import { getGeneralSettings } from "../settings/general/queries";
+import { getTeamSettingsRow } from "../settings/general/queries";
 import { validateTemplateContent } from "../templates/validation";
 import {
   getTrackedClickUrl,
@@ -9,6 +10,7 @@ import {
   getViewInBrowserUrl,
 } from "../utils/mail";
 import { generatePixelToken, verifyPixelToken } from "../utils/pixel-jwt";
+import { issueUrl } from "../web/urls";
 import {
   appendTrackingPixel,
   renderEmailContent,
@@ -52,6 +54,20 @@ export function verifyCampaignViewToken(token: string): CampaignEmailIds | null 
   };
 }
 
+/** Stands in for the unsubscribe link on public pages, which have no
+ * reader to unsubscribe; the link is removed after rendering. */
+const PUBLIC_UNSUBSCRIBE_PLACEHOLDER = "https://sendlit.invalid/unsubscribe";
+
+function withoutUnsubscribeLink(html: string): string {
+  const dom = new JSDOM(html);
+  for (const anchor of dom.window.document.querySelectorAll(
+    `a[href="${PUBLIC_UNSUBSCRIBE_PLACEHOLDER}"]`,
+  )) {
+    anchor.remove();
+  }
+  return dom.serialize();
+}
+
 /**
  * Renders a broadcast or sequence email for one recipient: liquid merge tags
  * and the managed footer. For a send (`web: false`) it also adds the open
@@ -67,21 +83,33 @@ export async function renderCampaignHtml({
   ids,
   unsubscribeToken,
   web = false,
+  publication,
 }: {
   team: { id: string; organizationId: string };
   content: unknown;
   subscriber: { email: string; name: string | null; tags: string[] };
   ids: CampaignEmailIds;
   unsubscribeToken: string;
-  web?: boolean;
+  /** `"public"`: the published web page, with nobody's data and no
+   * unsubscribe link. */
+  web?: boolean | "public";
+  /** The broadcast's web publishing state, for `{{web_version_url}}`. */
+  publication?: { webPublished: boolean; webSlug: string | null } | null;
 }): Promise<string> {
-  const generalSettings = await getGeneralSettings(team.id);
-  const viewInBrowserUrl = web ? undefined : getCampaignViewUrl(ids);
+  const settings = await getTeamSettingsRow(team.id);
+  const publicUrl = publication ? issueUrl(settings, publication) : null;
+  // The footer's "view in browser" link goes to the public page once the
+  // issue is published, else to the reader's own web version.
+  const viewInBrowserUrl = web ? undefined : (publicUrl ?? getCampaignViewUrl(ids));
+  const isPublic = web === "public";
   const variables = {
-    subscriber,
-    address: generalSettings.mailingAddress || "",
-    unsubscribe_link: getUnsubLink(unsubscribeToken),
+    subscriber: isPublic ? { email: "", name: null, tags: [] } : subscriber,
+    address: settings?.mailingAddress || "",
+    unsubscribe_link: isPublic
+      ? PUBLIC_UNSUBSCRIBE_PLACEHOLDER
+      : getUnsubLink(unsubscribeToken),
     view_in_browser_url: viewInBrowserUrl ?? "",
+    web_version_url: publicUrl ?? viewInBrowserUrl ?? "",
   };
 
   const renderedContent = web
@@ -104,6 +132,7 @@ export async function renderCampaignHtml({
       ? "Sent with SendLit"
       : undefined,
   });
+  if (isPublic) return withoutUnsubscribeLink(renderedHtml);
   if (web) return renderedHtml;
 
   return transformLinksForClickTracking(

@@ -148,6 +148,10 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("sequences.start", "start_sequence", "write"),
   required("sequences.pause", "pause_sequence", "write"),
   required("sequences.stats", "get_sequence_stats", "read"),
+  required("sequences.getWeb", "get_broadcast_web_publishing", "read"),
+  required("sequences.updateWeb", "update_broadcast_web_publishing", "write"),
+  required("web.list", "list_web_issues", "read"),
+  required("web.get", "get_web_issue", "read"),
   required("sequences.subscribers", "get_sequence_subscribers", "read"),
 
   // Transactional email
@@ -179,6 +183,8 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   // General settings
   required("settings.general.get", "get_general_settings", "read"),
   required("settings.general.update", "update_general_settings", "write"),
+  required("settings.web.get", "get_web_settings", "read"),
+  required("settings.web.update", "update_web_settings", "write"),
 
   // Teams and team API keys
   required("teams.list", "list_teams", "read"),

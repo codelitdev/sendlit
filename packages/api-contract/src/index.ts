@@ -23,3 +23,4 @@ export * from "./schemas/suppressions";
 export * from "./schemas/teams";
 export * from "./schemas/templates";
 export * from "./schemas/transactional";
+export * from "./schemas/web";

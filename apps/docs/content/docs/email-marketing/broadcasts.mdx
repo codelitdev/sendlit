@@ -27,6 +27,11 @@ web version shows their merge-tag data and their unsubscribe link. It has no
 open or click tracking and isn't indexed by search engines. To place the link
 elsewhere in your content, use the `{{ view_in_browser_url }}` merge tag.
 
+Once a broadcast is [published to the web](/email-marketing/web-archive), the
+footer link goes to its public page instead, and so does the
+`{{ web_version_url }}` merge tag. Before that, `{{ web_version_url }}` is the
+recipient's own web version.
+
 ## Automatic pause on bounces and complaints
 
 While a broadcast or sequence sends, SendLit watches its bounce and spam

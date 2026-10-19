@@ -10,6 +10,8 @@ import {
   type PaidPlan,
   type SignupForm,
   type SignupFormInput,
+  type WebPublishing,
+  type WebSettings,
 } from "@sendlit/api-contract";
 import type {
   Contact,
@@ -1741,4 +1743,43 @@ export function updateSignupForm(formId: string, body: Partial<SignupFormInput>)
 
 export function deleteSignupForm(formId: string) {
   return unwrap<void>(client.forms.remove({ params: { formId } }));
+}
+
+export type { WebPublishing, WebSettings };
+
+export function getBroadcastWebPublishing(sequenceId: string) {
+  return unwrap<WebPublishing>(client.sequences.getWeb({ params: { sequenceId } }));
+}
+
+export function updateBroadcastWebPublishing(
+  sequenceId: string,
+  body: Partial<{
+    published: boolean;
+    slug: string;
+    seoTitle: string | null;
+    seoDescription: string | null;
+    ogImage: string | null;
+    noindex: boolean;
+    canonicalUrl: string | null;
+  }>,
+) {
+  return unwrap<WebPublishing>(
+    client.sequences.updateWeb({ params: { sequenceId }, body }),
+  );
+}
+
+export function getWebSettings() {
+  return unwrap<WebSettings>(client.settings.web.get());
+}
+
+export function updateWebSettings(
+  body: Partial<{
+    enabled: boolean;
+    handle: string;
+    title: string | null;
+    description: string | null;
+    signupFormId: string | null;
+  }>,
+) {
+  return unwrap<WebSettings>(client.settings.web.update({ body }));
 }

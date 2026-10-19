@@ -1281,6 +1281,16 @@ export const settings = pgTable("settings", {
     .unique()
     .references(() => teams.id, { onDelete: "cascade" }),
   mailingAddress: text("mailing_address"),
+  /** Hosted web pages for published broadcasts: the archive at
+   * `/w/<webHandle>` and one page per issue. */
+  webEnabled: boolean("web_enabled").notNull().default(false),
+  webHandle: text("web_handle").unique(),
+  webTitle: text("web_title"),
+  webDescription: text("web_description"),
+  /** The signup form shown on the archive page. */
+  webSignupFormId: uuid("web_signup_form_id").references(() => signupForms.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
@@ -1320,10 +1330,22 @@ export const sequences = pgTable(
     entrants: text("entrants").array().notNull().default([]),
     // { broadcast: { sentAt, lockedAt }, sequence: { subscribers, unsubscribers, failed } }
     report: jsonb("report").notNull().default({}),
+    /** Broadcasts published as a public web page once they're sent. */
+    webPublished: boolean("web_published").notNull().default(false),
+    webSlug: text("web_slug"),
+    webSeoTitle: text("web_seo_title"),
+    webSeoDescription: text("web_seo_description"),
+    webOgImage: text("web_og_image"),
+    webNoindex: boolean("web_noindex").notNull().default(false),
+    /** Where the issue really lives when a platform hosts it. */
+    webCanonicalUrl: text("web_canonical_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({
+    webSlugIdx: uniqueIndex("sequences_team_id_web_slug_idx")
+      .on(table.teamId, table.webSlug)
+      .where(sql`${table.webSlug} IS NOT NULL`),
     sequenceIdCheck: publicIdCheck(
       "sequences_sequence_id_check",
       table.sequenceId,

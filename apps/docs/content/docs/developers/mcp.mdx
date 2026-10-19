@@ -111,6 +111,7 @@ Broadcasts use the sequence resource with one email and an audience filter. `upd
 - `add_sequence_email`, `update_sequence_email`, `delete_sequence_email`
 - `send_sequence_email_test` sends a `[Test]` copy of one email to you (or up to five addresses)
 - `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_subscribers`
+- `get_broadcast_web_publishing`, `update_broadcast_web_publishing`, `list_web_issues`, `get_web_issue` ([web archive](/email-marketing/web-archive))
 
 Send a test with `send_sequence_email_test` and use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.
 
@@ -128,7 +129,7 @@ send. Broadcast and sequence tools accept only marketing templates and report
 
 ### Sending configuration
 
-- `get_general_settings`, `update_general_settings`
+- `get_general_settings`, `update_general_settings`, `get_web_settings`, `update_web_settings`
 - `get_esp_config`, `update_esp_config`, `delete_esp_config`, `send_test_email`
 - `list_esps`, `create_esp`, `get_esp`, `update_esp`, `delete_esp`, `test_esp`
 - `check_esp_domain_authentication` (live SPF, DKIM and DMARC check of the From domain, with the records to add)
