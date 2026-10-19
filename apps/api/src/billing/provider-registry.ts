@@ -27,8 +27,18 @@ export function getBillingProvider(
       if (process.env.NODE_ENV === "production") {
         throw new Error("fake_billing_provider_not_allowed_in_production");
       }
+      // Seed the products the configured catalog asks for, so the fake
+      // always matches SendLit's plans and amounts.
       const fake = new FakeBillingProvider();
-      fake.seedDefaultCatalog();
+      for (const offer of config.offers) {
+        fake.seedProduct({
+          provider: fake.provider,
+          providerProductId: offer.providerProductId,
+          amountMinor: offer.amountMinor,
+          interval: offer.interval,
+          currency: offer.currency,
+        });
+      }
       adapter = fake;
       break;
     }

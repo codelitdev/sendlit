@@ -15,7 +15,9 @@ import { getBillingEngine } from "./engine";
 import { PlanGateError } from "./errors";
 import { lockOrganizationSubscriptions } from "./locks";
 import {
+  cheapestPlanWith,
   marketingRampDailyLimit,
+  nextPlanUp,
   type OrganizationEntitlements,
   pastDueGraceEndsAt,
   resolveEntitlements,
@@ -170,7 +172,7 @@ export async function reserveTeamSlot(
       limit: entitlements.teamsLimit,
       usage,
       plan: entitlements.plan,
-      requiredPlan: entitlements.plan === "free" ? "pro" : "business",
+      requiredPlan: nextPlanUp(entitlements.plan),
     });
   }
   return entitlements;
@@ -207,7 +209,7 @@ export async function reserveSubscribedContactSlot(
       limit: entitlements.subscribedContactsLimit,
       usage,
       plan: entitlements.plan,
-      requiredPlan: entitlements.plan === "free" ? "pro" : "business",
+      requiredPlan: nextPlanUp(entitlements.plan),
     });
   }
   return entitlements;
@@ -244,7 +246,7 @@ export async function assertMarketingAllowedForContactUsage(
       limit: snapshot.subscribedContactsLimit,
       usage,
       plan: snapshot.plan,
-      requiredPlan: snapshot.plan === "free" ? "pro" : "business",
+      requiredPlan: nextPlanUp(snapshot.plan),
     });
   }
 }
@@ -264,6 +266,13 @@ export function assertCapability(
       organizationId: entitlements.organizationId,
       capability,
       plan: entitlements.plan,
+      requiredPlan: cheapestPlanWith(
+        capability === "shared_organization_mailbox"
+          ? "sharedOrganizationMailbox"
+          : capability === "provisioning"
+            ? "provisioning"
+            : "organizationApiKeys",
+      ),
     });
   }
 }
@@ -592,7 +601,7 @@ export async function reserveSend(
       limit: entitlements.monthlySendsLimit,
       usage: bucket.committed + bucket.reserved,
       plan: entitlements.plan,
-      requiredPlan: "pro",
+      requiredPlan: nextPlanUp(entitlements.plan),
     });
   }
   await tx

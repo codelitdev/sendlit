@@ -1,5 +1,6 @@
 import { BillingWorkflowError } from "@codelitdev/billing/core";
 import type { BillingActionGrant } from "@codelitdev/billing/workflows";
+import type { PaidPlan } from "@sendlit/api-contract";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { organizations, trialClaims, user } from "../db/schema";
@@ -164,7 +165,7 @@ function returnUrl(organizationPublicId: string): string {
 export async function createOrganizationCheckout(input: {
   organizationId: string;
   payerId: string;
-  plan: "pro" | "business";
+  plan: PaidPlan;
   interval: "month" | "year";
   catalogRevision: number;
   grant: BillingActionGrant;
@@ -311,7 +312,7 @@ export async function createPaidOrganizationCheckout(input: {
   payerId: string;
   organizationName: string;
   teamName: string;
-  plan: "pro" | "business";
+  plan: PaidPlan;
   interval: "month" | "year";
   catalogRevision: number;
   /** The session that presented the consumed `organization_checkout` token. */

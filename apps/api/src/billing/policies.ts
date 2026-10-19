@@ -1,4 +1,6 @@
-export type PlanId = "oss" | "free" | "pro" | "business";
+import { type BillingPlan, type PaidPlan, paidPlans } from "@sendlit/api-contract";
+
+export type PlanId = BillingPlan;
 
 export type BillingInterval = "month" | "year";
 
@@ -20,10 +22,14 @@ export type PlanPolicy = {
   provisioning: boolean;
   organizationApiKeys: boolean;
   marketingBranding: boolean;
+  /** Cloud safeguards: the new-account marketing ramp and automatic
+   * bounce/complaint reputation controls. Independent of the send caps. */
   fairUse: boolean;
 };
 
-/** Product capabilities live here; paid amounts live in catalog configuration. */
+/** Product capabilities live here; paid amounts live in catalog configuration.
+ * Hosted plans are priced on sends and teams, never contacts (#60): every plan
+ * has unlimited contacts and a hard org-wide monthly send cap. */
 export const planPolicies: Record<PlanId, PlanPolicy> = {
   oss: {
     teamsLimit: null,
@@ -37,18 +43,28 @@ export const planPolicies: Record<PlanId, PlanPolicy> = {
   },
   free: {
     teamsLimit: 1,
-    subscribedContactsLimit: 1_000,
+    subscribedContactsLimit: null,
     monthlySendsLimit: 3_000,
     sharedOrganizationMailbox: false,
     provisioning: false,
     organizationApiKeys: false,
     marketingBranding: true,
-    fairUse: false,
+    fairUse: true,
+  },
+  starter: {
+    teamsLimit: 1,
+    subscribedContactsLimit: null,
+    monthlySendsLimit: 25_000,
+    sharedOrganizationMailbox: false,
+    provisioning: false,
+    organizationApiKeys: false,
+    marketingBranding: true,
+    fairUse: true,
   },
   pro: {
-    teamsLimit: 5,
-    subscribedContactsLimit: 10_000,
-    monthlySendsLimit: null,
+    teamsLimit: 3,
+    subscribedContactsLimit: null,
+    monthlySendsLimit: 125_000,
     sharedOrganizationMailbox: true,
     provisioning: false,
     organizationApiKeys: false,
@@ -56,9 +72,9 @@ export const planPolicies: Record<PlanId, PlanPolicy> = {
     fairUse: true,
   },
   business: {
-    teamsLimit: 25,
+    teamsLimit: 15,
     subscribedContactsLimit: null,
-    monthlySendsLimit: null,
+    monthlySendsLimit: 600_000,
     sharedOrganizationMailbox: true,
     provisioning: true,
     organizationApiKeys: true,
@@ -66,6 +82,20 @@ export const planPolicies: Record<PlanId, PlanPolicy> = {
     fairUse: true,
   },
 };
+
+/** The cheapest paid plan above `plan`, for "upgrade to" hints on limit
+ * errors; Business for anything at or above it. */
+export function nextPlanUp(plan: PlanId): PaidPlan {
+  const index = paidPlans.indexOf(plan as PaidPlan);
+  return paidPlans[Math.min(index + 1, paidPlans.length - 1)];
+}
+
+/** The cheapest paid plan that grants `capability`. */
+export function cheapestPlanWith(
+  capability: "sharedOrganizationMailbox" | "provisioning" | "organizationApiKeys",
+): PaidPlan {
+  return paidPlans.find((plan) => planPolicies[plan][capability]) ?? "business";
+}
 
 /** Paid marketing ramp defaults are operational policy knobs, not code-level
  * price constants. They are read when a reservation is made so a deployment
@@ -136,8 +166,8 @@ export type OrganizationEntitlements = {
   cancelAtPeriodEnd: boolean;
 };
 
-function paidPlan(plan: string | null | undefined): "pro" | "business" | null {
-  return plan === "pro" || plan === "business" ? plan : null;
+function paidPlan(plan: string | null | undefined): PaidPlan | null {
+  return paidPlans.includes(plan as PaidPlan) ? (plan as PaidPlan) : null;
 }
 
 /**

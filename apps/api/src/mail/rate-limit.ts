@@ -191,11 +191,23 @@ export async function acquireEspSendCapacity(
   return release;
 }
 
-/** An organization ESP grant's daily/monthly quota being used up (see
- * `delivery/quota.ts`) as a deferral until it resets, so campaign mail waits
- * instead of failing. */
+/** An organization ESP grant's daily/monthly quota (see `delivery/quota.ts`)
+ * or the new-organization marketing ramp being used up, as a deferral until
+ * it resets, so campaign mail waits instead of failing. */
 export function quotaExhaustionDeferral(error: unknown): SendDeferredError | null {
-  const err = error as { message?: unknown; retryAfter?: unknown };
+  const err = error as {
+    message?: unknown;
+    retryAfter?: unknown;
+    details?: { capability?: unknown };
+  };
+  // A new organization's daily marketing ramp (billing/entitlements.ts) is
+  // per UTC day, so the rest of a broadcast continues tomorrow.
+  if (
+    err?.message === "plan_limit_reached" &&
+    err.details?.capability === "marketing_daily_ramp"
+  ) {
+    return new SendDeferredError(untilNextUtcDay(), "marketing_daily_ramp");
+  }
   if (
     err?.message !== "organization_team_quota_exhausted" &&
     err?.message !== "organization_quota_exhausted"

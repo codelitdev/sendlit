@@ -1,6 +1,18 @@
 import { z } from "zod";
 
-export const billingPlanSchema = z.enum(["oss", "free", "pro", "business"]);
+/** Hosted paid plans, cheapest first. Limits live in the API's plan
+ * policies; prices live in the billing catalog. */
+export const paidPlans = ["starter", "pro", "business"] as const;
+export type PaidPlan = (typeof paidPlans)[number];
+export const billingPlans = ["oss", "free", ...paidPlans] as const;
+export type BillingPlan = (typeof billingPlans)[number];
+export const billingCatalogKeys = paidPlans.flatMap(
+  (plan) => [`${plan}_month`, `${plan}_year`] as const,
+);
+export type BillingCatalogKey = `${PaidPlan}_${"month" | "year"}`;
+
+export const billingPlanSchema = z.enum(billingPlans);
+export const paidPlanSchema = z.enum(paidPlans);
 export const billingIntervalSchema = z.enum(["month", "year"]);
 export const paymentStatusSchema = z.enum([
   "free",
@@ -14,12 +26,24 @@ export const paymentStatusSchema = z.enum([
 ]);
 
 export const billingOfferSchema = z.object({
-  catalogKey: z.enum(["pro_month", "pro_year", "business_month", "business_year"]),
-  plan: z.enum(["pro", "business"]),
+  catalogKey: z.enum(billingCatalogKeys as [BillingCatalogKey, ...BillingCatalogKey[]]),
+  plan: paidPlanSchema,
   interval: billingIntervalSchema,
   currency: z.string().regex(/^[A-Z]{3}$/),
   amountMinor: z.number().int().positive(),
   trialDays: z.number().int().nonnegative(),
+});
+
+/** What each paid plan includes, from the API's plan policies, so clients
+ * never hard-code limits. */
+export const billingPlanFeaturesSchema = z.object({
+  plan: paidPlanSchema,
+  teamsLimit: z.number().int().positive().nullable(),
+  monthlySendsLimit: z.number().int().positive().nullable(),
+  marketingBranding: z.boolean(),
+  sharedOrganizationMailbox: z.boolean(),
+  provisioning: z.boolean(),
+  organizationApiKeys: z.boolean(),
 });
 
 export const billingCatalogSchema = z.object({
@@ -29,6 +53,7 @@ export const billingCatalogSchema = z.object({
     .regex(/^[A-Z]{3}$/)
     .nullable(),
   offers: z.array(billingOfferSchema),
+  plans: z.array(billingPlanFeaturesSchema).optional(),
   checkoutAvailable: z.boolean(),
 });
 
@@ -48,7 +73,7 @@ export const organizationPlanUsageSchema = z.object({
 
 export const billingPlanChangeSummarySchema = z.object({
   changeId: z.string(),
-  targetPlan: z.enum(["pro", "business"]),
+  targetPlan: paidPlanSchema,
   targetInterval: billingIntervalSchema,
   effectiveAt: z.enum(["immediately", "next_billing_date"]),
 });
@@ -79,7 +104,7 @@ export const organizationBillingSchema = z.object({
 });
 
 export const billingCheckoutBodySchema = z.object({
-  plan: z.enum(["pro", "business"]),
+  plan: paidPlanSchema,
   interval: billingIntervalSchema,
   catalogRevision: z.number().int().positive(),
 });
@@ -119,7 +144,7 @@ export const billingCancellationResponseSchema = z.object({
 });
 
 export const billingPlanChangeBodySchema = z.object({
-  plan: z.enum(["pro", "business"]),
+  plan: paidPlanSchema,
   interval: billingIntervalSchema,
   catalogRevision: z.number().int().positive(),
   idempotencyKey: z.string().trim().min(1).max(256).optional(),
@@ -128,7 +153,7 @@ export const billingPlanChangeBodySchema = z.object({
 export const billingPlanChangeResponseSchema = z.object({
   changeId: z.string(),
   status: z.enum(["pending", "succeeded", "failed", "conflicted"]),
-  targetPlan: z.enum(["pro", "business"]),
+  targetPlan: paidPlanSchema,
   targetInterval: billingIntervalSchema,
   effectiveAt: z.enum(["immediately", "next_billing_date"]),
   paymentUrl: z.string().url().nullable(),

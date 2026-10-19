@@ -1,3 +1,4 @@
+import { billingPlanSchema } from "@sendlit/api-contract";
 import { z } from "zod";
 import { createApiKey, deleteApiKey, getApiKeysByTeamId } from "../../apikey/queries";
 import { getOrganizationMembership } from "../../organization/queries";
@@ -64,7 +65,7 @@ export function registerTeamTools(server: McpToolRegistrar): void {
       description:
         "Returns plan usage and limits for the current team's organization. When cancelAtPeriodEnd is true the paid plan ends at paidThroughAt.",
       outputSchema: z.object({
-        plan: z.enum(["oss", "free", "pro", "business"]),
+        plan: billingPlanSchema,
         paymentStatus: z.string(),
         cancelAtPeriodEnd: z.boolean(),
         paidThroughAt: z.string().nullable(),

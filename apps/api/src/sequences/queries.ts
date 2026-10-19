@@ -7,6 +7,7 @@ import {
   getOrganizationEntitlements,
   PlanGateError,
 } from "../billing/entitlements";
+import { nextPlanUp } from "../billing/policies";
 import { usageForOrganization } from "../billing/usage";
 import {
   type EmailActionType,
@@ -680,7 +681,7 @@ export async function startSequence({
           limit: entitlements.monthlySendsLimit,
           usage: usage.monthlySends + usage.monthlySendsReserved,
           plan: entitlements.plan,
-          requiredPlan: "pro",
+          requiredPlan: nextPlanUp(entitlements.plan),
         });
       }
     }

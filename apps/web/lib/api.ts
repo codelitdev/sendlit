@@ -1,9 +1,12 @@
 import {
+  type BillingCatalogKey,
+  type BillingPlan,
   type CustomFields,
   contactFilterSchema,
   contract,
   type ImportContactRow,
   type ImportContactsResult,
+  type PaidPlan,
 } from "@sendlit/api-contract";
 import type {
   Contact,
@@ -1002,7 +1005,7 @@ export function createOrganization(name: string) {
 export function createPaidOrganizationBillingCheckout(input: {
   organizationName: string;
   teamName: string;
-  plan: "pro" | "business";
+  plan: PaidPlan;
   interval: "month" | "year";
   catalogRevision: number;
 }) {
@@ -1366,18 +1369,30 @@ export function transitionOrganizationEspGrant(
 // ---- Billing --------------------------------------------------------------
 
 export interface BillingOffer {
-  catalogKey: "pro_month" | "pro_year" | "business_month" | "business_year";
-  plan: "pro" | "business";
+  catalogKey: BillingCatalogKey;
+  plan: PaidPlan;
   interval: "month" | "year";
   currency: string;
   amountMinor: number;
   trialDays: number;
 }
 
+/** What a paid plan includes, as reported by the API. */
+export interface BillingPlanFeatures {
+  plan: PaidPlan;
+  teamsLimit: number | null;
+  monthlySendsLimit: number | null;
+  marketingBranding: boolean;
+  sharedOrganizationMailbox: boolean;
+  provisioning: boolean;
+  organizationApiKeys: boolean;
+}
+
 export interface BillingCatalog {
   catalogRevision: number | null;
   currency: string | null;
   offers: BillingOffer[];
+  plans?: BillingPlanFeatures[];
   checkoutAvailable: boolean;
 }
 
@@ -1392,7 +1407,7 @@ export type OrganizationPaymentStatus =
   | "expired";
 
 export interface OrganizationPlanUsage {
-  plan: "oss" | "free" | "pro" | "business";
+  plan: BillingPlan;
   paymentStatus: OrganizationPaymentStatus;
   teams: number;
   subscribedContacts: number;
@@ -1416,7 +1431,7 @@ export interface OrganizationEntitlements {
 }
 
 export interface OrganizationBilling {
-  plan: "oss" | "free" | "pro" | "business";
+  plan: BillingPlan;
   billingInterval: "month" | "year" | null;
   paymentStatus: OrganizationPaymentStatus;
   trialEndsAt: string | null;
@@ -1431,7 +1446,7 @@ export interface OrganizationBilling {
   usage: OrganizationPlanUsage;
   pendingPlanChange: {
     changeId: string;
-    targetPlan: "pro" | "business";
+    targetPlan: PaidPlan;
     targetInterval: "month" | "year";
     effectiveAt: "immediately" | "next_billing_date";
   } | null;
@@ -1450,7 +1465,7 @@ export function getOrganizationBilling(organizationId: string) {
 export function createOrganizationBillingCheckout(
   organizationId: string,
   input: {
-    plan: "pro" | "business";
+    plan: PaidPlan;
     interval: "month" | "year";
     catalogRevision: number;
   },
@@ -1500,7 +1515,7 @@ export function resumeOrganizationSubscription(organizationId: string) {
 export interface OrganizationPlanChange {
   changeId: string;
   status: "pending" | "succeeded" | "failed" | "conflicted";
-  targetPlan: "pro" | "business";
+  targetPlan: PaidPlan;
   targetInterval: "month" | "year";
   effectiveAt: "immediately" | "next_billing_date";
   paymentUrl: string | null;
@@ -1510,7 +1525,7 @@ export interface OrganizationPlanChange {
 export function createOrganizationBillingPlanChange(
   organizationId: string,
   input: {
-    plan: "pro" | "business";
+    plan: PaidPlan;
     interval: "month" | "year";
     catalogRevision: number;
     idempotencyKey?: string;
