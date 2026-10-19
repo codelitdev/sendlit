@@ -175,7 +175,6 @@ export const billingCheckoutAttempts = pgTable(
         lastError: text("last_error"),
         completedAt: timestamp("completed_at", { withTimezone: true }),
         ...timestamps,
-        pendingTeamName: text("pending_team_name"),
     },
     (table) => ({
         providerSessionUnique: uniqueIndex("billing_checkout_attempts_provider_session_uidx")
@@ -245,8 +244,6 @@ export const billingSubscriptions = pgTable(
         lastObservedAt: timestamp("last_observed_at", { withTimezone: true }),
         lastReconciledAt: timestamp("last_reconciled_at", { withTimezone: true }),
         ...timestamps,
-        pastDueAt: timestamp("past_due_at", { withTimezone: true }),
-        graceEndsAt: timestamp("grace_ends_at", { withTimezone: true }),
     },
     (table) => ({
         providerSubscriptionUnique: uniqueIndex("billing_subscriptions_provider_subscription_uidx").on(
@@ -351,13 +348,6 @@ export const billingPlanStates = pgTable(
         ),
         projectionVersion: integer("projection_version").notNull().default(0),
         ...timestamps,
-        plan: text("plan").notNull(),
-        teamsLimitOverride: integer("teams_limit_override"),
-        contactsLimitOverride: integer("contacts_limit_override"),
-        firstPaidActivatedAt: timestamp("first_paid_activated_at", { withTimezone: true }),
-        rampStage: integer("ramp_stage").notNull(),
-        rampCleanStageDays: integer("ramp_clean_stage_days").notNull(),
-        rampEvaluatedAt: timestamp("ramp_evaluated_at", { withTimezone: true }),
     },
 );
 

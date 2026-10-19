@@ -9,11 +9,12 @@ const { and, eq } = await import("drizzle-orm");
 const { db } = await import("../db/client");
 const {
   billingCheckoutAttempts,
-  billingTrialClaims,
   organizationAuditEvents,
   organizationMembers,
+  organizationPlanPolicies,
   organizations,
   teams,
+  trialClaims,
   user,
 } = await import("../db/schema");
 const { truncateAll } = await import("../test/db");
@@ -24,6 +25,8 @@ type TestDb = import("../test/db").TestDb;
 const { createOrganizationCheckout } = await import("./checkout");
 const { getBillingActionGrants, getBillingEngine } = await import("./engine");
 const { getOrganizationEntitlements } = await import("./entitlements");
+const { applySendLitProjectionEffects } = await import("./product-effects");
+const { PAST_DUE_GRACE_MS } = await import("./policies");
 const { abandonPendingOrganization } = await import("../organization/queries");
 
 const tdb = db as unknown as TestDb;
@@ -46,7 +49,11 @@ async function pendingOrganization() {
   });
   const [organization] = await tdb
     .insert(organizations)
-    .values({ name: "Pending org", status: "pending_payment" })
+    .values({
+      name: "Pending org",
+      status: "pending_payment",
+      pendingTeamName: "Launch team",
+    })
     .returning();
   await tdb
     .insert(organizationMembers)
@@ -75,7 +82,6 @@ async function checkout(
     plan,
     interval: "month",
     catalogRevision: 1,
-    pendingTeamName: "Launch team",
     grant: grants.grant({
       token: issued.token,
       actorId: userId,
@@ -128,7 +134,12 @@ describe("SendLit projection effects", () => {
       .from(teams)
       .where(eq(teams.organizationId, organization.id));
     expect(created).toEqual([{ name: "Launch team" }]);
-    const [claim] = await tdb.select().from(billingTrialClaims);
+    const [activated] = await tdb
+      .select({ pendingTeamName: organizations.pendingTeamName })
+      .from(organizations)
+      .where(eq(organizations.id, organization.id));
+    expect(activated?.pendingTeamName).toBeNull();
+    const [claim] = await tdb.select().from(trialClaims);
     expect(claim?.status).toBe("redeemed");
     expect((await getOrganizationEntitlements(organization.id)).plan).toBe("pro");
   });
@@ -138,7 +149,7 @@ describe("SendLit projection effects", () => {
     const attempt = await checkout(userId, organization.id);
     await abandonPendingOrganization(organization.id, userId);
     // Abandoning the checkout released the reserved trial.
-    const [released] = await tdb.select().from(billingTrialClaims);
+    const [released] = await tdb.select().from(trialClaims);
     expect(released?.status).toBe("released");
 
     await payAndDeliverWebhook(attempt.providerCheckoutSessionId!);
@@ -179,17 +190,60 @@ describe("SendLit projection effects", () => {
     const provider = await fakeProvider();
     const first = await checkout(userId, organization.id, "pro");
     expect(provider.lastCreateCheckoutInput?.trialDays).toBe(14);
-    let [claim] = await tdb.select().from(billingTrialClaims);
+    let [claim] = await tdb.select().from(trialClaims);
     expect(claim).toMatchObject({ status: "reserved", checkoutAttemptId: first.id });
 
     await checkout(userId, organization.id, "business");
-    [claim] = await tdb.select().from(billingTrialClaims);
+    [claim] = await tdb.select().from(trialClaims);
     expect(claim?.status).toBe("released");
 
     await checkout(userId, organization.id, "pro");
     expect(provider.lastCreateCheckoutInput?.trialDays).toBe(14);
-    [claim] = await tdb.select().from(billingTrialClaims);
+    [claim] = await tdb.select().from(trialClaims);
     expect(claim?.status).toBe("reserved");
     expect(claim?.checkoutAttemptId).not.toBe(first.id);
+  });
+
+  it("records when the entitlement subscription goes past due and clears it on recovery", async () => {
+    const { organization } = await pendingOrganization();
+    const subscription = {
+      id: crypto.randomUUID(),
+      billableEntityId: organization.id,
+      payerId: "payer",
+      status: "active",
+      isEntitlementSource: true,
+      originCheckoutAttemptId: null,
+      providerOccurredAt: null,
+    };
+    const project = (previous: string, next: string) =>
+      applySendLitProjectionEffects(
+        {
+          material: true,
+          previous: { ...subscription, status: previous } as never,
+          next: { ...subscription, status: next } as never,
+          planState: {} as never,
+        },
+        tdb as never,
+      );
+    const pastDueSince = async () =>
+      (
+        await tdb
+          .select({ pastDueSince: organizationPlanPolicies.pastDueSince })
+          .from(organizationPlanPolicies)
+          .where(eq(organizationPlanPolicies.organizationId, organization.id))
+      )[0]?.pastDueSince ?? null;
+
+    const before = Date.now();
+    await project("active", "past_due");
+    const since = await pastDueSince();
+    expect(since?.getTime()).toBeGreaterThanOrEqual(before);
+
+    // Staying past due keeps the original start, so the grace does not reset.
+    await project("past_due", "past_due");
+    expect((await pastDueSince())?.getTime()).toBe(since?.getTime());
+    expect(PAST_DUE_GRACE_MS).toBe(7 * 24 * 60 * 60 * 1000);
+
+    await project("past_due", "active");
+    expect(await pastDueSince()).toBeNull();
   });
 });

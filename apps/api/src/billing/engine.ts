@@ -250,22 +250,6 @@ export function getBillingEngine(): BillingEngine {
   const store = createDrizzleBillingStore(db as never, {
     schema: billingSchema,
     clock,
-    // `plan` is NOT NULL until a later schema change drops it. SendLit no
-    // longer writes or reads it; paid state comes from `commercialState`.
-    planStateDefaults: {
-      plan: "free",
-      rampStage: 0,
-      rampCleanStageDays: 0,
-    },
-    checkoutApplicationFields: {
-      toColumns: (fields) => ({
-        pendingTeamName:
-          typeof fields.pendingTeamName === "string" ? fields.pendingTeamName : null,
-      }),
-      fromRow: (row) => ({
-        pendingTeamName: row.pendingTeamName ?? null,
-      }),
-    },
   });
   engine = createBilling({
     database: store,

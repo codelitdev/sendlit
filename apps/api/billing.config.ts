@@ -1,7 +1,9 @@
 import { defineBillingConfig } from "@codelitdev/billing/config";
 
 /** Schema description for `codelit-billing generate`. Output is committed and
- * applied through drizzle-kit; SendLit does not hand-write canonical tables. */
+ * applied through drizzle-kit; SendLit does not hand-write canonical tables.
+ * No `additionalFields`: SendLit's plan policy lives in its own tables
+ * (`organization_plan_policies`, `trial_claims`). */
 export default defineBillingConfig({
   dialect: "postgresql",
   adapter: "drizzle",
@@ -24,22 +26,4 @@ export default defineBillingConfig({
   },
   planIds: ["pro", "business"],
   requiredOfferKeys: ["pro_month", "pro_year", "business_month", "business_year"],
-  additionalFields: {
-    planStates: {
-      plan: { type: "text", nullable: false },
-      teamsLimitOverride: { type: "integer", nullable: true },
-      contactsLimitOverride: { type: "integer", nullable: true },
-      firstPaidActivatedAt: { type: "timestamp", nullable: true },
-      rampStage: { type: "integer", nullable: false },
-      rampCleanStageDays: { type: "integer", nullable: false },
-      rampEvaluatedAt: { type: "timestamp", nullable: true },
-    },
-    checkoutAttempts: {
-      pendingTeamName: { type: "text", nullable: true },
-    },
-    subscriptions: {
-      pastDueAt: { type: "timestamp", nullable: true },
-      graceEndsAt: { type: "timestamp", nullable: true },
-    },
-  },
 });

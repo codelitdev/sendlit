@@ -2,9 +2,8 @@ import type { BillingEngine } from "@codelitdev/billing/workflows";
 import { and, count, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
-  billingPlanStates,
-  billingSubscriptions,
   contacts,
+  organizationPlanPolicies,
   organizations,
   outboundMessages,
   planSendReservations,
@@ -18,7 +17,7 @@ import { lockOrganizationSubscriptions } from "./locks";
 import {
   marketingRampDailyLimit,
   type OrganizationEntitlements,
-  type PlanStateLike,
+  pastDueGraceEndsAt,
   resolveEntitlements,
 } from "./policies";
 import { readReputationConfig } from "./reputation-config";
@@ -34,75 +33,49 @@ function deploymentMode(): "oss" | "cloud" {
   throw new Error("SENDLIT_DEPLOYMENT_MODE_must_be_oss_or_cloud");
 }
 
-/** Creates the Free projection row as part of organization creation/backfill. */
-export async function ensureOrganizationPlanState(
+type PlanPolicyRow = typeof organizationPlanPolicies.$inferSelect;
+
+/** Creates the organization's plan policy row if it is missing (organization
+ * creation and first use) and returns it, locked until the transaction ends. */
+export async function ensureOrganizationPlanPolicy(
   tx: Transaction,
   organizationId: string,
-) {
-  const [existing] = await tx
+): Promise<PlanPolicyRow> {
+  await tx
+    .insert(organizationPlanPolicies)
+    .values({ organizationId })
+    .onConflictDoNothing({ target: organizationPlanPolicies.organizationId });
+  const [policy] = await tx
     .select()
-    .from(billingPlanStates)
-    .where(eq(billingPlanStates.billableEntityId, organizationId))
+    .from(organizationPlanPolicies)
+    .where(eq(organizationPlanPolicies.organizationId, organizationId))
     .limit(1)
     .for("update");
-  if (existing) return existing;
-  const [created] = await tx
-    .insert(billingPlanStates)
-    .values({
-      billableEntityId: organizationId,
-      plan: "free",
-      rampStage: 0,
-      rampCleanStageDays: 0,
-    })
-    .onConflictDoNothing({ target: billingPlanStates.billableEntityId })
-    .returning();
-  if (created) return created;
-  const [raced] = await tx
-    .select()
-    .from(billingPlanStates)
-    .where(eq(billingPlanStates.billableEntityId, organizationId))
-    .limit(1)
-    .for("update");
-  if (!raced) throw new Error("organization_plan_state_unavailable");
-  return raced;
+  if (!policy) throw new Error("organization_plan_policy_unavailable");
+  return policy;
 }
 
 type CommercialState = Awaited<ReturnType<BillingEngine["commercialState"]>>;
 
-/** The past-due grace deadline of the organization's entitlement
- * subscription. A narrow read of SendLit's own policy column; the engine's
- * `commercialState` does not expose the subscription ID. */
-async function readGraceEndsAt(
-  client: Pick<typeof db, "select">,
-  organizationId: string,
-): Promise<Date | null> {
-  const [row] = await client
-    .select({ graceEndsAt: billingSubscriptions.graceEndsAt })
-    .from(billingPlanStates)
-    .innerJoin(
-      billingSubscriptions,
-      eq(billingSubscriptions.id, billingPlanStates.activeSubscriptionId),
-    )
-    .where(eq(billingPlanStates.billableEntityId, organizationId))
-    .limit(1);
-  return row?.graceEndsAt ?? null;
-}
+type PolicyInput = Pick<
+  PlanPolicyRow,
+  "teamsLimitOverride" | "contactsLimitOverride" | "pastDueSince"
+>;
 
-async function resolveCloudEntitlements(
-  client: Pick<typeof db, "select">,
+function resolveCloudEntitlements(
   organizationId: string,
-  planState: PlanStateLike | null,
+  policy: PolicyInput | null,
   commercial: CommercialState,
   now: Date,
-): Promise<OrganizationEntitlements> {
+): OrganizationEntitlements {
   return resolveEntitlements({
     organizationId,
     deploymentMode: "cloud",
-    planState,
+    overrides: policy,
     commercial,
     graceEndsAt:
       commercial.subscriptionStatus === "past_due"
-        ? await readGraceEndsAt(client, organizationId)
+        ? pastDueGraceEndsAt(policy?.pastDueSince ?? null)
         : null,
     now,
   });
@@ -112,36 +85,39 @@ function ossEntitlements(organizationId: string): OrganizationEntitlements {
   return resolveEntitlements({
     organizationId,
     deploymentMode: "oss",
-    planState: null,
+    overrides: null,
   });
 }
 
 /** Read-only entitlements. Paid state comes from the billing engine's
- * `commercialState`; SendLit adds plan policy and operator overrides. */
+ * `commercialState`; SendLit adds plan policy, operator overrides and the
+ * past-due grace from `organization_plan_policies`. */
 export async function getOrganizationEntitlements(
   organizationId: string,
   now = new Date(),
 ): Promise<OrganizationEntitlements> {
   if (deploymentMode() === "oss") return ossEntitlements(organizationId);
-  const [state] = await db
+  const [policy] = await db
     .select({
-      teamsLimitOverride: billingPlanStates.teamsLimitOverride,
-      contactsLimitOverride: billingPlanStates.contactsLimitOverride,
+      teamsLimitOverride: organizationPlanPolicies.teamsLimitOverride,
+      contactsLimitOverride: organizationPlanPolicies.contactsLimitOverride,
+      pastDueSince: organizationPlanPolicies.pastDueSince,
     })
-    .from(billingPlanStates)
-    .where(eq(billingPlanStates.billableEntityId, organizationId))
+    .from(organizationPlanPolicies)
+    .where(eq(organizationPlanPolicies.organizationId, organizationId))
     .limit(1);
   const commercial = await getBillingEngine().commercialState(organizationId);
-  return resolveCloudEntitlements(db, organizationId, state ?? null, commercial, now);
+  return resolveCloudEntitlements(organizationId, policy ?? null, commercial, now);
 }
 
 /**
  * Entitlements for a quota decision inside the caller's transaction. The
  * rows read stay locked until the transaction ends, so concurrent
- * reservations and webhook projections serialise. Lock order matters: the
- * engine's projection locks subscription then plan state, so this locks the
- * organization's subscriptions first, then the plan state, then reads
- * `commercialState` in the same transaction.
+ * reservations and webhook projections serialise. Lock order matches the
+ * engine's projection (subscription, plan state, then SendLit's
+ * afterProjection hook, which writes the plan policy): the organization's
+ * subscriptions first, then `commercialState` in this transaction, then the
+ * plan policy row.
  */
 export async function getOrganizationEntitlementsInTransaction(
   tx: Transaction,
@@ -150,11 +126,11 @@ export async function getOrganizationEntitlementsInTransaction(
 ): Promise<OrganizationEntitlements> {
   if (deploymentMode() === "oss") return ossEntitlements(organizationId);
   await lockOrganizationSubscriptions(tx, organizationId);
-  const state = await ensureOrganizationPlanState(tx, organizationId);
   const commercial = await getBillingEngine().commercialState(organizationId, {
     transaction: tx,
   });
-  return resolveCloudEntitlements(tx, organizationId, state, commercial, now);
+  const policy = await ensureOrganizationPlanPolicy(tx, organizationId);
+  return resolveCloudEntitlements(organizationId, policy, commercial, now);
 }
 
 export async function reserveTeamSlot(
@@ -294,28 +270,26 @@ export function assertCapability(
 
 async function advanceMarketingRamp(
   tx: Transaction,
-  state: {
-    id: string;
-    rampStage: number;
-    rampCleanStageDays: number;
-    rampEvaluatedAt: Date | null;
-  },
+  state: Pick<
+    PlanPolicyRow,
+    "id" | "marketingRampStage" | "marketingRampCleanDays" | "marketingRampEvaluatedAt"
+  >,
   organizationId: string,
   now: Date,
 ): Promise<number> {
   const day = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
   );
-  const evaluatedDay = state.rampEvaluatedAt
+  const evaluatedDay = state.marketingRampEvaluatedAt
     ? new Date(
         Date.UTC(
-          state.rampEvaluatedAt.getUTCFullYear(),
-          state.rampEvaluatedAt.getUTCMonth(),
-          state.rampEvaluatedAt.getUTCDate(),
+          state.marketingRampEvaluatedAt.getUTCFullYear(),
+          state.marketingRampEvaluatedAt.getUTCMonth(),
+          state.marketingRampEvaluatedAt.getUTCDate(),
         ),
       )
     : null;
-  if (evaluatedDay?.getTime() === day.getTime()) return state.rampStage;
+  if (evaluatedDay?.getTime() === day.getTime()) return state.marketingRampStage;
   const [breach] = await tx
     .select({ id: teamSendingControls.id })
     .from(teamSendingControls)
@@ -327,22 +301,22 @@ async function advanceMarketingRamp(
       ),
     )
     .limit(1);
-  let stage = state.rampStage;
-  let cleanDays = breach ? 0 : state.rampCleanStageDays + 1;
+  let stage = state.marketingRampStage;
+  let cleanDays = breach ? 0 : state.marketingRampCleanDays + 1;
   const requiredDays = stage === 0 ? 3 : stage === 1 ? 4 : 7;
   if (!breach && stage < 3 && cleanDays >= requiredDays) {
     stage += 1;
     cleanDays = 0;
   }
   await tx
-    .update(billingPlanStates)
+    .update(organizationPlanPolicies)
     .set({
-      rampStage: stage,
-      rampCleanStageDays: cleanDays,
-      rampEvaluatedAt: now,
+      marketingRampStage: stage,
+      marketingRampCleanDays: cleanDays,
+      marketingRampEvaluatedAt: now,
       updatedAt: now,
     })
-    .where(eq(billingPlanStates.id, state.id));
+    .where(eq(organizationPlanPolicies.id, state.id));
   return stage;
 }
 
@@ -468,20 +442,14 @@ export async function reserveSend(
     }
   }
   if (entitlements.fairUse && input.purpose === "marketing") {
-    const [rampState] = await tx
-      .select({
-        id: billingPlanStates.id,
-        rampStage: billingPlanStates.rampStage,
-        rampCleanStageDays: billingPlanStates.rampCleanStageDays,
-        rampEvaluatedAt: billingPlanStates.rampEvaluatedAt,
-      })
-      .from(billingPlanStates)
-      .where(eq(billingPlanStates.billableEntityId, input.organizationId))
-      .limit(1)
-      .for("update");
-    const stage = rampState
-      ? await advanceMarketingRamp(tx, rampState, input.organizationId, new Date())
-      : 0;
+    // Already created and locked by getOrganizationEntitlementsInTransaction.
+    const rampState = await ensureOrganizationPlanPolicy(tx, input.organizationId);
+    const stage = await advanceMarketingRamp(
+      tx,
+      rampState,
+      input.organizationId,
+      new Date(),
+    );
     const dailyLimit = marketingRampDailyLimit(stage);
     if (dailyLimit !== null) {
       const now = new Date();

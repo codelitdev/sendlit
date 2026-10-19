@@ -74,7 +74,8 @@ export async function seedPaidSubscription(
     status?: "trialing" | "active" | "past_due" | "cancelled";
     cancelAtPeriodEnd?: boolean;
     paidThroughAt?: Date;
-    graceEndsAt?: Date | null;
+    /** Recorded on SendLit's plan policy, as the projection hook does. */
+    pastDueSince?: Date | null;
   },
 ) {
   const offerKey = input.offerKey ?? "pro_month";
@@ -134,15 +135,33 @@ export async function seedPaidSubscription(
       currentPeriodEndsAt: paidThroughAt,
       paidThroughAt,
       cancelAtPeriodEnd: input.cancelAtPeriodEnd ?? false,
-      graceEndsAt: input.graceEndsAt ?? null,
       isEntitlementSource: true,
       providerVersion: "1",
       lastReconciledAt: new Date(),
     })
     .returning();
+  // Stands in for the engine's projection, which creates the plan state.
   await db
-    .update(schema.billingPlanStates)
-    .set({ activeSubscriptionId: subscription!.id })
-    .where(eq(schema.billingPlanStates.billableEntityId, input.organizationId));
+    .insert(schema.billingPlanStates)
+    .values({
+      billableEntityId: input.organizationId,
+      activeSubscriptionId: subscription!.id,
+    })
+    .onConflictDoUpdate({
+      target: schema.billingPlanStates.billableEntityId,
+      set: { activeSubscriptionId: subscription!.id },
+    });
+  if (input.pastDueSince !== undefined) {
+    await db
+      .insert(schema.organizationPlanPolicies)
+      .values({
+        organizationId: input.organizationId,
+        pastDueSince: input.pastDueSince,
+      })
+      .onConflictDoUpdate({
+        target: schema.organizationPlanPolicies.organizationId,
+        set: { pastDueSince: input.pastDueSince },
+      });
+  }
   return { subscription: subscription!, remote, price };
 }

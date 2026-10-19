@@ -1,6 +1,6 @@
 import { retainsPaidEntitlement } from "@codelitdev/billing/core";
 import { and, asc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
-import { ensureOrganizationPlanState } from "../billing/entitlements";
+import { ensureOrganizationPlanPolicy } from "../billing/entitlements";
 import { lockOrganizationSubscriptions } from "../billing/locks";
 import { releaseTrialClaimsForAbandonedCheckouts } from "../billing/trial-claims";
 import { db } from "../db/client";
@@ -148,6 +148,9 @@ export async function createOrganization(
      * consume the user's one owned Free organization and cannot create a
      * team until a verified payment event activates them. */
     pendingPayment?: boolean;
+    /** Name of the team created when a pending organization's payment
+     * activates it. */
+    pendingTeamName?: string;
   } = {},
 ): Promise<Organization> {
   return db.transaction(async (tx) => {
@@ -208,6 +211,9 @@ export async function createOrganization(
       .values({
         name: normalizedName,
         status: options.pendingPayment ? "pending_payment" : "active",
+        pendingTeamName: options.pendingPayment
+          ? options.pendingTeamName?.trim() || null
+          : null,
       })
       .returning();
     await tx.insert(organizationMembers).values({
@@ -218,7 +224,7 @@ export async function createOrganization(
     await tx.insert(organizationDeliveryPolicies).values({
       organizationId: organization.id,
     });
-    await ensureOrganizationPlanState(tx, organization.id);
+    await ensureOrganizationPlanPolicy(tx, organization.id);
     if (options.createInitialTeam) {
       const [team] = await tx
         .insert(teams)
@@ -780,7 +786,7 @@ export async function ensureDefaultOrganization(
     await tx.insert(organizationDeliveryPolicies).values({
       organizationId: organization.id,
     });
-    await ensureOrganizationPlanState(tx, organization.id);
+    await ensureOrganizationPlanPolicy(tx, organization.id);
     const [team] = await tx
       .insert(teams)
       .values({

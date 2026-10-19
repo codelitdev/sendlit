@@ -1,9 +1,9 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import {
-  billingPlanStates,
   billingReconciliationJobs,
   billingSubscriptions,
+  organizationPlanPolicies,
   organizations,
   teams,
 } from "../db/schema";
@@ -311,12 +311,20 @@ async function run(
       };
       const teamsLimitOverride = parse(arg("--teams", rest));
       const contactsLimitOverride = parse(arg("--contacts", rest));
-      // SendLit's own policy columns, not paid state.
+      // SendLit's own plan policy, not paid state.
       await db.transaction(async (tx) => {
+        const now = new Date();
         await tx
-          .update(billingPlanStates)
-          .set({ teamsLimitOverride, contactsLimitOverride, updatedAt: new Date() })
-          .where(eq(billingPlanStates.billableEntityId, organization.id));
+          .insert(organizationPlanPolicies)
+          .values({
+            organizationId: organization.id,
+            teamsLimitOverride,
+            contactsLimitOverride,
+          })
+          .onConflictDoUpdate({
+            target: organizationPlanPolicies.organizationId,
+            set: { teamsLimitOverride, contactsLimitOverride, updatedAt: now },
+          });
         await recordOrganizationAuditEvent(tx, {
           organizationId: organization.id,
           actor: { type: "system" },

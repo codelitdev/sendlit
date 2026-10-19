@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { db } from "../db/client";
-import { billingTrialClaims } from "../db/schema";
+import { trialClaims } from "../db/schema";
 
 type ClaimsDb = Pick<typeof db, "update">;
 
@@ -16,12 +16,12 @@ export async function releaseTrialClaimsForAbandonedCheckouts(
 ): Promise<void> {
   if (checkoutAttemptIds.length === 0) return;
   await client
-    .update(billingTrialClaims)
+    .update(trialClaims)
     .set({ status: "released", updatedAt: now })
     .where(
       and(
-        inArray(billingTrialClaims.checkoutAttemptId, [...checkoutAttemptIds]),
-        eq(billingTrialClaims.status, "reserved"),
+        inArray(trialClaims.checkoutAttemptId, [...checkoutAttemptIds]),
+        eq(trialClaims.status, "reserved"),
       ),
     );
 }

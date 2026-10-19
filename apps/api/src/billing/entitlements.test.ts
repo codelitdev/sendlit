@@ -28,6 +28,7 @@ const {
   settleExpiredSendReservation,
 } = await import("./entitlements");
 const { getBillingEngine } = await import("./engine");
+const { PAST_DUE_GRACE_MS } = await import("./policies");
 
 const tdb = db as unknown as TestDb;
 
@@ -226,14 +227,15 @@ describe("entitlements from the engine's commercial state", () => {
     });
   });
 
-  it("applies the past-due grace from SendLit's own column", async () => {
+  it("applies the past-due grace from SendLit's plan policy", async () => {
     const { account, organization } = await seedTeamAndContact(tdb);
-    const graceEndsAt = new Date(Date.now() - 1_000);
+    const pastDueSince = new Date(Date.now() - PAST_DUE_GRACE_MS - 1_000);
+    const graceEndsAt = new Date(pastDueSince.getTime() + PAST_DUE_GRACE_MS);
     await seedPaidSubscription(tdb, {
       organizationId: organization.id,
       payerId: account.id,
       status: "past_due",
-      graceEndsAt,
+      pastDueSince,
     });
     const entitlements = await getOrganizationEntitlements(organization.id);
     expect(entitlements).toMatchObject({
@@ -244,7 +246,7 @@ describe("entitlements from the engine's commercial state", () => {
     expect(entitlements.graceEndsAt?.toISOString()).toBe(graceEndsAt.toISOString());
   });
 
-  it("locks subscriptions before the plan state inside a quota transaction", async () => {
+  it("locks subscriptions, then the plan state, then the plan policy inside a quota transaction", async () => {
     const { account, organization } = await seedTeamAndContact(tdb);
     await seedPaidSubscription(tdb, {
       organizationId: organization.id,
@@ -258,9 +260,13 @@ describe("entitlements from the engine's commercial state", () => {
       ),
     );
     expect(entitlements.plan).toBe("pro");
-    // Same order as the engine's projection: subscription, then plan state.
+    // Same order as the engine's projection: subscription, plan state, then
+    // SendLit's plan policy (which the afterProjection hook writes).
     expect(locks[0]).toBe("billing_subscriptions");
     expect(locks.indexOf("billing_plan_states")).toBeGreaterThan(0);
+    expect(locks.indexOf("organization_plan_policies")).toBeGreaterThan(
+      locks.indexOf("billing_plan_states"),
+    );
     // commercialState read its rows in this transaction (locked).
     expect(locks).toContain("billing_checkout_attempts");
   });
@@ -288,7 +294,7 @@ describe("scheduled cancellation expiry", () => {
     expect((await getOrganizationEntitlements(organization.id)).plan).toBe("pro");
   });
 
-  it("releases an elapsed scheduled cancellation through the engine without writing plan_states.plan", async () => {
+  it("releases an elapsed scheduled cancellation through the engine", async () => {
     const { account, organization } = await seedTeamAndContact(tdb);
     const { subscription } = await seedPaidSubscription(tdb, {
       organizationId: organization.id,
@@ -296,11 +302,6 @@ describe("scheduled cancellation expiry", () => {
       cancelAtPeriodEnd: true,
       paidThroughAt: new Date(Date.now() - 60_000),
     });
-    // A stale value SendLit must neither read nor rewrite.
-    await tdb
-      .update(billingPlanStates)
-      .set({ plan: "pro" })
-      .where(eq(billingPlanStates.billableEntityId, organization.id));
     expect(await getBillingEngine().runDeadlineBatch()).toBe(1);
     const [state] = await tdb
       .select()
@@ -310,7 +311,7 @@ describe("scheduled cancellation expiry", () => {
       .select()
       .from(billingSubscriptions)
       .where(eq(billingSubscriptions.id, subscription.id));
-    expect(state).toMatchObject({ plan: "pro", activeSubscriptionId: null });
+    expect(state).toMatchObject({ activeSubscriptionId: null });
     expect(row?.isEntitlementSource).toBe(false);
     expect((await getOrganizationEntitlements(organization.id)).plan).toBe("free");
   });

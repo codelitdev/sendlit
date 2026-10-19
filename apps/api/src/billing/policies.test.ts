@@ -23,7 +23,7 @@ function resolve(value: CommercialStateLike | null, graceEndsAt: Date | null = n
   return resolveEntitlements({
     organizationId: "org",
     deploymentMode: "cloud",
-    planState: state,
+    overrides: state,
     commercial: value,
     graceEndsAt,
     now,
@@ -93,7 +93,7 @@ describe("billing entitlement projection", () => {
     const entitlements = resolveEntitlements({
       organizationId: "org",
       deploymentMode: "cloud",
-      planState: { teamsLimitOverride: 3, contactsLimitOverride: 5_000 },
+      overrides: { teamsLimitOverride: 3, contactsLimitOverride: 5_000 },
       commercial: null,
     });
     expect(entitlements).toMatchObject({
@@ -107,7 +107,7 @@ describe("billing entitlement projection", () => {
     const entitlements = resolveEntitlements({
       organizationId: "org",
       deploymentMode: "oss",
-      planState: null,
+      overrides: null,
       commercial: commercial(),
     });
     expect(entitlements).toMatchObject({ plan: "oss", teamsLimit: null });

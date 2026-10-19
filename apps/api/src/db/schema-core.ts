@@ -62,6 +62,9 @@ export const organizations = pgTable(
       .$defaultFn(() => genPublicId("org")),
     name: text("name").notNull(),
     status: text("status").notNull().default("active"),
+    /** Name of the first team, created once a `pending_payment`
+     * organization's checkout is paid. */
+    pendingTeamName: text("pending_team_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1074,6 +1077,88 @@ export const organizationDeliveryPolicies = pgTable(
                 AND (${table.defaultMonthlyLimit} IS NULL OR ${table.defaultMonthlyLimit} >= 0)
                 AND (${table.aggregateDailyLimit} IS NULL OR ${table.aggregateDailyLimit} >= 0)
                 AND (${table.aggregateMonthlyLimit} IS NULL OR ${table.aggregateMonthlyLimit} >= 0)`,
+    ),
+  }),
+);
+
+/**
+ * SendLit plan policy that @codelitdev/billing does not model: operator limit
+ * overrides, the paid marketing ramp and the past-due sending grace. Paid
+ * state itself is read with `commercialState`; the billing tables carry no
+ * SendLit columns.
+ */
+export const organizationPlanPolicies = pgTable(
+  "organization_plan_policies",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .unique()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    teamsLimitOverride: integer("teams_limit_override"),
+    contactsLimitOverride: integer("contacts_limit_override"),
+    marketingRampStage: integer("marketing_ramp_stage").notNull().default(0),
+    marketingRampCleanDays: integer("marketing_ramp_clean_days").notNull().default(0),
+    marketingRampEvaluatedAt: timestamp("marketing_ramp_evaluated_at", {
+      withTimezone: true,
+    }),
+    /** When the entitlement subscription entered `past_due`; null otherwise. */
+    pastDueSince: timestamp("past_due_since", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    overridesCheck: check(
+      "organization_plan_policies_overrides_check",
+      sql`(${table.teamsLimitOverride} IS NULL OR ${table.teamsLimitOverride} > 0)
+                AND (${table.contactsLimitOverride} IS NULL OR ${table.contactsLimitOverride} > 0)`,
+    ),
+    rampCheck: check(
+      "organization_plan_policies_ramp_check",
+      sql`${table.marketingRampStage} BETWEEN 0 AND 3 AND ${table.marketingRampCleanDays} >= 0`,
+    ),
+  }),
+);
+
+/**
+ * One trial per person: claims keyed by user and by a keyed fingerprint of
+ * the verified email. The billing engine only receives `trialDays`; who is
+ * eligible is SendLit's decision.
+ */
+export const trialClaims = pgTable(
+  "trial_claims",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    verifiedEmailFingerprint: text("verified_email_fingerprint").notNull(),
+    fingerprintKeyVersion: text("fingerprint_key_version").notNull(),
+    trialKey: text("trial_key").notNull(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    /** The billing engine's checkout attempt the claim is reserved for. */
+    checkoutAttemptId: uuid("checkout_attempt_id"),
+    status: text("status").notNull().default("reserved"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    userTrialUnique: uniqueIndex("trial_claims_user_trial_uidx")
+      .on(table.userId, table.trialKey)
+      .where(sql`${table.status} <> 'released'`),
+    emailTrialUnique: uniqueIndex("trial_claims_email_trial_uidx")
+      .on(table.verifiedEmailFingerprint, table.trialKey)
+      .where(sql`${table.status} <> 'released'`),
+    checkoutAttemptIdx: index("trial_claims_checkout_attempt_idx").on(
+      table.checkoutAttemptId,
+    ),
+    statusCheck: check(
+      "trial_claims_status_check",
+      sql`${table.status} IN ('reserved', 'redeemed', 'released')`,
     ),
   }),
 );

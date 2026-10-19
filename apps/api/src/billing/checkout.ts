@@ -2,7 +2,7 @@ import { BillingWorkflowError } from "@codelitdev/billing/core";
 import type { BillingActionGrant } from "@codelitdev/billing/workflows";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
-import { billingTrialClaims, organizations, user } from "../db/schema";
+import { organizations, trialClaims, user } from "../db/schema";
 import { createOrganization } from "../organization/queries";
 import {
   fingerprintVerifiedEmail,
@@ -94,23 +94,20 @@ async function reserveTrialInTransaction(
   );
   const [existing] = await tx
     .select()
-    .from(billingTrialClaims)
+    .from(trialClaims)
     .where(
       and(
-        eq(billingTrialClaims.trialKey, "pro_month"),
-        inArray(billingTrialClaims.verifiedEmailFingerprint, fingerprints),
+        eq(trialClaims.trialKey, "pro_month"),
+        inArray(trialClaims.verifiedEmailFingerprint, fingerprints),
       ),
     )
     .limit(1)
     .for("update");
   const [existingUser] = await tx
     .select()
-    .from(billingTrialClaims)
+    .from(trialClaims)
     .where(
-      and(
-        eq(billingTrialClaims.userId, input.userId),
-        eq(billingTrialClaims.trialKey, "pro_month"),
-      ),
+      and(eq(trialClaims.userId, input.userId), eq(trialClaims.trialKey, "pro_month")),
     )
     .limit(1)
     .for("update");
@@ -120,7 +117,7 @@ async function reserveTrialInTransaction(
   }
   if (claimed?.status === "released") {
     const [updated] = await tx
-      .update(billingTrialClaims)
+      .update(trialClaims)
       .set({
         organizationId: input.organizationId,
         checkoutAttemptId: input.checkoutAttemptId,
@@ -130,17 +127,12 @@ async function reserveTrialInTransaction(
         fingerprintKeyVersion: secrets[0].version,
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(billingTrialClaims.id, claimed.id),
-          eq(billingTrialClaims.status, "released"),
-        ),
-      )
+      .where(and(eq(trialClaims.id, claimed.id), eq(trialClaims.status, "released")))
       .returning();
     return Boolean(updated);
   }
   const [created] = await tx
-    .insert(billingTrialClaims)
+    .insert(trialClaims)
     .values({
       userId: input.userId,
       verifiedEmailFingerprint: fingerprints[0],
@@ -175,7 +167,6 @@ export async function createOrganizationCheckout(input: {
   plan: "pro" | "business";
   interval: "month" | "year";
   catalogRevision: number;
-  pendingTeamName?: string;
   grant: BillingActionGrant;
 }) {
   let config: ReturnType<typeof readBillingConfig>;
@@ -259,24 +250,21 @@ export async function createOrganizationCheckout(input: {
     );
     const [existing] = await db
       .select({
-        status: billingTrialClaims.status,
+        status: trialClaims.status,
       })
-      .from(billingTrialClaims)
+      .from(trialClaims)
       .where(
         and(
-          eq(billingTrialClaims.trialKey, "pro_month"),
-          inArray(billingTrialClaims.verifiedEmailFingerprint, fingerprints),
+          eq(trialClaims.trialKey, "pro_month"),
+          inArray(trialClaims.verifiedEmailFingerprint, fingerprints),
         ),
       )
       .limit(1);
     const [existingUser] = await db
-      .select({ status: billingTrialClaims.status })
-      .from(billingTrialClaims)
+      .select({ status: trialClaims.status })
+      .from(trialClaims)
       .where(
-        and(
-          eq(billingTrialClaims.userId, identity.id),
-          eq(billingTrialClaims.trialKey, "pro_month"),
-        ),
+        and(eq(trialClaims.userId, identity.id), eq(trialClaims.trialKey, "pro_month")),
       )
       .limit(1);
     const claimed = existing ?? existingUser;
@@ -298,9 +286,6 @@ export async function createOrganizationCheckout(input: {
       catalogRevision: input.catalogRevision,
       returnUrl: returnUrl(organization.organizationId),
       trialDays,
-      applicationFields: {
-        pendingTeamName: input.pendingTeamName ?? null,
-      },
     });
     if (trialDays > 0) {
       await db.transaction((tx) =>
@@ -352,6 +337,7 @@ export async function createPaidOrganizationCheckout(input: {
   try {
     organization = await createOrganization(input.payerId, input.organizationName, {
       pendingPayment: true,
+      pendingTeamName: input.teamName,
     });
   } catch (error) {
     if (
@@ -388,7 +374,6 @@ export async function createPaidOrganizationCheckout(input: {
     plan: input.plan,
     interval: input.interval,
     catalogRevision: input.catalogRevision,
-    pendingTeamName: input.teamName,
     grant: grants.grant({
       token: issued.token,
       actorId: input.payerId,

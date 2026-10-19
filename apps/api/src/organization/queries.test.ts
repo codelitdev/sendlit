@@ -478,13 +478,18 @@ describe("one owned Free organization", () => {
         isEntitlementSource: true,
       })
       .returning();
+    // The engine creates the plan state on projection; this fixture stands in
+    // for that projection.
     await tdb
-      .update(billingPlanStates)
-      .set({
-        plan: "pro",
+      .insert(billingPlanStates)
+      .values({
+        billableEntityId: organizationId,
         activeSubscriptionId: subscription.id,
       })
-      .where(eq(billingPlanStates.billableEntityId, organizationId));
+      .onConflictDoUpdate({
+        target: billingPlanStates.billableEntityId,
+        set: { activeSubscriptionId: subscription.id },
+      });
     return subscription;
   }
 

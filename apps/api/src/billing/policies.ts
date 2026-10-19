@@ -88,9 +88,16 @@ export function marketingRampDailyLimit(stage: number): number | null {
   return null;
 }
 
-/** SendLit's own policy columns on the plan state (operator overrides). Paid
- * state is never read from the plan state. */
-export type PlanStateLike = {
+/** How long a past-due organization keeps sending before it is paused. */
+export const PAST_DUE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** The past-due sending deadline, from when the subscription went past due. */
+export function pastDueGraceEndsAt(pastDueSince: Date | null): Date | null {
+  return pastDueSince ? new Date(pastDueSince.getTime() + PAST_DUE_GRACE_MS) : null;
+}
+
+/** Operator limit overrides from `organization_plan_policies`. */
+export type PlanOverrides = {
   teamsLimitOverride: number | null;
   contactsLimitOverride: number | null;
 };
@@ -144,14 +151,14 @@ function paidPlan(plan: string | null | undefined): "pro" | "business" | null {
 export function resolveEntitlements({
   organizationId,
   deploymentMode,
-  planState,
+  overrides,
   commercial,
   graceEndsAt = null,
   now = new Date(),
 }: {
   organizationId: string;
   deploymentMode: "oss" | "cloud";
-  planState: PlanStateLike | null;
+  overrides: PlanOverrides | null;
   commercial?: CommercialStateLike | null;
   /** The past-due grace deadline of the entitlement subscription. */
   graceEndsAt?: Date | null;
@@ -219,9 +226,9 @@ export function resolveEntitlements({
     plan: effectivePlan,
     interval,
     paymentStatus,
-    teamsLimit: planState?.teamsLimitOverride ?? effectiveBase.teamsLimit,
+    teamsLimit: overrides?.teamsLimitOverride ?? effectiveBase.teamsLimit,
     subscribedContactsLimit:
-      planState?.contactsLimitOverride ?? effectiveBase.subscribedContactsLimit,
+      overrides?.contactsLimitOverride ?? effectiveBase.subscribedContactsLimit,
     monthlySendsLimit: effectiveBase.monthlySendsLimit,
     sharedOrganizationMailbox: effectiveBase.sharedOrganizationMailbox,
     provisioning: effectiveBase.provisioning,
