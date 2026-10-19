@@ -26,6 +26,7 @@ import {
   updateMailInSequence,
   updateSequence,
 } from "./queries";
+import { sendSequenceEmailTest } from "./test-send";
 
 const router = Router();
 router.use("/sequences", requireAuth, requireTeam);
@@ -136,6 +137,36 @@ const impl = s.router(contract.sequences, {
         return {
           status: 422,
           body: { error: "template_not_marketing" },
+        };
+      }
+      return { status: 400, body: { error: err.message } };
+    }
+  },
+  sendEmailTest: async ({ params, body, req }) => {
+    try {
+      const result = await sendSequenceEmailTest({
+        teamId: (req as any).teamId,
+        sequenceId: params.sequenceId,
+        emailId: params.emailId,
+        to: body.to,
+        fallbackRecipient: (req as any).user?.email,
+      });
+      return { status: 200, body: result };
+    } catch (err: any) {
+      const gated = planGateHttp(err);
+      if (gated) return gated as any;
+      if (err.message === "sequence_not_found" || err.message === "email_not_found") {
+        return { status: 404, body: { error: err.message } };
+      }
+      if (err.message === "test_send_limit_reached") {
+        return { status: 429, body: { error: err.message } };
+      }
+      if (err.message === MAILING_ADDRESS_REQUIRED) {
+        return {
+          status: 400,
+          body: {
+            error: "A mailing address is required for broadcasts and sequences.",
+          },
         };
       }
       return { status: 400, body: { error: err.message } };

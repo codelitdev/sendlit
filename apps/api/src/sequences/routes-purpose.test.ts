@@ -5,6 +5,7 @@ const mocks = {
   createSequence: vi.fn(),
   addMailToSequence: vi.fn(),
   updateMailInSequence: vi.fn(),
+  sendSequenceEmailTest: vi.fn(),
 };
 
 mock.module("../auth/middleware", () => ({
@@ -13,8 +14,12 @@ mock.module("../auth/middleware", () => ({
 mock.module("../auth/require-team", () => ({
   requireTeam: (req: any, _res: any, next: () => void) => {
     req.teamId = "team-1";
+    req.user = { email: "owner@example.com" };
     next();
   },
+}));
+mock.module("./test-send", () => ({
+  sendSequenceEmailTest: mocks.sendSequenceEmailTest,
 }));
 mock.module("./queries", () => ({
   createSequence: mocks.createSequence,
@@ -90,5 +95,53 @@ describe("marketing template route boundary", () => {
 
     expect(response.status).toBe(422);
     expect(response.json<unknown>()).toEqual({ error: "template_not_marketing" });
+  });
+});
+
+describe("POST /sequences/:sequenceId/emails/:emailId/test", () => {
+  const post = (body: unknown) =>
+    requestApp(app(), "/sequences/seq_1/emails/email_1/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("falls back to the signed-in user's address", async () => {
+    mocks.sendSequenceEmailTest.mockResolvedValue({
+      sent: ["owner@example.com"],
+      skipped: [],
+      lastTestSentAt: "2026-10-19T00:00:00.000Z",
+    });
+
+    const response = await post({});
+
+    expect(response.status).toBe(200);
+    expect(mocks.sendSequenceEmailTest).toHaveBeenCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq_1",
+      emailId: "email_1",
+      to: undefined,
+      fallbackRecipient: "owner@example.com",
+    });
+  });
+
+  it("maps errors to 404, 429 and 400", async () => {
+    mocks.sendSequenceEmailTest.mockRejectedValueOnce(new Error("email_not_found"));
+    expect((await post({})).status).toBe(404);
+    mocks.sendSequenceEmailTest.mockRejectedValueOnce(
+      new Error("test_send_limit_reached"),
+    );
+    expect((await post({})).status).toBe(429);
+    mocks.sendSequenceEmailTest.mockRejectedValueOnce(
+      new Error("delivery_source_unavailable"),
+    );
+    expect((await post({})).status).toBe(400);
+    expect(
+      (
+        await post({
+          to: ["a@x.com", "b@x.com", "c@x.com", "d@x.com", "e@x.com", "f@x.com"],
+        })
+      ).status,
+    ).toBe(400);
   });
 });

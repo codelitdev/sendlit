@@ -1359,6 +1359,8 @@ export const sequenceEmails = pgTable(
     templateId: text("template_id"),
     actionType: text("action_type"), // tag:add | tag:remove
     actionData: jsonb("action_data"),
+    /** When a test of this email was last sent (`POST .../test`). */
+    lastTestSentAt: timestamp("last_test_sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },

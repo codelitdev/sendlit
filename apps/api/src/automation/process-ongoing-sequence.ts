@@ -1,10 +1,5 @@
-import type { Email as EmailType } from "@sendlit/email-editor";
 import { eq } from "drizzle-orm";
-import {
-  commitSendReservation,
-  getOrganizationEntitlements,
-  releaseSendReservation,
-} from "../billing/entitlements";
+import { commitSendReservation, releaseSendReservation } from "../billing/entitlements";
 import { sequenceBounceLimit } from "../config/constants";
 import {
   addTagToContact,
@@ -27,26 +22,13 @@ import {
   withCorrelationHeaders,
 } from "../delivery-feedback/outbound-send";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
-import {
-  appendTrackingPixel,
-  renderEmailContent,
-  transformLinksForClickTracking,
-} from "../mail/render";
+import { renderCampaignHtml } from "../mail/campaign";
 import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
-import { getGeneralSettings } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
-import { validateTemplateContent } from "../templates/validation";
 import { normalizeEmail } from "../utils/email";
-import {
-  getEmailFrom,
-  getListUnsubscribeHeaders,
-  getTrackedClickUrl,
-  getTrackingPixelUrl,
-  getUnsubLink,
-} from "../utils/mail";
-import { generatePixelToken } from "../utils/pixel-jwt";
+import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
 import {
   claimOngoingSequence,
   countOngoingSequencesForSequence,
@@ -224,17 +206,6 @@ async function attemptMailSending({
   });
   const to = contact.email;
   const subject = email.subject;
-  const unsubscribeLink = getUnsubLink(contact.unsubscribeToken);
-  const generalSettings = await getGeneralSettings(team.id);
-  const templatePayload = {
-    subscriber: {
-      email: contact.email,
-      name: contact.name,
-      tags: contact.tags,
-    },
-    address: generalSettings.mailingAddress || "",
-    unsubscribe_link: unsubscribeLink,
-  };
 
   if (!email.content) return;
 
@@ -260,48 +231,22 @@ async function attemptMailSending({
     return;
   }
 
-  // NOTE: these three must stay **public** ids — they get embedded into the
-  // outgoing email's tracking pixel/links, and `tracking/routes.ts` only
-  // has the decoded token (no other context) to resolve them from, days
-  // later. `ongoingSequence.sequenceId` is the *internal* id at the DB
-  // layer after the FK normalization — use `sequence.sequenceId` (public)
-  // instead.
-  const pixelToken = generatePixelToken({
+  // NOTE: these ids must stay **public** — they get embedded into the
+  // outgoing email's tracking pixel/links. `ongoingSequence.sequenceId` is
+  // the *internal* id; use `sequence.sequenceId` (public) instead.
+  const contentWithTrackedLinks = await renderCampaignHtml({
+    team,
+    content: email.content,
+    subscriber: {
+      email: contact.email,
+      name: contact.name,
+      tags: contact.tags,
+    },
     contactId: contact.contactId,
+    unsubscribeToken: contact.unsubscribeToken,
     sequenceId: sequence.sequenceId,
     emailId: email.emailId,
   });
-  const pixelUrl = getTrackingPixelUrl(pixelToken);
-  const content = email.content as EmailType;
-  const emailContentWithPixel = appendTrackingPixel(content, pixelUrl);
-  // Stored sequence content is normally validated on every write. Recheck
-  // at the delivery boundary as defense in depth so corrupted/manual DB
-  // content can never bypass the managed final-footer invariant.
-  validateTemplateContent(emailContentWithPixel, "marketing");
-
-  const renderedHtml = await renderEmailContent({
-    content: emailContentWithPixel,
-    variables: templatePayload,
-    brandingText: (await getOrganizationEntitlements(team.organizationId))
-      .marketingBranding
-      ? "Sent with SendLit"
-      : undefined,
-  });
-
-  const contentWithTrackedLinks = transformLinksForClickTracking(
-    renderedHtml,
-    (originalUrl, index) => {
-      const linkToken = generatePixelToken({
-        contactId: contact.contactId,
-        sequenceId: sequence.sequenceId,
-        emailId: email.emailId,
-        index,
-        link: encodeURIComponent(originalUrl),
-      });
-      return getTrackedClickUrl(linkToken);
-    },
-    { sequence_id: sequence.sequenceId, email_id: email.emailId },
-  );
 
   let outboundForReservation: { id: string } | null = null;
   try {

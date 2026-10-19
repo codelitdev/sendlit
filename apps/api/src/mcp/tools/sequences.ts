@@ -1,4 +1,8 @@
-import { contactFilterSchema, emailContentInputSchema } from "@sendlit/api-contract";
+import {
+  contactFilterSchema,
+  emailContentInputSchema,
+  sequenceEmailTestResultSchema,
+} from "@sendlit/api-contract";
 import { z } from "zod";
 import { emailActionTypes, mailTypes } from "../../config/constants";
 import type { HydratedSequence } from "../../sequences/queries";
@@ -19,9 +23,10 @@ import {
   updateMailInSequence,
   updateSequence,
 } from "../../sequences/queries";
+import { sendSequenceEmailTest } from "../../sequences/test-send";
 import { omitInternal } from "../../utils/public";
 import type { McpToolRegistrar } from "../tool-registry";
-import { getTeamId } from "./auth";
+import { getAuthUser, getTeamId } from "./auth";
 import {
   AUTH_ERROR,
   errorResult,
@@ -300,6 +305,46 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
         if (!sequence) return NOT_FOUND;
         return jsonResult(toPublicSequence(sequence));
       } catch (err: any) {
+        return errorResult(err.message);
+      }
+    },
+  );
+
+  server.registerTool(
+    "send_sequence_email_test",
+    {
+      description:
+        "Sends a test of one broadcast/sequence email, rendered exactly like a real send (merge tags, footer, tracking) with a [Test] subject prefix. Defaults to the current user's own address (OAuth sessions only; API-key sessions must supply `to`). Suppressed addresses are skipped; opens, clicks and the unsubscribe link in a test change nothing.",
+      inputSchema: {
+        sequenceId: z.string(),
+        emailId: z.string(),
+        to: z.array(z.string().email()).max(5).optional().describe("Up to 5 addresses"),
+      },
+      outputSchema: sequenceEmailTestResultSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        return jsonResult(
+          await sendSequenceEmailTest({
+            teamId,
+            sequenceId: args.sequenceId,
+            emailId: args.emailId,
+            to: args.to,
+            fallbackRecipient: getAuthUser(extra)?.email,
+          }),
+        );
+      } catch (err: any) {
+        if (isPlanGateError(err)) return planGateResult(err);
+        if (err.message === "sequence_not_found" || err.message === "email_not_found") {
+          return NOT_FOUND;
+        }
         return errorResult(err.message);
       }
     },

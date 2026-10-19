@@ -1,0 +1,1 @@
+ALTER TABLE "sequence_emails" ADD COLUMN "last_test_sent_at" timestamp with time zone;

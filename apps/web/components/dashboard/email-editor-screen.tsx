@@ -112,6 +112,7 @@ export function EmailEditorScreen({
   requiredVariables = [],
   saveLabel = "Save",
   header,
+  actions,
 }: {
   /** Where exit lands when there's no history to go back to (deep link). */
   exitFallbackHref: string;
@@ -125,6 +126,9 @@ export function EmailEditorScreen({
   saveLabel?: string;
   /** Optional controls rendered in the bar above the editor canvas. */
   header?: ReactNode;
+  /** Extra top-bar controls. `saveContent` persists the current document
+   * (throwing on failure), e.g. before sending a test of it. */
+  actions?: (saveContent: () => Promise<void>) => ReactNode;
 }) {
   const router = useRouter();
   const normalizedInitialContent = useMemo(
@@ -219,6 +223,7 @@ export function EmailEditorScreen({
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          {actions?.(() => onSave(contentRef.current))}
           <Button onClick={save} disabled={saving}>
             {saving ? (
               <Loader size={16} />

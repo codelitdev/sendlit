@@ -71,6 +71,13 @@
       "when": 1792411179022,
       "tag": "0009_pure_billing_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792416090050,
+      "tag": "0010_sequence_email_last_test_sent_at",
+      "breakpoints": true
     }
   ]
 }

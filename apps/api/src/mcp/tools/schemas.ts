@@ -127,6 +127,7 @@ export const sequenceEmailSchema = z.object({
   templateId: z.string().min(1).nullable().optional(),
   actionType: z.enum(emailActionTypes).nullable().optional(),
   actionData: z.record(z.any()).nullable().optional(),
+  lastTestSentAt: z.string().nullable().optional(),
 });
 
 export const sequenceSchema = z.object({

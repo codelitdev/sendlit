@@ -135,6 +135,7 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   ),
   required("sequences.addEmail", "add_sequence_email", "write"),
   required("sequences.updateEmail", "update_sequence_email", "write"),
+  required("sequences.sendEmailTest", "send_sequence_email_test", "write"),
   required("sequences.removeEmail", "delete_sequence_email", "destructive"),
   required("sequences.start", "start_sequence", "write"),
   required("sequences.pause", "pause_sequence", "write"),

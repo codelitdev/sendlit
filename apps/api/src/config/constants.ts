@@ -183,3 +183,10 @@ export const ownerReleasableSuppressionReasons: SuppressionReason[] = [
  * rolling window below that trigger automatic suppression. */
 export const finalSoftBounceSuppressionThreshold = 3;
 export const finalSoftBounceWindowDays = 30;
+
+/** Embedded in a test's tracking links so they resolve to no contact: opens
+ * and clicks aren't recorded and the link still redirects. */
+export const TEST_CONTACT_ID = "cnt_000000000000000000000000";
+/** Unsubscribe token of a test email. The unsubscribe page recognises it and
+ * changes nothing. */
+export const TEST_UNSUBSCRIBE_TOKEN = "test";

@@ -261,4 +261,19 @@ describe("tracking and unsubscribe routes", () => {
       subscribed: false,
     });
   });
+
+  it("explains test-email unsubscribe links and changes nothing", async () => {
+    const page = await get("/unsubscribe/test");
+    expect(page.status).toBe(200);
+    expect(page.body.toString()).toContain("This was a test email");
+
+    const oneClick = await request(
+      "POST",
+      "/unsubscribe/test",
+      "List-Unsubscribe=One-Click",
+    );
+    expect(oneClick.status).toBe(200);
+    expect(mocks.getContactByUnsubscribeToken).not.toHaveBeenCalled();
+    expect(mocks.updateContact).not.toHaveBeenCalled();
+  });
 });
