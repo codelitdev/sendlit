@@ -162,6 +162,11 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("settings.esps.update", "update_esp", "write"),
   required("settings.esps.remove", "delete_esp", "destructive"),
   required("settings.esps.test", "test_esp", "write"),
+  required(
+    "settings.esps.domainAuthentication",
+    "check_esp_domain_authentication",
+    "read",
+  ),
   required("settings.esps.activate", "activate_esp", "write"),
   restOnly("settings.esps.suspend", ESP_LIFECYCLE),
   restOnly("settings.esps.resume", ESP_LIFECYCLE),

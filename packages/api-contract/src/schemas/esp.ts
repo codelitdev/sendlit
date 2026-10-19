@@ -133,3 +133,44 @@ export const retireEspConfigBodySchema = z.discriminatedUnion("transition", [
   }),
   z.object({ transition: z.literal("cancel") }),
 ]);
+
+export const domainAuthStatuses = ["pass", "warn", "fail"] as const;
+
+const domainAuthCheckSchema = z.object({
+  status: z.enum(domainAuthStatuses),
+  message: z.string(),
+  /** The DNS record SendLit found, if any. */
+  record: z.string().nullable(),
+});
+
+/** SPF, DKIM and DMARC status of the domain an ESP sends from, with the
+ * DNS records to add. */
+export const domainAuthenticationSchema = z.object({
+  domain: z.string(),
+  provider: z.enum(espProviders),
+  spf: domainAuthCheckSchema.extend({ host: z.string() }),
+  dkim: domainAuthCheckSchema.extend({ selector: z.string().nullable() }),
+  dmarc: domainAuthCheckSchema.extend({ policy: z.string().nullable() }),
+  records: z.array(
+    z.object({
+      type: z.enum(["TXT", "CNAME", "MX"]),
+      name: z.string(),
+      /** `null` when only the provider's console knows the value. */
+      value: z.string().nullable(),
+      purpose: z.string(),
+      present: z.boolean(),
+    }),
+  ),
+  providerConsoleUrl: z.string().nullable(),
+  checkedAt: z.string(),
+});
+
+export type DomainAuthentication = z.infer<typeof domainAuthenticationSchema>;
+
+export const domainAuthenticationQuerySchema = z.object({
+  dkimSelector: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]{1,63}$/)
+    .optional()
+    .describe("DKIM selector to check, if your provider uses a custom one"),
+});

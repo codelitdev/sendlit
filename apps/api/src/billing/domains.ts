@@ -1,5 +1,4 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { promises as dns } from "node:dns";
 import { isIP } from "node:net";
 import { and, count, eq, gte } from "drizzle-orm";
 import { db } from "../db/client";
@@ -12,6 +11,7 @@ import {
   teams,
   user,
 } from "../db/schema";
+import { resolveTxtWithTimeout } from "../utils/dns";
 import { PlanGateError } from "./errors";
 
 function verificationKey(): string {
@@ -70,22 +70,6 @@ export function normalizeSendingDomain(input: string): string {
 
 function hashChallenge(token: string): string {
   return createHmac("sha256", verificationKey()).update(token, "utf8").digest("hex");
-}
-
-function resolveTxtWithTimeout(name: string, timeoutMs = 5_000): Promise<string[][]> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("dns_timeout")), timeoutMs);
-    dns.resolveTxt(name).then(
-      (records) => {
-        clearTimeout(timer);
-        resolve(records);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
 }
 
 export function serializeSendingDomain(

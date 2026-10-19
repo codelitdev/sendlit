@@ -44,6 +44,8 @@ import {
 } from "./schemas/delivery-events";
 import {
   createEspConfigBodySchema,
+  domainAuthenticationQuerySchema,
+  domainAuthenticationSchema,
   espConfigSchema,
   retireEspConfigBodySchema,
   testEspConfigBodySchema,
@@ -676,6 +678,19 @@ const espCollectionContract = c.router(
       summary: "Remove a user-managed ESP configuration",
       description:
         "Removes an ESP with no active or queued dependencies. Draft, paused, and completed sequences are detached first.",
+    },
+    domainAuthentication: {
+      method: "GET",
+      path: "/settings/esps/:espId/domain-authentication",
+      query: domainAuthenticationQuerySchema,
+      responses: {
+        200: domainAuthenticationSchema,
+        404: errorSchema,
+        422: errorSchema,
+      },
+      summary: "Check SPF, DKIM and DMARC for an ESP's sending domain",
+      description:
+        "Looks up the DNS records of the ESP's From address domain and returns each check's status with the records to add. Returns 422 `from_email_missing` when the ESP has no From address.",
     },
     test: {
       method: "POST",

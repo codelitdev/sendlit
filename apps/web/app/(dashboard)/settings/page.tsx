@@ -7,6 +7,7 @@ import {
   Pencil,
   Plus,
   Send,
+  ShieldCheck,
   Star,
   Trash2,
   XCircle,
@@ -16,6 +17,7 @@ import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
+import { DomainAuthenticationDialog } from "@/components/dashboard/domain-authentication-dialog";
 import { EspConfigurationDialog } from "@/components/dashboard/esp-configuration-dialog";
 import { EspFeedbackDialog } from "@/components/dashboard/esp-feedback-dialog";
 import { Loading } from "@/components/dashboard/loading";
@@ -109,6 +111,7 @@ export default function SettingsPage() {
   const [editingEsp, setEditingEsp] = useState<EspConfig | null>(null);
   const [espPendingDelete, setEspPendingDelete] = useState<EspConfig | null>(null);
   const [feedbackEsp, setFeedbackEsp] = useState<EspConfig | null>(null);
+  const [domainAuthEsp, setDomainAuthEsp] = useState<EspConfig | null>(null);
   const [testingEspId, setTestingEspId] = useState<string | null>(null);
   const [activatingEspId, setActivatingEspId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{
@@ -647,6 +650,15 @@ export default function SettingsPage() {
                               >
                                 <Send className="size-4" />
                               </IconButton>
+                              {esp.fromEmail && (
+                                <IconButton
+                                  title="Domain authentication (SPF, DKIM, DMARC)"
+                                  aria-label={`Domain authentication for ${esp.name}`}
+                                  onClick={() => setDomainAuthEsp(esp)}
+                                >
+                                  <ShieldCheck className="size-4" />
+                                </IconButton>
+                              )}
                               {feedbackCapableProviders.includes(esp.provider) && (
                                 <IconButton
                                   title="Delivery feedback (bounces & complaints)"
@@ -695,6 +707,12 @@ export default function SettingsPage() {
                   await createEsp(input);
                 }
                 await load();
+              }}
+            />
+            <DomainAuthenticationDialog
+              esp={domainAuthEsp}
+              onOpenChange={(open) => {
+                if (!open) setDomainAuthEsp(null);
               }}
             />
             <EspFeedbackDialog

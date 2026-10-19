@@ -8,6 +8,7 @@ import { dailySendCount } from "../../mail/rate-limit";
 import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
 import { captureEvent } from "../../observability";
 import { getTeamMembership } from "../../team/queries";
+import { checkDomainAuthentication } from "./domain-auth";
 import {
   createEspConfig,
   deleteEspConfig,
@@ -126,6 +127,13 @@ const collectionImpl = s.router(contract.settings.esps, {
     invalidateTeamTransport(teamId);
     captureUpsert(config, "settings.esps.create");
     return { status: 201, body: toPublicShape(config) };
+  },
+  domainAuthentication: async ({ params, query, req }) => {
+    const config = await getEspConfigByEspId((req as any).teamId, params.espId);
+    if (!config) return { status: 404, body: { error: "ESP not found" } };
+    const result = await checkDomainAuthentication(config, query);
+    if (!result) return { status: 422, body: { error: "from_email_missing" } };
+    return { status: 200, body: result };
   },
   get: async ({ params, req }) => {
     const config = await getEspConfigByEspId((req as any).teamId, params.espId);

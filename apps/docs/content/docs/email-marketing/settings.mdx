@@ -12,6 +12,12 @@ carry a `Reply-To` header, so replies reach that inbox (for example
 `replyTo` takes precedence; a shared organization ESP can be given a per-team
 reply-to on the team's grant.
 
+## Domain authentication
+
+The shield button on an ESP checks SPF, DKIM and DMARC for its From
+address's domain and lists the DNS records to add. See
+[Domain authentication](/email-marketing/domain-authentication).
+
 ## Send rate
 
 Providers cap how many emails per second an account may send; Amazon SES

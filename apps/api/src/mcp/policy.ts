@@ -93,6 +93,7 @@ const toolPolicies = {
   get_esp_config: MCP_SCOPES.espRead,
   list_esps: MCP_SCOPES.espRead,
   get_esp: MCP_SCOPES.espRead,
+  check_esp_domain_authentication: MCP_SCOPES.espRead,
   update_esp_config: MCP_SCOPES.espWrite,
   delete_esp_config: MCP_SCOPES.espWrite,
   send_test_email: MCP_SCOPES.espWrite,

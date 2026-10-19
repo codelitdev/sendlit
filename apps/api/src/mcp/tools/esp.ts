@@ -1,5 +1,10 @@
+import {
+  domainAuthenticationQuerySchema,
+  domainAuthenticationSchema,
+} from "@sendlit/api-contract";
 import { z } from "zod";
 import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
+import { checkDomainAuthentication } from "../../settings/esp/domain-auth";
 import {
   createEspConfig,
   deleteEspConfig,
@@ -268,6 +273,36 @@ export function registerEspTools(server: McpToolRegistrar): void {
       const config = await getEspConfigByEspId(teamId, args.espId);
       if (!config) return NOT_FOUND;
       return jsonResult(toPublicShape(config));
+    },
+  );
+
+  server.registerTool(
+    "check_esp_domain_authentication",
+    {
+      description:
+        "Checks SPF, DKIM and DMARC for the domain of an ESP's From address (live DNS lookups) and returns each check's status, plus the DNS records to add. Records whose value only the provider's console knows (e.g. DKIM keys) have a null value. Pass dkimSelector if the provider uses a custom DKIM selector.",
+      inputSchema: {
+        espId: z.string().min(1),
+        dkimSelector: domainAuthenticationQuerySchema.shape.dkimSelector,
+      },
+      outputSchema: domainAuthenticationSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const config = await getEspConfigByEspId(teamId, args.espId);
+      if (!config) return NOT_FOUND;
+      const result = await checkDomainAuthentication(config, {
+        dkimSelector: args.dkimSelector,
+      });
+      if (!result)
+        return errorResult("from_email_missing: set the ESP's From address first");
+      return jsonResult(result);
     },
   );
 
