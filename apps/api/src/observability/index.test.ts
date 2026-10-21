@@ -81,6 +81,27 @@ describe("SendLit observability", () => {
     expect(properties.email).toBeUndefined();
   });
 
+  it("sends id properties as they are instead of masking them as tokens", () => {
+    const client = fakeClient();
+    const events = createSendLitObservability(env, { client, purpose: "events" });
+    const teamId = "01a15ed4-d3f2-798f-b6fa-cbedeb854b54";
+
+    events.captureEvent({
+      event: "team_paused_for_review",
+      source: "abuse.flags",
+      subjectId: teamId,
+      properties: {
+        team_id: teamId,
+        organization_id: teamId,
+        reason: "content_review",
+      },
+    });
+
+    const [{ properties }] = client.capture.mock.calls[0];
+    expect(properties.team_id).toBe(teamId);
+    expect(properties.organization_id).toBe(teamId);
+  });
+
   it("dedupes identical errors within the TTL window", () => {
     const client = fakeClient();
     const observability = createSendLitObservability(env, { client });

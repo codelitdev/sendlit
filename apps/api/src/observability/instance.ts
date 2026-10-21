@@ -62,6 +62,22 @@ const PROPERTY_ALLOWLIST = new Set([
   "scan_mode",
 ]);
 
+/** Allowlisted keys that hold opaque record ids. They skip the package's
+ * long-token mask, which would otherwise hide every UUID. */
+const IDENTIFIER_KEYS = new Set([
+  "team_id",
+  "user_id",
+  "contact_id",
+  "sequence_id",
+  "ongoing_sequence_id",
+  "template_id",
+  "segment_id",
+  "email_id",
+  "job_id",
+  "organization_id",
+  "form_id",
+]);
+
 /**
  * `purpose: "events"` builds the instance for product analytics. The package
  * dedupes and rate-caps captures per source, which suits errors but would drop
@@ -94,7 +110,10 @@ export function createSendLitObservability(
           }
         : {}),
     },
-    contextPolicy: { propertyAllowlist: PROPERTY_ALLOWLIST },
+    contextPolicy: {
+      propertyAllowlist: PROPERTY_ALLOWLIST,
+      identifierKeys: IDENTIFIER_KEYS,
+    },
     ...(forEvents
       ? { dedupeTtlMs: 0, dedupeMaxKeys: 1, perSourceCap: Number.POSITIVE_INFINITY }
       : {
