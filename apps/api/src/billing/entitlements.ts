@@ -420,12 +420,15 @@ export async function reserveSend(
   if (entitlements.fairUse && outbound) {
     // Lock the team row so concurrent reservations cannot both consume the
     // degraded transactional allowance after observing the same count.
+    // `no key update`, not `update`: the caller's outbound_messages insert
+    // already holds a FOR KEY SHARE lock on this row (its foreign key), and
+    // FOR UPDATE conflicts with that, so two concurrent sends deadlocked.
     await tx
       .select({ id: teams.id })
       .from(teams)
       .where(eq(teams.id, outbound.teamId))
       .limit(1)
-      .for("update");
+      .for("no key update");
     const [control] = await tx
       .select({ status: teamSendingControls.status })
       .from(teamSendingControls)

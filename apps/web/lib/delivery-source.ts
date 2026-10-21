@@ -17,6 +17,10 @@ export function presentDeliverySourceError(error: string): string {
       return "Your recent contact import is being reviewed by SendLit. Campaigns can start once it's approved, usually within a business day.";
     case "organization_sending_suspended":
       return "Sending is suspended for this organization. Contact SendLit support.";
+    case "team_sending_suspended":
+      return "Sending is suspended for this team. Ask an organization admin to resume it.";
+    case "sending_paused":
+      return "Sending is paused for this team. This happens when a payment is overdue, when bounce or complaint rates get too high, or while SendLit reviews the account. Check the Plan tab on your organization page, or contact SendLit support if it stays paused.";
     case "delivery_source_in_use":
       return "This ESP can't be removed while it is used by an active sequence, queued email, or delivery integration.";
     default:
