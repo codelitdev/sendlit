@@ -12,6 +12,16 @@ carry a `Reply-To` header, so replies reach that inbox (for example
 `replyTo` takes precedence; a shared organization ESP can be given a per-team
 reply-to on the team's grant.
 
+## Port and TLS
+
+Most providers accept SMTP on port **587**: leave **Use TLS** off and SendLit
+upgrades the connection with STARTTLS, so it's still encrypted. Turn **Use TLS**
+on only for port **465**, which expects encryption from the first byte.
+Toggling **Use TLS** switches between 587 and 465 for you. Mixing them up (TLS
+on port 587, or plain on 465) fails with an SSL "wrong version number" error or
+a connection that never answers; the form and the test send say which to
+change.
+
 ## Domain authentication
 
 The shield button on an ESP checks SPF, DKIM and DMARC for its From

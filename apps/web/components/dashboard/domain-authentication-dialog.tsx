@@ -296,18 +296,18 @@ function AuthSection({
           : "Missing";
 
   const instruction =
-    name === "SPF"
-      ? records.some((record) => record.name !== domain)
-        ? `${provider} sends bounces from ${records[0]?.name}. Add ${records.length === 1 ? "this record" : "these records"} at your DNS provider so SPF lines up with ${domain}.`
-        : `Add this SPF record at your DNS provider. A domain can have only one SPF record, so merge it into any you already have.`
-      : name === "DKIM"
-        ? isSes
-          ? `Amazon SES gives you three CNAME records for ${domain}. Copy each one from SES and add it at your DNS provider.`
-          : records.length > 0
-            ? `Copy the DKIM ${records.length === 1 ? "record" : "records"} from ${provider} and add ${records.length === 1 ? "it" : "them"} at your DNS provider.`
-            : "Publish your mail server's DKIM key as a TXT record, then enter its selector below to check it."
-        : check.status === "pass"
-          ? check.message
+    check.status === "pass"
+      ? check.message
+      : name === "SPF"
+        ? records.some((record) => record.name !== domain)
+          ? `${provider} sends bounces from ${records[0]?.name}. Add ${records.length === 1 ? "this record" : "these records"} at your DNS provider so SPF lines up with ${domain}.`
+          : `Add this SPF record at your DNS provider. A domain can have only one SPF record, so merge it into any you already have.`
+        : name === "DKIM"
+          ? isSes
+            ? `Amazon SES gives you three CNAME records for ${domain}. Copy each one from SES and add it at your DNS provider.`
+            : records.length > 0
+              ? `Copy the DKIM ${records.length === 1 ? "record" : "records"} from ${provider} and add ${records.length === 1 ? "it" : "them"} at your DNS provider.`
+              : "Publish your mail server's DKIM key as a TXT record, then enter its selector below to check it."
           : "Add this record so inboxes know what to do with mail that fails SPF or DKIM. Start with p=none to monitor.";
 
   let dkimKey = 0;

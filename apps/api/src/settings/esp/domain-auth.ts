@@ -13,6 +13,10 @@ type ProviderGuide = {
   /** Subdomain used as the bounce (MAIL FROM / Return-Path) domain, whose SPF
    * record is the one that counts for alignment. */
   returnPath: ((domain: string, region: string) => DnsRecord[]) | null;
+  /** A provider that publishes SPF for its own bounce domain once its DKIM
+   * CNAMEs are in place (SendGrid's automated security: the `em<id>` CNAME
+   * carries SPF). The selector to look at and the suffix its CNAME points to. */
+  managedSpf?: { selector: string; cnameSuffix: string };
   /** DKIM selectors the provider uses, when they are fixed. */
   dkimSelectors: string[];
   dkimRecords: (domain: string) => DnsRecord[];
@@ -97,6 +101,7 @@ const GUIDES: Record<EspProvider, ProviderGuide> = {
   sendgrid: {
     spfInclude: "sendgrid.net",
     returnPath: null,
+    managedSpf: { selector: "s1", cnameSuffix: ".sendgrid.net" },
     dkimSelectors: ["s1", "s2"],
     dkimRecords: (domain) => [
       fromConsole(domain, "CNAME", "s1._domainkey", "DKIM"),
@@ -213,12 +218,25 @@ export async function checkDomainAuthentication(
   // From domain's.
   const returnPath = guide.returnPath?.(domain, region) ?? [];
   const spfHost = returnPath[0]?.name ?? domain;
-  const [rootTxt, returnPathTxt] = await Promise.all([
+  const [rootTxt, returnPathTxt, managedTargets] = await Promise.all([
     txt(resolve, domain),
     spfHost === domain ? null : txt(resolve, spfHost),
+    guide.managedSpf
+      ? resolveCname(`${guide.managedSpf.selector}._domainkey.${domain}`).catch(
+          () => [] as string[],
+        )
+      : Promise.resolve([] as string[]),
   ]);
   const rootSpf = spfOf(rootTxt);
   const returnPathSpf = returnPathTxt ? spfOf(returnPathTxt) : rootSpf;
+  // SendGrid's automated security: with its DKIM CNAMEs in place, mail
+  // bounces to em<id>.<domain>, a CNAME whose SPF SendGrid publishes, so the
+  // root SPF record doesn't need to include it.
+  const managedSpfTarget = managedTargets
+    .map((target) => target.toLowerCase().replace(/\.$/, ""))
+    .find(
+      (target) => guide.managedSpf && target.endsWith(guide.managedSpf.cnameSuffix),
+    );
   let spf: DomainAuthentication["spf"];
   if (rootSpf.length > 1) {
     spf = {
@@ -226,6 +244,13 @@ export async function checkDomainAuthentication(
       host: domain,
       record: rootSpf.join(" | "),
       message: `${domain} has ${rootSpf.length} SPF records; receivers treat that as no SPF at all. Merge them into one.`,
+    };
+  } else if (managedSpfTarget) {
+    spf = {
+      status: "pass",
+      host: domain,
+      record: rootSpf[0] ?? null,
+      message: `${provider === "sendgrid" ? "SendGrid" : "Your provider"} handles SPF through its bounce domain (automated security), so your root SPF record doesn't need to include it.`,
     };
   } else if (
     returnPathSpf[0] &&
@@ -367,7 +392,7 @@ export async function checkDomainAuthentication(
                 ),
       })),
     )),
-    ...(guide.returnPath
+    ...(guide.returnPath || managedSpfTarget
       ? []
       : [
           {
@@ -382,13 +407,13 @@ export async function checkDomainAuthentication(
             present: spf.status === "pass",
           },
         ]),
-    ...guide
-      .dkimRecords(domain)
-      .map((record) =>
-        record.purpose.startsWith("DKIM")
-          ? { ...record, present: dkim.status === "pass" }
-          : record,
-      ),
+    ...guide.dkimRecords(domain).map((record) =>
+      record.purpose.startsWith("DKIM")
+        ? { ...record, present: dkim.status === "pass" }
+        : // The em<id> bounce CNAME: its name is per account, so it's known to
+          // be there when automated security is (SendGrid verifies it).
+          { ...record, present: Boolean(managedSpfTarget) },
+    ),
     {
       type: "TXT",
       name: `_dmarc.${domain}`,

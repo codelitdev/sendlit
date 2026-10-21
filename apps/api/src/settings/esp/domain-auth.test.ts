@@ -177,4 +177,34 @@ describe("checkDomainAuthentication", () => {
     });
     expect(result?.dkim.status).toBe("fail");
   });
+
+  it("passes SendGrid SPF through automated security without a root include", async () => {
+    const result = await checkDomainAuthentication(
+      esp("sendgrid"),
+      dns(
+        {
+          "example.com": ["v=spf1 include:spf.protection.outlook.com ~all"],
+          "s1._domainkey.example.com": [KEY],
+        },
+        { cname: { "s1._domainkey.example.com": "s1.domainkey.u1.wl2.sendgrid.net." } },
+      ),
+    );
+    expect(result?.spf.status).toBe("pass");
+    expect(result?.records.find((record) => record.purpose === "SPF")).toBeUndefined();
+    expect(
+      result?.records.find((record) => record.purpose === "Bounce (Return-Path) domain")
+        ?.present,
+    ).toBe(true);
+  });
+
+  it("still asks for the SendGrid include without automated security", async () => {
+    const result = await checkDomainAuthentication(
+      esp("sendgrid"),
+      dns({ "example.com": ["v=spf1 include:spf.protection.outlook.com ~all"] }),
+    );
+    expect(result?.spf.status).toBe("warn");
+    expect(result?.records.find((record) => record.purpose === "SPF")?.value).toBe(
+      "v=spf1 include:sendgrid.net include:spf.protection.outlook.com ~all",
+    );
+  });
 });

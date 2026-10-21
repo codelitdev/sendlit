@@ -2,6 +2,7 @@ import { sendTestMail } from "../../mail/send";
 import { captureError, captureEvent } from "../../observability";
 import { getEmailFrom } from "../../utils/mail";
 import { decryptEspCredentials, type EspConfig, recordEspTestResult } from "./queries";
+import { explainSmtpError } from "./smtp-errors";
 
 export interface TestEspConfigResult {
   success: boolean;
@@ -87,10 +88,11 @@ export async function testEspConfig({
     });
     return { success: true };
   } catch (err: any) {
+    const message = explainSmtpError(err, config);
     await recordEspTestResult(
       config.ownerScope === "organization" ? config.organizationId! : config.teamId!,
       "failed",
-      err.message,
+      message,
       config.espId,
       config.ownerScope as "organization" | "team",
     );
@@ -101,7 +103,7 @@ export async function testEspConfig({
       severity: "warning",
       context: { esp_id: config.espId, provider: config.provider },
     });
-    return { success: false, error: err.message };
+    return { success: false, error: message };
   }
 }
 

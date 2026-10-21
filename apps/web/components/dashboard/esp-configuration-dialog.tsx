@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/codelit/switch";
 import type { EspConfig, EspConnectionInput, EspProvider } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { ESP_PROVIDERS } from "@/lib/esp-providers";
+import { portForTls, tlsPortMismatch } from "@/lib/smtp";
 
 type FormState = {
   name: string;
@@ -426,13 +427,25 @@ export function EspConfigurationDialog({
               </div>
             )}
           </div>
-          <div className="col-span-full flex items-center gap-3">
-            <Switch
-              id="esp-secure"
-              checked={form.secure}
-              onCheckedChange={(secure) => setForm({ ...form, secure })}
-            />
-            <Label htmlFor="esp-secure">Use TLS (port 465)</Label>
+          <div className="col-span-full space-y-1.5">
+            <div className="flex items-center gap-3">
+              <Switch
+                id="esp-secure"
+                checked={form.secure}
+                onCheckedChange={(secure) =>
+                  setForm({ ...form, secure, port: portForTls(form.port, secure) })
+                }
+              />
+              <Label htmlFor="esp-secure">Use TLS (port 465)</Label>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Leave off for port 587; SendLit upgrades the connection with STARTTLS.
+            </p>
+            {tlsPortMismatch(form.port, form.secure) && (
+              <p role="alert" className="text-sm text-[var(--warning)]">
+                {tlsPortMismatch(form.port, form.secure)}
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>
