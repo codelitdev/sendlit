@@ -9,6 +9,7 @@
     "web-archive",
     "sequences",
     "settings",
+    "delivery-feedback",
     "domain-authentication",
     "reputation",
     "warm-up"

@@ -51,4 +51,4 @@ Use the test send endpoint after configuring settings to verify delivery before 
 
 ## Bounce and complaint feedback
 
-Each ESP can report bounces and spam complaints back to SendLit, which then suppresses those addresses automatically. Open the ESP's delivery feedback settings, copy its webhook URL into your provider, and enter the value the provider asks for. Resend, Postmark, SendGrid, and Mailgun use a webhook signing secret or key. Amazon SES uses an SNS topic ARN; see [Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback) for its setup.
+Each ESP can report bounces and spam complaints back to SendLit, which then suppresses those addresses automatically. Open the ESP's delivery feedback settings, copy its webhook URL into your provider, and enter the value the provider asks for. Resend, Postmark, SendGrid, and Mailgun use a webhook signing secret or key; Amazon SES uses an SNS topic ARN. See [Bounce and complaint feedback](/email-marketing/delivery-feedback) for each provider's setup.
