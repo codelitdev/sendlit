@@ -6,8 +6,8 @@ import {
 import { z } from "zod";
 import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
 import { warmupState } from "../../mail/warmup";
-import { checkDomainAuthentication } from "../../settings/esp/domain-auth";
 import {
+  checkAndRememberDomainAuthentication,
   createEspConfig,
   deleteEspConfig,
   type EspConfig,
@@ -284,7 +284,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
     "check_esp_domain_authentication",
     {
       description:
-        "Checks SPF, DKIM and DMARC for the domain of an ESP's From address (live DNS lookups) and returns each check's status, plus the DNS records to add. Records whose value only the provider's console knows (e.g. DKIM keys) have a null value. Pass dkimSelector if the provider uses a custom DKIM selector.",
+        "Checks SPF, DKIM and DMARC for the domain of an ESP's From address (live DNS lookups) and returns each check's status, plus the DNS records to add. Records whose value only the provider's console knows (e.g. DKIM keys) have a null value. Pass dkimSelector if the provider uses a custom DKIM selector (for Amazon SES, one Easy DKIM token); a selector that passes is saved on the ESP and reused by later checks.",
       inputSchema: {
         espId: z.string().min(1),
         dkimSelector: domainAuthenticationQuerySchema.shape.dkimSelector,
@@ -301,9 +301,10 @@ export function registerEspTools(server: McpToolRegistrar): void {
       if (!teamId) return AUTH_ERROR;
       const config = await getEspConfigByEspId(teamId, args.espId);
       if (!config) return NOT_FOUND;
-      const result = await checkDomainAuthentication(config, {
-        dkimSelector: args.dkimSelector,
-      });
+      const result = await checkAndRememberDomainAuthentication(
+        config,
+        args.dkimSelector,
+      );
       if (!result)
         return errorResult("from_email_missing: set the ESP's From address first");
       return jsonResult(result);

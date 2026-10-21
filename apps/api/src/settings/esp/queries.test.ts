@@ -7,7 +7,7 @@ mock.module("../../db/client", async () => {
 });
 
 const { db } = await import("../../db/client");
-const { outboundMessages, sequences, teamDeliverySettings } = await import(
+const { espConfigs, outboundMessages, sequences, teamDeliverySettings } = await import(
   "../../db/schema"
 );
 const { seedTeamAndContact, truncateAll } = await import("../../test/db");
@@ -21,6 +21,7 @@ const {
   listEspConfigs,
   recordEspTestResult,
   upsertEspConfig,
+  checkAndRememberDomainAuthentication,
 } = await import("./queries");
 
 const tdb = db as unknown as TestDb;
@@ -217,5 +218,65 @@ describe("ESP config queries", () => {
 
     await expect(getEspConfigByEspId(teamB.id, espA.espId)).resolves.toBeNull();
     await expect(deleteEspConfig(teamB.id, espA.espId)).resolves.toBe(false);
+  });
+});
+
+describe("checkAndRememberDomainAuthentication", () => {
+  const token = "6p3ranxrt5vvjzleljadgpakhkvklt2d";
+  // SES: the token's key is empty (rotation) but its CNAME is right.
+  const lookups = {
+    resolveTxt: async (): Promise<string[][]> => {
+      throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" });
+    },
+    resolveMx: async () => [],
+    resolveCname: async (name: string) =>
+      name === `${token}._domainkey.example.com` ? [`${token}.dkim.amazonses.com`] : [],
+  };
+
+  it("saves a token that passes and uses it when the next check omits it", async () => {
+    const { team } = await seedTeamAndContact(tdb, {
+      espConfig: {
+        provider: "ses",
+        host: "email-smtp.eu-west-1.amazonaws.com",
+        fromEmail: "news@example.com",
+      },
+    });
+    const [esp] = await tdb
+      .select()
+      .from(espConfigs)
+      .where(eq(espConfigs.teamId, team.id));
+
+    const first = await checkAndRememberDomainAuthentication(esp, token, lookups);
+    expect(first?.dkim).toMatchObject({ status: "pass", selector: token });
+    const [saved] = await tdb
+      .select()
+      .from(espConfigs)
+      .where(eq(espConfigs.id, esp.id));
+    expect(saved.dkimSelector).toBe(token);
+
+    // A reload checks without a token and still passes.
+    const again = await checkAndRememberDomainAuthentication(saved, undefined, lookups);
+    expect(again?.dkim).toMatchObject({ status: "pass", selector: token });
+  });
+
+  it("doesn't save a selector that fails", async () => {
+    const { team } = await seedTeamAndContact(tdb, {
+      espConfig: { provider: "ses", fromEmail: "news@example.com" },
+    });
+    const [esp] = await tdb
+      .select()
+      .from(espConfigs)
+      .where(eq(espConfigs.teamId, team.id));
+    const result = await checkAndRememberDomainAuthentication(
+      esp,
+      "wrongtoken",
+      lookups,
+    );
+    expect(result?.dkim.status).toBe("fail");
+    const [saved] = await tdb
+      .select()
+      .from(espConfigs)
+      .where(eq(espConfigs.id, esp.id));
+    expect(saved.dkimSelector).toBeNull();
   });
 });

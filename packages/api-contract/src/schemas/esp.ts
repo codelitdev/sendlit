@@ -230,5 +230,7 @@ export const domainAuthenticationQuerySchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9._-]{1,63}$/)
     .optional()
-    .describe("DKIM selector to check, if your provider uses a custom one"),
+    .describe(
+      "DKIM selector to check (for Amazon SES, one Easy DKIM token). A selector that passes is saved on the ESP and used by later checks that omit it.",
+    ),
 });

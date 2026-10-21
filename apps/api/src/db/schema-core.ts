@@ -1025,6 +1025,10 @@ export const espConfigs = pgTable(
      * the ramp started (see `WARMUP_RAMP`). Both null when off. */
     warmupTargetDaily: integer("warmup_target_daily"),
     warmupStartedAt: timestamp("warmup_started_at", { withTimezone: true }),
+    /** DKIM selector (for SES, an Easy DKIM token) the domain check last
+     * confirmed. Providers like SES use random selectors that DNS can't list,
+     * so it's remembered for later checks. */
+    dkimSelector: text("dkim_selector"),
     status: text("status").notNull().default("draft"),
     secretVersion: integer("secret_version").notNull().default(1),
     lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),

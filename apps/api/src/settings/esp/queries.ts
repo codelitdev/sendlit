@@ -1,3 +1,4 @@
+import type { DomainAuthentication } from "@sendlit/api-contract";
 import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
@@ -14,6 +15,7 @@ import { cancelQueuedWorkForGrantInTransaction } from "../../delivery/queries";
 import { releaseReservedQuotaForGrantInTransaction } from "../../delivery/quota";
 import { warmupValues } from "../../mail/warmup";
 import { decryptSecret, encryptSecret } from "../../utils/secret-crypto";
+import { checkDomainAuthentication } from "./domain-auth";
 
 export type EspConfig = typeof espConfigs.$inferSelect;
 export type EspOwnerScope = "organization" | "team";
@@ -735,4 +737,34 @@ export async function transitionEspConfig(
     }
     return updated;
   });
+}
+
+/**
+ * The domain check as the dashboard, REST API and MCP run it: without a
+ * selector it uses the one this ESP last confirmed, and a selector that
+ * passes is saved so later checks (and reloads) keep finding the key.
+ */
+export async function checkAndRememberDomainAuthentication(
+  config: Pick<EspConfig, "id" | "provider" | "host" | "fromEmail" | "dkimSelector">,
+  dkimSelector?: string,
+  /** DNS lookups to use instead of live ones (tests). */
+  lookups: Omit<Parameters<typeof checkDomainAuthentication>[1], "dkimSelector"> = {},
+): Promise<DomainAuthentication | null> {
+  const selector = dkimSelector?.trim() || config.dkimSelector || undefined;
+  const result = await checkDomainAuthentication(config, {
+    ...lookups,
+    dkimSelector: selector,
+  });
+  if (
+    result?.dkim.status === "pass" &&
+    selector &&
+    result.dkim.selector === selector &&
+    selector !== config.dkimSelector
+  ) {
+    await db
+      .update(espConfigs)
+      .set({ dkimSelector: selector })
+      .where(eq(espConfigs.id, config.id));
+  }
+  return result;
 }

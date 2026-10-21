@@ -124,6 +124,7 @@ mock.module("../../sequences/test-send", () => ({
 }));
 
 mock.module("../../settings/esp/queries", () => ({
+  checkAndRememberDomainAuthentication: vi.fn(),
   decryptEspCredentials: vi.fn(),
   getEspConfig: mocks.getEspConfig,
   upsertEspConfig: mocks.upsertEspConfig,
