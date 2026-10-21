@@ -1,3 +1,5 @@
+import type { DeliverySourceSelection, SendingOption } from "@/lib/api";
+
 /** Human-facing explanations for stable delivery-source API error codes. */
 export function presentDeliverySourceError(error: string): string {
   switch (error) {
@@ -43,5 +45,37 @@ export function isDeletedDeliverySource({
       !Array.isArray(report) &&
       (report as Record<string, unknown>).deliverySourceDeleted === true) ||
     (status === "completed" && deliverySource === null)
+  );
+}
+
+/** "Name (from@address)", prefixed "Shared:" for the organization's sender. */
+export function sendingOptionLabel(option: SendingOption): string {
+  const sender = option.fromEmail ? ` (${option.fromEmail})` : "";
+  return option.type === "organization"
+    ? `Shared: ${option.name}${sender}`
+    : `${option.name}${sender}`;
+}
+
+/** The delivery source a send will use for `selection`: the one chosen, else
+ * the team default, else the only one available. Null when it can't be told
+ * (nothing available, or a choice that's no longer available). */
+export function sendingOptionFor(
+  options: SendingOption[],
+  selection: DeliverySourceSelection | null | undefined,
+): SendingOption | null {
+  const available = options.filter((option) => option.available);
+  if (selection?.type === "organization") {
+    return available.find((option) => option.type === "organization") ?? null;
+  }
+  if (selection?.type === "team") {
+    return (
+      available.find(
+        (option) => option.type === "team" && option.espId === selection.espId,
+      ) ?? null
+    );
+  }
+  return (
+    available.find((option) => option.isDefault) ??
+    (available.length === 1 ? (available[0] ?? null) : null)
   );
 }

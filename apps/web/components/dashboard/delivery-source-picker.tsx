@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/codelit/select";
 import type { DeliverySourceSelection, SendingOption } from "@/lib/api";
+import { sendingOptionLabel } from "@/lib/delivery-source";
 
 /** `Select` cannot represent a null value. Null intentionally leaves source
  * selection to the team's default at activation time. */
@@ -27,13 +28,6 @@ function valueForOption(option: SendingOption) {
   return option.type === "organization"
     ? ORGANIZATION_VALUE
     : `${TEAM_PREFIX}${option.espId}`;
-}
-
-function labelFor(option: SendingOption) {
-  const sender = option.fromEmail ? ` (${option.fromEmail})` : "";
-  return option.type === "organization"
-    ? `Shared: ${option.name}${sender}`
-    : `${option.name}${sender}`;
 }
 
 /**
@@ -76,7 +70,8 @@ export function DeliverySourcePicker({
       />
     );
   }
-  const hasDefault = availableOptions.some((option) => option.isDefault);
+  const defaultOption = availableOptions.find((option) => option.isDefault);
+  const hasDefault = Boolean(defaultOption);
   const soleOption = availableOptions.length === 1 ? availableOptions[0] : null;
   // A lone available source resolves automatically, so a separate "team
   // default" alias adds no choice and merely duplicates the same sender.
@@ -108,11 +103,15 @@ export function DeliverySourcePicker({
       </SelectTrigger>
       <SelectContent>
         {hasDefault && !soleOption && (
-          <SelectItem value={DEFAULT_VALUE}>Team default delivery source</SelectItem>
+          <SelectItem value={DEFAULT_VALUE}>
+            {defaultOption
+              ? `Team default: ${sendingOptionLabel(defaultOption)}`
+              : "Team default delivery source"}
+          </SelectItem>
         )}
         {availableOptions.map((option) => (
           <SelectItem key={valueForOption(option)} value={valueForOption(option)}>
-            {labelFor(option)}
+            {sendingOptionLabel(option)}
           </SelectItem>
         ))}
       </SelectContent>

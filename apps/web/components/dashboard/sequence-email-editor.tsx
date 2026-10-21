@@ -6,8 +6,15 @@ import { Banner } from "@/components/dashboard/banner";
 import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
 import { SendTestDialog } from "@/components/dashboard/send-test-dialog";
-import { getSequence, updateSequenceEmail } from "@/lib/api";
+import {
+  type DeliverySourceSelection,
+  getSequence,
+  listSendingOptions,
+  type SendingOption,
+  updateSequenceEmail,
+} from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
+import { sendingOptionFor } from "@/lib/delivery-source";
 
 /**
  * Loads one email of a sequence/broadcast and edits its content full-screen.
@@ -29,10 +36,19 @@ export function SequenceEmailEditor({
     lastTestSentAt?: string | null;
   }>();
   const [error, setError] = useState<string | null>(null);
+  const [sendingOptions, setSendingOptions] = useState<SendingOption[]>([]);
+  const [deliverySource, setDeliverySource] = useState<DeliverySourceSelection | null>(
+    null,
+  );
 
   useEffect(() => {
+    // Which delivery source a test goes through; best effort.
+    listSendingOptions()
+      .then(({ items }) => setSendingOptions(items))
+      .catch(() => undefined);
     getSequence(sequenceId)
       .then((sequence) => {
+        setDeliverySource(sequence.deliverySource ?? null);
         const found = emailId
           ? sequence.emails.find((e) => e.emailId === emailId)
           : sequence.emails[0];
@@ -72,6 +88,7 @@ export function SequenceEmailEditor({
       }}
       actions={(saveContent) => (
         <SendTestDialog
+          sendingVia={sendingOptionFor(sendingOptions, deliverySource)}
           sequenceId={sequenceId}
           emailId={email.emailId}
           lastTestSentAt={email.lastTestSentAt}
