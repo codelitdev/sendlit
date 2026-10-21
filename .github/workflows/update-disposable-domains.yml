@@ -1,0 +1,48 @@
+name: Update disposable email domains
+
+# Refreshes apps/api/src/abuse/disposable-domains.txt from the maintained
+# upstream blocklist and opens (or updates) a PR when it changed.
+on:
+    schedule:
+        - cron: "17 3 * * 1"
+    workflow_dispatch:
+
+permissions:
+    contents: write
+    pull-requests: write
+
+concurrency:
+    group: update-disposable-domains
+    cancel-in-progress: false
+
+jobs:
+    update:
+        runs-on: ubuntu-latest
+        env:
+            BRANCH: chore/disposable-domains
+            GH_TOKEN: ${{ github.token }}
+        steps:
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.4.1
+            - name: Refresh the list
+              id: refresh
+              run: |
+                  echo "summary=$(bun apps/api/scripts/update-disposable-domains.ts)" >> "$GITHUB_OUTPUT"
+            - name: Open or update the PR
+              run: |
+                  if git diff --quiet; then
+                      echo "The list is already up to date."
+                      exit 0
+                  fi
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git switch -C "$BRANCH"
+                  git commit -am "chore(abuse): refresh disposable email domains (${{ steps.refresh.outputs.summary }})"
+                  git push --force origin "$BRANCH"
+                  if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+                      gh pr create --head "$BRANCH" --base main \
+                          --title "chore(abuse): refresh disposable email domains" \
+                          --body "Weekly refresh of \`apps/api/src/abuse/disposable-domains.txt\` from [disposable-email-domains](https://github.com/disposable-email-domains/disposable-email-domains): ${{ steps.refresh.outputs.summary }}."
+                  fi
