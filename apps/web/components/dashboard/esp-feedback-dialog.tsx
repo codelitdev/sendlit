@@ -31,6 +31,7 @@ import {
   upsertOrganizationEspFeedback,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
+import { espProviderLabel } from "@/lib/esp-providers";
 
 const STATUS_LABEL: Record<FeedbackConnectionStatus, string> = {
   pending: "Waiting for first event",
@@ -94,14 +95,6 @@ const SETUP_GUIDE_URL: Record<string, string> = {
   sendgrid: `${FEEDBACK_DOCS_URL}#sendgrid`,
   mailgun: `${FEEDBACK_DOCS_URL}#mailgun`,
   ses: "https://docs.sendlit.app/self-hosting/amazon-ses-feedback",
-};
-
-const PROVIDER_NAME: Record<string, string> = {
-  resend: "Resend",
-  postmark: "Postmark",
-  sendgrid: "SendGrid",
-  mailgun: "Mailgun",
-  ses: "Amazon SES",
 };
 
 const DEFAULT_CREDENTIAL_COPY: CredentialCopy = {
@@ -244,7 +237,7 @@ export function EspFeedbackDialog({
         {error && <Banner>{error}</Banner>}
 
         {loading ? (
-          <Loading centered />
+          <Loading />
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -258,7 +251,7 @@ export function EspFeedbackDialog({
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 underline underline-offset-4"
               >
-                How to set this up in {PROVIDER_NAME[esp.provider] ?? "your provider"}
+                How to set this up in {espProviderLabel(esp.provider)}
                 <ExternalLink className="size-3" />
               </a>
             </p>

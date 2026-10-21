@@ -1,6 +1,5 @@
-import { promises as dns } from "node:dns";
 import type { DomainAuthentication } from "@sendlit/api-contract";
-import { resolveTxtWithTimeout } from "../../utils/dns";
+import { freshDnsLookups } from "../../utils/dns";
 import type { EspConfig, EspProvider } from "./queries";
 
 type DnsRecord = DomainAuthentication["records"][number];
@@ -166,14 +165,18 @@ const includes = (spf: string, include: string) =>
  * covers its subdomains. */
 async function findDmarc(resolve: ResolveTxt, domain: string) {
   const labels = domain.split(".");
-  for (let i = 0; i <= labels.length - 2; i++) {
-    const host = labels.slice(i).join(".");
-    const record = (await txt(resolve, `_dmarc.${host}`)).find((value) =>
-      /^v=DMARC1\s*(;|$)/i.test(value.trim()),
-    );
-    if (record) return { host, record };
-  }
-  return null;
+  const hosts = labels.slice(0, -1).map((_, i) => labels.slice(i).join("."));
+  // Look all of them up at once; the closest one with a record wins.
+  const found = await Promise.all(
+    hosts.map(async (host) => ({
+      host,
+      record: (await txt(resolve, `_dmarc.${host}`)).find((value) =>
+        /^v=DMARC1\s*(;|$)/i.test(value.trim()),
+      ),
+    })),
+  );
+  const match = found.find((entry) => entry.record);
+  return match?.record ? { host: match.host, record: match.record } : null;
 }
 
 /**
@@ -191,9 +194,10 @@ export async function checkDomainAuthentication(
 ): Promise<DomainAuthentication | null> {
   const domain = sendingDomainOf(config.fromEmail);
   if (!domain) return null;
-  const resolve = options.resolveTxt ?? ((name) => resolveTxtWithTimeout(name, 4_000));
-  const resolveMx = options.resolveMx ?? ((name) => dns.resolveMx(name));
-  const resolveCname = options.resolveCname ?? ((name) => dns.resolveCname(name));
+  const lookups = freshDnsLookups();
+  const resolve = options.resolveTxt ?? lookups.resolveTxt;
+  const resolveMx = options.resolveMx ?? lookups.resolveMx;
+  const resolveCname = options.resolveCname ?? lookups.resolveCname;
   const provider = (
     config.provider in GUIDES ? config.provider : "smtp"
   ) as EspProvider;
@@ -204,9 +208,12 @@ export async function checkDomainAuthentication(
   // From domain's.
   const returnPath = guide.returnPath?.(domain, region) ?? [];
   const spfHost = returnPath[0]?.name ?? domain;
-  const rootSpf = spfOf(await txt(resolve, domain));
-  const returnPathSpf =
-    spfHost === domain ? rootSpf : spfOf(await txt(resolve, spfHost));
+  const [rootTxt, returnPathTxt] = await Promise.all([
+    txt(resolve, domain),
+    spfHost === domain ? null : txt(resolve, spfHost),
+  ]);
+  const rootSpf = spfOf(rootTxt);
+  const returnPathSpf = returnPathTxt ? spfOf(returnPathTxt) : rootSpf;
   let spf: DomainAuthentication["spf"];
   if (rootSpf.length > 1) {
     spf = {
@@ -259,23 +266,30 @@ export async function checkDomainAuthentication(
       ? "No DKIM key found. Add the DKIM records your email provider shows for this domain; if it uses a custom selector, enter it to check."
       : "No DKIM key found at common selectors. Enter your mail server's DKIM selector to check it.",
   };
-  for (const selector of selectors) {
-    const key = (await txt(resolve, `${selector}._domainkey.${domain}`)).find((value) =>
-      /(^|;)\s*p=[A-Za-z0-9+/=]{16,}/.test(value),
-    );
-    if (key) {
-      dkim = {
-        status: "pass",
+  // Look up every selector and DMARC at once; the first selector (in the
+  // order above) with a key wins.
+  const [keys, dmarcFound] = await Promise.all([
+    Promise.all(
+      selectors.map(async (selector) => ({
         selector,
-        record: key,
-        message: `DKIM key found (selector "${selector}").`,
-      };
-      break;
-    }
+        key: (await txt(resolve, `${selector}._domainkey.${domain}`)).find((value) =>
+          /(^|;)\s*p=[A-Za-z0-9+/=]{16,}/.test(value),
+        ),
+      })),
+    ),
+    findDmarc(resolve, domain),
+  ]);
+  const found = keys.find((entry) => entry.key);
+  if (found?.key) {
+    dkim = {
+      status: "pass",
+      selector: found.selector,
+      record: found.key,
+      message: `DKIM key found (selector "${found.selector}").`,
+    };
   }
 
   // DMARC
-  const dmarcFound = await findDmarc(resolve, domain);
   const policy =
     dmarcFound?.record.match(/(?:^|;)\s*p=([a-z]+)/i)?.[1]?.toLowerCase() ?? null;
   const dmarc: DomainAuthentication["dmarc"] = !dmarcFound

@@ -27,15 +27,7 @@ import {
 import { Switch } from "@/components/ui/codelit/switch";
 import type { EspConfig, EspConnectionInput, EspProvider } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
-
-const PROVIDERS: Array<{ value: EspProvider; label: string }> = [
-  { value: "smtp", label: "Custom SMTP" },
-  { value: "sendgrid", label: "SendGrid" },
-  { value: "mailgun", label: "Mailgun" },
-  { value: "postmark", label: "Postmark" },
-  { value: "ses", label: "Amazon SES" },
-  { value: "resend", label: "Resend" },
-];
+import { ESP_PROVIDERS } from "@/lib/esp-providers";
 
 type FormState = {
   name: string;
@@ -235,7 +227,7 @@ export function EspConfigurationDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PROVIDERS.map((provider) => (
+                {ESP_PROVIDERS.map((provider) => (
                   <SelectItem key={provider.value} value={provider.value}>
                     {provider.label}
                   </SelectItem>
