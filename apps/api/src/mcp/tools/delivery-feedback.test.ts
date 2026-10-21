@@ -19,6 +19,7 @@ const mocks = {
 };
 
 mock.module("../../settings/esp/queries", () => ({
+  checkAndRememberDomainAuthentication: vi.fn(),
   getEspConfigByEspId: mocks.getEspConfigByEspId,
   listEspConfigs: mocks.listEspConfigs,
 }));

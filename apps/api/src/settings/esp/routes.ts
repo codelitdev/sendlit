@@ -9,8 +9,9 @@ import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/tran
 import { effectiveDailySendLimit, warmupState } from "../../mail/warmup";
 import { captureEvent } from "../../observability";
 import { getTeamMembership } from "../../team/queries";
-import { checkDomainAuthentication } from "./domain-auth";
+
 import {
+  checkAndRememberDomainAuthentication,
   createEspConfig,
   deleteEspConfig,
   type EspConfig,
@@ -135,7 +136,10 @@ const collectionImpl = s.router(contract.settings.esps, {
   domainAuthentication: async ({ params, query, req }) => {
     const config = await getEspConfigByEspId((req as any).teamId, params.espId);
     if (!config) return { status: 404, body: { error: "ESP not found" } };
-    const result = await checkDomainAuthentication(config, query);
+    const result = await checkAndRememberDomainAuthentication(
+      config,
+      query.dkimSelector,
+    );
     if (!result) return { status: 422, body: { error: "from_email_missing" } };
     return { status: 200, body: result };
   },
