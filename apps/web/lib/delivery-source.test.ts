@@ -7,6 +7,14 @@ describe("presentDeliverySourceError", () => {
       "This ESP can't be removed while it is used by an active sequence, queued email, or delivery integration.",
     );
   });
+
+  it("explains paused and suspended sending instead of showing the code", () => {
+    for (const code of ["sending_paused", "team_sending_suspended"]) {
+      const message = presentDeliverySourceError(code);
+      expect(message).not.toBe(code);
+      expect(message).toStartWith("Sending is");
+    }
+  });
 });
 
 describe("isDeletedDeliverySource", () => {
