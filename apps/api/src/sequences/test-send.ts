@@ -13,6 +13,7 @@ import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries"
 import { renderCampaignHtml } from "../mail/campaign";
 import { sendMail } from "../mail/send";
 import { captureEvent } from "../observability";
+import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
@@ -94,6 +95,9 @@ export async function sendSequenceEmailTest({
   if (recipients.length === 0) throw new Error("test_recipients_required");
   if (recipients.length > MAX_TEST_RECIPIENTS)
     throw new Error("too_many_test_recipients");
+  // The footer needs the team's mailing address, as a real send does; say so
+  // instead of failing inside the renderer.
+  await assertMailingAddressConfigured(teamId);
 
   // Same source the real send uses: the pin once started, otherwise what
   // starting it now would resolve.

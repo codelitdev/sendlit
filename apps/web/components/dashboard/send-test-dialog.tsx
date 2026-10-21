@@ -3,6 +3,7 @@
 import { FlaskConical } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { Button } from "@/components/ui/codelit/button";
 import {
   Dialog,
@@ -16,7 +17,6 @@ import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import { sendSequenceEmailTest } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
-import { presentDeliverySourceError } from "@/lib/delivery-source";
 
 const MAX_RECIPIENTS = 5;
 
@@ -96,7 +96,7 @@ export function SendTestDialog({
         err instanceof ApiError
           ? err.message === "test_send_limit_reached"
             ? "Too many test emails in the last hour. Try again later."
-            : presentDeliverySourceError(err.message)
+            : err.message
           : "Failed to send the test",
       );
     } finally {
@@ -134,7 +134,11 @@ export function SendTestDialog({
                 ? ` Last test sent ${new Date(lastTestSentAt).toLocaleString()}.`
                 : " No test sent yet."}
             </p>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && (
+              <p className="text-sm text-destructive">
+                <SendErrorMessage error={error} />
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={sending}>
