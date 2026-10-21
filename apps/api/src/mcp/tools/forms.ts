@@ -3,14 +3,27 @@ import { z } from "zod";
 import {
   createForm,
   deleteForm,
+  FormSenderError,
   getForm,
   listForms,
-  toPublicForm,
+  toPublicForms,
   updateForm,
 } from "../../forms/queries";
 import type { McpToolRegistrar } from "../tool-registry";
 import { getTeamId } from "./auth";
-import { AUTH_ERROR, jsonResult, NOT_FOUND } from "./responses";
+import { AUTH_ERROR, errorResult, jsonResult, NOT_FOUND } from "./responses";
+
+/** Double opt-in needs a sender; explain instead of failing generically. */
+async function withSenderCheck(run: () => Promise<unknown>) {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof FormSenderError) {
+      return errorResult(`confirmation_sender_unavailable: ${error.issue}`);
+    }
+    throw error;
+  }
+}
 
 export function registerFormTools(server: McpToolRegistrar): void {
   server.registerTool(
@@ -23,7 +36,9 @@ export function registerFormTools(server: McpToolRegistrar): void {
     async (extra: any) => {
       const teamId = getTeamId(extra);
       if (!teamId) return AUTH_ERROR;
-      return jsonResult({ items: (await listForms(teamId)).map(toPublicForm) });
+      return jsonResult({
+        items: await toPublicForms(teamId, await listForms(teamId)),
+      });
     },
   );
 
@@ -31,7 +46,7 @@ export function registerFormTools(server: McpToolRegistrar): void {
     "create_signup_form",
     {
       description:
-        "Creates a public signup form. People subscribe on its hosted page (`url`) or via an HTML form on any site posting `email` (and `name`) to that URL. Double opt-in (default) emails a confirmation link first; new subscribers get the form's tags and trigger subscriber:added sequences (e.g. a welcome email).",
+        "Creates a public signup form. People subscribe on its hosted page (`url`) or via an HTML form on any site posting `email` (and `name`) to that URL. Double opt-in (default) emails a confirmation link first; new subscribers get the form's tags and trigger subscriber:added sequences (e.g. a welcome email). Double opt-in needs a sending mailbox: without one this fails with confirmation_sender_unavailable. `sendingIssue` on a form says why its confirmations can't be sent.",
       inputSchema: createSignupFormBodySchema.shape,
       outputSchema: signupFormSchema,
       annotations: {
@@ -43,7 +58,9 @@ export function registerFormTools(server: McpToolRegistrar): void {
     async (args: any, extra: any) => {
       const teamId = getTeamId(extra);
       if (!teamId) return AUTH_ERROR;
-      return jsonResult(toPublicForm(await createForm(teamId, args)));
+      return withSenderCheck(async () =>
+        jsonResult((await toPublicForms(teamId, [await createForm(teamId, args)]))[0]),
+      );
     },
   );
 
@@ -59,14 +76,15 @@ export function registerFormTools(server: McpToolRegistrar): void {
       const teamId = getTeamId(extra);
       if (!teamId) return AUTH_ERROR;
       const form = await getForm(teamId, args.formId);
-      return form ? jsonResult(toPublicForm(form)) : NOT_FOUND;
+      return form ? jsonResult((await toPublicForms(teamId, [form]))[0]) : NOT_FOUND;
     },
   );
 
   server.registerTool(
     "update_signup_form",
     {
-      description: "Updates a signup form's name, tags, double opt-in or redirect URL.",
+      description:
+        "Updates a signup form's name, tags, double opt-in or redirect URL. Turning double opt-in on fails with confirmation_sender_unavailable when the team has no sending mailbox.",
       inputSchema: {
         formId: z.string(),
         ...createSignupFormBodySchema.partial().shape,
@@ -82,8 +100,10 @@ export function registerFormTools(server: McpToolRegistrar): void {
       const teamId = getTeamId(extra);
       if (!teamId) return AUTH_ERROR;
       const { formId, ...patch } = args;
-      const form = await updateForm(teamId, formId, patch);
-      return form ? jsonResult(toPublicForm(form)) : NOT_FOUND;
+      return withSenderCheck(async () => {
+        const form = await updateForm(teamId, formId, patch);
+        return form ? jsonResult((await toPublicForms(teamId, [form]))[0]) : NOT_FOUND;
+      });
     },
   );
 

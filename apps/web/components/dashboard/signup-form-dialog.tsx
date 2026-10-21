@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/codelit/button";
 import {
@@ -34,6 +35,7 @@ export function SignupFormDialog({
   const [redirectUrl, setRedirectUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [senderIssue, setSenderIssue] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -42,11 +44,13 @@ export function SignupFormDialog({
     setDoubleOptIn(form?.doubleOptIn ?? true);
     setRedirectUrl(form?.redirectUrl ?? "");
     setError(null);
+    setSenderIssue(null);
   }, [open, form]);
 
   async function submit() {
     setSaving(true);
     setError(null);
+    setSenderIssue(null);
     const body = {
       name: name.trim(),
       tags: tags
@@ -63,6 +67,16 @@ export function SignupFormDialog({
       onOpenChange(false);
       onSaved(saved);
     } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.message === "confirmation_sender_unavailable"
+      ) {
+        setSenderIssue(
+          (err.body as { message?: string } | undefined)?.message ??
+            "This team can't send email right now.",
+        );
+        return;
+      }
       setError(err instanceof ApiError ? err.message : "Failed to save the form");
     } finally {
       setSaving(false);
@@ -128,6 +142,15 @@ export function SignupFormDialog({
               Leave empty to show SendLit&apos;s thank-you page.
             </p>
           </div>
+          {senderIssue && (
+            <p className="text-sm text-destructive">
+              Double opt-in needs a way to email confirmation links. {senderIssue}{" "}
+              <Link href="/settings?tab=esp" className="underline underline-offset-4">
+                Open email settings
+              </Link>{" "}
+              or turn off double opt-in.
+            </p>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>

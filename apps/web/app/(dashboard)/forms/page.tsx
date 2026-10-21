@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
@@ -45,6 +46,9 @@ export default function SignupFormsPage() {
   const [copied, setCopied] = useState(false);
   const [deleting, setDeleting] = useState<SignupForm | null>(null);
 
+  // The issue is the team's, so every affected form reports the same one.
+  const sendingIssue = forms?.find((form) => form.sendingIssue)?.sendingIssue ?? null;
+
   async function load() {
     setError(null);
     try {
@@ -85,6 +89,15 @@ export default function SignupFormsPage() {
       />
 
       {error && <Banner className="mb-4">{error}</Banner>}
+      {sendingIssue && (
+        <Banner variant="warning" className="mb-4">
+          Double opt-in forms can&apos;t email confirmation links, so their signups
+          fail. {sendingIssue}{" "}
+          <Link href="/settings?tab=esp" className="underline underline-offset-4">
+            Open email settings
+          </Link>
+        </Banner>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -119,9 +132,16 @@ export default function SignupFormsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">
-                        {form.doubleOptIn ? "Double" : "Single"}
-                      </Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="outline">
+                          {form.doubleOptIn ? "Double" : "Single"}
+                        </Badge>
+                        {form.sendingIssue && (
+                          <Badge variant="destructive">
+                            Can&apos;t send confirmations
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <a

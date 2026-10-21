@@ -10,6 +10,8 @@ const mocks = {
   fireEvent: mock(async () => undefined),
   consumeRateLimit: mock(async () => true),
   createTransactionalEmail: mock(async (_input: any) => ({})),
+  resolveDeliverySource: mock(async (..._args: any[]): Promise<any> => ({})),
+  captureError: mock((_input: any) => undefined),
 };
 mock.module("../automation/fire-event", () => ({ fireEvent: mocks.fireEvent }));
 mock.module("../services/rate-counter", () => ({
@@ -17,6 +19,16 @@ mock.module("../services/rate-counter", () => ({
 }));
 mock.module("../transactional/queries", () => ({
   createTransactionalEmail: mocks.createTransactionalEmail,
+}));
+const realDelivery = await import("../delivery/queries");
+mock.module("../delivery/queries", () => ({
+  ...realDelivery,
+  resolveDeliverySource: mocks.resolveDeliverySource,
+}));
+const realObservability = await import("../observability");
+mock.module("../observability", () => ({
+  ...realObservability,
+  captureError: mocks.captureError,
 }));
 
 const { eq } = await import("drizzle-orm");
@@ -28,9 +40,15 @@ const { addOrStrengthenSuppression } = await import(
   "../delivery-feedback/suppression-queries"
 );
 const { findContactByEmail } = await import("../contacts/queries");
-const { confirmSignup, createForm, submitSignup, toPublicForm } = await import(
-  "./queries"
-);
+const {
+  confirmSignup,
+  createForm,
+  FormSenderError,
+  submitSignup,
+  toPublicForm,
+  toPublicForms,
+  updateForm,
+} = await import("./queries");
 const { default: publicRoutes } = await import("./public-routes");
 type TestDb = import("../test/db").TestDb;
 
@@ -54,6 +72,9 @@ const confirmationToken = () =>
 beforeEach(async () => {
   mocks.fireEvent.mockClear();
   mocks.createTransactionalEmail.mockClear();
+  mocks.createTransactionalEmail.mockImplementation(async () => ({}));
+  mocks.resolveDeliverySource.mockImplementation(async () => ({}));
+  mocks.captureError.mockClear();
   mocks.consumeRateLimit.mockImplementation(async () => true);
   await truncateAll(tdb);
 });
@@ -281,5 +302,99 @@ describe("public form routes", () => {
     expect(
       (await requestApp(app(), "/f/confirm/nope", { method: "POST" })).status,
     ).toBe(404);
+  });
+
+  describe("without a sender", () => {
+    const noSender = () =>
+      mocks.resolveDeliverySource.mockImplementation(async () => {
+        throw new Error("delivery_source_unavailable");
+      });
+
+    it("refuses to create or switch on double opt-in, but allows single opt-in", async () => {
+      const { team } = await seedTeamAndContact(tdb);
+      noSender();
+
+      const error = await createForm(team.id, { name: "Newsletter" }).catch((e) => e);
+      expect(error).toBeInstanceOf(FormSenderError);
+      expect(error.message).toBe("confirmation_sender_unavailable");
+      expect(error.issue).toContain("no active sending mailbox");
+
+      const single = await createForm(team.id, { name: "Single", doubleOptIn: false });
+      expect(
+        await updateForm(team.id, single.formId, { doubleOptIn: true }).catch((e) => e),
+      ).toBeInstanceOf(FormSenderError);
+      expect(
+        (await updateForm(team.id, single.formId, { name: "Renamed" }))?.name,
+      ).toBe("Renamed");
+    });
+
+    it("flags double opt-in forms that can no longer send", async () => {
+      const { team } = await seedTeamAndContact(tdb);
+      const double = await createForm(team.id, { name: "Double" });
+      const single = await createForm(team.id, { name: "Single", doubleOptIn: false });
+      // An already double opt-in form can still be edited once the sender goes.
+      noSender();
+      await updateForm(team.id, double.formId, { name: "Double!", doubleOptIn: true });
+
+      const [doubleView, singleView] = await toPublicForms(team.id, [double, single]);
+      expect(doubleView.sendingIssue).toContain("no active sending mailbox");
+      expect(singleView.sendingIssue).toBeNull();
+      mocks.resolveDeliverySource.mockImplementation(async () => ({}));
+      expect((await toPublicForms(team.id, [double]))[0].sendingIssue).toBeNull();
+    });
+
+    it("answers every submission with the same error and reports it", async () => {
+      const { team } = await seedTeamAndContact(tdb, { team: { name: "Acme" } });
+      const form = await createForm(team.id, { name: "Newsletter" });
+      await addOrStrengthenSuppression({
+        teamId: team.id,
+        recipientEmail: "gone@example.com",
+        reason: "hard_bounce",
+        actorType: "system",
+      });
+      noSender();
+      const post = (body: Record<string, string>) =>
+        requestApp(app(), `/f/${form.formId}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+      for (const body of <Record<string, string>[]>[
+        { email: "new@example.com" },
+        { email: "gone@example.com" },
+        { email: "bot@example.com", website: "spam" },
+      ]) {
+        const response = await post(body);
+        expect(response.status).toBe(503);
+        expect(response.json()).toMatchObject({ error: "form_unavailable" });
+      }
+      const page = await formPost(`/f/${form.formId}`, { email: "html@example.com" });
+      expect(page.status).toBe(503);
+      expect(page.body).toContain("can&#39;t accept signups right now");
+      expect(mocks.createTransactionalEmail).not.toHaveBeenCalled();
+      expect(mocks.captureError).toHaveBeenCalledTimes(4);
+      expect(mocks.captureError.mock.calls[0][0]).toMatchObject({
+        source: "forms.submit",
+        teamId: team.id,
+        context: { form_id: form.formId },
+      });
+    });
+
+    it("reports a confirmation email that fails to send", async () => {
+      const { team } = await seedTeamAndContact(tdb);
+      const form = await createForm(team.id, { name: "Newsletter" });
+      mocks.createTransactionalEmail.mockImplementation(async () => {
+        throw new Error("esp_not_configured");
+      });
+
+      expect(
+        await submitSignup({ form, teamName: "Acme", email: "new@example.com" }),
+      ).toBe("unavailable");
+      expect(mocks.captureError.mock.calls[0][0]).toMatchObject({
+        source: "forms.confirmation_email",
+        teamId: team.id,
+      });
+    });
   });
 });

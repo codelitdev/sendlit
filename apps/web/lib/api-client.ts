@@ -8,9 +8,12 @@ import {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The response body, for errors that carry more than a code. */
+  body?: unknown;
+  constructor(status: number, message: string, body?: unknown) {
     super(message);
     this.status = status;
+    this.body = body;
     this.name = "ApiError";
   }
 }
