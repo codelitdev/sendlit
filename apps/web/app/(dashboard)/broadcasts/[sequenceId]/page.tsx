@@ -52,6 +52,7 @@ import { broadcastScheduledFor, presentBroadcastStatus } from "@/lib/broadcast";
 import {
   isDeletedDeliverySource,
   presentDeliverySourceError,
+  sendingOptionFor,
 } from "@/lib/delivery-source";
 import { sequenceStatsMetrics } from "@/lib/stats";
 import { useSegments } from "@/lib/use-segments";
@@ -315,6 +316,7 @@ export default function BroadcastEditorPage({
                 </Button>
                 {sequence.emails[0] && (
                   <SendTestDialog
+                    sendingVia={sendingOptionFor(sendingOptions, meta?.deliverySource)}
                     sequenceId={sequenceId}
                     emailId={sequence.emails[0].emailId}
                     lastTestSentAt={sequence.emails[0].lastTestSentAt}

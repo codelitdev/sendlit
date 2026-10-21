@@ -15,8 +15,10 @@ import {
 } from "@/components/ui/codelit/dialog";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
+import type { SendingOption } from "@/lib/api";
 import { sendSequenceEmailTest } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
+import { sendingOptionLabel } from "@/lib/delivery-source";
 
 const MAX_RECIPIENTS = 5;
 
@@ -40,6 +42,7 @@ async function currentUserEmail(): Promise<string> {
  * editor save pending changes first so the test matches what's on screen.
  */
 export function SendTestDialog({
+  sendingVia,
   sequenceId,
   emailId,
   lastTestSentAt,
@@ -53,6 +56,8 @@ export function SendTestDialog({
   beforeSend?: () => Promise<void>;
   onSent?: (lastTestSentAt: string | null) => void;
   disabled?: boolean;
+  /** The delivery source the test goes through, when known. */
+  sendingVia?: SendingOption | null;
 }) {
   const [open, setOpen] = useState(false);
   const [recipients, setRecipients] = useState("");
@@ -83,7 +88,9 @@ export function SendTestDialog({
       const result = await sendSequenceEmailTest(sequenceId, emailId, to);
       onSent?.(result.lastTestSentAt);
       if (result.sent.length > 0) {
-        toast.success(`Test sent to ${result.sent.join(", ")}`);
+        toast.success(
+          `Test sent to ${result.sent.join(", ")}${sendingVia ? ` via ${sendingVia.name}` : ""}`,
+        );
       }
       if (result.skipped.length > 0) {
         toast.warning(
@@ -128,6 +135,13 @@ export function SendTestDialog({
               onChange={(e) => setRecipients(e.target.value)}
               placeholder="you@example.com"
             />
+            {sendingVia && (
+              <p className="text-sm">
+                Sends through{" "}
+                <span className="font-medium">{sendingOptionLabel(sendingVia)}</span>,
+                the same delivery source as the real email.
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               Up to {MAX_RECIPIENTS} addresses, separated by commas.
               {lastTestSentAt
