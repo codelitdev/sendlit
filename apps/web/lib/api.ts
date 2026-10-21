@@ -87,6 +87,7 @@ async function unwrap<T>(
   throw new ApiError(
     result.status,
     errorBody?.error || `Request failed (${result.status})`,
+    result.body,
   );
 }
 

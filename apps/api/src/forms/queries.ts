@@ -4,8 +4,9 @@ import { emailDomain, isDisposableDomain } from "../abuse/email-domains";
 import { createContact, findContactByEmail, updateContact } from "../contacts/queries";
 import { db } from "../db/client";
 import { signupConfirmations, signupForms, teams } from "../db/schema";
+import { resolveDeliverySource } from "../delivery/queries";
 import { getActiveSuppressionReasons } from "../delivery-feedback/suppression-queries";
-import { captureEvent } from "../observability";
+import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import { consumeRateLimit } from "../services/rate-counter";
 import { createTransactionalEmail } from "../transactional/queries";
@@ -15,8 +16,9 @@ import { getSiteUrl } from "../utils/mail";
 
 export type SignupForm = typeof signupForms.$inferSelect;
 
-/** A form as the API returns it, with its hosted page URL. */
-export function toPublicForm(form: SignupForm) {
+/** A form as the API returns it, with its hosted page URL. `sendingIssue`
+ * is why a double opt-in form can't email confirmations right now. */
+export function toPublicForm(form: SignupForm, sendingIssue: string | null = null) {
   return {
     formId: form.formId,
     name: form.name,
@@ -24,9 +26,59 @@ export function toPublicForm(form: SignupForm) {
     doubleOptIn: form.doubleOptIn,
     redirectUrl: form.redirectUrl,
     url: `${getSiteUrl()}/f/${form.formId}`,
+    sendingIssue: form.doubleOptIn ? sendingIssue : null,
     createdAt: form.createdAt.toISOString(),
     updatedAt: form.updatedAt.toISOString(),
   };
+}
+
+/** The team's forms as the API returns them, checking the sender once. */
+export async function toPublicForms(teamId: string, forms: SignupForm[]) {
+  const issue = forms.some((form) => form.doubleOptIn)
+    ? await confirmationSenderIssue(teamId)
+    : null;
+  return forms.map((form) => toPublicForm(form, issue));
+}
+
+function senderIssueMessage(code: string): string {
+  switch (code) {
+    case "delivery_source_unavailable":
+    case "organization_delivery_disabled":
+    case "team_esp_disabled":
+    case "esp_not_configured":
+      return "This team has no active sending mailbox to send confirmation emails from. Add one under Settings → Email service providers.";
+    case "delivery_source_required":
+      return "This team can send from more than one mailbox and has no default. Choose a default sending mailbox in Settings.";
+    case "team_sending_suspended":
+    case "organization_sending_suspended":
+    case "sending_paused":
+      return "Sending is paused for this team, so confirmation emails can't go out.";
+    default:
+      return "This team can't send email right now, so confirmation emails can't go out.";
+  }
+}
+
+/** Why the team can't email double opt-in confirmations right now, or null.
+ * Uses the same sender choice as the confirmation email itself. */
+export async function confirmationSenderIssue(teamId: string): Promise<string | null> {
+  try {
+    await resolveDeliverySource(teamId, undefined, "transactional");
+    return null;
+  } catch (error) {
+    return senderIssueMessage((error as Error).message);
+  }
+}
+
+/** A double opt-in form was turned on for a team that can't send. */
+export class FormSenderError extends Error {
+  constructor(readonly issue: string) {
+    super("confirmation_sender_unavailable");
+  }
+}
+
+async function assertCanSendConfirmations(teamId: string) {
+  const issue = await confirmationSenderIssue(teamId);
+  if (issue) throw new FormSenderError(issue);
 }
 
 const CONFIRMATION_TTL_MS = 3 * 24 * 60 * 60 * 1000;
@@ -80,6 +132,7 @@ export async function createForm(
     redirectUrl?: string | null;
   },
 ): Promise<SignupForm> {
+  if (input.doubleOptIn ?? true) await assertCanSendConfirmations(teamId);
   const [row] = await db
     .insert(signupForms)
     .values({
@@ -103,6 +156,11 @@ export async function updateForm(
     redirectUrl?: string | null;
   },
 ): Promise<SignupForm | null> {
+  if (input.doubleOptIn) {
+    const current = await getForm(teamId, formId);
+    if (!current) return null;
+    if (!current.doubleOptIn) await assertCanSendConfirmations(teamId);
+  }
   const [row] = await db
     .update(signupForms)
     .set({
@@ -131,7 +189,8 @@ export type SignupOutcome =
   | "confirmation_sent"
   | "subscribed"
   | "rate_limited"
-  | "invalid";
+  | "invalid"
+  | "unavailable";
 
 /** Subscribes (or resubscribes) a contact through a form and adds its tags.
  * Creating the contact fires "subscriber added" sequences, e.g. a welcome
@@ -160,7 +219,8 @@ async function subscribe(form: SignupForm, email: string, name?: string | null) 
  * addresses straight away but never resubscribes someone who unsubscribed.
  * Suppressed, disposable and rate-limited submissions are dropped quietly:
  * the caller always gets the same answer, so the form can't be used to find
- * out who is on the list.
+ * out who is on the list. Callers check `confirmationSenderIssue` first, so
+ * a team that can't send answers `unavailable` to every address alike.
  */
 export async function submitSignup(input: {
   form: SignupForm;
@@ -231,6 +291,13 @@ export async function submitSignup(input: {
       { form_id: input.form.formId, error: (error as Error).message },
       "signup confirmation email not sent",
     );
+    captureError({
+      error,
+      source: "forms.confirmation_email",
+      teamId: input.form.teamId,
+      context: { form_id: input.form.formId },
+    });
+    return "unavailable";
   }
   captureEvent({
     event: "signup_form_confirmation_sent",

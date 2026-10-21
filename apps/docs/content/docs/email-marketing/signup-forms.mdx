@@ -21,6 +21,20 @@ New subscribers trigger "subscriber added" sequences, so a welcome sequence
 starts on its own. The confirmation email is sent through your team's email
 provider and appears in the transactional log.
 
+## Double opt-in needs a sending mailbox
+
+The confirmation email has to come from somewhere, so you can't create a
+double opt-in form, or switch a form to double opt-in, until your team can
+send email. Add a mailbox under **Settings → Email service providers** (or
+ask your organization to share one), or use single opt-in.
+
+If sending stops working later, for example because the mailbox was removed
+or sending was paused, the **Signup forms** page warns you and marks the
+affected forms **Can't send confirmations**. Until you fix it, those forms
+turn signups away with "This form can't accept signups right now" rather than
+pretending a confirmation email was sent. The API returns the reason in the
+form's `sendingIssue` field.
+
 ## Share or embed a form
 
 Every form has a hosted page at `https://<your SendLit API>/f/<formId>`. Open
@@ -50,12 +64,15 @@ await fetch("https://<your SendLit API>/f/frm_...", {
 });
 // 200 { "status": "confirmation_sent" | "subscribed" }
 // 400 { "error": "invalid_email" }, 429 { "error": "too_many_requests" }
+// 503 { "error": "form_unavailable", "message": "..." } when the team can't
+//     send the confirmation email
 ```
 
 ## What SendLit filters out
 
 The answer is the same whether or not an address was accepted, so a form
-can't be used to find out who is on your list. SendLit quietly drops:
+can't be used to find out who is on your list. (A form that can't send
+confirmations answers `503` to every address alike.) SendLit quietly drops:
 
 - addresses on your [suppression list](/activity/suppressions), and disposable
   email domains;

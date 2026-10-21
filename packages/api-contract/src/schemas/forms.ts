@@ -9,11 +9,24 @@ export const signupFormSchema = z.object({
   doubleOptIn: z.boolean(),
   redirectUrl: z.string().nullable(),
   url: z.string(),
+  sendingIssue: z
+    .string()
+    .nullable()
+    .describe(
+      "Why this double opt-in form can't email confirmation links right now (e.g. the team has no sending mailbox); null when it can. Submissions fail until it's fixed.",
+    ),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 
 export type SignupForm = z.infer<typeof signupFormSchema>;
+
+/** Double opt-in was requested but the team can't send the confirmation
+ * email; `message` says what to fix. */
+export const signupFormSenderErrorSchema = z.object({
+  error: z.literal("confirmation_sender_unavailable"),
+  message: z.string(),
+});
 
 export const createSignupFormBodySchema = z.object({
   name: z.string().trim().min(1).max(200),
