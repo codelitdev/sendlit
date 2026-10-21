@@ -19,6 +19,7 @@ import {
 import { db } from "../db/client";
 import * as schema from "../db/schema";
 import { MCP_SCOPES_SUPPORTED } from "../mcp/policy";
+import { captureError } from "../observability";
 import { ensureDefaultOrganization } from "../organization/queries";
 import logger from "../services/log";
 import { fetchClientMetadataResource } from "./cimd-fetch";
@@ -219,7 +220,11 @@ export const auth = betterAuth({
             organizationId: organization?.id ?? null,
             ip: clientIp(context),
           }).catch((error) =>
-            logger.error({ error: error.message }, "recording a signup failed"),
+            captureError({
+              error,
+              source: "abuse.record_signup",
+              context: { organization_id: organization?.id },
+            }),
           );
         },
       },

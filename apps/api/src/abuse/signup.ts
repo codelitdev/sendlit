@@ -6,6 +6,7 @@ import { sharedRedis } from "../services/redis-client";
 import { abuseControlsEnabled, readAbuseConfig } from "./config";
 import { emailDomain, isDisposableDomain, isFreeEmailDomain } from "./email-domains";
 import { pauseTeamForReview, raiseAbuseFlag } from "./flags";
+import { recordAbuseEvent } from "./telemetry";
 
 /** Set by the API (from Express's `req.ip`, which honours
  * `ENABLE_TRUST_PROXY`) on every auth request; any client value is
@@ -21,6 +22,14 @@ export class SignupBlockedError extends Error {
     super(code);
     this.name = "SignupBlockedError";
   }
+}
+
+function blockSignup(code: SignupBlockedError["code"], userMessage: string): never {
+  recordAbuseEvent("signup_blocked", {
+    source: "abuse.signup",
+    properties: { reason: code },
+  });
+  throw new SignupBlockedError(code, userMessage);
 }
 
 function signupCounterKey(ip: string, now = new Date()) {
@@ -49,19 +58,16 @@ export async function assertSignupAllowed(input: {
   const config = readAbuseConfig();
   const domain = emailDomain(input.email);
   if (config.blockDisposableSignups && isDisposableDomain(domain)) {
-    throw new SignupBlockedError(
+    blockSignup(
       "disposable_email",
       "Disposable or temporary email addresses can't be used to sign up. Use your work or personal email.",
     );
   }
   if (config.freeEmailSignupPolicy === "block" && isFreeEmailDomain(domain)) {
-    throw new SignupBlockedError(
-      "free_email",
-      "Sign up with an email address on your own domain.",
-    );
+    blockSignup("free_email", "Sign up with an email address on your own domain.");
   }
   if (input.ip && (await signupsToday(input.ip)) >= config.signupsPerIpPerDay) {
-    throw new SignupBlockedError(
+    blockSignup(
       "too_many_signups",
       "Too many accounts were created from your network today. Try again tomorrow or contact support.",
     );

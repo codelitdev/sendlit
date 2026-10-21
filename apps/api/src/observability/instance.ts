@@ -51,6 +51,15 @@ const PROPERTY_ALLOWLIST = new Set([
   "billing_alert",
   "age_ms",
   "count",
+  // Hosted abuse controls (abuse/telemetry.ts): codes and internal ids only.
+  "organization_id",
+  "form_id",
+  "kind",
+  "severity",
+  "verdict",
+  "reason",
+  "outcome",
+  "scan_mode",
 ]);
 
 /**
