@@ -8,6 +8,16 @@
 - SendLit is an email marketing platform on top of the customer's own ESP, not an ESP. Push back on sending-infrastructure work (MTAs, IP pools, SMTP relay), but don't refuse marketing features because an ESP also has them, and keep features provider-neutral. See [ADR 0005](docs/decisions/0005-marketing-platform-not-esp.md).
 - Always send important events and errors to PostHog through `@codelitdev/observability`, via the API's `src/observability` wrappers (`captureEvent`, `captureError`). Add any new property name to `PROPERTY_ALLOWLIST` in `src/observability/instance.ts`, or it is dropped. Send codes and internal ids only, never email addresses, IPs or other personal data.
 
+## Design Guidelines
+
+- Loading states show only the animated SendLit mark, large and dead centre in the area that is loading (page, card or dialog body), with no "Loading…" text. Use the `Loading` component (`apps/web/components/dashboard/loading.tsx`); don't build your own spinner or loading text.
+- Dialogs follow the domain authentication dialog (`apps/web/components/dashboard/domain-authentication-dialog.tsx`):
+  - **Header**, separated by a rule: a title that names the object (code-like values such as a domain in monospace), one or two plain sentences on why it matters, and a progress summary when the dialog tracks several steps (for example "1 of 3 done" with what's left).
+  - **Body** that scrolls on its own: one collapsible section per step or topic, each with a status icon, a name, a one-line summary, a status pill and a chevron. Sections that need attention start open; finished ones start folded.
+  - **Inside a section**: one sentence saying exactly what to do, then the details. Technical values (DNS names, keys, IDs) are monospace with a copy button; values the user gets elsewhere link there with an external-link icon. Advanced or rarely needed options sit behind a collapsible question ("Using another provider's DKIM selector?").
+  - **Footer**, separated by a rule: context on the left (when it was last checked, how long changes take), actions on the right: a secondary Close and one primary action with an icon.
+  - **Status** is colour plus words, never colour alone: green for done, amber for needs attention, red for missing.
+
 ## CodeLit Platform
 
 SendLit is built on the [CodeLit Platform](https://github.com/codelitdev/platform) (`~/dev/proj/platform`) and follows its conventions. Prefer a Platform package over SendLit code for shared infrastructure.

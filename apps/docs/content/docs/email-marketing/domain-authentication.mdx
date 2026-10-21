@@ -50,7 +50,10 @@ tool.
 | Other SMTP | Your mail server's SPF record | Your mail server's DKIM selector |
 
 For SES, SendLit reads the region from the SMTP host
-(`email-smtp.<region>.amazonaws.com`).
+(`email-smtp.<region>.amazonaws.com`). SES names its DKIM records with random
+tokens, so SendLit can't find them on its own: paste one token (or a whole
+`<token>._domainkey.<domain>` name) from the SES console's DKIM section into
+**Easy DKIM token** and press **Check again**.
 
 A domain may have only **one** SPF record. If you already have one (for
 example for Google Workspace), add the provider's `include:` to it instead of

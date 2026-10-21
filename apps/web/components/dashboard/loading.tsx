@@ -1,28 +1,15 @@
 import { Loader } from "@codelitdev/design-system";
 import { cn } from "@/lib/utils";
 
-/** Standard "loading" state — the design system's animated SendLit mark.
- * `centered` places it in the middle of the surrounding area, such as a
- * dialog body, instead of at its top left. */
-export function Loading({
-  className,
-  centered = false,
-}: {
-  className?: string;
-  centered?: boolean;
-}) {
+/** Standard loading state: the design system's animated SendLit mark, on its
+ * own and centred in the area it fills (a page, card or dialog body). No
+ * "Loading…" text; the mark itself is a labelled `role="status"`. */
+export function Loading({ className }: { className?: string }) {
   return (
-    <p
-      className={cn(
-        "flex items-center gap-2 text-sm text-muted-foreground",
-        centered && "min-h-32 w-full justify-center",
-        className,
-      )}
-    >
+    <div className={cn("flex min-h-32 w-full items-center justify-center", className)}>
       <span className="text-primary">
-        <Loader product="sendlit" size={16} />
+        <Loader product="sendlit" size={40} />
       </span>
-      Loading…
-    </p>
+    </div>
   );
 }

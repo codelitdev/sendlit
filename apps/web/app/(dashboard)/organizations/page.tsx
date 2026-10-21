@@ -110,7 +110,6 @@ import {
   createPaidOrganizationBillingCheckout,
   deleteOrganizationEsp,
   type EspConfig,
-  type EspProvider,
   enterOrganizationTeam,
   feedbackCapableProviders,
   getBillingCatalog,
@@ -158,6 +157,7 @@ import {
   verifyOrganizationSendingDomain,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
+import { espProviderLabel } from "@/lib/esp-providers";
 import { reloadPage } from "@/lib/navigation";
 import {
   getOrganizationIdFromCookie,
@@ -166,15 +166,6 @@ import {
   setTeamIdCookie,
 } from "@/lib/tokens";
 import { cn } from "@/lib/utils";
-
-const PROVIDERS: Array<{ value: EspProvider; label: string }> = [
-  { value: "smtp", label: "Custom SMTP" },
-  { value: "resend", label: "Resend" },
-  { value: "postmark", label: "Postmark" },
-  { value: "sendgrid", label: "SendGrid" },
-  { value: "mailgun", label: "Mailgun" },
-  { value: "ses", label: "Amazon SES" },
-];
 
 const KEY_SCOPES: Array<{ value: OrganizationApiKeyScope; label: string }> = [
   { value: "organization:read", label: "Read organization" },
@@ -1832,10 +1823,7 @@ function SharedEspsSection({
               {esps.map((esp) => (
                 <TableRow key={esp.espId}>
                   <TableCell className="font-medium">{esp.name}</TableCell>
-                  <TableCell>
-                    {PROVIDERS.find((item) => item.value === esp.provider)?.label ??
-                      esp.provider}
-                  </TableCell>
+                  <TableCell>{espProviderLabel(esp.provider)}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {esp.fromEmail ?? "Not set"}
                   </TableCell>
@@ -2685,7 +2673,7 @@ function OrganizationBillingDialog({
                 Close this dialog and try again once billing plans are available.
               </div>
             ) : (
-              <Loading centered />
+              <Loading />
             )
           ) : (
             <>
@@ -2910,7 +2898,7 @@ function OrganizationPlanChangeDialog({
                 Close this dialog and try again once billing plans are available.
               </div>
             ) : (
-              <Loading centered />
+              <Loading />
             )
           ) : (
             <>

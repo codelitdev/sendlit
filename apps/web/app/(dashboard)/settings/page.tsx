@@ -55,7 +55,6 @@ import {
   deleteEsp,
   deleteTeamKey,
   type EspConfig,
-  type EspProvider,
   feedbackCapableProviders,
   type GeneralSettings,
   getGeneralSettings,
@@ -69,20 +68,8 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { presentDeliverySourceError } from "@/lib/delivery-source";
+import { espProviderLabel } from "@/lib/esp-providers";
 import { getTeamIdFromCookie } from "@/lib/tokens";
-
-const PROVIDERS: { value: EspProvider; label: string }[] = [
-  { value: "smtp", label: "Custom SMTP" },
-  { value: "sendgrid", label: "SendGrid" },
-  { value: "mailgun", label: "Mailgun" },
-  { value: "postmark", label: "Postmark" },
-  { value: "ses", label: "Amazon SES" },
-  { value: "resend", label: "Resend" },
-];
-
-const PROVIDER_LABEL: Record<EspProvider, string> = Object.fromEntries(
-  PROVIDERS.map((p) => [p.value, p.label]),
-) as Record<EspProvider, string>;
 
 const SETTINGS_TABS = ["general", "esp", "api-keys", "web"] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -582,7 +569,7 @@ export default function SettingsPage() {
                               )}
                             </span>
                           </TableCell>
-                          <TableCell>{PROVIDER_LABEL[esp.provider]}</TableCell>
+                          <TableCell>{espProviderLabel(esp.provider)}</TableCell>
                           <TableCell className="text-muted-foreground">
                             <div>{esp.fromEmail ?? "Not set"}</div>
                             {esp.warmup && !esp.warmup.complete ? (
