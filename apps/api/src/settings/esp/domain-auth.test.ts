@@ -144,4 +144,37 @@ describe("checkDomainAuthentication", () => {
     );
     expect(result?.dkim.status).toBe("fail");
   });
+
+  it("passes SES DKIM on the token's CNAME even when that token's key is empty", async () => {
+    const token = "6p3ranxrt5vvjzleljadgpakhkvklt2d";
+    const result = await checkDomainAuthentication(esp("ses"), {
+      ...dns(
+        { [`${token}._domainkey.example.com`]: [""] },
+        {
+          cname: {
+            [`${token}._domainkey.example.com`]: `${token}.dkim.amazonses.com.`,
+          },
+        },
+      ),
+      dkimSelector: token,
+    });
+    expect(result?.dkim).toMatchObject({ status: "pass", selector: token });
+    const dkimRows = (result?.records ?? []).filter((record) =>
+      record.purpose.startsWith("DKIM"),
+    );
+    expect(dkimRows.length).toBe(3);
+    expect(dkimRows.every((row) => row.present)).toBe(true);
+  });
+
+  it("doesn't pass SES DKIM when the token's CNAME points somewhere else", async () => {
+    const token = "abc123";
+    const result = await checkDomainAuthentication(esp("ses"), {
+      ...dns(
+        {},
+        { cname: { [`${token}._domainkey.example.com`]: "elsewhere.example.net" } },
+      ),
+      dkimSelector: token,
+    });
+    expect(result?.dkim.status).toBe("fail");
+  });
 });

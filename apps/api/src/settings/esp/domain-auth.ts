@@ -16,6 +16,10 @@ type ProviderGuide = {
   /** DKIM selectors the provider uses, when they are fixed. */
   dkimSelectors: string[];
   dkimRecords: (domain: string) => DnsRecord[];
+  /** Where a DKIM selector's CNAME must point, for providers that host the
+   * keys themselves. SES rotates keys across its three tokens, so a token's
+   * key can be empty while its CNAME is correct; the CNAME is what counts. */
+  dkimCnameTarget?: (selector: string) => string;
   consoleUrl: string | null;
 };
 
@@ -63,6 +67,7 @@ const GUIDES: Record<EspProvider, ProviderGuide> = {
       [1, 2, 3].map((n) =>
         fromConsole(domain, "CNAME", `<token${n}>._domainkey`, "DKIM (Easy DKIM)"),
       ),
+    dkimCnameTarget: (selector) => `${selector}.dkim.amazonses.com`,
     consoleUrl: "https://console.aws.amazon.com/ses/home#/identities",
   },
   resend: {
@@ -268,7 +273,9 @@ export async function checkDomainAuthentication(
   };
   // Look up every selector and DMARC at once; the first selector (in the
   // order above) with a key wins.
-  const [keys, dmarcFound] = await Promise.all([
+  const cnameSelector =
+    options.dkimSelector && guide.dkimCnameTarget ? options.dkimSelector : null;
+  const [keys, dmarcFound, cnameTargets] = await Promise.all([
     Promise.all(
       selectors.map(async (selector) => ({
         selector,
@@ -278,14 +285,33 @@ export async function checkDomainAuthentication(
       })),
     ),
     findDmarc(resolve, domain),
+    cnameSelector
+      ? resolveCname(`${cnameSelector}._domainkey.${domain}`).catch(
+          () => [] as string[],
+        )
+      : Promise.resolve([] as string[]),
   ]);
   const found = keys.find((entry) => entry.key);
+  const cnameTarget =
+    cnameSelector && guide.dkimCnameTarget?.(cnameSelector).toLowerCase();
   if (found?.key) {
     dkim = {
       status: "pass",
       selector: found.selector,
       record: found.key,
       message: `DKIM key found (selector "${found.selector}").`,
+    };
+  } else if (
+    cnameSelector &&
+    cnameTargets.some(
+      (target) => target.toLowerCase().replace(/\.$/, "") === cnameTarget,
+    )
+  ) {
+    dkim = {
+      status: "pass",
+      selector: cnameSelector,
+      record: `CNAME ${cnameTarget}`,
+      message: `DKIM record found (token "${cnameSelector}" points to ${cnameTarget}).`,
     };
   }
 
