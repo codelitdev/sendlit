@@ -5,6 +5,7 @@
 - For UI components, use shadcn/ui exclusively. Always use Shadcn CLI for installing components. Never hand roll standard Shadcn components. Prefer shadcn/ui components over browser-native components.
 - When dealing with a large change, work through it in layers: money-path correctness first, then enforcement, then dashboard/self-serve, then ops and docs.
 - If you are a Grok model, make sure you run the linter and tests before declaring any task done.
+- SendLit is an email marketing platform on top of the customer's own ESP, not an ESP. Push back on sending-infrastructure work (MTAs, IP pools, SMTP relay), but don't refuse marketing features because an ESP also has them, and keep features provider-neutral. See [ADR 0005](docs/decisions/0005-marketing-platform-not-esp.md).
 
 ## CodeLit Platform
 
