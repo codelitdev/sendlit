@@ -99,7 +99,7 @@ export function DomainAuthenticationDialog({
         </DialogHeader>
 
         {error && <Banner>{error}</Banner>}
-        {!result && !error && <Loading className="p-6" />}
+        {!result && !error && <Loading centered />}
 
         {result && (
           <div className="space-y-6">

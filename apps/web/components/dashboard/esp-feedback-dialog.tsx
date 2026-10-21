@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Copy, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
@@ -83,6 +83,25 @@ const CREDENTIAL_COPY: Record<string, CredentialCopy> = {
     placeholder: "Paste the HTTP webhook signing key",
     hint: "Mailgun's HTTP webhook signing key (Sending → Webhooks), used to HMAC-verify each event's timestamp and token.",
   },
+};
+
+const FEEDBACK_DOCS_URL = "https://docs.sendlit.app/email-marketing/delivery-feedback";
+
+/** The setup guide for each feedback-capable provider. */
+const SETUP_GUIDE_URL: Record<string, string> = {
+  resend: `${FEEDBACK_DOCS_URL}#resend`,
+  postmark: `${FEEDBACK_DOCS_URL}#postmark`,
+  sendgrid: `${FEEDBACK_DOCS_URL}#sendgrid`,
+  mailgun: `${FEEDBACK_DOCS_URL}#mailgun`,
+  ses: "https://docs.sendlit.app/self-hosting/amazon-ses-feedback",
+};
+
+const PROVIDER_NAME: Record<string, string> = {
+  resend: "Resend",
+  postmark: "Postmark",
+  sendgrid: "SendGrid",
+  mailgun: "Mailgun",
+  ses: "Amazon SES",
 };
 
 const DEFAULT_CREDENTIAL_COPY: CredentialCopy = {
@@ -225,14 +244,23 @@ export function EspFeedbackDialog({
         {error && <Banner>{error}</Banner>}
 
         {loading ? (
-          <Loading />
+          <Loading centered />
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Receives bounce and spam-complaint events from {esp.name} so SendLit can
               suppress future sends to addresses that hard-bounce or complain. This URL
               and {isSes ? "topic" : "secret"} are unique to this ESP — switching the
-              team&apos;s default ESP never affects it.
+              team&apos;s default ESP never affects it.{" "}
+              <a
+                href={SETUP_GUIDE_URL[esp.provider] ?? FEEDBACK_DOCS_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 underline underline-offset-4"
+              >
+                How to set this up in {PROVIDER_NAME[esp.provider] ?? "your provider"}
+                <ExternalLink className="size-3" />
+              </a>
             </p>
 
             {connection && (

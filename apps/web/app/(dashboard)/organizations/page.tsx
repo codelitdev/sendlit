@@ -2685,7 +2685,7 @@ function OrganizationBillingDialog({
                 Close this dialog and try again once billing plans are available.
               </div>
             ) : (
-              <Loading />
+              <Loading centered />
             )
           ) : (
             <>
@@ -2910,7 +2910,7 @@ function OrganizationPlanChangeDialog({
                 Close this dialog and try again once billing plans are available.
               </div>
             ) : (
-              <Loading />
+              <Loading centered />
             )
           ) : (
             <>
