@@ -53,7 +53,9 @@ For SES, SendLit reads the region from the SMTP host
 (`email-smtp.<region>.amazonaws.com`). SES names its DKIM records with random
 tokens, so SendLit can't find them on its own: paste one token (or a whole
 `<token>._domainkey.<domain>` name) from the SES console's DKIM section into
-**Easy DKIM token** and press **Check again**.
+**Easy DKIM token** and press **Check again**. Any of the three works: SES
+rotates its keys across them, so SendLit checks that the token's CNAME points to
+`<token>.dkim.amazonses.com` rather than reading the key.
 
 A domain may have only **one** SPF record. If you already have one (for
 example for Google Workspace), add the provider's `include:` to it instead of
