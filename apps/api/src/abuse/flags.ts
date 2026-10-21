@@ -9,9 +9,9 @@ import {
   teamSendingControls,
   teams,
 } from "../db/schema";
-import { captureEvent } from "../observability";
+import { captureError } from "../observability";
 import { emailOperators, operatorRecipients } from "../operations/alerts";
-import logger from "../services/log";
+import { recordAbuseEvent } from "./telemetry";
 
 export type AbuseFlag = typeof abuseFlags.$inferSelect;
 export type AbuseFlagKind = "signup" | "content" | "import";
@@ -74,14 +74,10 @@ export async function raiseAbuseFlag(input: {
     .from(organizations)
     .where(eq(organizations.id, input.organizationId))
     .limit(1);
-  logger.warn(
-    { abuse_flag: flag.flagId, kind: flag.kind, severity: flag.severity },
-    "abuse flag raised",
-  );
-  captureEvent({
-    event: "abuse_flag_raised",
+  recordAbuseEvent("abuse_flag_raised", {
     source: "abuse.flags",
-    teamId: input.teamId ?? undefined,
+    teamId: input.teamId,
+    organizationId: input.organizationId,
     properties: { kind: flag.kind, severity: flag.severity },
   });
   await emailOperators(
@@ -95,7 +91,14 @@ export async function raiseAbuseFlag(input: {
       "",
       `Review with: bun scripts/abuse.ts show ${flag.flagId}`,
     ].join("\n"),
-  ).catch((error) => logger.error({ error }, "abuse alert email failed"));
+  ).catch((error) =>
+    captureError({
+      error,
+      source: "abuse.operator_alert",
+      teamId: input.teamId,
+      context: { organization_id: input.organizationId, kind: flag.kind },
+    }),
+  );
   return flag;
 }
 
@@ -150,14 +153,14 @@ export async function pauseTeamForReview(
   reasonCode: "content_review" | "signup_review",
 ): Promise<void> {
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const organizationId = await db.transaction(async (tx) => {
     const [team] = await tx
       .select({ organizationId: teams.organizationId })
       .from(teams)
       .where(eq(teams.id, teamId))
       .limit(1)
       .for("update");
-    if (!team) return;
+    if (!team) return null;
     await tx
       .insert(teamSendingControls)
       .values({
@@ -187,7 +190,16 @@ export async function pauseTeamForReview(
       action: "team.sending_paused_for_review",
       metadata: { reason: reasonCode },
     });
+    return team.organizationId;
   });
+  if (organizationId) {
+    recordAbuseEvent("team_paused_for_review", {
+      source: "abuse.flags",
+      teamId,
+      organizationId,
+      properties: { reason: reasonCode },
+    });
+  }
 }
 
 /**
@@ -217,6 +229,12 @@ export async function resolveAbuseFlag(input: {
     .where(and(eq(abuseFlags.id, flag.id), eq(abuseFlags.status, "open")))
     .returning();
   if (!updated) return null;
+  recordAbuseEvent("abuse_flag_resolved", {
+    source: "abuse.flags",
+    teamId: flag.teamId,
+    organizationId: flag.organizationId,
+    properties: { kind: flag.kind, outcome: input.resolution },
+  });
 
   if (input.resolution === "confirmed") {
     await setOrganizationSuspended(flag.organizationId, true, input.operatorUserId);
@@ -260,7 +278,7 @@ export async function setOrganizationSuspended(
   suspended: boolean,
   operatorUserId: string,
 ): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const changed = await db.transaction(async (tx) => {
     const [organization] = await tx
       .select({ status: organizations.status })
       .from(organizations)
@@ -283,4 +301,11 @@ export async function setOrganizationSuspended(
     });
     return true;
   });
+  if (changed) {
+    recordAbuseEvent(
+      suspended ? "organization_sending_suspended" : "organization_sending_unsuspended",
+      { source: "abuse.flags", organizationId },
+    );
+  }
+  return changed;
 }

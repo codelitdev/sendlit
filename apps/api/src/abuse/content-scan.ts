@@ -9,6 +9,7 @@ import { sequenceEmails, teams } from "../db/schema";
 import { captureError } from "../observability";
 import { abuseControlsEnabled, readAbuseConfig } from "./config";
 import { pauseTeamForReview, raiseAbuseFlag } from "./flags";
+import { recordAbuseEvent } from "./telemetry";
 
 export type ScanVerdict = "clean" | "review" | "blocked";
 export type ScanResult = { verdict: ScanVerdict; reasons: string[] };
@@ -173,19 +174,27 @@ const SEVERITY: Record<ScanVerdict, number> = { clean: 0, review: 1, blocked: 2 
 export async function scanEmail(
   subject: string,
   content: unknown,
-): Promise<ScanResult> {
+): Promise<ScanResult & { mode: "heuristic" | "ai" }> {
   const heuristic = heuristicScan(subject, content);
   if (readAbuseConfig().contentScan !== "ai" || heuristic.verdict === "blocked") {
-    return heuristic;
+    return { ...heuristic, mode: "heuristic" };
   }
   try {
     const ai = await aiScan(subject, content);
     return SEVERITY[ai.verdict] > SEVERITY[heuristic.verdict]
-      ? { verdict: ai.verdict, reasons: [...ai.reasons, ...heuristic.reasons] }
-      : { verdict: heuristic.verdict, reasons: [...heuristic.reasons, ...ai.reasons] };
+      ? {
+          verdict: ai.verdict,
+          reasons: [...ai.reasons, ...heuristic.reasons],
+          mode: "ai",
+        }
+      : {
+          verdict: heuristic.verdict,
+          reasons: [...heuristic.reasons, ...ai.reasons],
+          mode: "ai",
+        };
   } catch (error) {
     captureError({ error, source: "abuse.content_scan_ai", severity: "warning" });
-    return heuristic;
+    return { ...heuristic, mode: "heuristic" };
   }
 }
 
@@ -217,6 +226,11 @@ export async function assertEmailContentAllowed(input: {
   if (verdict === "approved" || verdict === "clean") return;
   if (!verdict) {
     const result = await scanEmail(subject, content);
+    recordAbuseEvent("content_scanned", {
+      source: "abuse.content_scan",
+      teamId: input.teamId,
+      properties: { verdict: result.verdict, scan_mode: result.mode },
+    });
     verdict = result.verdict;
     reasons = result.reasons;
     await db

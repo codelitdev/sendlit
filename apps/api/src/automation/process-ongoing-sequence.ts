@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { recordPacedSend } from "../abuse/telemetry";
 import { commitSendReservation, releaseSendReservation } from "../billing/entitlements";
 import { sequenceBounceLimit } from "../config/constants";
 import {
@@ -352,6 +353,17 @@ async function attemptMailSending({
     const deferral =
       err instanceof SendDeferredError ? err : quotaExhaustionDeferral(err);
     if (deferral) {
+      if (
+        deferral.message === "marketing_hourly_pacing" ||
+        deferral.message === "marketing_daily_ramp"
+      ) {
+        await recordPacedSend({
+          teamId: team.id,
+          organizationId: team.organizationId,
+          sequenceId: sequence.sequenceId,
+          reason: deferral.message,
+        });
+      }
       // Try again once the ESP has capacity (rate limit, daily warm-up cap
       // or quota). Not a failed attempt, so the retry count (which
       // eventually marks the contact failed) stays put.

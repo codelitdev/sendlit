@@ -5,6 +5,14 @@ mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
+const captureEvent = mock();
+const captureError = mock();
+const realObservability = await import("../observability");
+mock.module("../observability", () => ({
+  ...realObservability,
+  captureEvent,
+  captureError,
+}));
 
 const { db } = await import("../db/client");
 const schema = await import("../db/schema");
@@ -23,14 +31,21 @@ const { listAbuseFlags, resolveAbuseFlag } = await import("./flags");
 const { pacingBudget } = await import("./pacing");
 const { runAbuseCli } = await import("./operator-cli");
 const { closeSharedRedis } = await import("../services/redis-client");
+const { recordPacedSend } = await import("./telemetry");
 
 const tdb = db as unknown as TestDb;
 
 beforeEach(async () => {
   useCloudFakeBillingEnv();
   process.env.CONTENT_SCAN = "heuristic";
+  captureEvent.mockClear();
+  captureError.mockClear();
   await truncateAll(tdb);
 });
+
+/** PostHog events sent so far, as `[event, properties]`. */
+const events = () =>
+  captureEvent.mock.calls.map(([call]) => [call.event, call.properties]);
 
 afterAll(async () => {
   clearCloudFakeBillingEnv();
@@ -304,5 +319,88 @@ describe("new-account pacing", () => {
         now,
       }),
     ).toBeNull();
+  });
+});
+
+describe("PostHog events", () => {
+  it("records refused signups with the reason only", async () => {
+    await expect(assertSignupAllowed({ email: "x@mailinator.com" })).rejects.toThrow(
+      "disposable_email",
+    );
+    expect(events()).toEqual([["signup_blocked", { reason: "disposable_email" }]]);
+  });
+
+  it("records scans, flags, pauses and operator decisions", async () => {
+    const { team, organization, account } = await seedTeamAndContact(tdb);
+    const { emailRows } = await seedSequence(tdb, {
+      teamId: team.id,
+      type: "broadcast",
+      status: "draft",
+      emails: [{ emailId: "email_e1", subject: "Notice" }],
+    });
+    await expect(
+      assertEmailContentAllowed({
+        teamId: team.id,
+        email: emailRows[0],
+        content: textEmail("Download https://example.com/update.exe"),
+      }),
+    ).rejects.toThrow("content_blocked");
+    const [{ flag }] = await listAbuseFlags();
+    await resolveAbuseFlag({
+      flagId: flag.flagId,
+      resolution: "confirmed",
+      operatorUserId: account.id,
+      note: "malware",
+    });
+
+    expect(events()).toEqual([
+      ["content_scanned", { verdict: "blocked", scan_mode: "heuristic" }],
+      [
+        "abuse_flag_raised",
+        { kind: "content", severity: "high", organization_id: organization.id },
+      ],
+      [
+        "team_paused_for_review",
+        { reason: "content_review", organization_id: organization.id },
+      ],
+      [
+        "abuse_flag_resolved",
+        { kind: "content", outcome: "confirmed", organization_id: organization.id },
+      ],
+      ["organization_sending_suspended", { organization_id: organization.id }],
+    ]);
+    expect(captureEvent.mock.calls[0][0]).toMatchObject({
+      source: "abuse.content_scan",
+      teamId: team.id,
+    });
+  });
+
+  it("records a paced campaign once per hour", async () => {
+    const { sharedRedis } = await import("../services/redis-client");
+    const reachable = await sharedRedis()
+      .ping()
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!reachable) return; // Needs Redis (CI runs one).
+    const input = {
+      teamId: "team-1",
+      organizationId: "org-1",
+      sequenceId: `seq_${crypto.randomUUID()}`,
+      reason: "marketing_hourly_pacing",
+    };
+    await recordPacedSend(input);
+    await recordPacedSend(input);
+    expect(events()).toEqual([
+      [
+        "marketing_send_paced",
+        {
+          reason: "marketing_hourly_pacing",
+          sequence_id: input.sequenceId,
+          organization_id: "org-1",
+        },
+      ],
+    ]);
   });
 });

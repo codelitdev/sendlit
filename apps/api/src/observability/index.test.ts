@@ -46,6 +46,41 @@ describe("SendLit observability", () => {
     expect(properties.not_allowed).toBeUndefined();
   });
 
+  it("keeps abuse-control codes and ids on product events", () => {
+    const client = fakeClient();
+    const events = createSendLitObservability(env, { client, purpose: "events" });
+
+    events.captureEvent({
+      event: "abuse_flag_raised",
+      source: "abuse.flags",
+      subjectId: "team-1",
+      properties: {
+        kind: "content",
+        severity: "high",
+        verdict: "blocked",
+        reason: "content_review",
+        outcome: "released",
+        scan_mode: "ai",
+        organization_id: "org-1",
+        form_id: "frm_1",
+        email: "dropped@example.com",
+      },
+    });
+
+    const [{ properties }] = client.capture.mock.calls[0];
+    expect(properties).toMatchObject({
+      kind: "content",
+      severity: "high",
+      verdict: "blocked",
+      reason: "content_review",
+      outcome: "released",
+      scan_mode: "ai",
+      organization_id: "org-1",
+      form_id: "frm_1",
+    });
+    expect(properties.email).toBeUndefined();
+  });
+
   it("dedupes identical errors within the TTL window", () => {
     const client = fakeClient();
     const observability = createSendLitObservability(env, { client });
