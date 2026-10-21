@@ -1,6 +1,4 @@
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
+import { readFileSync } from "node:fs";
 
 /** Free mailbox providers. People really sign up with these, so they are
  * flagged rather than blocked by default. */
@@ -70,10 +68,15 @@ const ROLE_LOCAL_PARTS = new Set([
 
 let disposable: Set<string> | null = null;
 
-/** The `disposable-email-domains` dataset (about 120k domains), loaded on
- * first use. */
+/** The maintained disposable-email-domains blocklist (about 10k domains),
+ * vendored in `disposable-domains.txt` and refreshed weekly by
+ * `scripts/update-disposable-domains.ts`. Loaded on first use. */
 function disposableDomains(): Set<string> {
-  disposable ??= new Set<string>(require("disposable-email-domains"));
+  disposable ??= new Set(
+    readFileSync(new URL("./disposable-domains.txt", import.meta.url), "utf8")
+      .split("\n")
+      .filter((line) => line && !line.startsWith("#")),
+  );
   return disposable;
 }
 

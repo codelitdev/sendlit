@@ -23,7 +23,8 @@
     "check:drift": "bun run billing:generate:check && bun run check:auth-schema",
     "test:conformance": "bun run build:deps && bun test --timeout 30000 src/platform-conformance.test.ts src/mcp/parity.test.ts",
     "lint": "biome lint .",
-    "build:deps": "bun --filter @sendlit/email-editor build && bun --filter @sendlit/email-blocks build"
+    "build:deps": "bun --filter @sendlit/email-editor build && bun --filter @sendlit/email-blocks build",
+    "disposable-domains:update": "bun scripts/update-disposable-domains.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -43,7 +44,6 @@
     "better-auth": "1.7.7",
     "bullmq": "^5.79.2",
     "cors": "^2.8.6",
-    "disposable-email-domains": "^1.0.62",
     "dodopayments": "2.48.0",
     "drizzle-orm": "0.45.2",
     "express": "4.21.2",
