@@ -10,7 +10,7 @@ mock.module("../mail/send", () => ({
 }));
 
 const { db } = await import("../db/client");
-const { contacts, sequenceEmails } = await import("../db/schema");
+const { contacts, sequenceEmails, settings } = await import("../db/schema");
 const { addOrStrengthenSuppression } = await import(
   "../delivery-feedback/suppression-queries"
 );
@@ -135,5 +135,23 @@ describe("sendSequenceEmailTest", () => {
         to: ["me@example.com"],
       }),
     ).rejects.toThrow("email_not_found");
+  });
+
+  it("asks for the mailing address before rendering when it's missing", async () => {
+    const { team, sequenceRow, email } = await seed();
+    await tdb
+      .update(settings)
+      .set({ mailingAddress: null })
+      .where(eq(settings.teamId, team.id));
+
+    await expect(
+      sendSequenceEmailTest({
+        teamId: team.id,
+        sequenceId: sequenceRow.sequenceId,
+        emailId: email.emailId,
+        to: ["me@example.com"],
+      }),
+    ).rejects.toThrow("mailing_address_required");
+    expect(mockedSendMail).not.toHaveBeenCalled();
   });
 });
