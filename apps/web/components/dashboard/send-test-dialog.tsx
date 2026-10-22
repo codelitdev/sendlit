@@ -45,11 +45,17 @@ export function parseRecipients(value: string) {
     .filter(Boolean);
 }
 
-/** Adds `incoming` to `current`, skipping duplicates (case-insensitive). */
-export function addRecipients(current: string[], incoming: string[]) {
+/** Adds `incoming` to `current`, skipping duplicates (case-insensitive) and
+ * stopping at `max` addresses. */
+export function addRecipients(
+  current: string[],
+  incoming: string[],
+  max = MAX_TEST_RECIPIENTS,
+) {
   const seen = new Set(current.map((email) => email.toLowerCase()));
   const next = [...current];
   for (const email of incoming) {
+    if (next.length >= max) break;
     if (seen.has(email.toLowerCase())) continue;
     seen.add(email.toLowerCase());
     next.push(email);
@@ -136,10 +142,6 @@ export function SendTestDialog({
       setError("Add at least one email address");
       return;
     }
-    if (to.length > MAX_TEST_RECIPIENTS) {
-      setError(`Send a test to at most ${MAX_TEST_RECIPIENTS} addresses`);
-      return;
-    }
     setSending(true);
     setError(null);
     try {
@@ -172,7 +174,7 @@ export function SendTestDialog({
     }
   }
 
-  const overLimit = recipients.length > MAX_TEST_RECIPIENTS;
+  const full = recipients.length >= MAX_TEST_RECIPIENTS;
   const from = sendingVia?.fromEmail
     ? sendingVia.fromName
       ? `${sendingVia.fromName} <${sendingVia.fromEmail}>`
@@ -201,7 +203,7 @@ export function SendTestDialog({
                 <span
                   className={cn(
                     "text-xs text-muted-foreground",
-                    overLimit && "text-destructive",
+                    full && "font-medium text-foreground",
                   )}
                 >
                   {recipients.length} of {MAX_TEST_RECIPIENTS}
@@ -228,6 +230,7 @@ export function SendTestDialog({
                 ))}
                 <input
                   id="send-test-recipients"
+                  hidden={full}
                   type="email"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
@@ -243,6 +246,12 @@ export function SendTestDialog({
                   className="h-8 min-w-40 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground"
                 />
               </div>
+              {full && (
+                <p className="text-xs text-muted-foreground">
+                  A test goes to at most {MAX_TEST_RECIPIENTS} addresses. Remove one to
+                  add another.
+                </p>
+              )}
             </div>
 
             <dl className="divide-y overflow-hidden rounded-lg border bg-muted/40 text-sm">
@@ -309,10 +318,7 @@ export function SendTestDialog({
               >
                 Cancel
               </Button>
-              <Button
-                onClick={send}
-                disabled={sending || Boolean(addressMissing) || overLimit}
-              >
+              <Button onClick={send} disabled={sending || Boolean(addressMissing)}>
                 <Send className="size-4" />
                 {sending ? "Sending…" : "Send test"}
               </Button>
