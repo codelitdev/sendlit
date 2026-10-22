@@ -1,0 +1,51 @@
+---
+title: Tracking domain
+description: Put open, click, unsubscribe and "view in browser" links on your own domain.
+---
+
+Every marketing email carries links that go through SendLit: the open-tracking
+pixel, tracked clicks, the unsubscribe link and the "view in browser" link. By
+default they use SendLit's domain. With a tracking domain they use yours, for
+example `track.example.com`:
+
+- links match your brand and the domain in your From address;
+- your links' reputation is your own, not shared with other senders.
+
+Transactional emails with open or click tracking use it too.
+
+## Set it up
+
+1. In **Settings → General → Tracking domain**, enter a subdomain you own,
+   such as `track.example.com`, and save. A root domain such as `example.com`
+   can't be used, because it can't have a CNAME record.
+2. At your DNS provider, add the CNAME record SendLit shows: the name is your
+   subdomain and the value is SendLit's tracking host. On Cloudflare, set the
+   record to **DNS only** (grey cloud).
+3. SendLit checks the record and that it can answer over HTTPS on your domain.
+   It rechecks every hour, or press **Check now**. The HTTPS certificate is
+   usually ready a few minutes after DNS updates.
+
+Once the domain shows **Verified**, new emails use it. Emails already sent keep
+their links.
+
+The API has the same settings: `GET`, `PUT /settings/tracking-domain` and
+`POST /settings/tracking-domain/verify`, and the MCP tools
+`get_tracking_domain`, `set_tracking_domain` and `verify_tracking_domain`.
+
+## Keep the record in place
+
+Links in emails you've sent point at your tracking domain for as long as
+people open them, so keep the CNAME record. SendLit checks a verified domain
+every day. If it fails three days in a row, it shows **Not working** and new
+emails go back to SendLit's domain until it works again.
+
+If you change or remove the domain, SendLit keeps answering on the old one, so
+links in emails you've already sent keep working as long as its CNAME record
+stays.
+
+## Return-Path (bounce) domain
+
+The tracking domain is only for links. The Return-Path (bounce, or MAIL FROM)
+domain is set at your email provider, and SendLit checks it as part of
+[domain authentication](/email-marketing/domain-authentication): its SPF record
+is the one that counts for DMARC alignment.

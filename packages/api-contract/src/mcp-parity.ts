@@ -193,6 +193,9 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   // General settings
   required("settings.general.get", "get_general_settings", "read"),
   required("settings.general.update", "update_general_settings", "write"),
+  required("settings.trackingDomain.get", "get_tracking_domain", "read"),
+  required("settings.trackingDomain.update", "set_tracking_domain", "write"),
+  required("settings.trackingDomain.verify", "verify_tracking_domain", "write"),
   required("settings.web.get", "get_web_settings", "read"),
   required("settings.web.update", "update_web_settings", "write"),
 

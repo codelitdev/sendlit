@@ -29,6 +29,7 @@ import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
 import { getOrCreateContentVersion } from "../sequences/content-versions";
 import logger from "../services/log";
+import { trackingOriginForTeam } from "../settings/tracking-domain/queries";
 import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
@@ -326,7 +327,10 @@ async function attemptMailSending({
       replyTo: pin.replyTo,
       headers: withCorrelationHeaders(
         outbound,
-        getListUnsubscribeHeaders(contact.unsubscribeToken),
+        getListUnsubscribeHeaders(
+          contact.unsubscribeToken,
+          await trackingOriginForTeam(team.id),
+        ),
       ),
       teamId: team.id,
       espConfigId: pin.espConfigId,

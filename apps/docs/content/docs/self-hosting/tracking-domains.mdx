@@ -1,0 +1,53 @@
+---
+title: Tracking domains
+description: Serve teams' custom tracking domains over HTTPS on a self-hosted install.
+---
+
+Teams can put their tracking links on their own domain
+([Tracking domain](/email-marketing/tracking-domain)). Each team points a
+CNAME at your API's host, so your reverse proxy has to accept those hosts and
+get a certificate for each one.
+
+## Settings
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `TRACKING_DOMAIN_CNAME_TARGET` | the host in `DOMAIN` | The host teams point their CNAME records at. Set it when tracking traffic should use a different host than the API, for example `track.yourdomain.com`. |
+
+A domain is verified when its CNAME points at that host and
+`https://<domain>/.well-known/sendlit-tracking` answers, so TLS must work
+before links switch to it.
+
+On a team's tracking domain the API serves only `/track/*`, `/unsubscribe/*`
+and `/view/*`; every other path returns 404.
+
+## Certificates with Caddy
+
+Caddy can issue a certificate the first time a domain is requested. Ask the API
+whether the domain belongs to a team first: `GET /tls/ask?domain=<host>`
+returns 200 for a team's current or previous tracking domain and 404
+otherwise.
+
+```caddyfile
+{
+  on_demand_tls {
+    ask http://api:4000/tls/ask
+  }
+}
+
+# Your API host, as before.
+api.example.com {
+  reverse_proxy api:4000
+}
+
+# Any other host: teams' tracking domains.
+https:// {
+  tls {
+    on_demand
+  }
+  reverse_proxy api:4000
+}
+```
+
+Other proxies need an equivalent: a catch-all HTTPS site that obtains
+certificates on demand and checks `/tls/ask` before issuing one.

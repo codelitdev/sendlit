@@ -11,6 +11,7 @@
     "settings",
     "delivery-feedback",
     "domain-authentication",
+    "tracking-domain",
     "reputation",
     "warm-up"
   ]

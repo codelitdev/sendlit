@@ -375,6 +375,8 @@ export function transformLinksForClickTracking(
   htmlContent: string,
   buildTrackedUrl: (originalUrl: string, index: number) => string,
   errorContext: Record<string, unknown> = {},
+  /** The team's tracking domain origin, whose links are left alone too. */
+  linkOrigin?: string,
 ): string {
   try {
     const dom = new JSDOM(htmlContent);
@@ -385,8 +387,8 @@ export function transformLinksForClickTracking(
       const originalUrl = link.getAttribute("href");
       if (!originalUrl) return;
       if (
-        isTrackingUrl(originalUrl) ||
-        isViewInBrowserUrl(originalUrl) ||
+        isTrackingUrl(originalUrl, linkOrigin) ||
+        isViewInBrowserUrl(originalUrl, linkOrigin) ||
         originalUrl.includes("/unsubscribe") ||
         originalUrl.startsWith("mailto:") ||
         originalUrl.startsWith("tel:") ||

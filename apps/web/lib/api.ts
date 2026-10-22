@@ -12,6 +12,7 @@ import {
   type Reputation,
   type SignupForm,
   type SignupFormInput,
+  type TrackingDomain,
   type WebPublishing,
   type WebSettings,
 } from "@sendlit/api-contract";
@@ -1681,6 +1682,22 @@ export function getGeneralSettings() {
 
 export function updateGeneralSettings(input: { mailingAddress?: string }) {
   return unwrap<GeneralSettings>(client.settings.general.update({ body: input }));
+}
+
+export type { TrackingDomain };
+
+export function getTrackingDomain() {
+  return unwrap<TrackingDomain>(client.settings.trackingDomain.get());
+}
+
+export function setTrackingDomain(domain: string | null) {
+  return unwrap<TrackingDomain>(
+    client.settings.trackingDomain.update({ body: { domain } }),
+  );
+}
+
+export function verifyTrackingDomain() {
+  return unwrap<TrackingDomain>(client.settings.trackingDomain.verify());
 }
 
 // ---- Transactional emails --------------------------------------------------

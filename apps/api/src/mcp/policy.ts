@@ -101,6 +101,9 @@ const toolPolicies = {
   update_web_settings: MCP_SCOPES.settingsWrite,
   get_general_settings: MCP_SCOPES.settingsRead,
   update_general_settings: MCP_SCOPES.settingsWrite,
+  get_tracking_domain: MCP_SCOPES.settingsRead,
+  set_tracking_domain: MCP_SCOPES.settingsWrite,
+  verify_tracking_domain: MCP_SCOPES.settingsWrite,
 
   get_esp_config: MCP_SCOPES.espRead,
   list_esps: MCP_SCOPES.espRead,
