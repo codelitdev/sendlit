@@ -541,7 +541,7 @@ const sequencesContract = c.router(
       },
       summary: "Send a test of a broadcast or sequence email",
       description:
-        "Renders the email exactly like a real send (merge tags, footer, tracking) and sends it with a `[Test]` subject prefix through the delivery source the real send would use. Merge tags use the recipient's contact data when they are a contact. Opens, clicks and the unsubscribe link in a test change nothing. Suppressed addresses are skipped. Each team can send 50 test emails per hour.",
+        "Renders the email exactly like a real send (merge tags, footer, tracking) and sends it with a `[Test]` subject prefix through the delivery source the real send would use. Merge tags use the recipient's contact data when they are a contact. Opens, clicks and the unsubscribe link in a test change nothing. Suppressed addresses are skipped. Every recipient counts as one test: by default a team can send 100 test emails in any 24 hours (50 in any 3 hours) and 20 per email per 24 hours, after which this returns 429 `test_send_limit_reached` or `test_send_email_limit_reached`. Tests through an organization's shared mailbox also count against the team's shared-delivery quota (429 `organization_team_quota_exhausted` or `organization_quota_exhausted`).",
     },
     removeEmail: {
       method: "DELETE",

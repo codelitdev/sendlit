@@ -29,9 +29,12 @@ const {
   transitionEspGrant,
   upsertEspGrant,
 } = await import("../delivery/queries");
-const { getOrganizationQuotaUsage, reserveOrganizationQuotaForOutbound } = await import(
-  "../delivery/quota"
-);
+const {
+  chargeOrganizationQuotaForTests,
+  getOrganizationQuotaUsage,
+  refundOrganizationQuotaForTests,
+  reserveOrganizationQuotaForOutbound,
+} = await import("../delivery/quota");
 const { createOrganizationEspConfig } = await import("../settings/esp/queries");
 const { createTeam } = await import("../team/queries");
 const { truncateAll } = await import("../test/db");
@@ -301,6 +304,65 @@ describe("organizations", () => {
         actorType: "user",
       }),
     );
+  });
+
+  it("charges test sends through a shared mailbox to the grant's quota", async () => {
+    const [member] = await tdb
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: "Owner",
+        email: `owner-${crypto.randomUUID()}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    const organization = await createOrganization(member.id, "Acme");
+    const team = await createTeam({
+      organizationId: organization.id,
+      creatorUserId: member.id,
+      name: "School A",
+    });
+    const esp = await createOrganizationEspConfig(organization.id, {
+      name: "Shared SMTP",
+      provider: "smtp",
+      host: "smtp.example.com",
+      port: 587,
+      secure: false,
+      fromEmail: "no-reply@example.com",
+    });
+    await tdb
+      .update(espConfigs)
+      .set({ status: "active", activatedAt: new Date() })
+      .where(eq(espConfigs.id, esp.id));
+    await upsertEspGrant(
+      organization.id,
+      team.id,
+      { espId: esp.espId, dailyLimit: 5, monthlyLimit: 100 },
+      { type: "user", id: member.id },
+    );
+    const [grant] = await tdb
+      .select()
+      .from(espConfigTeamGrants)
+      .where(eq(espConfigTeamGrants.teamId, team.id));
+
+    const charge = await chargeOrganizationQuotaForTests({
+      grantId: grant.id,
+      count: 4,
+    });
+    await expect(getOrganizationQuotaUsage(organization.id)).resolves.toMatchObject({
+      day: { accepted: 4, reserved: 0 },
+    });
+    // All or nothing: two more would pass the daily limit of 5.
+    await expect(
+      chargeOrganizationQuotaForTests({ grantId: grant.id, count: 2 }),
+    ).rejects.toThrow("organization_team_quota_exhausted");
+    await refundOrganizationQuotaForTests(charge, 3);
+    await expect(getOrganizationQuotaUsage(organization.id)).resolves.toMatchObject({
+      day: { accepted: 1 },
+      month: { accepted: 1 },
+    });
   });
 
   it("lets an organization grant select the shared ESP as the team default", async () => {

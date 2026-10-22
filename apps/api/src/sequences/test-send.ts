@@ -9,6 +9,11 @@ import {
   resolveDeliverySource,
   resolvePinnedDeliverySource,
 } from "../delivery/queries";
+import {
+  chargeOrganizationQuotaForTests,
+  refundOrganizationQuotaForTests,
+  type TestQuotaCharge,
+} from "../delivery/quota";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
 import { renderCampaignHtml } from "../mail/campaign";
 import { sendMail } from "../mail/send";
@@ -17,25 +22,10 @@ import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
+import { takeTestSendQuota } from "./test-send-limits";
 
 /** A test goes to at most this many addresses (Mailchimp allows a handful). */
 export const MAX_TEST_RECIPIENTS = 5;
-/** Test recipients per team per hour, across REST and MCP. Test sends skip
- * billing and the outbound ledger, so this keeps them from becoming a free
- * bulk-send path. */
-export const TEST_RECIPIENTS_PER_HOUR = 50;
-
-const testSendLog = new Map<string, number[]>();
-
-function takeTestQuota(teamId: string, recipients: number) {
-  const now = Date.now();
-  const recent = (testSendLog.get(teamId) ?? []).filter((at) => now - at < 3_600_000);
-  if (recent.length + recipients > TEST_RECIPIENTS_PER_HOUR) {
-    testSendLog.set(teamId, recent);
-    throw new Error("test_send_limit_reached");
-  }
-  testSendLog.set(teamId, [...recent, ...Array(recipients).fill(now)]);
-}
 
 export interface TestSendResult {
   sent: string[];
@@ -48,8 +38,11 @@ export interface TestSendResult {
  * like a real send (merge tags, footer, tracking) with a `[Test]` subject.
  * Merge tags use the recipient's contact data when they are a contact of the
  * team. Errors are thrown as codes: `sequence_not_found`, `email_not_found`,
- * `test_recipients_required`, `test_send_limit_reached`, plus the delivery
- * source and mailing address errors a real send would raise.
+ * `test_recipients_required`, `test_send_limit_reached` (team) and
+ * `test_send_email_limit_reached` (this email), both `TestSendLimitError`s,
+ * plus the delivery source, shared-mailbox quota and mailing address errors a
+ * real send would raise. Tests through a shared mailbox count against the
+ * team's shared-delivery quota; tests through the team's own ESP don't.
  */
 export async function sendSequenceEmailTest({
   teamId,
@@ -126,38 +119,79 @@ export async function sendSequenceEmailTest({
       deliverable.push(recipient);
     }
   }
-  takeTestQuota(teamId, deliverable.length);
-
-  for (const recipient of deliverable) {
-    const contact = await findContactByEmail(teamId, recipient);
-    const html = await renderCampaignHtml({
-      team,
-      content: email.content,
-      subscriber: {
-        email: recipient,
-        name: contact?.name ?? null,
-        tags: contact?.tags ?? [],
-      },
-      ids: {
-        contactId: TEST_CONTACT_ID,
-        sequenceId: sequence.sequenceId,
-        emailId: email.emailId,
-      },
-      unsubscribeToken: TEST_UNSUBSCRIBE_TOKEN,
-    });
-    await sendMail({
-      purpose: "campaign",
-      from: getEmailFrom({ name: pin.fromName, email: pin.fromEmail }),
-      to: recipient,
-      subject: `[Test] ${email.subject}`,
-      html,
-      replyTo: pin.replyTo,
-      headers: getListUnsubscribeHeaders(TEST_UNSUBSCRIBE_TOKEN),
+  // The organization pays for its shared mailbox, so tests through it also
+  // use the team's shared-delivery quota, like real sends.
+  let charge: TestQuotaCharge | null = null;
+  try {
+    await takeTestSendQuota({
       teamId,
-      espConfigId: pin.espConfigId,
-      secretVersion: pin.secretVersion,
+      emailId: email.emailId,
+      recipients: deliverable.length,
     });
-    result.sent.push(recipient);
+    if (pin.type === "organization" && pin.espGrantId && deliverable.length > 0) {
+      charge = await chargeOrganizationQuotaForTests({
+        grantId: pin.espGrantId,
+        count: deliverable.length,
+      });
+    }
+  } catch (error) {
+    if (error instanceof Error && /limit_reached|quota_exhausted/.test(error.message)) {
+      captureEvent({
+        event: "sequence_email_test_limited",
+        source: "sequences.test_send",
+        teamId,
+        properties: {
+          sequence_id: sequence.sequenceId,
+          email_id: email.emailId,
+          error_code: error.message,
+          kind: pin.type,
+          recipients_count: deliverable.length,
+        },
+      });
+    }
+    throw error;
+  }
+
+  try {
+    for (const recipient of deliverable) {
+      const contact = await findContactByEmail(teamId, recipient);
+      const html = await renderCampaignHtml({
+        team,
+        content: email.content,
+        subscriber: {
+          email: recipient,
+          name: contact?.name ?? null,
+          tags: contact?.tags ?? [],
+        },
+        ids: {
+          contactId: TEST_CONTACT_ID,
+          sequenceId: sequence.sequenceId,
+          emailId: email.emailId,
+        },
+        unsubscribeToken: TEST_UNSUBSCRIBE_TOKEN,
+      });
+      await sendMail({
+        purpose: "campaign",
+        from: getEmailFrom({ name: pin.fromName, email: pin.fromEmail }),
+        to: recipient,
+        subject: `[Test] ${email.subject}`,
+        html,
+        replyTo: pin.replyTo,
+        headers: getListUnsubscribeHeaders(TEST_UNSUBSCRIBE_TOKEN),
+        teamId,
+        espConfigId: pin.espConfigId,
+        secretVersion: pin.secretVersion,
+      });
+      result.sent.push(recipient);
+    }
+  } catch (error) {
+    if (charge) {
+      await refundOrganizationQuotaForTests(
+        charge,
+        deliverable.length - result.sent.length,
+      );
+    }
+    throw error;
   }
 
   if (result.sent.length > 0) {

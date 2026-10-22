@@ -5,6 +5,9 @@ mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
+mock.module("./test-send-limits", () => ({
+  takeTestSendQuota: vi.fn().mockResolvedValue(undefined),
+}));
 mock.module("../mail/send", () => ({
   sendMail: vi.fn().mockResolvedValue({ messageId: null, providerResponse: null }),
 }));
@@ -21,6 +24,8 @@ const { seedSequence } = await import("../test/fixtures");
 const { TEST_CONTACT_ID } = await import("../config/constants");
 const { verifyPixelToken } = await import("../utils/pixel-jwt");
 const { sendSequenceEmailTest } = await import("./test-send");
+const { takeTestSendQuota } = await import("./test-send-limits");
+const mockedTakeQuota = takeTestSendQuota as unknown as Mock<typeof takeTestSendQuota>;
 
 const tdb = db as unknown as TestDb;
 const mockedSendMail = sendMail as unknown as Mock<typeof sendMail>;
@@ -28,6 +33,8 @@ const mockedSendMail = sendMail as unknown as Mock<typeof sendMail>;
 beforeEach(async () => {
   await truncateAll(tdb);
   mockedSendMail.mockClear();
+  mockedTakeQuota.mockClear();
+  mockedTakeQuota.mockResolvedValue(undefined);
 });
 
 async function seed() {
@@ -123,6 +130,33 @@ describe("sendSequenceEmailTest", () => {
     ]);
     expect(mockedSendMail).not.toHaveBeenCalled();
     expect(result.lastTestSentAt).toBeNull();
+  });
+
+  it("counts each deliverable recipient and sends nothing past the limit", async () => {
+    const { team, sequenceRow, email } = await seed();
+    await sendSequenceEmailTest({
+      teamId: team.id,
+      sequenceId: sequenceRow.sequenceId,
+      emailId: email.emailId,
+      to: ["a@example.com", "B@example.com", "b@example.com"],
+    });
+    expect(mockedTakeQuota).toHaveBeenCalledWith({
+      teamId: team.id,
+      emailId: email.emailId,
+      recipients: 2,
+    });
+
+    mockedSendMail.mockClear();
+    mockedTakeQuota.mockRejectedValueOnce(new Error("test_send_limit_reached"));
+    await expect(
+      sendSequenceEmailTest({
+        teamId: team.id,
+        sequenceId: sequenceRow.sequenceId,
+        emailId: email.emailId,
+        to: ["a@example.com"],
+      }),
+    ).rejects.toThrow("test_send_limit_reached");
+    expect(mockedSendMail).not.toHaveBeenCalled();
   });
 
   it("404s an email of another sequence", async () => {

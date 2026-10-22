@@ -30,6 +30,13 @@ import { cn } from "@/lib/utils";
 
 export const MAX_TEST_RECIPIENTS = 5;
 
+const TEST_LIMIT_MESSAGES: Record<string, string> = {
+  test_send_limit_reached:
+    "Your team has reached its test email limit. Earlier tests age out over the day, so try again later.",
+  test_send_email_limit_reached:
+    "This email has reached its daily test limit. Try again later.",
+};
+
 /** Splits typed or pasted text into addresses (commas, semicolons, spaces). */
 export function parseRecipients(value: string) {
   return value
@@ -153,9 +160,7 @@ export function SendTestDialog({
     } catch (err) {
       const message =
         err instanceof ApiError
-          ? err.message === "test_send_limit_reached"
-            ? "Too many test emails in the last hour. Try again later."
-            : err.message
+          ? (TEST_LIMIT_MESSAGES[err.message] ?? err.message)
           : "Failed to send the test";
       if (presentDeliverySourceError(message) === MAILING_ADDRESS_REQUIRED_ERROR) {
         setAddressMissing(true);

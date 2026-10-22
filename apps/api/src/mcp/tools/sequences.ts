@@ -321,7 +321,7 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
     "send_sequence_email_test",
     {
       description:
-        "Sends a test of one broadcast/sequence email, rendered exactly like a real send (merge tags, footer, tracking) with a [Test] subject prefix. Defaults to the current user's own address (OAuth sessions only; API-key sessions must supply `to`). Suppressed addresses are skipped; opens, clicks and the unsubscribe link in a test change nothing.",
+        "Sends a test of one broadcast/sequence email, rendered exactly like a real send (merge tags, footer, tracking) with a [Test] subject prefix. Defaults to the current user's own address (OAuth sessions only; API-key sessions must supply `to`). Suppressed addresses are skipped; opens, clicks and the unsubscribe link in a test change nothing. Every recipient counts as one test: by default 100 per team in any 24 hours (50 in any 3 hours) and 20 per email per 24 hours (errors `test_send_limit_reached`, `test_send_email_limit_reached`). Tests through an organization's shared mailbox also use the team's shared-delivery quota.",
       inputSchema: {
         sequenceId: z.string(),
         emailId: z.string(),

@@ -57,9 +57,26 @@ sends the email exactly as recipients will get it (merge tags, footer,
 tracking) with `[Test]` added to the subject, through the delivery source the
 real send will use. It defaults to your own address and accepts up to five.
 When the recipient is one of your contacts, merge tags use their data.
-Opens, clicks and the unsubscribe link in a test change nothing, suppressed
-addresses are skipped, and each team can send 50 test emails per hour.
+Opens, clicks and the unsubscribe link in a test change nothing, and
+suppressed addresses are skipped.
 The email's `lastTestSentAt` records when the last test went out.
+
+### Test limits
+
+Tests don't count towards your plan, so they have limits of their own, like
+other email marketing platforms. Every address counts as one test:
+
+- **100 tests per team** in any 24 hours, and no more than 50 in any 3 hours.
+- **20 tests per email** in any 24 hours.
+
+When you reach a limit, Send test says so; earlier tests age out of the
+window over time. Tests sent through an organization's shared mailbox also
+count against your team's shared-delivery quota, because the organization
+pays for that mailbox. Tests through your team's own ESP don't.
+
+Self-hosters can change the limits with `TEST_SEND_DAILY_LIMIT`,
+`TEST_SEND_BURST_LIMIT`, `TEST_SEND_BURST_HOURS` and
+`TEST_SEND_EMAIL_DAILY_LIMIT`.
 
 Over the API: `POST /sequences/{sequenceId}/emails/{emailId}/test` with an
 optional `{ "to": ["you@example.com"] }`. API keys have no signed-in user, so
