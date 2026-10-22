@@ -176,7 +176,7 @@ describe("tracking domain host", () => {
     }
     expect((await on("api.sendlit.test", "/api/auth/session")).status).toBe(200);
     expect(
-      (await on("links.example.com", "/.well-known/sendlit-tracking")).json(),
+      (await on("links.example.com", "/.well-known/sendlit-tracking")).json<unknown>(),
     ).toEqual({ service: "sendlit-tracking" });
   });
 

@@ -94,6 +94,15 @@ function toTrackingDomain(row: TeamSettings | null): TrackingDomain {
   };
 }
 
+/** The REST/MCP shape: dates as ISO strings. */
+export function toPublicTrackingDomain(domain: TrackingDomain) {
+  return {
+    ...domain,
+    verifiedAt: domain.verifiedAt?.toISOString() ?? null,
+    checkedAt: domain.checkedAt?.toISOString() ?? null,
+  };
+}
+
 /** Origin (`https://track.example.com`) for a team's links, or undefined to
  * use the API's own host. Only a verified domain is used. */
 export function trackingOrigin(

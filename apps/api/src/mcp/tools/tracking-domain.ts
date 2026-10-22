@@ -2,9 +2,9 @@ import { z } from "zod";
 import {
   getTrackingDomain,
   setTrackingDomain,
+  toPublicTrackingDomain,
   verifyTrackingDomain,
 } from "../../settings/tracking-domain/queries";
-import { toPublicTrackingDomain } from "../../settings/tracking-domain/routes";
 import type { McpToolRegistrar } from "../tool-registry";
 import { getTeamId } from "./auth";
 import { AUTH_ERROR, errorResult, jsonResult } from "./responses";

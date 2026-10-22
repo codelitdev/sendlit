@@ -6,7 +6,7 @@ import { requireTeam } from "../../auth/require-team";
 import {
   getTrackingDomain,
   setTrackingDomain,
-  type TrackingDomain,
+  toPublicTrackingDomain,
   verifyTrackingDomain,
 } from "./queries";
 
@@ -14,14 +14,6 @@ const router = Router();
 router.use("/settings/tracking-domain", requireAuth, requireTeam);
 
 const s = initServer();
-
-export function toPublicTrackingDomain(domain: TrackingDomain) {
-  return {
-    ...domain,
-    verifiedAt: domain.verifiedAt?.toISOString() ?? null,
-    checkedAt: domain.checkedAt?.toISOString() ?? null,
-  };
-}
 
 const impl = s.router(contract.settings.trackingDomain, {
   get: async ({ req }) => ({
