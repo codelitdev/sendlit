@@ -181,6 +181,21 @@ describe("sequence queries", () => {
       subject: "Should not change",
     });
     expect(result?.emails[0].subject).not.toBe("Should not change");
+    // The title is the sent email's subject, so it is locked too.
+    await expect(
+      updateSequence({
+        teamId: one.team.id,
+        sequenceId: broadcast.sequenceId,
+        title: "Should not change",
+      }),
+    ).rejects.toThrow(responses.mail_already_sent);
+    await expect(
+      updateSequence({
+        teamId: one.team.id,
+        sequenceId: broadcast.sequenceId,
+        title: broadcast.title,
+      }),
+    ).resolves.toMatchObject({ title: broadcast.title });
     await expect(
       addMailToSequence({
         teamId: one.team.id,

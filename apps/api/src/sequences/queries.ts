@@ -299,6 +299,11 @@ export async function updateSequence({
 }): Promise<HydratedSequence | null> {
   const current = await getSequenceBySequenceId(teamId, sequenceId);
   if (!current) return null;
+  // A sent broadcast's title is its email's subject, which can't change
+  // after it went out (its content can't either; see updateMailInSequence).
+  if (title !== undefined && title !== current.title && isBroadcastLocked(current)) {
+    throw new Error(responses.mail_already_sent);
+  }
   const patch: Partial<Sequence> = { updatedAt: new Date() };
   if (title !== undefined) patch.title = title;
   if (triggerType !== undefined) patch.triggerType = triggerType;

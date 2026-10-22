@@ -27,7 +27,13 @@ const { sendMail } = await import("../mail/send");
 const { SendDeferredError } = await import("../mail/rate-limit");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
-const { seedOngoingSequence, seedSequence } = await import("../test/fixtures");
+const { emailContent, seedOngoingSequence, seedSequence } = await import(
+  "../test/fixtures"
+);
+const { emailContentVersions } = await import("../db/schema");
+const { default: webViewRoutes } = await import("../tracking/web-view");
+const { requestApp } = await import("../test/http");
+const express = (await import("express")).default;
 const { getUnsubLink } = await import("../utils/mail");
 const { getNextPublishedEmail, processOngoingSequence } = await import(
   "./process-ongoing-sequence"
@@ -300,6 +306,57 @@ describe("processOngoingSequence", () => {
     await processOngoingSequence(row.id);
 
     expect(mockedSendMail.mock.calls[0][0].replyTo).toBe("support@example.com");
+  });
+
+  it("keeps each send's web version at what was sent when the email is edited mid-sequence", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const { sequenceRow, emailRows } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const viewPath = (html: string) =>
+      new URL(html.match(/href="(https:\/\/sendlit\.test\/view\/[^"]+)"/)?.[1] ?? "")
+        .pathname;
+    const webView = express().use(webViewRoutes);
+
+    const before = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+    await processOngoingSequence(before.id);
+    await tdb
+      .update(sequenceEmails)
+      .set({ content: emailContent({ text: "Edited for later contacts" }) })
+      .where(eq(sequenceEmails.id, emailRows[0].id));
+    const after = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+    await processOngoingSequence(after.id);
+
+    const [earlier, later] = mockedSendMail.mock.calls.map(([mail]) => mail.html);
+    expect(earlier).toContain("Hello Ada Lovelace!");
+    expect(later).toContain("Edited for later contacts");
+    const earlierPage = await requestApp(webView, viewPath(earlier));
+    expect(earlierPage.body).toContain("Hello Ada Lovelace!");
+    expect(earlierPage.body).not.toContain("Edited for later contacts");
+    const laterPage = await requestApp(webView, viewPath(later));
+    expect(laterPage.body).toContain("Edited for later contacts");
+
+    const versions = await tdb
+      .select()
+      .from(emailContentVersions)
+      .where(eq(emailContentVersions.sequenceEmailId, emailRows[0].id));
+    expect(versions).toHaveLength(2);
+    const deliveries = await tdb
+      .select()
+      .from(emailDeliveries)
+      .where(eq(emailDeliveries.emailId, emailRows[0].id));
+    expect(new Set(deliveries.map((d) => d.contentVersionId))).toEqual(
+      new Set(versions.map((v) => v.id)),
+    );
   });
 
   it("renders merge tags, the tracking pixel, and click-tracked links", async () => {

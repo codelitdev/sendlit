@@ -20,7 +20,9 @@ const { addOrStrengthenSuppression } = await import(
 const { sendMail } = await import("../mail/send");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
-const { seedSequence } = await import("../test/fixtures");
+const { emailContent, seedSequence } = await import("../test/fixtures");
+const { verifyCampaignViewToken } = await import("../mail/campaign");
+const { getContentVersion } = await import("./content-versions");
 const { TEST_CONTACT_ID } = await import("../config/constants");
 const { verifyPixelToken } = await import("../utils/pixel-jwt");
 const { sendSequenceEmailTest } = await import("./test-send");
@@ -78,6 +80,32 @@ describe("sendSequenceEmailTest", () => {
       .where(eq(sequenceEmails.id, email.id));
     expect(row.lastTestSentAt).toBeInstanceOf(Date);
     expect(result.lastTestSentAt).toBe(row.lastTestSentAt?.toISOString() ?? null);
+  });
+
+  it("links a web version of the email as tested, not later edits", async () => {
+    const { team, sequenceRow, email } = await seed();
+
+    await sendSequenceEmailTest({
+      teamId: team.id,
+      sequenceId: sequenceRow.sequenceId,
+      emailId: email.emailId,
+      to: ["me@example.com"],
+    });
+    await tdb
+      .update(sequenceEmails)
+      .set({ content: emailContent({ text: "Edited after the test" }) })
+      .where(eq(sequenceEmails.id, email.id));
+
+    const viewUrl = mockedSendMail.mock.calls[0][0].html.match(
+      /href="(https:\/\/sendlit\.test\/view\/[^"]+)"/,
+    )?.[1];
+    const ids = verifyCampaignViewToken(
+      new URL(viewUrl ?? "http://x").pathname.slice(6),
+    );
+    expect(ids?.contactId).toBe(TEST_CONTACT_ID);
+    const version = await getContentVersion(email.id, ids?.versionId ?? "");
+    expect(JSON.stringify(version?.content)).toContain("Hello {{ subscriber.name }}!");
+    expect(JSON.stringify(version?.content)).not.toContain("Edited after the test");
   });
 
   it("defaults to the fallback recipient and uses their contact data", async () => {
