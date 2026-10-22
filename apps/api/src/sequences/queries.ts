@@ -1,5 +1,6 @@
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { assertLargeBroadcastReviewed } from "../abuse/broadcast-review";
 import { assertEmailContentAllowed } from "../abuse/content-scan";
 import { assertNoImportUnderReview } from "../abuse/imports";
 import { getMatchingContactIds } from "../automation/queries";
@@ -724,6 +725,13 @@ export async function startSequence({
     if (recipientIds.length === 0) {
       throw new Error(responses.broadcast_no_recipients);
     }
+    await assertLargeBroadcastReviewed({
+      organizationId: team.organizationId,
+      teamId,
+      deliverySourceType: pin.type,
+      sequence,
+      recipients: recipientIds.length,
+    });
     const entitlements = await getOrganizationEntitlements(team.organizationId);
     if (entitlements.monthlySendsLimit !== null) {
       const usage = await usageForOrganization(team.organizationId);

@@ -24,6 +24,7 @@ import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
+import { TrackingDomainSettings } from "@/components/dashboard/tracking-domain-settings";
 import { WebArchiveSettings } from "@/components/dashboard/web-archive-settings";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -360,6 +361,7 @@ export default function SettingsPage() {
                   </Button>
                 </CardFooter>
               </Card>
+              <TrackingDomainSettings />
             </div>
           </TabsContent>
 

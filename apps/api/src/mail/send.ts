@@ -11,6 +11,28 @@ import { getEspTransport, getTeamTransport } from "./transport";
 
 const MISSING_TEAM_ESP_ERROR = "Team ESP is not configured.";
 
+/** Headers a provider parses as JSON (SendGrid's `X-SMTPAPI`). Nodemailer
+ * MIME-encodes a long header with no spaces, which the provider can't read,
+ * so these go out as they are while they fit on one line. */
+const RAW_HEADERS = new Set(["x-smtpapi"]);
+const MAX_RAW_HEADER_LENGTH = 900;
+
+function transportHeaders(
+  headers: Record<string, string> | undefined,
+): Record<string, string | { prepared: true; value: string }> | undefined {
+  if (!headers) return headers;
+  return Object.fromEntries(
+    Object.entries(headers).map(([name, value]) => [
+      name,
+      RAW_HEADERS.has(name.toLowerCase()) &&
+      value.length <= MAX_RAW_HEADER_LENGTH &&
+      /^[\x20-\x7e]*$/.test(value)
+        ? { prepared: true as const, value }
+        : value,
+    ]),
+  );
+}
+
 interface MailInput {
   from: string;
   to: string;
@@ -103,7 +125,7 @@ export async function sendMail({
         html,
         text: text ?? renderEmailToPlainText(html),
         ...(replyTo ? { replyTo } : {}),
-        headers,
+        headers: transportHeaders(headers),
         messageId,
       });
     } catch (error) {

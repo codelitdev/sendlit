@@ -108,7 +108,9 @@ import {
 } from "./schemas/sequences";
 import {
   generalSettingsSchema,
+  trackingDomainSchema,
   updateGeneralSettingsBodySchema,
+  updateTrackingDomainBodySchema,
 } from "./schemas/settings";
 import {
   createSuppressionBodySchema,
@@ -566,7 +568,7 @@ const sequencesContract = c.router(
       },
       summary: "Start a broadcast or activate a sequence",
       description:
-        "Requires a non-empty mailing address in the team's general settings.",
+        "Requires a non-empty mailing address in the team's general settings. On SendLit Cloud, a new organization's first broadcast to 1,000 or more contacts through its own ESP is reviewed once before it can start (400 `broadcast_held_for_review`); start it again once approved.",
     },
     pause: {
       method: "POST",
@@ -840,9 +842,44 @@ const webSettingsContract = c.router(
   { metadata: { tag: "Web publishing" } },
 );
 
+/** Custom tracking domain (#50): a per-team singleton like the general
+ * settings. */
+const trackingDomainContract = c.router(
+  {
+    get: {
+      method: "GET",
+      path: "/settings/tracking-domain",
+      responses: { 200: trackingDomainSchema },
+      summary: "Get the team's custom tracking domain",
+      description:
+        'Open, click, unsubscribe and "view in browser" links use the domain once it is verified; until then, and after it stops working, they use SendLit\'s own host.',
+    },
+    update: {
+      method: "PUT",
+      path: "/settings/tracking-domain",
+      body: updateTrackingDomainBodySchema,
+      responses: { 200: trackingDomainSchema, 400: errorSchema, 409: errorSchema },
+      summary: "Set or remove the team's custom tracking domain",
+      description:
+        "Use a subdomain (for example `track.example.com`) with a CNAME record pointing to `cnameTarget`. A new domain is `pending` until it is verified; SendLit rechecks pending domains every hour. `null` removes it. Links in emails already sent on a previous domain keep working. 400 `tracking_domain_invalid`, 409 `tracking_domain_taken`.",
+    },
+    verify: {
+      method: "POST",
+      path: "/settings/tracking-domain/verify",
+      body: c.noBody(),
+      responses: { 200: trackingDomainSchema, 400: errorSchema },
+      summary: "Check the team's custom tracking domain now",
+      description:
+        "Checks the CNAME record and that SendLit answers over HTTPS on the domain. 400 `tracking_domain_not_set`.",
+    },
+  },
+  { metadata: { tag: "Settings" } },
+);
+
 const settingsContract = c.router({
   esps: espCollectionContract,
   general: generalSettingsContract,
+  trackingDomain: trackingDomainContract,
   web: webSettingsContract,
 });
 

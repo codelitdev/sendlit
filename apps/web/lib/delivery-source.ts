@@ -15,8 +15,10 @@ export function presentDeliverySourceError(error: string): string {
       return "This email is being reviewed by SendLit before it can be sent. We've emailed you; you can send it once it's approved, usually within a business day.";
     case "content_blocked":
       return "This email looks like it could harm recipients, so sending for this team is paused while SendLit reviews it. Reply to our email if you think this is a mistake.";
+    case "broadcast_held_for_review":
+      return "Your first large broadcast is being reviewed by SendLit, a one-time check for new accounts. We've emailed you; start it again once it's approved, usually within a business day.";
     case "import_under_review":
-      return "Your recent contact import is being reviewed by SendLit. Campaigns can start once it's approved, usually within a business day.";
+      return "Your recent contact import is being reviewed by SendLit, a one-time check for new accounts. Campaigns can start once it's approved, usually within a business day, with no further review of your first broadcast.";
     case "organization_sending_suspended":
       return "Sending is suspended for this organization. Contact SendLit support.";
     case "team_sending_suspended":

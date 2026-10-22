@@ -241,6 +241,16 @@ export const generalSettingsSchema = z.object({
   updatedAt: z.string().nullable().optional(),
 });
 
+/** Custom tracking domain singleton — see settings/tracking-domain. */
+export const trackingDomainSchema = z.object({
+  domain: z.string().nullable(),
+  status: z.enum(["pending", "verified", "failed"]).nullable(),
+  cnameTarget: z.string(),
+  error: z.string().nullable(),
+  verifiedAt: z.string().nullable(),
+  checkedAt: z.string().nullable(),
+});
+
 // ---- Bounce and complaint processing (docs/bounces-and-complaints.md) -----
 
 // Re-exported from the single source of truth so the MCP surface can never

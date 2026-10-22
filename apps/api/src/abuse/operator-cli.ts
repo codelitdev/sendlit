@@ -18,19 +18,22 @@ import {
 export const ABUSE_CLI_USAGE = `Usage: bun scripts/abuse.ts <command>
 
   queue [--all]                       Open flags (signups, held emails, large
-                                      imports), suspended organizations and
-                                      paused teams. --all includes closed flags.
+                                      imports, first large broadcasts),
+                                      suspended organizations and paused
+                                      teams. --all includes closed flags.
   show <flagId>                       One flag with its details.
   release <flagId> --operator <userId> --reason <text>
                                       Not abuse: approve the email, lift the
-                                      import hold, release teams paused for it.
+                                      import hold, let the organization send
+                                      large broadcasts, release teams paused
+                                      for it.
   confirm <flagId> --operator <userId> --reason <text>
                                       Abuse: suspend the organization's sending.
   suspend-org <organizationId> --operator <userId> --reason <text>
   unsuspend-org <organizationId> --operator <userId> --reason <text>
   pacing-exempt <organizationId> on|off --operator <userId> --reason <text>
-                                      Vetted organization: no new-account ramp
-                                      or pacing of marketing sends.`;
+                                      Vetted organization: no new-account ramp,
+                                      pacing or first-broadcast review.`;
 
 class UsageError extends Error {}
 

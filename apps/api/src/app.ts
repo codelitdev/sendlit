@@ -34,6 +34,10 @@ import sequencesRoutes from "./sequences/routes";
 import logger from "./services/log";
 import espRoutes from "./settings/esp/routes";
 import generalSettingsRoutes from "./settings/general/routes";
+import trackingDomainPublicRoutes, {
+  trackingHostGuard,
+} from "./settings/tracking-domain/public-routes";
+import trackingDomainRoutes from "./settings/tracking-domain/routes";
 import teamRoutes from "./team/routes";
 import templatesRoutes from "./templates/routes";
 import trackingRoutes from "./tracking/routes";
@@ -63,6 +67,7 @@ export function createApp(options: CreateAppOptions) {
     res.setHeader("X-Request-ID", requestId);
     next();
   });
+  app.use(trackingHostGuard);
   app.use(cors());
   // MCP clients may use public dynamic client registration (DCR) during their
   // first OAuth connection. Keep that standards-based bootstrap available while
@@ -136,6 +141,7 @@ export function createApp(options: CreateAppOptions) {
   // would otherwise be incorrectly blocked by that blanket check.
   app.use(trackingRoutes);
   app.use(webViewRoutes);
+  app.use(trackingDomainPublicRoutes);
   app.use(signupFormPublicRoutes);
   app.use(webPublicRoutes);
   app.use(billingRoutes);
@@ -156,6 +162,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(transactionalRoutes);
   app.use(espRoutes);
   app.use(generalSettingsRoutes);
+  app.use(trackingDomainRoutes);
   app.use(overviewRoutes);
   app.use(feedbackRoutes);
   app.use(deliveryEventsRoutes);

@@ -29,6 +29,7 @@ import mailWorker from "./mail/worker";
 import { captureError, getTeamId, shutdownObservability } from "./observability";
 import { startReputationSync, stopReputationSync } from "./reputation/sync";
 import logger from "./services/log";
+import { startTrackingDomainChecks } from "./settings/tracking-domain/queries";
 import { assertEspEncryptionKeyConfigured } from "./utils/secret-crypto";
 
 const state: ProcessState = { started: false, shuttingDown: false };
@@ -64,6 +65,7 @@ checkConfig()
     const billingMaintenance = startBillingMaintenance();
     startFeedbackReceiptPoller();
     startRetentionLoop();
+    const stopTrackingDomainChecks = startTrackingDomainChecks();
     state.started = true;
 
     const shutdown = createApiShutdown({
@@ -73,6 +75,7 @@ checkConfig()
         { name: "delivery_lifecycle_jobs", run: stopDeliveryLifecycleJobs },
         { name: "reputation_sync", run: stopReputationSync },
         { name: "billing_maintenance", run: () => billingMaintenance.stop() },
+        { name: "tracking_domain_checks", run: stopTrackingDomainChecks },
         // Closing a BullMQ worker waits for the job it is running.
         { name: "mail_worker", run: () => mailWorker.close() },
         { name: "sequence_worker", run: () => sequenceWorker.close() },

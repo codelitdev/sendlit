@@ -1300,6 +1300,27 @@ export const settings = pgTable("settings", {
   webSignupFormId: uuid("web_signup_form_id").references(() => signupForms.id, {
     onDelete: "set null",
   }),
+  /** Custom tracking domain (#50): open, click, unsubscribe and "view in
+   * browser" links use it once `trackingDomainStatus` is `verified`
+   * (`settings/tracking-domain`). `pending` until its CNAME and HTTPS work;
+   * `failed` after repeated failed rechecks, when links fall back to the
+   * API's own host. */
+  trackingDomain: text("tracking_domain").unique(),
+  trackingDomainStatus: text("tracking_domain_status"),
+  trackingDomainError: text("tracking_domain_error"),
+  trackingDomainVerifiedAt: timestamp("tracking_domain_verified_at", {
+    withTimezone: true,
+  }),
+  trackingDomainCheckedAt: timestamp("tracking_domain_checked_at", {
+    withTimezone: true,
+  }),
+  trackingDomainFailures: integer("tracking_domain_failures").notNull().default(0),
+  /** Domains this team used before, still served (and given certificates)
+   * so links in emails already sent keep working. */
+  retiredTrackingDomains: text("retired_tracking_domains")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
@@ -2265,7 +2286,7 @@ export const abuseFlags = pgTable(
     flagIdCheck: publicIdCheck("abuse_flags_flag_id_check", table.flagId, "abf"),
     kindCheck: check(
       "abuse_flags_kind_check",
-      sql`${table.kind} IN ('signup', 'content', 'import')`,
+      sql`${table.kind} IN ('signup', 'content', 'import', 'broadcast')`,
     ),
     severityCheck: check(
       "abuse_flags_severity_check",

@@ -23,6 +23,8 @@ import {
 } from "../delivery-feedback/suppression-queries";
 import { captureError } from "../observability";
 import logger from "../services/log";
+import { withoutProviderTracking } from "../settings/esp/provider-capabilities";
+import { trackingOriginForTeam } from "../settings/tracking-domain/queries";
 import { getTeam } from "../team/queries";
 import {
   claimTransactionalEmailForSending,
@@ -138,6 +140,10 @@ async function processTransactionalJob(job: Job, token?: string) {
     // opt-in flags — the stored `html` snapshot stays pre-rewrite (see
     // `transactional/queries.ts#createTransactionalEmail`).
     let html = row.html ?? "";
+    const origin =
+      row.trackClicks || row.trackOpens
+        ? await trackingOriginForTeam(row.teamId)
+        : undefined;
     if (row.trackClicks) {
       html = transformLinksForClickTracking(
         html,
@@ -148,9 +154,10 @@ async function processTransactionalJob(job: Job, token?: string) {
             index,
             link: encodeURIComponent(originalUrl),
           });
-          return getTrackedClickUrl(token);
+          return getTrackedClickUrl(token, origin);
         },
         { txe_id: row.txeId },
+        origin,
       );
     }
     if (row.trackOpens) {
@@ -158,7 +165,7 @@ async function processTransactionalJob(job: Job, token?: string) {
         type: "txe",
         txeId: row.txeId,
       });
-      const pixelUrl = getTrackingPixelUrl(pixelToken);
+      const pixelUrl = getTrackingPixelUrl(pixelToken, origin);
       html = appendTrackingPixelToHtml(html, pixelUrl);
     }
 
@@ -170,9 +177,14 @@ async function processTransactionalJob(job: Job, token?: string) {
       html,
       text: row.text ?? undefined,
       replyTo: row.replyTo,
-      headers: withCorrelationHeaders(
-        outbound,
-        (row.headers as Record<string, string> | null) ?? undefined,
+      // What SendLit tracks here, the ESP shouldn't track again.
+      headers: withoutProviderTracking(
+        pin.provider,
+        withCorrelationHeaders(
+          outbound,
+          (row.headers as Record<string, string> | null) ?? undefined,
+        ),
+        { opens: row.trackOpens, clicks: row.trackClicks },
       ),
       teamId: row.teamId,
       espConfigId: row.outboxId,

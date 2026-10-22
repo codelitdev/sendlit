@@ -14,7 +14,7 @@ import { emailOperators, operatorRecipients } from "../operations/alerts";
 import { recordAbuseEvent } from "./telemetry";
 
 export type AbuseFlag = typeof abuseFlags.$inferSelect;
-export type AbuseFlagKind = "signup" | "content" | "import";
+export type AbuseFlagKind = "signup" | "content" | "import" | "broadcast";
 export type AbuseSeverity = "low" | "medium" | "high";
 
 function alertRecipients(): string[] {

@@ -2,6 +2,7 @@ import type { Email as EmailType } from "@sendlit/email-editor";
 import { JSDOM } from "jsdom";
 import { getOrganizationEntitlements } from "../billing/entitlements";
 import { getTeamSettingsRow } from "../settings/general/queries";
+import { trackingOrigin } from "../settings/tracking-domain/queries";
 import { validateTemplateContent } from "../templates/validation";
 import {
   getTrackedClickUrl,
@@ -36,12 +37,17 @@ export interface CampaignViewIds extends CampaignEmailIds {
 /** Web versions stay reachable for as long as an archive would. */
 const VIEW_TOKEN_TTL = "3650d";
 
-export function getCampaignViewUrl({ versionId, ...ids }: CampaignViewIds): string {
+export function getCampaignViewUrl(
+  { versionId, ...ids }: CampaignViewIds,
+  /** The team's tracking domain origin, if verified. */
+  origin?: string,
+): string {
   return getViewInBrowserUrl(
     generatePixelToken(
       { kind: "view", ...ids, ...(versionId && { v: versionId }) },
       VIEW_TOKEN_TTL,
     ),
+    origin,
   );
 }
 
@@ -113,19 +119,23 @@ export async function renderCampaignHtml({
   publication?: { webPublished: boolean; webSlug: string | null } | null;
 }): Promise<string> {
   const settings = await getTeamSettingsRow(team.id);
+  // Tracking, unsubscribe and web-version links use the team's verified
+  // tracking domain when it has one.
+  const origin = trackingOrigin(settings);
   const publicUrl = publication ? issueUrl(settings, publication) : null;
   // The footer's "view in browser" link goes to the public page once the
   // issue is published, else to the reader's own web version.
   const viewInBrowserUrl = web
     ? undefined
-    : (publicUrl ?? getCampaignViewUrl({ ...ids, versionId: contentVersionId }));
+    : (publicUrl ??
+      getCampaignViewUrl({ ...ids, versionId: contentVersionId }, origin));
   const isPublic = web === "public";
   const variables = {
     subscriber: isPublic ? { email: "", name: null, tags: [] } : subscriber,
     address: settings?.mailingAddress || "",
     unsubscribe_link: isPublic
       ? PUBLIC_UNSUBSCRIBE_PLACEHOLDER
-      : getUnsubLink(unsubscribeToken),
+      : getUnsubLink(unsubscribeToken, origin),
     view_in_browser_url: viewInBrowserUrl ?? "",
     web_version_url: publicUrl ?? viewInBrowserUrl ?? "",
   };
@@ -134,7 +144,7 @@ export async function renderCampaignHtml({
     ? (content as EmailType)
     : appendTrackingPixel(
         content as EmailType,
-        getTrackingPixelUrl(generatePixelToken({ ...ids })),
+        getTrackingPixelUrl(generatePixelToken({ ...ids }), origin),
       );
   // Stored sequence content is normally validated on every write. Recheck
   // at the delivery boundary as defense in depth so corrupted/manual DB
@@ -162,7 +172,9 @@ export async function renderCampaignHtml({
           index,
           link: encodeURIComponent(originalUrl),
         }),
+        origin,
       ),
     { sequence_id: ids.sequenceId, email_id: ids.emailId },
+    origin,
   );
 }

@@ -18,7 +18,9 @@ import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries"
 import { renderCampaignHtml } from "../mail/campaign";
 import { sendMail } from "../mail/send";
 import { captureEvent } from "../observability";
+import { withoutProviderTracking } from "../settings/esp/provider-capabilities";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
+import { trackingOriginForTeam } from "../settings/tracking-domain/queries";
 import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
@@ -184,7 +186,14 @@ export async function sendSequenceEmailTest({
         subject: `[Test] ${email.subject}`,
         html,
         replyTo: pin.replyTo,
-        headers: getListUnsubscribeHeaders(TEST_UNSUBSCRIBE_TOKEN),
+        headers: withoutProviderTracking(
+          pin.provider,
+          getListUnsubscribeHeaders(
+            TEST_UNSUBSCRIBE_TOKEN,
+            await trackingOriginForTeam(teamId),
+          ),
+          { opens: true, clicks: true },
+        ),
         teamId,
         espConfigId: pin.espConfigId,
         secretVersion: pin.secretVersion,
