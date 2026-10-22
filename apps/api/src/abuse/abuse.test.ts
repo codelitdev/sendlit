@@ -316,6 +316,33 @@ describe("first large broadcast through the team's own ESP", () => {
     await expect(start(20_000, "team")).resolves.toBeUndefined();
   });
 
+  it("counts a released large import as the account's one review", async () => {
+    const { team, account, organization } = await seedTeamAndContact(tdb);
+    await recordContactImport({
+      teamId: team.id,
+      createdEmails: Array.from({ length: 1_000 }, (_, i) => `c${i}@example.com`),
+      updated: 0,
+      skipped: 0,
+      suppressed: 0,
+    });
+    const [{ flag }] = await listAbuseFlags();
+    await runAbuseCli(
+      ["release", flag.flagId, "--operator", account.id, "--reason", "known list"],
+      { out: () => undefined, err: () => undefined },
+    );
+
+    await expect(
+      assertLargeBroadcastReviewed({
+        organizationId: organization.id,
+        teamId: team.id,
+        deliverySourceType: "team",
+        sequence: broadcast,
+        recipients: 1_000,
+      }),
+    ).resolves.toBeUndefined();
+    expect(await listAbuseFlags()).toHaveLength(0);
+  });
+
   it("doesn't hold established or exempt accounts, or self-hosted installs", async () => {
     const { team, organization } = await seedTeamAndContact(tdb);
     const start = () =>

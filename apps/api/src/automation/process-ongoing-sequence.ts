@@ -29,6 +29,7 @@ import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
 import { getOrCreateContentVersion } from "../sequences/content-versions";
 import logger from "../services/log";
+import { withoutProviderTracking } from "../settings/esp/provider-capabilities";
 import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
@@ -324,9 +325,14 @@ async function attemptMailSending({
       subject,
       html: contentWithTrackedLinks,
       replyTo: pin.replyTo,
-      headers: withCorrelationHeaders(
-        outbound,
-        getListUnsubscribeHeaders(contact.unsubscribeToken),
+      // SendLit tracks opens and clicks itself; stop the ESP doing it too.
+      headers: withoutProviderTracking(
+        pin.provider,
+        withCorrelationHeaders(
+          outbound,
+          getListUnsubscribeHeaders(contact.unsubscribeToken),
+        ),
+        { opens: true, clicks: true },
       ),
       teamId: team.id,
       espConfigId: pin.espConfigId,

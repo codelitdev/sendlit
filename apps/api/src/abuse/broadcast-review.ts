@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { notifyOrganizationOwners } from "../billing/notifications";
 import { db } from "../db/client";
 import { abuseFlags, organizationPlanPolicies, organizations } from "../db/schema";
@@ -10,10 +10,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * Hosted check when a broadcast is started through the team's own ESP (#122).
  * A new organization's first broadcast to at least
- * `firstBroadcastReviewRecipients` contacts waits for an operator; once one
- * has been released, later broadcasts aren't held. Sends through a shared
- * mailbox are paced instead (`reserveSend`). Throws
- * `broadcast_held_for_review`.
+ * `firstBroadcastReviewRecipients` contacts waits for an operator. One review
+ * per new account: once an operator has released a broadcast or a large
+ * import (`abuse/imports.ts`, where the list was already looked at), later
+ * broadcasts aren't held. Sends through a shared mailbox are paced instead
+ * (`reserveSend`). Throws `broadcast_held_for_review`.
  */
 export async function assertLargeBroadcastReviewed(input: {
   organizationId: string;
@@ -49,7 +50,7 @@ export async function assertLargeBroadcastReviewed(input: {
     .where(
       and(
         eq(abuseFlags.organizationId, input.organizationId),
-        eq(abuseFlags.kind, "broadcast"),
+        inArray(abuseFlags.kind, ["broadcast", "import"]),
         eq(abuseFlags.status, "released"),
       ),
     )
