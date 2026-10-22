@@ -89,6 +89,7 @@ export function SequenceEmailEditor({
       actions={(saveContent) => (
         <SendTestDialog
           sendingVia={sendingOptionFor(sendingOptions, deliverySource)}
+          subject={email.subject}
           sequenceId={sequenceId}
           emailId={email.emailId}
           lastTestSentAt={email.lastTestSentAt}
