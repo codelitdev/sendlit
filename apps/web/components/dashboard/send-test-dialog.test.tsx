@@ -121,8 +121,8 @@ describe("SendTestDialog", () => {
     fireEvent.click(sendButton());
     await settle();
     expect(sendSequenceEmailTest).toHaveBeenCalledWith("seq_1", "email_1", [
-        "two@example.com",
-      ]);
+      "two@example.com",
+    ]);
   });
 
   it("asks for the mailing address before sending, and saves it inline", async () => {
