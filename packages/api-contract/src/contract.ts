@@ -566,7 +566,7 @@ const sequencesContract = c.router(
       },
       summary: "Start a broadcast or activate a sequence",
       description:
-        "Requires a non-empty mailing address in the team's general settings.",
+        "Requires a non-empty mailing address in the team's general settings. On SendLit Cloud, a new organization's first broadcast to 1,000 or more contacts through its own ESP is reviewed once before it can start (400 `broadcast_held_for_review`); start it again once approved.",
     },
     pause: {
       method: "POST",

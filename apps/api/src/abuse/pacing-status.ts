@@ -21,13 +21,18 @@ export type SequencePacing = {
 };
 
 /** Whether a running broadcast is being sent gradually because its
- * organization is new, with how many emails are left and roughly when the
- * last goes out. */
+ * organization is new and it goes through a shared mailbox, with how many
+ * emails are left and roughly when the last goes out. */
 export async function broadcastPacing(
-  sequence: Pick<typeof sequences.$inferSelect, "id" | "teamId" | "type" | "status">,
+  sequence: Pick<
+    typeof sequences.$inferSelect,
+    "id" | "teamId" | "type" | "status" | "deliverySourceType"
+  >,
 ): Promise<SequencePacing | null> {
   if (!abuseControlsEnabled()) return null;
   if (sequence.type !== "broadcast" || sequence.status !== "active") return null;
+  // Only sends through a shared mailbox are paced (`reserveSend`).
+  if (sequence.deliverySourceType !== "organization") return null;
   const [context] = await db
     .select({
       organizationId: organizations.id,

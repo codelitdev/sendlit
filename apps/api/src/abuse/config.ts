@@ -28,8 +28,8 @@ export type AbuseConfig = {
   signupsPerIpPerDay: number;
   /** Optional real-person check at signup. */
   signupRiskCheck: "off" | "exa";
-  /** Accounts younger than this get stricter import thresholds and paced
-   * marketing sends. */
+  /** Accounts younger than this get stricter import thresholds, paced
+   * shared-mailbox sends and a review of their first large broadcast. */
   newAccountDays: number;
   /** Imported contacts in 24 hours that alert operators. */
   importAlertContacts: number;
@@ -38,8 +38,12 @@ export type AbuseConfig = {
   importAlertGrowthFactor: number;
   /** Hold campaigns of new accounts with a flagged import until reviewed. */
   holdLargeImportsOfNewAccounts: boolean;
-  /** New accounts' daily marketing allowance is spread over this many hours. */
+  /** New accounts' daily marketing allowance through a shared mailbox is
+   * spread over this many hours. */
   pacingHours: number;
+  /** A new account's first broadcast through its own ESP to at least this
+   * many contacts waits for an operator. */
+  firstBroadcastReviewRecipients: number;
   /** Scan marketing emails before they are started: heuristics only, or
    * heuristics plus an AI classifier. */
   contentScan: "off" | "heuristic" | "ai";
@@ -64,6 +68,10 @@ export function readAbuseConfig(): AbuseConfig {
     importAlertGrowthFactor: positiveInt("IMPORT_ALERT_GROWTH_FACTOR", 3, 1_000),
     holdLargeImportsOfNewAccounts: process.env.IMPORT_HOLD_NEW_ACCOUNTS !== "false",
     pacingHours: positiveInt("PACING_HOURS", 12, 24),
+    firstBroadcastReviewRecipients: positiveInt(
+      "FIRST_BROADCAST_REVIEW_RECIPIENTS",
+      1_000,
+    ),
     contentScan: choice(
       "CONTENT_SCAN",
       ["off", "heuristic", "ai"] as const,

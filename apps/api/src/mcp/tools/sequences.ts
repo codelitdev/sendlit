@@ -391,7 +391,7 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
     "start_sequence",
     {
       description:
-        "Starts a broadcast (schedules it for delivery) or activates a sequence (begins enrolling contacts on its trigger). Requires a mailing address and at least one published email.",
+        "Starts a broadcast (schedules it for delivery) or activates a sequence (begins enrolling contacts on its trigger). Requires a mailing address and at least one published email. On SendLit Cloud, a new organization's first broadcast to 1,000 or more contacts through its own ESP is reviewed once first (error `broadcast_held_for_review`); start it again once approved.",
       inputSchema: { sequenceId: z.string() },
       outputSchema: sequenceSchema,
       annotations: {

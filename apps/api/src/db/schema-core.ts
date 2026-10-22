@@ -2265,7 +2265,7 @@ export const abuseFlags = pgTable(
     flagIdCheck: publicIdCheck("abuse_flags_flag_id_check", table.flagId, "abf"),
     kindCheck: check(
       "abuse_flags_kind_check",
-      sql`${table.kind} IN ('signup', 'content', 'import')`,
+      sql`${table.kind} IN ('signup', 'content', 'import', 'broadcast')`,
     ),
     severityCheck: check(
       "abuse_flags_severity_check",

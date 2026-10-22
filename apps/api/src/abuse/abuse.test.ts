@@ -29,6 +29,7 @@ const { assertSignupAllowed, recordSignup, SignupBlockedError } = await import(
 const { recordContactImport, assertNoImportUnderReview } = await import("./imports");
 const { listAbuseFlags, resolveAbuseFlag } = await import("./flags");
 const { pacingBudget } = await import("./pacing");
+const { assertLargeBroadcastReviewed } = await import("./broadcast-review");
 const { runAbuseCli } = await import("./operator-cli");
 const { closeSharedRedis } = await import("../services/redis-client");
 const { recordPacedSend } = await import("./telemetry");
@@ -276,6 +277,68 @@ describe("large imports", () => {
       suppressed: 0,
     });
     expect(await listAbuseFlags()).toEqual([]);
+  });
+});
+
+describe("first large broadcast through the team's own ESP", () => {
+  const broadcast = { sequenceId: "seq_first", title: "Welcome issue" };
+
+  it("is reviewed once for a new account, then later ones start", async () => {
+    const { team, account, organization } = await seedTeamAndContact(tdb);
+    const start = (recipients: number, deliverySourceType: "team" | "organization") =>
+      assertLargeBroadcastReviewed({
+        organizationId: organization.id,
+        teamId: team.id,
+        deliverySourceType,
+        sequence: broadcast,
+        recipients,
+      });
+
+    // Small broadcasts and shared-mailbox ones (paced instead) aren't held.
+    await expect(start(999, "team")).resolves.toBeUndefined();
+    await expect(start(5_000, "organization")).resolves.toBeUndefined();
+
+    await expect(start(1_000, "team")).rejects.toThrow("broadcast_held_for_review");
+    await expect(start(1_000, "team")).rejects.toThrow("broadcast_held_for_review");
+    const flags = await listAbuseFlags();
+    expect(flags).toHaveLength(1);
+    expect(flags[0].flag).toMatchObject({ kind: "broadcast", severity: "medium" });
+    expect(flags[0].flag.details).toMatchObject({
+      sequenceId: "seq_first",
+      recipients: 1_000,
+    });
+
+    const code = await runAbuseCli(
+      ["release", flags[0].flag.flagId, "--operator", account.id, "--reason", "ok"],
+      { out: () => undefined, err: () => undefined },
+    );
+    expect(code).toBe(0);
+    await expect(start(20_000, "team")).resolves.toBeUndefined();
+  });
+
+  it("doesn't hold established or exempt accounts, or self-hosted installs", async () => {
+    const { team, organization } = await seedTeamAndContact(tdb);
+    const start = () =>
+      assertLargeBroadcastReviewed({
+        organizationId: organization.id,
+        teamId: team.id,
+        deliverySourceType: "team",
+        sequence: broadcast,
+        recipients: 50_000,
+      });
+    await tdb
+      .update(schema.organizations)
+      .set({ createdAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) })
+      .where(eq(schema.organizations.id, organization.id));
+    await expect(start()).resolves.toBeUndefined();
+
+    await tdb
+      .update(schema.organizations)
+      .set({ createdAt: new Date() })
+      .where(eq(schema.organizations.id, organization.id));
+    process.env.SENDLIT_DEPLOYMENT_MODE = "oss";
+    await expect(start()).resolves.toBeUndefined();
+    expect(await listAbuseFlags()).toHaveLength(0);
   });
 });
 

@@ -48,7 +48,12 @@ async function campaignSendsSince(
   organizationId: string,
   start: Date,
   now: Date,
+  /** Only sends through this kind of delivery source. */
+  deliverySourceType?: "organization" | "team",
 ): Promise<number> {
+  const source = deliverySourceType
+    ? eq(outboundMessages.deliverySourceType, deliverySourceType)
+    : undefined;
   const [[accepted], [reserved]] = await Promise.all([
     tx
       .select({ value: count() })
@@ -59,6 +64,7 @@ async function campaignSendsSince(
           eq(teams.organizationId, organizationId),
           eq(outboundMessages.sourceType, "campaign"),
           gte(outboundMessages.acceptedAt, start),
+          source,
         ),
       ),
     tx
@@ -76,6 +82,7 @@ async function campaignSendsSince(
           eq(planSendReservations.state, "reserved"),
           gt(planSendReservations.expiresAt, now),
           gte(planSendReservations.updatedAt, start),
+          source,
         ),
       ),
   ]);
@@ -388,7 +395,10 @@ export async function reserveSend(
     throw new Error("send_reservation_amount_invalid");
   }
   const [outbound] = await tx
-    .select({ teamId: outboundMessages.teamId })
+    .select({
+      teamId: outboundMessages.teamId,
+      deliverySourceType: outboundMessages.deliverySourceType,
+    })
     .from(outboundMessages)
     .where(eq(outboundMessages.id, input.outboundMessageId))
     .limit(1)
@@ -524,7 +534,11 @@ export async function reserveSend(
         });
       }
     }
-    if (abuseControlsEnabled()) {
+    // New-account pacing protects shared mailboxes, which other teams depend
+    // on. Through a team's own ESP the reputation is the team's and the ESP
+    // enforces its own limits; a new account's first large broadcast there
+    // is reviewed instead (`abuse/broadcast-review.ts`, #122).
+    if (abuseControlsEnabled() && outbound?.deliverySourceType === "organization") {
       const [organization] = await tx
         .select({ createdAt: organizations.createdAt })
         .from(organizations)
@@ -547,6 +561,7 @@ export async function reserveSend(
           input.organizationId,
           hourStart,
           now,
+          "organization",
         );
         if (usage + amount > budget.hourlyLimit) {
           throw new PlanGateError("plan_limit_reached", {

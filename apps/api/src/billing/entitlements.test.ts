@@ -184,6 +184,47 @@ function recordLocks(tx: any, locks: string[]) {
   });
 }
 
+describe("new-account pacing", () => {
+  async function reserveMany(deliverySourceType: "organization" | "team", n: number) {
+    const { organization, team } = await seedTeamAndContact(tdb);
+    for (let i = 0; i < n; i++) {
+      const [outbound] = await tdb
+        .insert(outboundMessages)
+        .values({
+          teamId: team.id,
+          deliverySourceType,
+          sourceType: "campaign",
+          recipientEmail: `r${i}@example.com`,
+          normalizedRecipient: `r${i}@example.com`,
+          deliveryStatus: "prepared",
+        })
+        .returning();
+      try {
+        await tdb.transaction((tx) =>
+          reserveSend(tx as any, {
+            organizationId: organization.id,
+            outboundMessageId: outbound.id,
+            purpose: "marketing",
+          }),
+        );
+      } catch (error: any) {
+        return { reserved: i, error: error.details?.capability };
+      }
+    }
+    return { reserved: n, error: null };
+  }
+
+  it("paces a new account's shared-mailbox sends but not its own ESP's (#122)", async () => {
+    // The first ramp stage allows 200 a day, spread over 12 hours: 17 an hour.
+    expect(await reserveMany("organization", 30)).toEqual({
+      reserved: 17,
+      error: "marketing_hourly_pacing",
+    });
+    await truncateAll(tdb);
+    expect(await reserveMany("team", 30)).toEqual({ reserved: 30, error: null });
+  });
+});
+
 describe("entitlements from the engine's commercial state", () => {
   beforeEach(async () => {
     await activateFakeCatalog();

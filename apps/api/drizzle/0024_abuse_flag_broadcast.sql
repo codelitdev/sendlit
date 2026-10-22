@@ -1,0 +1,2 @@
+ALTER TABLE "abuse_flags" DROP CONSTRAINT "abuse_flags_kind_check";--> statement-breakpoint
+ALTER TABLE "abuse_flags" ADD CONSTRAINT "abuse_flags_kind_check" CHECK ("abuse_flags"."kind" IN ('signup', 'content', 'import', 'broadcast'));
