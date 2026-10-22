@@ -26,24 +26,35 @@ export interface CampaignEmailIds {
   emailId: string;
 }
 
+/** What a web-version link opens: the email for one contact, as it was
+ * sent when `versionId` (an `email_content_versions.versionId`) is set. Links
+ * sent before versions existed have none and show the current content. */
+export interface CampaignViewIds extends CampaignEmailIds {
+  versionId?: string;
+}
+
 /** Web versions stay reachable for as long as an archive would. */
 const VIEW_TOKEN_TTL = "3650d";
 
-export function getCampaignViewUrl(ids: CampaignEmailIds): string {
+export function getCampaignViewUrl({ versionId, ...ids }: CampaignViewIds): string {
   return getViewInBrowserUrl(
-    generatePixelToken({ kind: "view", ...ids }, VIEW_TOKEN_TTL),
+    generatePixelToken(
+      { kind: "view", ...ids, ...(versionId && { v: versionId }) },
+      VIEW_TOKEN_TTL,
+    ),
   );
 }
 
-export function verifyCampaignViewToken(token: string): CampaignEmailIds | null {
-  const payload = verifyPixelToken<Partial<CampaignEmailIds> & { kind?: string }>(
-    token,
-  );
+export function verifyCampaignViewToken(token: string): CampaignViewIds | null {
+  const payload = verifyPixelToken<
+    Partial<CampaignEmailIds> & { kind?: string; v?: unknown }
+  >(token);
   if (
     payload?.kind !== "view" ||
     typeof payload.contactId !== "string" ||
     typeof payload.sequenceId !== "string" ||
-    typeof payload.emailId !== "string"
+    typeof payload.emailId !== "string" ||
+    (payload.v !== undefined && typeof payload.v !== "string")
   ) {
     return null;
   }
@@ -51,6 +62,7 @@ export function verifyCampaignViewToken(token: string): CampaignEmailIds | null 
     contactId: payload.contactId,
     sequenceId: payload.sequenceId,
     emailId: payload.emailId,
+    ...(payload.v && { versionId: payload.v }),
   };
 }
 
@@ -81,6 +93,7 @@ export async function renderCampaignHtml({
   content,
   subscriber,
   ids,
+  contentVersionId,
   unsubscribeToken,
   web = false,
   publication,
@@ -89,6 +102,9 @@ export async function renderCampaignHtml({
   content: unknown;
   subscriber: { email: string; name: string | null; tags: string[] };
   ids: CampaignEmailIds;
+  /** Public id of the stored copy of `content`, for the "view in browser"
+   * link (`sequences/content-versions.ts`). */
+  contentVersionId?: string;
   unsubscribeToken: string;
   /** `"public"`: the published web page, with nobody's data and no
    * unsubscribe link. */
@@ -100,7 +116,9 @@ export async function renderCampaignHtml({
   const publicUrl = publication ? issueUrl(settings, publication) : null;
   // The footer's "view in browser" link goes to the public page once the
   // issue is published, else to the reader's own web version.
-  const viewInBrowserUrl = web ? undefined : (publicUrl ?? getCampaignViewUrl(ids));
+  const viewInBrowserUrl = web
+    ? undefined
+    : (publicUrl ?? getCampaignViewUrl({ ...ids, versionId: contentVersionId }));
   const isPublic = web === "public";
   const variables = {
     subscriber: isPublic ? { email: "", name: null, tags: [] } : subscriber,

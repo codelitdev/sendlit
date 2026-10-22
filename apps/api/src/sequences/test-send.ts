@@ -22,6 +22,7 @@ import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
+import { getOrCreateContentVersion } from "./content-versions";
 import { takeTestSendQuota } from "./test-send-limits";
 
 /** A test goes to at most this many addresses (Mailchimp allows a handful). */
@@ -153,6 +154,11 @@ export async function sendSequenceEmailTest({
   }
 
   try {
+    // The test's "view in browser" link shows this copy, not later edits.
+    const contentVersion =
+      deliverable.length > 0
+        ? await getOrCreateContentVersion({ ...email, teamId })
+        : null;
     for (const recipient of deliverable) {
       const contact = await findContactByEmail(teamId, recipient);
       const html = await renderCampaignHtml({
@@ -168,6 +174,7 @@ export async function sendSequenceEmailTest({
           sequenceId: sequence.sequenceId,
           emailId: email.emailId,
         },
+        contentVersionId: contentVersion?.versionId,
         unsubscribeToken: TEST_UNSUBSCRIBE_TOKEN,
       });
       await sendMail({
