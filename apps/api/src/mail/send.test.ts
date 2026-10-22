@@ -206,6 +206,29 @@ describe("sendMail", () => {
     });
   });
 
+  it("passes SendGrid's JSON header through unencoded", async () => {
+    getTeamTransportMock.mockResolvedValue({ sendMail: sendMailMock });
+    const { sendMail } = await loadSend();
+    const json = JSON.stringify({
+      filters: { clicktrack: { settings: { enable: 0 } } },
+    });
+
+    await sendMail({
+      purpose: "transactional",
+      from: "Sender <sender@example.com>",
+      to: "contact@example.com",
+      subject: "Hello",
+      html: "<p>Hi</p>",
+      headers: { "X-SMTPAPI": json, "X-Other": "kept" },
+      teamId: "team-1",
+    });
+
+    expect(sendMailMock.mock.calls.at(-1)?.[0].headers).toEqual({
+      "X-SMTPAPI": { prepared: true, value: json },
+      "X-Other": "kept",
+    });
+  });
+
   it("sends transactional mail without requiring a mailing address", async () => {
     assertMailingAddressConfiguredMock.mockRejectedValueOnce(
       new Error("mailing_address_required"),
