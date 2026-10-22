@@ -317,6 +317,7 @@ export default function BroadcastEditorPage({
                 {sequence.emails[0] && (
                   <SendTestDialog
                     sendingVia={sendingOptionFor(sendingOptions, meta?.deliverySource)}
+                    subject={meta.title}
                     sequenceId={sequenceId}
                     emailId={sequence.emails[0].emailId}
                     lastTestSentAt={sequence.emails[0].lastTestSentAt}
