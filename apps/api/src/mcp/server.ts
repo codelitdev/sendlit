@@ -11,6 +11,7 @@ import { registerSegmentTools } from "./tools/segments";
 import { registerSequenceTools } from "./tools/sequences";
 import { registerTeamTools } from "./tools/teams";
 import { registerTemplateTools } from "./tools/templates";
+import { registerTrackingDomainTools } from "./tools/tracking-domain";
 import { registerTransactionalTools } from "./tools/transactional";
 import { registerWebTools } from "./tools/web";
 
@@ -59,6 +60,7 @@ export function buildMcpServer(): McpServer {
   registerSequenceTools(tools);
   registerTransactionalTools(tools);
   registerGeneralSettingsTools(tools);
+  registerTrackingDomainTools(tools);
   registerEspTools(tools);
   registerTeamTools(tools);
   registerDeliveryFeedbackTools(tools);

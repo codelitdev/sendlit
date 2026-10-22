@@ -19,6 +19,7 @@ off. This page lists what applies where.
 | Pacing of a new account's sends through a shared mailbox | Off | On |
 | New-account daily ramp and monthly send caps (plans) | Off | On |
 | Auto-pause on high bounce or complaint rates | On | On |
+| Teams' own tracking domains | On, once your proxy serves them over HTTPS | On |
 
 Variables go in the root `.env` file; the Compose stack passes all of it to
 the API. The full list, with defaults, is in `apps/api/.env.example`.
@@ -56,6 +57,13 @@ the ESP's tracking off:
 This applies to broadcasts, sequences and test sends, and to transactional
 emails where SendLit tracks opens or clicks. Headers a transactional request
 sets itself take precedence.
+
+## Tracking domains
+
+Teams can put open, click, unsubscribe and "view in browser" links on their
+own subdomain. A domain only verifies once your reverse proxy serves it over
+HTTPS, so set that up first: see [Tracking domains](/self-hosting/tracking-domains).
+Until then, links keep using your API's host.
 
 ## Auto-pause
 

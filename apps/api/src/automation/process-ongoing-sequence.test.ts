@@ -383,6 +383,38 @@ describe("processOngoingSequence", () => {
     );
   });
 
+  it("puts every link on the team's verified tracking domain", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb, {
+      settings: {
+        trackingDomain: "track.example.com",
+        trackingDomainStatus: "verified",
+      },
+    });
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const row = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+
+    await processOngoingSequence(row.id);
+
+    const { html, headers } = mockedSendMail.mock.calls[0][0];
+    expect(html).toContain("https://track.example.com/track/open?d=");
+    expect(html).toContain("https://track.example.com/track/click?d=");
+    expect(html).toMatch(/href="https:\/\/track\.example\.com\/view\/[^"]+"/);
+    expect(html).toContain(
+      `https://track.example.com/unsubscribe/${contact.unsubscribeToken}`,
+    );
+    expect(html).not.toContain("sendlit.test/");
+    expect(headers?.["List-Unsubscribe"]).toBe(
+      `<https://track.example.com/unsubscribe/${contact.unsubscribeToken}>`,
+    );
+  });
+
   it("renders merge tags, the tracking pixel, and click-tracked links", async () => {
     const { team, contact } = await seedTeamAndContact(tdb);
     const { sequenceRow } = await seedSequence(tdb, {

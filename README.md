@@ -92,7 +92,8 @@ For an internet-facing deployment:
 - Put the API and web ports behind a TLS reverse proxy, and set `ENABLE_TRUST_PROXY=true` when it forwards client IPs.
 - Back up the `postgres-data` volume and keep the `.env` secrets stable. Changing the ESP encryption key makes stored team SMTP credentials unreadable.
 - If you send through Amazon SES, follow [Amazon SES bounces and complaints](./apps/docs/content/docs/self-hosting/amazon-ses-feedback.mdx) so SendLit suppresses bounced and complaining addresses.
-- See [Sending safeguards](./apps/docs/content/docs/self-hosting/sending-safeguards.mdx) for which limits apply to a self-hosted install (test-send limits, your ESP's own tracking) and how to change them.
+- See [Sending safeguards](./apps/docs/content/docs/self-hosting/sending-safeguards.mdx) for which limits apply to a self-hosted install (test-send limits, auto-pause, your ESP's own tracking) and how to change them.
+- To let teams use their own tracking domains, configure on-demand TLS in your reverse proxy as described in [Tracking domains](./apps/docs/content/docs/self-hosting/tracking-domains.mdx).
 
 Prebuilt images are published on release tags: [`codelit/sendlit`](https://hub.docker.com/r/codelit/sendlit) (API) and [`codelit/sendlit-web`](https://hub.docker.com/r/codelit/sendlit-web) (dashboard).
 

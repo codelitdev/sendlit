@@ -52,8 +52,15 @@ type Section = "SPF" | "DKIM" | "DMARC";
 /** What every check (SPF, DKIM, DMARC) has in common. */
 type CheckSummary = { status: Status; message: string };
 
-const SECTION_SUMMARY: Record<Section, (domain: string) => string> = {
-  SPF: (domain) => `Lists the servers allowed to send as ${domain}.`,
+const SECTION_SUMMARY: Record<
+  Section,
+  (domain: string, result: DomainAuthentication) => string
+> = {
+  // With a separate bounce (Return-Path) domain, its SPF is what DMARC checks.
+  SPF: (domain, result) =>
+    result.spf.host !== domain
+      ? `Lists the servers allowed to send for your bounce (Return-Path) domain, ${result.spf.host}.`
+      : `Lists the servers allowed to send as ${domain}.`,
   DKIM: () => "Signs every email so inboxes know nobody changed it.",
   DMARC: () => "Tells inboxes what to do with mail that fails SPF or DKIM.",
 };
@@ -330,7 +337,7 @@ function AuthSection({
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium">{name}</span>
           <span className="block text-sm text-muted-foreground">
-            {SECTION_SUMMARY[name](domain)}
+            {SECTION_SUMMARY[name](domain, result)}
           </span>
         </span>
         <Badge variant={STATUS_STYLE[check.status].badge}>{badge}</Badge>
@@ -513,7 +520,7 @@ function SelectorField({
   );
 }
 
-function CopyButton({ value, label }: { value: string; label: string }) {
+export function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <IconButton

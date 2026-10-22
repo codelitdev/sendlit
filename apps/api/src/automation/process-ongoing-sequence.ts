@@ -30,6 +30,7 @@ import { captureError, captureEvent } from "../observability";
 import { getOrCreateContentVersion } from "../sequences/content-versions";
 import logger from "../services/log";
 import { withoutProviderTracking } from "../settings/esp/provider-capabilities";
+import { trackingOriginForTeam } from "../settings/tracking-domain/queries";
 import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
@@ -330,7 +331,10 @@ async function attemptMailSending({
         pin.provider,
         withCorrelationHeaders(
           outbound,
-          getListUnsubscribeHeaders(contact.unsubscribeToken),
+          getListUnsubscribeHeaders(
+            contact.unsubscribeToken,
+            await trackingOriginForTeam(team.id),
+          ),
         ),
         { opens: true, clicks: true },
       ),

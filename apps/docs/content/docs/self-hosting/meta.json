@@ -1,5 +1,10 @@
 {
   "title": "Self-Hosting",
   "icon": "Server",
-  "pages": ["amazon-ses-feedback", "monitoring", "sending-safeguards"]
+  "pages": [
+    "amazon-ses-feedback",
+    "monitoring",
+    "sending-safeguards",
+    "tracking-domains"
+  ]
 }
