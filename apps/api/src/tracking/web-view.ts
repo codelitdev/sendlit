@@ -6,6 +6,7 @@ import { db } from "../db/client";
 import { sequenceEmails, sequences } from "../db/schema";
 import { renderCampaignHtml, verifyCampaignViewToken } from "../mail/campaign";
 import { captureError } from "../observability";
+import { getContentVersion } from "../sequences/content-versions";
 import logger from "../services/log";
 import { getTeam } from "../team/queries";
 import { emailUnavailablePage } from "./unsubscribe-page";
@@ -24,7 +25,9 @@ const WEB_VIEW_CSP = [
 ].join("; ");
 
 // The hosted "view in browser" version of one broadcast or sequence email,
-// personalised for the recipient the signed link was sent to.
+// personalised for the recipient the signed link was sent to. Links carry the
+// version that was sent, so later edits don't change them; older links
+// without one show the current content.
 router.get("/view/:token", async (req: Request, res: Response) => {
   res.setHeader("X-Robots-Tag", "noindex");
   res.setHeader("Referrer-Policy", "no-referrer");
@@ -63,10 +66,16 @@ router.get("/view/:token", async (req: Request, res: Response) => {
     ) {
       return res.status(404).type("html").send(emailUnavailablePage());
     }
+    const version = ids.versionId
+      ? await getContentVersion(email.id, ids.versionId)
+      : null;
+    if (ids.versionId && !version) {
+      return res.status(404).type("html").send(emailUnavailablePage());
+    }
 
     const html = await renderCampaignHtml({
       team,
-      content: email.content,
+      content: version ? version.content : email.content,
       subscriber: contact
         ? { email: contact.email, name: contact.name, tags: contact.tags }
         : { email: "", name: null, tags: [] },

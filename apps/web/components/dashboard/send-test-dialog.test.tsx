@@ -80,6 +80,15 @@ describe("recipient helpers", () => {
     ]);
   });
 
+  it("stops at five addresses", () => {
+    expect(
+      addRecipients(
+        ["a@x.com"],
+        ["b@x.com", "c@x.com", "d@x.com", "e@x.com", "f@x.com"],
+      ),
+    ).toEqual(["a@x.com", "b@x.com", "c@x.com", "d@x.com", "e@x.com"]);
+  });
+
   it("skips duplicates regardless of case", () => {
     expect(addRecipients(["a@x.com"], ["A@x.com", "b@x.com"])).toEqual([
       "a@x.com",
@@ -123,6 +132,20 @@ describe("SendTestDialog", () => {
     expect(sendSequenceEmailTest).toHaveBeenCalledWith("seq_1", "email_1", [
       "two@example.com",
     ]);
+  });
+
+  it("hides the address input once five are added", async () => {
+    openDialog();
+    await settle();
+    for (const n of [1, 2, 3, 4, 5]) addAddress(`p${n}@example.com`);
+    expect(screen.getByText("5 of 5")).toBeTruthy();
+    expect(screen.getByText(/at most 5 addresses/)).toBeTruthy();
+    expect(
+      (document.getElementById("send-test-recipients") as HTMLInputElement).hidden,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Remove p1@example.com" }));
+    expect(screen.getByText("4 of 5")).toBeTruthy();
+    expect(screen.queryByText(/at most 5 addresses/)).toBeNull();
   });
 
   it("asks for the mailing address before sending, and saves it inline", async () => {

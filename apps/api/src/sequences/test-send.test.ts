@@ -5,6 +5,9 @@ mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db.js");
   return { db: await makeTestDb() };
 });
+mock.module("./test-send-limits", () => ({
+  takeTestSendQuota: vi.fn().mockResolvedValue(undefined),
+}));
 mock.module("../mail/send", () => ({
   sendMail: vi.fn().mockResolvedValue({ messageId: null, providerResponse: null }),
 }));
@@ -17,10 +20,14 @@ const { addOrStrengthenSuppression } = await import(
 const { sendMail } = await import("../mail/send");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
-const { seedSequence } = await import("../test/fixtures");
+const { emailContent, seedSequence } = await import("../test/fixtures");
+const { verifyCampaignViewToken } = await import("../mail/campaign");
+const { getContentVersion } = await import("./content-versions");
 const { TEST_CONTACT_ID } = await import("../config/constants");
 const { verifyPixelToken } = await import("../utils/pixel-jwt");
 const { sendSequenceEmailTest } = await import("./test-send");
+const { takeTestSendQuota } = await import("./test-send-limits");
+const mockedTakeQuota = takeTestSendQuota as unknown as Mock<typeof takeTestSendQuota>;
 
 const tdb = db as unknown as TestDb;
 const mockedSendMail = sendMail as unknown as Mock<typeof sendMail>;
@@ -28,6 +35,8 @@ const mockedSendMail = sendMail as unknown as Mock<typeof sendMail>;
 beforeEach(async () => {
   await truncateAll(tdb);
   mockedSendMail.mockClear();
+  mockedTakeQuota.mockClear();
+  mockedTakeQuota.mockResolvedValue(undefined);
 });
 
 async function seed() {
@@ -71,6 +80,32 @@ describe("sendSequenceEmailTest", () => {
       .where(eq(sequenceEmails.id, email.id));
     expect(row.lastTestSentAt).toBeInstanceOf(Date);
     expect(result.lastTestSentAt).toBe(row.lastTestSentAt?.toISOString() ?? null);
+  });
+
+  it("links a web version of the email as tested, not later edits", async () => {
+    const { team, sequenceRow, email } = await seed();
+
+    await sendSequenceEmailTest({
+      teamId: team.id,
+      sequenceId: sequenceRow.sequenceId,
+      emailId: email.emailId,
+      to: ["me@example.com"],
+    });
+    await tdb
+      .update(sequenceEmails)
+      .set({ content: emailContent({ text: "Edited after the test" }) })
+      .where(eq(sequenceEmails.id, email.id));
+
+    const viewUrl = mockedSendMail.mock.calls[0][0].html.match(
+      /href="(https:\/\/sendlit\.test\/view\/[^"]+)"/,
+    )?.[1];
+    const ids = verifyCampaignViewToken(
+      new URL(viewUrl ?? "http://x").pathname.slice(6),
+    );
+    expect(ids?.contactId).toBe(TEST_CONTACT_ID);
+    const version = await getContentVersion(email.id, ids?.versionId ?? "");
+    expect(JSON.stringify(version?.content)).toContain("Hello {{ subscriber.name }}!");
+    expect(JSON.stringify(version?.content)).not.toContain("Edited after the test");
   });
 
   it("defaults to the fallback recipient and uses their contact data", async () => {
@@ -123,6 +158,33 @@ describe("sendSequenceEmailTest", () => {
     ]);
     expect(mockedSendMail).not.toHaveBeenCalled();
     expect(result.lastTestSentAt).toBeNull();
+  });
+
+  it("counts each deliverable recipient and sends nothing past the limit", async () => {
+    const { team, sequenceRow, email } = await seed();
+    await sendSequenceEmailTest({
+      teamId: team.id,
+      sequenceId: sequenceRow.sequenceId,
+      emailId: email.emailId,
+      to: ["a@example.com", "B@example.com", "b@example.com"],
+    });
+    expect(mockedTakeQuota).toHaveBeenCalledWith({
+      teamId: team.id,
+      emailId: email.emailId,
+      recipients: 2,
+    });
+
+    mockedSendMail.mockClear();
+    mockedTakeQuota.mockRejectedValueOnce(new Error("test_send_limit_reached"));
+    await expect(
+      sendSequenceEmailTest({
+        teamId: team.id,
+        sequenceId: sequenceRow.sequenceId,
+        emailId: email.emailId,
+        to: ["a@example.com"],
+      }),
+    ).rejects.toThrow("test_send_limit_reached");
+    expect(mockedSendMail).not.toHaveBeenCalled();
   });
 
   it("404s an email of another sequence", async () => {

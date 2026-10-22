@@ -178,7 +178,12 @@ const impl = s.router(contract.sequences, {
       if (err.message === "sequence_not_found" || err.message === "email_not_found") {
         return { status: 404, body: { error: err.message } };
       }
-      if (err.message === "test_send_limit_reached") {
+      if (
+        err.message === "test_send_limit_reached" ||
+        err.message === "test_send_email_limit_reached" ||
+        err.message === "organization_team_quota_exhausted" ||
+        err.message === "organization_quota_exhausted"
+      ) {
         return { status: 429, body: { error: err.message } };
       }
       if (err.message === MAILING_ADDRESS_REQUIRED) {

@@ -1428,6 +1428,44 @@ export const sequenceEmails = pgTable(
   }),
 );
 
+/** What a broadcast or sequence email looked like when it was sent: one
+ * row per distinct subject and content (`contentHash` from
+ * `abuse/content-scan.ts`), never updated. A send's "view in browser" link
+ * points at its row, so later edits don't change what earlier recipients
+ * see. Deleted with the email. */
+export const emailContentVersions = pgTable(
+  "email_content_versions",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    /** Public id, carried in "view in browser" links. */
+    versionId: text("version_id")
+      .notNull()
+      .unique()
+      .$defaultFn(() => genPublicId("ver")),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    sequenceEmailId: uuid("sequence_email_id")
+      .notNull()
+      .references(() => sequenceEmails.id, { onDelete: "cascade" }),
+    contentHash: text("content_hash").notNull(),
+    subject: text("subject").notNull(),
+    content: jsonb("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    emailHashIdx: uniqueIndex("email_content_versions_email_hash_idx").on(
+      table.sequenceEmailId,
+      table.contentHash,
+    ),
+    versionIdCheck: publicIdCheck(
+      "email_content_versions_version_id_check",
+      table.versionId,
+      "ver",
+    ),
+  }),
+);
+
 /** A scheduled trigger for a sequence — e.g. "fire DATE_OCCURRED for broadcast X at
  * time T", processed by `automation/process-rules.ts`. Not exposed via any
  * REST/MCP route today. */
@@ -1511,6 +1549,11 @@ export const emailDeliveries = pgTable("email_deliveries", {
   emailId: uuid("email_id")
     .notNull()
     .references(() => sequenceEmails.id, { onDelete: "cascade" }),
+  /** The content this contact received; null for sends before versions. */
+  contentVersionId: uuid("content_version_id").references(
+    () => emailContentVersions.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

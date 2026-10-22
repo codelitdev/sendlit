@@ -494,6 +494,8 @@ const sequencesContract = c.router(
         404: errorSchema,
       },
       summary: "Update a broadcast or sequence",
+      description:
+        "A broadcast's title is its email's subject, so once the broadcast has been sent, changing the title returns 400 with the error \"This broadcast has already been sent\".",
     },
     remove: {
       method: "DELETE",
@@ -527,7 +529,7 @@ const sequencesContract = c.router(
       },
       summary: "Update an email within a sequence",
       description:
-        "When templateId is supplied, it must identify a marketing template; transactional templates return 422 template_not_marketing.",
+        "When templateId is supplied, it must identify a marketing template; transactional templates return 422 template_not_marketing. Edits to an active sequence's email apply to later sends only: the \"view in browser\" page of an email already sent keeps showing what was sent. A sent broadcast can't be edited; the request returns it unchanged.",
     },
     sendEmailTest: {
       method: "POST",
@@ -541,7 +543,7 @@ const sequencesContract = c.router(
       },
       summary: "Send a test of a broadcast or sequence email",
       description:
-        "Renders the email exactly like a real send (merge tags, footer, tracking) and sends it with a `[Test]` subject prefix through the delivery source the real send would use. Merge tags use the recipient's contact data when they are a contact. Opens, clicks and the unsubscribe link in a test change nothing. Suppressed addresses are skipped. Each team can send 50 test emails per hour.",
+        "Renders the email exactly like a real send (merge tags, footer, tracking) and sends it with a `[Test]` subject prefix through the delivery source the real send would use. Its \"view in browser\" link shows the email as it was when tested, not later edits. Merge tags use the recipient's contact data when they are a contact. Opens, clicks and the unsubscribe link in a test change nothing. Suppressed addresses are skipped. Every recipient counts as one test: by default a team can send 100 test emails in any 24 hours (50 in any 3 hours) and 20 per email per 24 hours, after which this returns 429 `test_send_limit_reached` or `test_send_email_limit_reached`. Tests through an organization's shared mailbox also count against the team's shared-delivery quota (429 `organization_team_quota_exhausted` or `organization_quota_exhausted`).",
     },
     removeEmail: {
       method: "DELETE",

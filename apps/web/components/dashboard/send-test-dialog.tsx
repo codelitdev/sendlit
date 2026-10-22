@@ -30,6 +30,13 @@ import { cn } from "@/lib/utils";
 
 export const MAX_TEST_RECIPIENTS = 5;
 
+const TEST_LIMIT_MESSAGES: Record<string, string> = {
+  test_send_limit_reached:
+    "Your team has reached its test email limit. Earlier tests age out over the day, so try again later.",
+  test_send_email_limit_reached:
+    "This email has reached its daily test limit. Try again later.",
+};
+
 /** Splits typed or pasted text into addresses (commas, semicolons, spaces). */
 export function parseRecipients(value: string) {
   return value
@@ -38,11 +45,17 @@ export function parseRecipients(value: string) {
     .filter(Boolean);
 }
 
-/** Adds `incoming` to `current`, skipping duplicates (case-insensitive). */
-export function addRecipients(current: string[], incoming: string[]) {
+/** Adds `incoming` to `current`, skipping duplicates (case-insensitive) and
+ * stopping at `max` addresses. */
+export function addRecipients(
+  current: string[],
+  incoming: string[],
+  max = MAX_TEST_RECIPIENTS,
+) {
   const seen = new Set(current.map((email) => email.toLowerCase()));
   const next = [...current];
   for (const email of incoming) {
+    if (next.length >= max) break;
     if (seen.has(email.toLowerCase())) continue;
     seen.add(email.toLowerCase());
     next.push(email);
@@ -129,10 +142,6 @@ export function SendTestDialog({
       setError("Add at least one email address");
       return;
     }
-    if (to.length > MAX_TEST_RECIPIENTS) {
-      setError(`Send a test to at most ${MAX_TEST_RECIPIENTS} addresses`);
-      return;
-    }
     setSending(true);
     setError(null);
     try {
@@ -153,9 +162,7 @@ export function SendTestDialog({
     } catch (err) {
       const message =
         err instanceof ApiError
-          ? err.message === "test_send_limit_reached"
-            ? "Too many test emails in the last hour. Try again later."
-            : err.message
+          ? (TEST_LIMIT_MESSAGES[err.message] ?? err.message)
           : "Failed to send the test";
       if (presentDeliverySourceError(message) === MAILING_ADDRESS_REQUIRED_ERROR) {
         setAddressMissing(true);
@@ -167,7 +174,7 @@ export function SendTestDialog({
     }
   }
 
-  const overLimit = recipients.length > MAX_TEST_RECIPIENTS;
+  const full = recipients.length >= MAX_TEST_RECIPIENTS;
   const from = sendingVia?.fromEmail
     ? sendingVia.fromName
       ? `${sendingVia.fromName} <${sendingVia.fromEmail}>`
@@ -196,7 +203,7 @@ export function SendTestDialog({
                 <span
                   className={cn(
                     "text-xs text-muted-foreground",
-                    overLimit && "text-destructive",
+                    full && "font-medium text-foreground",
                   )}
                 >
                   {recipients.length} of {MAX_TEST_RECIPIENTS}
@@ -223,6 +230,7 @@ export function SendTestDialog({
                 ))}
                 <input
                   id="send-test-recipients"
+                  hidden={full}
                   type="email"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
@@ -238,6 +246,12 @@ export function SendTestDialog({
                   className="h-8 min-w-40 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground"
                 />
               </div>
+              {full && (
+                <p className="text-xs text-muted-foreground">
+                  A test goes to at most {MAX_TEST_RECIPIENTS} addresses. Remove one to
+                  add another.
+                </p>
+              )}
             </div>
 
             <dl className="divide-y overflow-hidden rounded-lg border bg-muted/40 text-sm">
@@ -304,10 +318,7 @@ export function SendTestDialog({
               >
                 Cancel
               </Button>
-              <Button
-                onClick={send}
-                disabled={sending || Boolean(addressMissing) || overLimit}
-              >
+              <Button onClick={send} disabled={sending || Boolean(addressMissing)}>
                 <Send className="size-4" />
                 {sending ? "Sending…" : "Send test"}
               </Button>

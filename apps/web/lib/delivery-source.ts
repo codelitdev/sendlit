@@ -23,6 +23,10 @@ export function presentDeliverySourceError(error: string): string {
       return "Sending is suspended for this team. Ask an organization admin to resume it.";
     case "sending_paused":
       return "Sending is paused for this team. This happens when a payment is overdue, when bounce or complaint rates get too high, or while SendLit reviews the account. Check the Plan tab on your organization page, or contact SendLit support if it stays paused.";
+    case "organization_team_quota_exhausted":
+      return "Your team has used its shared-mailbox quota for now. Ask an organization admin to raise it, or wait for it to reset.";
+    case "organization_quota_exhausted":
+      return "The organization's shared mailbox has reached its sending quota for now. Ask an organization admin to raise it, or wait for it to reset.";
     case "delivery_source_in_use":
       return "This ESP can't be removed while it is used by an active sequence, queued email, or delivery integration.";
     default:

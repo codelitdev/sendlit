@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   espConfigTeamGrants,
@@ -61,49 +61,20 @@ async function ensureBucket(
   return bucket;
 }
 
-export async function reserveOrganizationQuota(
+type GrantContext = {
+  grant: typeof espConfigTeamGrants.$inferSelect;
+  policy: typeof organizationDeliveryPolicies.$inferSelect;
+};
+
+/** Locks the grant's and organization's day and month buckets, throwing
+ * `organization_team_quota_exhausted` / `organization_quota_exhausted` (with
+ * `retryAfter` seconds) unless each has room for `count` more sends. */
+async function lockBucketsWithRoom(
   tx: Executor,
-  input: {
-    outboundMessageId: string;
-    grantId: string;
-  },
+  context: GrantContext,
+  periods: ReturnType<typeof utcPeriods>,
+  count: number,
 ) {
-  const [context] = await tx
-    .select({
-      grant: espConfigTeamGrants,
-      policy: organizationDeliveryPolicies,
-    })
-    .from(espConfigTeamGrants)
-    .innerJoin(
-      organizationDeliveryPolicies,
-      eq(
-        organizationDeliveryPolicies.organizationId,
-        espConfigTeamGrants.organizationId,
-      ),
-    )
-    .where(eq(espConfigTeamGrants.id, input.grantId))
-    .limit(1)
-    .for("update");
-  if (context?.grant.status !== "active") {
-    throw new Error("organization_delivery_disabled");
-  }
-
-  const [existingReservation] = await tx
-    .select()
-    .from(organizationEspQuotaReservations)
-    .where(
-      eq(organizationEspQuotaReservations.outboundMessageId, input.outboundMessageId),
-    )
-    .limit(1)
-    .for("update");
-  if (
-    existingReservation?.state === "reserved" ||
-    existingReservation?.state === "committed"
-  ) {
-    return existingReservation;
-  }
-
-  const periods = utcPeriods();
   const specs = [
     {
       scope: "grant" as const,
@@ -153,7 +124,7 @@ export async function reserveOrganizationQuota(
     });
     if (
       spec.limit !== null &&
-      bucket.acceptedCount + bucket.reservedCount >= spec.limit
+      bucket.acceptedCount + bucket.reservedCount + count > spec.limit
     ) {
       const error = new Error(spec.error) as Error & {
         retryAfter?: number;
@@ -166,7 +137,58 @@ export async function reserveOrganizationQuota(
     }
     buckets.push(bucket);
   }
+  return buckets;
+}
 
+async function lockActiveGrant(tx: Executor, grantId: string): Promise<GrantContext> {
+  const [context] = await tx
+    .select({
+      grant: espConfigTeamGrants,
+      policy: organizationDeliveryPolicies,
+    })
+    .from(espConfigTeamGrants)
+    .innerJoin(
+      organizationDeliveryPolicies,
+      eq(
+        organizationDeliveryPolicies.organizationId,
+        espConfigTeamGrants.organizationId,
+      ),
+    )
+    .where(eq(espConfigTeamGrants.id, grantId))
+    .limit(1)
+    .for("update");
+  if (context?.grant.status !== "active") {
+    throw new Error("organization_delivery_disabled");
+  }
+  return context;
+}
+
+export async function reserveOrganizationQuota(
+  tx: Executor,
+  input: {
+    outboundMessageId: string;
+    grantId: string;
+  },
+) {
+  const context = await lockActiveGrant(tx, input.grantId);
+
+  const [existingReservation] = await tx
+    .select()
+    .from(organizationEspQuotaReservations)
+    .where(
+      eq(organizationEspQuotaReservations.outboundMessageId, input.outboundMessageId),
+    )
+    .limit(1)
+    .for("update");
+  if (
+    existingReservation?.state === "reserved" ||
+    existingReservation?.state === "committed"
+  ) {
+    return existingReservation;
+  }
+
+  const periods = utcPeriods();
+  const buckets = await lockBucketsWithRoom(tx, context, periods, 1);
   for (const bucket of buckets) {
     await tx
       .update(organizationEspUsageBuckets)
@@ -209,6 +231,49 @@ export async function reserveOrganizationQuotaForOutbound(input: {
   grantId: string;
 }) {
   return db.transaction((tx) => reserveOrganizationQuota(tx, input));
+}
+
+/** Buckets a test send was charged to, so unsent tests can be refunded. */
+export type TestQuotaCharge = { bucketIds: string[] };
+
+/**
+ * Counts `count` test sends through a shared mailbox as accepted usage on the
+ * grant and organization buckets, the same quota a real send draws on. Tests
+ * have no outbound ledger row, so there is no reservation: they are charged
+ * up front and `refundOrganizationQuotaForTests` returns any that didn't go.
+ */
+export async function chargeOrganizationQuotaForTests(input: {
+  grantId: string;
+  count: number;
+}): Promise<TestQuotaCharge> {
+  return db.transaction(async (tx) => {
+    const context = await lockActiveGrant(tx, input.grantId);
+    const buckets = await lockBucketsWithRoom(tx, context, utcPeriods(), input.count);
+    for (const bucket of buckets) {
+      await tx
+        .update(organizationEspUsageBuckets)
+        .set({
+          acceptedCount: bucket.acceptedCount + input.count,
+          updatedAt: new Date(),
+        })
+        .where(eq(organizationEspUsageBuckets.id, bucket.id));
+    }
+    return { bucketIds: buckets.map((bucket) => bucket.id) };
+  });
+}
+
+export async function refundOrganizationQuotaForTests(
+  charge: TestQuotaCharge,
+  count: number,
+): Promise<void> {
+  if (count <= 0 || charge.bucketIds.length === 0) return;
+  await db
+    .update(organizationEspUsageBuckets)
+    .set({
+      acceptedCount: sql`greatest(${organizationEspUsageBuckets.acceptedCount} - ${count}, 0)`,
+      updatedAt: new Date(),
+    })
+    .where(inArray(organizationEspUsageBuckets.id, charge.bucketIds));
 }
 
 async function transitionReservationInTransaction(

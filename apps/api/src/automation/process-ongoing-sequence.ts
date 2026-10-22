@@ -27,6 +27,7 @@ import { renderCampaignHtml } from "../mail/campaign";
 import { quotaExhaustionDeferral, SendDeferredError } from "../mail/rate-limit";
 import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
+import { getOrCreateContentVersion } from "../sequences/content-versions";
 import logger from "../services/log";
 import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
@@ -263,12 +264,18 @@ async function attemptMailSending({
     return;
   }
 
+  // The "view in browser" link shows this copy, not later edits.
+  const contentVersion = await getOrCreateContentVersion({
+    ...email,
+    teamId: team.id,
+  });
   // NOTE: these ids must stay **public** — they get embedded into the
   // outgoing email's tracking pixel/links. `ongoingSequence.sequenceId` is
   // the *internal* id; use `sequence.sequenceId` (public) instead.
   const contentWithTrackedLinks = await renderCampaignHtml({
     team,
     content: email.content,
+    contentVersionId: contentVersion.versionId,
     subscriber: {
       email: contact.email,
       name: contact.name,
@@ -333,6 +340,7 @@ async function attemptMailSending({
         sequenceId: sequence.id,
         contactId: contact.id,
         emailId: email.id,
+        contentVersionId: contentVersion.id,
       })
       .returning();
     await markOutboundAccepted(outbound.id, {
