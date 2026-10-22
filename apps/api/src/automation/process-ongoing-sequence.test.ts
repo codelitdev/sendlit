@@ -289,6 +289,30 @@ describe("processOngoingSequence", () => {
     expect(after.tags).toEqual(["bol"]);
   });
 
+  it("asks a SendGrid ESP not to track what SendLit already tracks", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb, {
+      espConfig: { provider: "sendgrid" },
+    });
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const row = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+
+    await processOngoingSequence(row.id);
+
+    const { headers } = mockedSendMail.mock.calls[0][0];
+    expect(JSON.parse(headers?.["X-SMTPAPI"] ?? "{}").filters).toMatchObject({
+      clicktrack: { settings: { enable: 0 } },
+      opentrack: { settings: { enable: 0 } },
+    });
+    expect(headers?.["List-Unsubscribe"]).toContain("/unsubscribe/");
+  });
+
   it("sends with the ESP's Reply-To", async () => {
     const { team, contact } = await seedTeamAndContact(tdb, {
       espConfig: { replyTo: "support@example.com" },

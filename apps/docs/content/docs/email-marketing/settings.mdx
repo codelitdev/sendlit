@@ -55,6 +55,17 @@ organization ESPs have their own per-team daily and monthly quotas, set by an
 organization admin; campaign mail over those quotas also waits until the
 quota resets.
 
+## Open and click tracking
+
+SendLit tracks opens and clicks itself. If your ESP tracked the same email,
+every link would be wrapped a second time, behind the ESP's domain, and
+clicks would be counted twice. So SendLit tells SendGrid, Mailgun and Postmark
+not to track its broadcasts, sequences and test sends, and transactional
+emails where SendLit tracks opens or clicks. Resend and Amazon SES have no
+per-email switch: turn off their open and click tracking for the domain
+(Resend) or configuration set (SES) yourself. To put SendLit's tracking links
+on your own domain, see [Tracking domain](/email-marketing/tracking-domain).
+
 ## Testing
 
 Use the test send endpoint after configuring settings to verify delivery before sending broadcasts or activating sequences.
