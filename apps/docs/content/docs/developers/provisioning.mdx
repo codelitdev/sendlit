@@ -12,6 +12,17 @@ Provisioning is a backend-to-backend workflow. If you only need another team
 for people already using the SendLit dashboard, create it from the dashboard
 instead.
 
+For an entirely headless setup—including discovering the key's organization,
+configuring an organization ESP, and setting shared delivery for new teams—use
+the [Headless organization setup](/developers/headless-provisioning) guide.
+
+Provisioning and organization API keys are available on **Business** cloud
+plans and on **OSS**. After a downgrade to Pro or Free, existing organization
+keys remain stored for audit and revocation, but mutating provisioning
+operations (`provision`, update, rotate keys, suspend, resume, archive) return
+`plan_feature_unavailable`. Idempotent replay of an already-provisioned
+`(externalId)` still succeeds.
+
 ## How provisioning is scoped
 
 Every SendLit team belongs to exactly one organization. The organization API
@@ -40,7 +51,9 @@ one team's contacts and email APIs. Keep these credentials separate.
     - For customer-owned delivery, enable team ESPs. The provisioned team can
       configure its own provider later using its team key or the dashboard.
 3. Create an organization API key and store its plaintext value in your
-   backend secret manager. It is displayed only once.
+   backend secret manager. It is displayed only once. For a team-provisioning
+   integration, use `organization:read`, `teams:provision`, and `teams:read`;
+   do not give its runtime key delivery administration scopes.
 
 Use the minimum scopes your integration needs:
 
@@ -51,6 +64,10 @@ Use the minimum scopes your integration needs:
 | `teams:manage`    | Update, suspend, resume, or archive teams    |
 | `teams:keys`      | Replace a provisioned team's integration key |
 | `usage:read`      | Read team quota usage                        |
+
+`organization:read` also enables `GET /provisioning/organization`, which
+returns the organization bound to the key. One-time shared-delivery setup uses
+a separate key; see the headless setup guide for its scopes and lifecycle.
 
 The examples below use:
 

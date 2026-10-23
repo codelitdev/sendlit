@@ -1,0 +1,135 @@
+---
+title: Bounce and complaint feedback
+description: Connect your email provider's webhook so SendLit stops mailing addresses that bounce or complain.
+---
+
+Your email provider learns when a message bounces or a recipient marks it as
+spam. Connect its webhook to SendLit and SendLit adds those addresses to your
+[suppression list](/activity/suppressions), so it stops mailing them before
+they hurt your sender reputation.
+
+SendLit suppresses an address after:
+
+- a **hard bounce** (the mailbox doesn't exist or permanently refuses mail);
+- a **spam complaint**;
+- the provider's own suppression of the address;
+- **three soft bounces** in a row on separate messages within 30 days. A
+  delivered message resets the count.
+
+Each ESP has its own webhook URL and secret. Changing the team's default ESP
+doesn't affect them.
+
+## Open the delivery feedback settings
+
+- **Team ESPs:** go to **Settings → Email service providers (ESP)** and click
+  the envelope button, **Delivery feedback (bounces & complaints)**, on the
+  ESP's row.
+- **Shared mailboxes:** go to **Organizations → Shared mailboxes** and click
+  **Configure delivery feedback** on the mailbox's row.
+
+The button only appears for providers SendLit can read feedback from:
+[Resend](#resend), [Postmark](#postmark), [SendGrid](#sendgrid),
+[Mailgun](#mailgun) and [Amazon SES](#amazon-ses). Custom SMTP servers don't
+report bounces this way.
+
+<Callout type="info">
+    The dialog shows the webhook URL only after you save a secret. Resend and
+    SendGrid create their secret after you register the URL, so for them save
+    any temporary value first, register the URL with the provider, and then
+    use **Rotate secret** to replace it with the real one.
+</Callout>
+
+## Resend
+
+1. In SendLit, open the ESP's delivery feedback settings, enter a temporary
+   value such as `pending`, and save. Copy the **Webhook URL**.
+2. In Resend, open **Webhooks** and add an endpoint with that URL.
+3. Select these events: `email.bounced`, `email.complained`,
+   `email.suppressed` and `email.delivered`. SendLit also records
+   `email.delivery_delayed` and `email.failed`, but they don't suppress
+   anyone.
+4. Open the new endpoint in Resend and copy its **signing secret**. It starts
+   with `whsec_`.
+5. Back in SendLit, paste it into **webhook signing secret** and click
+   **Rotate secret**.
+
+SendLit checks the Svix signature Resend sends with every event.
+
+## Postmark
+
+Postmark doesn't sign its webhooks, so you choose a shared secret and give it
+to both sides.
+
+1. Create a long random value, for example with `openssl rand -hex 32`.
+2. In SendLit, open the ESP's delivery feedback settings, paste the value
+   into **webhook secret**, and save. Copy the **Webhook URL**.
+3. In Postmark, open the message stream you send from and add a webhook with
+   that URL.
+4. Give Postmark the secret in one of two ways:
+   - a custom header named `X-SendLit-Webhook-Secret` whose value is the
+     secret; or
+   - HTTP Basic authentication with any username and the secret as the
+     password.
+5. Enable the **Bounce**, **Spam complaint** and **Delivery** events. Don't
+   include message content.
+
+Never put the secret in the URL's query string.
+
+## SendGrid
+
+1. In SendLit, open the ESP's delivery feedback settings, enter a temporary
+   value such as `pending`, and save. Copy the **Webhook URL**.
+2. In SendGrid, go to **Settings → Mail Settings → Event Webhook** and create
+   a webhook that posts to that URL.
+3. Select the **Bounced**, **Spam reports**, **Delivered**, **Deferred** and
+   **Dropped** events. Only bounces and spam reports suppress addresses.
+4. Turn on **Signed Event Webhook** (signature verification) and copy the
+   **verification key**. It's a base64 public key.
+5. Back in SendLit, paste it into **verification key** and click **Rotate
+   secret**.
+
+SendLit rejects events whose signature doesn't match, so Signed Event Webhook
+has to stay on.
+
+## Mailgun
+
+1. In Mailgun, open **Sending → Webhooks** and copy the **HTTP webhook signing
+   key**.
+2. In SendLit, open the ESP's delivery feedback settings, paste the key into
+   **HTTP webhook signing key**, and save. Copy the **Webhook URL**.
+3. Back in Mailgun, choose the sending domain and add the URL for the
+   **Permanent failure**, **Temporary failure**, **Spam complaint** and
+   **Delivered** events.
+
+SendLit checks each event's signature and rejects events whose timestamp is
+more than five minutes off, so the clock on a self-hosted server must be
+correct.
+
+## Amazon SES
+
+SES publishes bounces and complaints to an Amazon SNS topic instead of calling
+a webhook. Instead of a secret, you enter the topic's ARN. Follow
+[Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback) for the
+full setup.
+
+## Check that it works
+
+**Test** only checks that SendLit can read the secret you saved. It doesn't
+contact the provider, so it can't tell whether the provider has the right
+secret.
+
+To confirm the connection, send a message through the ESP, or trigger a test
+event from the provider, then reopen the delivery feedback settings:
+
+- **Healthy** with a recent **Last event** means events arrive and their
+  signature checks out.
+- **Waiting for first event** means nothing has arrived yet. Check the webhook
+  URL and the selected events at the provider.
+- **Error** with `invalid_signature` means events arrive but the secret or key
+  doesn't match. Copy it again from the provider and click **Rotate secret**.
+
+## Rotating a secret
+
+Paste the new value and click **Rotate secret**. SendLit accepts the previous
+value for 24 hours, so events already in flight aren't rejected while you
+update the provider.

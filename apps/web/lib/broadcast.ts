@@ -10,25 +10,29 @@ import type { Sequence } from "@sendlit/email-blocks";
  * holds the absolute send time in epoch millis (0 / past = send now).
  */
 export function presentBroadcastStatus(sequence: Sequence): {
-    label: "draft" | "scheduled" | "sending" | "sent";
-    variant: "success" | "warning" | "neutral";
+  label: "draft" | "scheduled" | "sending" | "paused" | "sent";
+  variant: "success" | "warning" | "neutral";
 } {
-    if (sequence.status === "completed") {
-        return { label: "sent", variant: "success" };
-    }
-    if (sequence.status === "active") {
-        return broadcastScheduledFor(sequence)
-            ? { label: "scheduled", variant: "warning" }
-            : { label: "sending", variant: "success" };
-    }
-    return { label: "draft", variant: "neutral" };
+  if (sequence.status === "completed") {
+    return { label: "sent", variant: "success" };
+  }
+  if (sequence.status === "active") {
+    return broadcastScheduledFor(sequence)
+      ? { label: "scheduled", variant: "warning" }
+      : { label: "sending", variant: "success" };
+  }
+  // Paused mid-send (#25); a cancelled schedule is a draft again.
+  if (sequence.status === "paused" && sequence.report?.broadcast?.lockedAt) {
+    return { label: "paused", variant: "warning" };
+  }
+  return { label: "draft", variant: "neutral" };
 }
 
 /** The future send time of an active, not-yet-locked broadcast, or `null`
  * if it isn't in a cancellable scheduled state. */
 export function broadcastScheduledFor(sequence: Sequence): Date | null {
-    if (sequence.status !== "active") return null;
-    if (sequence.report?.broadcast?.lockedAt) return null;
-    const sendAt = sequence.emails[0]?.delayInMillis ?? 0;
-    return sendAt > Date.now() ? new Date(sendAt) : null;
+  if (sequence.status !== "active") return null;
+  if (sequence.report?.broadcast?.lockedAt) return null;
+  const sendAt = sequence.emails[0]?.delayInMillis ?? 0;
+  return sendAt > Date.now() ? new Date(sendAt) : null;
 }

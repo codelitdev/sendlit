@@ -47,14 +47,23 @@ docker compose logs init
 
 Open the dashboard at <http://localhost:3000>, sign in with an email one-time code, and follow [Send your first broadcast](./apps/docs/content/docs/getting-started/first-broadcast.mdx).
 
-Call the API with the key printed by the `init` service:
+`BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` selects an ordinary initial organization
+owner; it does not create a special global-admin role. To integrate
+headlessly, set `BOOTSTRAP_DELIVERY_SETUP_API_KEY` and `BOOTSTRAP_TEAM_PROVISIONING_API_KEY` in
+`.env`. Bootstrap hashes both keys and never logs them.
+See the [Headless organization setup](./apps/docs/content/docs/developers/headless-provisioning.mdx)
+for the complete REST sequence, scopes, rotation, and migration from the old
+log-generated key. The plain Markdown guide is at
+[`apps/docs/integrations/headless-provisioning.md`](./apps/docs/integrations/headless-provisioning.md).
+
+Create a team API key in the dashboard (Settings → API keys) and call the API with it:
 
 ```bash
-curl http://localhost:5000/contacts \
+curl http://localhost:4000/contacts \
   -H "x-sendlit-apikey: sl_live_..."
 ```
 
-Connect an AI agent: add `https://api.sendlit.app/mcp` (or `http://localhost:5000/mcp` for your own instance) as a remote MCP server in your client and sign in. See the [MCP guide](./apps/docs/content/docs/developers/mcp.mdx).
+Connect an AI agent: add `https://api.sendlit.app/mcp` (or `http://localhost:4000/mcp` for your own Compose instance) as a remote MCP server in your client and sign in. See the [MCP guide](./apps/docs/content/docs/developers/mcp.mdx).
 
 ## Packages
 
@@ -70,10 +79,10 @@ The repository also contains the API (`apps/api`), which owns all product behavi
 
 ## Self-hosting
 
-The root Compose stack runs PostgreSQL, Redis, the API and the web dashboard, plus a one-shot `init` service that applies migrations and creates the first account, its default team and a team-scoped API key.
+The root Compose stack runs PostgreSQL, Redis, the API and the web dashboard, plus a one-shot `init` service that applies migrations and creates the initial owner's organization and default team. The API reports `/ready` once Postgres and Redis answer, and the dashboard waits for it.
 
-1. Set `SUPER_ADMIN_EMAIL` and the required secrets in `.env` before the first start.
-2. Run `docker compose up --build -d`, then `docker compose logs init`. The logs contain the initial API key exactly once. Save it in a password manager and use it as the `x-sendlit-apikey` header. If you lose it, create a replacement in the dashboard.
+1. Set `BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` and the required secrets in `.env` before the first start.
+2. Run `docker compose up --build -d`. The `init` service applies migrations and creates the owner's organization and default team.
 3. Open the dashboard at `WEB_CLIENT` (default `http://localhost:3000`) and the API documentation at `API_PUBLIC_URL/docs`.
 4. Configure a sending provider for your team in the dashboard settings. Without one, SendLit won't send campaign mail.
 
@@ -82,44 +91,76 @@ For an internet-facing deployment:
 - Set `API_PUBLIC_URL`, `WEB_CLIENT`, `PROTOCOL=https` and `DOMAIN` to the public values before the first start.
 - Put the API and web ports behind a TLS reverse proxy, and set `ENABLE_TRUST_PROXY=true` when it forwards client IPs.
 - Back up the `postgres-data` volume and keep the `.env` secrets stable. Changing the ESP encryption key makes stored team SMTP credentials unreadable.
+- If you send through Amazon SES, follow [Amazon SES bounces and complaints](./apps/docs/content/docs/self-hosting/amazon-ses-feedback.mdx) so SendLit suppresses bounced and complaining addresses.
+- See [Sending safeguards](./apps/docs/content/docs/self-hosting/sending-safeguards.mdx) for which limits apply to a self-hosted install (test-send limits, auto-pause, your ESP's own tracking) and how to change them.
+- To let teams use their own tracking domains, configure on-demand TLS in your reverse proxy as described in [Tracking domains](./apps/docs/content/docs/self-hosting/tracking-domains.mdx).
 
 Prebuilt images are published on release tags: [`codelit/sendlit`](https://hub.docker.com/r/codelit/sendlit) (API) and [`codelit/sendlit-web`](https://hub.docker.com/r/codelit/sendlit-web) (dashboard).
 
 ## Development
 
-**Requirements:** Node.js 24, [pnpm](https://pnpm.io) 11, and Docker for PostgreSQL and Redis. We develop on Linux; on Windows, use WSL.
+**Requirements:** [Bun](https://bun.sh) 1.4.1 and Docker. We develop on Linux; on Windows, use WSL.
+
+SendLit follows the [CodeLit Platform](https://github.com/codelitdev/platform) conventions: one Bun workspace, the API runs its TypeScript directly on Bun, and shared infrastructure comes from the published `@codelitdev/*` packages.
 
 ```bash
-pnpm install
+bun install
 
-# 1. Start PostgreSQL and Redis (for example from docker-compose.yml).
-docker compose up -d postgres redis
+# 1. Start Postgres, Redis and Mailpit for local development.
+docker compose -f docker-compose.local.yml up -d
 
 # 2. Configure the API and create its tables.
 cp apps/api/.env.example apps/api/.env
-pnpm --filter @sendlit/api db:push
+bun --filter @sendlit/api db:migrate
 
-# 3. Build the shared packages once so the dashboard can import them.
-pnpm --filter @sendlit/email-editor build
-pnpm --filter @sendlit/email-blocks build
+# 3. Build the shared packages once so the API and dashboard can import them.
+bun run build:packages
 
 # 4. Configure the dashboard (API_URL must point at the API).
 cp apps/web/.env.example apps/web/.env.local
 
-pnpm dev:api    # API
-pnpm dev:web    # Dashboard on http://localhost:3000
-pnpm dev:docs   # Docs site
+bun run dev:api    # API
+bun run dev:web    # Dashboard on http://localhost:3000
+bun run dev:docs   # Docs site
 ```
 
-Re-run the package builds (or use their `dev` scripts) after changing either shared package. For full end-to-end work you'll also want a local SMTP catcher such as [Mailpit](https://mailpit.axllent.org).
+The local Compose file publishes Postgres on `5434`, Redis on `6380` and Mailpit on `1027` (SMTP) and `8027` (UI), so it can run next to the CourseLit and FrontLit local stacks. `apps/api/.env.example` already points at those ports. Bun loads `apps/api/.env` automatically.
+
+Re-run `bun run build:packages` (or use the packages' `dev` scripts) after changing `@sendlit/email-editor` or `@sendlit/email-blocks`.
 
 ### Tests
 
 ```bash
-pnpm test          # API, web and package unit tests
-pnpm lint          # ESLint
-pnpm prettier      # Format the codebase
+bun run test       # API, web and package unit tests
+bun --filter @sendlit/api test:conformance  # CodeLit Platform conformance
+bun --filter @sendlit/api check:drift       # billing and Better Auth schema drift
+bun run typecheck  # TypeScript in every workspace
+bun run lint       # Biome lint
+bun run format     # Biome format (bun run format:check in CI)
 ```
+
+## Operator billing CLI
+
+Cloud billing recovery is a CLI, not the dashboard. From the repo root it
+loads `apps/api/.env` and talks to that API's database:
+
+```sh
+bun --filter @sendlit/api billing catalog-status
+bun --filter @sendlit/api billing catalog-verify
+```
+
+Run it with no arguments for the full list. Subcommands:
+
+- `catalog-status` / `catalog-verify` / `catalog-abandon <revision> --reason <text>`
+- `reconcile-org <organization_public_id>`
+- `webhook-retry <provider_event_id>` / `webhook-inspect <provider_event_id>`
+- `set-override <organization_public_id> --teams <n>|none --contacts <n>|none --reason <text>`
+- `reputation-apply <team_public_id> <warned|marketing_paused|all_paused> --operator <user_id> --reason <text>`
+- `reputation-release <team_public_id> --operator <user_id> --reason <text>`
+- `cancel-subscription <organization_public_id> --reason <text>`
+
+OSS mode has nothing to verify. A new `BILLING_CATALOG_REVISION` is recorded on
+API startup; `catalog-verify` checks it against Dodo and activates it.
 
 ## Documentation
 
@@ -130,9 +171,9 @@ Product, API and email-block docs live in [`apps/docs`](apps/docs). The REST ref
 Contributions are welcome. For anything larger than a small fix, please open an issue first so we can agree on the approach.
 
 1. Fork the repository and create a branch.
-2. Make your change, with tests. If you change a published package, add a changeset with `pnpm changeset`.
+2. Make your change, with tests. If you change a published package, add a changeset with `bun run changeset`.
 3. If you change `apps/api`, update the REST API documentation and the MCP server too.
-4. Run `pnpm lint`, `pnpm prettier` and `pnpm test`.
+4. Run `bun run lint`, `bun run format`, `bun run typecheck` and `bun run test`.
 5. Open a pull request.
 
 Questions and ideas are welcome in [GitHub issues](https://github.com/codelitdev/sendlit/issues).

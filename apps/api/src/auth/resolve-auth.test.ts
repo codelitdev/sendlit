@@ -1,297 +1,315 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock, vi } from "bun:test";
 import type {
-    AuthenticatedIdentity,
-    AuthenticationResult,
+  AuthenticatedIdentity,
+  AuthenticationResult,
 } from "@codelitdev/oauth-server-kit";
 
-vi.mock("../apikey/queries", () => ({
-    getApiKeyBySecret: vi.fn(),
-    getOrganizationApiKeyBySecret: vi.fn(),
+mock.module("../apikey/queries", () => ({
+  getApiKeyBySecret: vi.fn(),
+  getOrganizationApiKeyBySecret: vi.fn(),
 }));
-vi.mock("../team/queries", () => ({
-    getTeamMembership: vi.fn(),
+mock.module("../team/queries", () => ({
+  getTeamMembership: vi.fn(),
 }));
-vi.mock("../organization/queries", () => ({
-    ensureDefaultOrganization: vi.fn(),
+mock.module("../organization/queries", () => ({
+  ensureDefaultOrganization: vi.fn(),
 }));
-vi.mock("../user/queries", () => ({
-    getUser: vi.fn(),
+mock.module("../user/queries", () => ({
+  getUser: vi.fn(),
 }));
-vi.mock("./better-auth", () => ({
-    auth: { api: { getSession: vi.fn(async () => null) } },
-    authIssuer: "https://sendlit.test/api/auth",
-    mcpResourceUrl: "https://sendlit.test/mcp",
-    validOAuthAudiences: ["https://sendlit.test", "https://sendlit.test/mcp"],
-    oauthResourceClient: { getActions: vi.fn(() => ({})) },
+mock.module("./better-auth", () => ({
+  SESSION_COOKIE_NAME: "sendlit.session_token",
+  auth: { api: { getSession: vi.fn(async () => null) } },
+  authIssuer: "https://sendlit.test/api/auth",
+  mcpResourceUrl: "https://sendlit.test/mcp",
+  validOAuthAudiences: ["https://sendlit.test", "https://sendlit.test/mcp"],
+  oauthResourceClient: { getActions: vi.fn(() => ({})) },
 }));
 
-import {
-    resolveAuth,
-    sendAuthError,
-    type AuthDependencies,
-} from "./resolve-auth";
+import type { AuthDependencies } from "./resolve-auth";
+
+const { resolveAuth, sendAuthError } = await import("./resolve-auth");
 
 const user = {
-    id: "user-1",
-    email: "owner@example.com",
-    name: "Owner",
-    createdAt: new Date(),
-    updatedAt: new Date(),
+  id: "user-1",
+  email: "owner@example.com",
+  name: "Owner",
+  createdAt: new Date(),
+  updatedAt: new Date(),
 };
 
 const oauthIdentity: Extract<AuthenticatedIdentity, { method: "oauth" }> = {
-    method: "oauth",
-    issuer: "https://sendlit.test/api/auth",
-    subject: "better-auth-user-1",
-    clientId: "mcp-client",
-    scopes: ["contacts:read", "templates:write"],
-    audiences: ["https://sendlit.test/mcp"],
+  method: "oauth",
+  issuer: "https://sendlit.test/api/auth",
+  subject: "better-auth-user-1",
+  clientId: "mcp-client",
+  scopes: ["contacts:read", "templates:write"],
+  audiences: ["https://sendlit.test/mcp"],
 };
 
 const sessionIdentity: Extract<AuthenticatedIdentity, { method: "session" }> = {
-    method: "session",
-    issuer: "https://sendlit.test/api/auth",
-    subject: user.id,
-    email: user.email,
-    name: user.name,
-    scopes: [],
+  method: "session",
+  issuer: "https://sendlit.test/api/auth",
+  subject: user.id,
+  email: user.email,
+  name: user.name,
+  scopes: [],
 };
 
 function deps(overrides: Partial<AuthDependencies> = {}): AuthDependencies {
-    return {
-        getUser: vi.fn(async () => user as any),
-        getApiKeyBySecret: vi.fn(async () => ({
-            id: "key-id",
-            teamId: "team-1",
-            keyHash: "hash-of-api-key",
-            keyPrefix: "sl_live_api-",
-            name: "Default",
-            teamApiKeyId: "tak_1",
-            expiresAt: null,
-            revokedAt: null,
-            lastUsedAt: null,
-            createdByType: "user",
-            createdById: null,
-            createdAt: new Date(),
-        })),
-        getOrganizationApiKeyBySecret: vi.fn(async () => null),
-        resolveSession: vi.fn(
-            async () => ({ status: "missing" }) as AuthenticationResult,
-        ),
-        authenticateBearer: vi.fn(async () => ({ identity: oauthIdentity })),
-        ensureDefaultOrganization: vi.fn(async () => ({ id: "org-1" })),
-        getTeamMembership: vi.fn(async () => null),
-        ...overrides,
-    };
+  return {
+    getUser: vi.fn(async () => user as any),
+    getApiKeyBySecret: vi.fn(async () => ({
+      id: "key-id",
+      teamId: "team-1",
+      keyHash: "hash-of-api-key",
+      keyPrefix: "sl_live_api-",
+      name: "Default",
+      teamApiKeyId: "tak_1",
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: null,
+      createdByType: "user",
+      createdById: null,
+      createdAt: new Date(),
+    })),
+    getOrganizationApiKeyBySecret: vi.fn(async () => null),
+    resolveSession: vi.fn(async () => ({ status: "missing" }) as AuthenticationResult),
+    authenticateBearer: vi.fn(async () => ({ identity: oauthIdentity })),
+    ensureDefaultOrganization: vi.fn(async () => ({ id: "org-1" })),
+    getTeamMembership: vi.fn(async () => null),
+    ...overrides,
+  };
 }
 
 describe("resolveAuth", () => {
-    it("rejects an invalid explicit bearer without falling back to an API key", async () => {
-        const authDeps = deps({ authenticateBearer: vi.fn(async () => null) });
+  it("rejects an invalid explicit bearer without falling back to anything", async () => {
+    const authDeps = deps({ authenticateBearer: vi.fn(async () => null) });
 
-        await expect(
-            resolveAuth(
-                { authorization: "Bearer expired", apiKeyHeader: "api-key" },
-                authDeps,
-            ),
-        ).resolves.toEqual({ status: "invalid_token" });
-        expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+    await expect(
+      resolveAuth({ authorization: "Bearer expired" }, authDeps),
+    ).resolves.toEqual({ status: "invalid_token" });
+    expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+    expect(authDeps.resolveSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects more than one credential as ambiguous without checking any", async () => {
+    const cases = [
+      { authorization: "Bearer token", apiKeyHeader: "api-key" },
+      { apiKeyHeader: "api-key", headers: { cookie: "sendlit.session_token=s" } },
+      { authorization: "Bearer token", headers: { cookie: "sendlit.session_token=s" } },
+      { apiKeyHeader: "api-key", bodyApiKey: "other-key" },
+      { apiKeyHeader: "api-key", headers: { "x-api-key": "api-key" } },
+    ];
+    for (const input of cases) {
+      const authDeps = deps();
+      await expect(resolveAuth(input, authDeps)).resolves.toEqual({
+        status: "ambiguous",
+      });
+      expect(authDeps.authenticateBearer).not.toHaveBeenCalled();
+      expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+      expect(authDeps.resolveSession).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects a malformed Authorization header instead of ignoring it", async () => {
+    const authDeps = deps();
+    await expect(
+      resolveAuth(
+        { authorization: "Basic dXNlcjpwYXNz", apiKeyHeader: "api-key" },
+        authDeps,
+      ),
+    ).resolves.toEqual({ status: "invalid_token" });
+    expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+  });
+
+  it("does not count a browser session on MCP, where it is not a credential", async () => {
+    const authDeps = deps();
+    await expect(
+      resolveAuth(
+        {
+          authorization: "Bearer better-auth-token",
+          headers: { cookie: "sendlit.session_token=s" },
+          transport: "mcp",
+        },
+        authDeps,
+      ),
+    ).resolves.toMatchObject({ status: "authenticated", kind: "oauth" });
+    await expect(
+      resolveAuth(
+        { headers: { cookie: "sendlit.session_token=s" }, transport: "mcp" },
+        authDeps,
+      ),
+    ).resolves.toEqual({ status: "missing" });
+    expect(authDeps.resolveSession).not.toHaveBeenCalled();
+  });
+
+  it("maps a verified OAuth identity to a SendLit user", async () => {
+    const authDeps = deps();
+
+    await expect(
+      resolveAuth({ authorization: "Bearer better-auth-token" }, authDeps),
+    ).resolves.toMatchObject({
+      status: "authenticated",
+      kind: "oauth",
+      userId: user.id,
+      clientId: "mcp-client",
+      scopes: ["contacts:read", "templates:write"],
+    });
+    expect(authDeps.getUser).toHaveBeenCalledWith(oauthIdentity.subject);
+    expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+  });
+
+  it("uses a verified team claim only while membership remains valid", async () => {
+    const authDeps = deps({
+      authenticateBearer: vi.fn(async () => ({
+        identity: oauthIdentity,
+        teamId: "team-abc",
+      })),
+      getTeamMembership: vi.fn(async () => ({ id: "membership-1" })),
     });
 
-    it("maps a verified OAuth identity to a SendLit user", async () => {
-        const authDeps = deps();
+    await expect(
+      resolveAuth({ authorization: "Bearer token" }, authDeps),
+    ).resolves.toMatchObject({
+      status: "authenticated",
+      kind: "oauth",
+      teamId: "team-abc",
+    });
+    expect(authDeps.getTeamMembership).toHaveBeenCalledWith("team-abc", user.id);
+  });
 
-        await expect(
-            resolveAuth(
-                {
-                    authorization: "Bearer better-auth-token",
-                    apiKeyHeader: "api-key",
-                },
-                authDeps,
-            ),
-        ).resolves.toMatchObject({
-            status: "authenticated",
-            kind: "oauth",
-            userId: user.id,
-            clientId: "mcp-client",
-            scopes: ["contacts:read", "templates:write"],
-        });
-        expect(authDeps.getUser).toHaveBeenCalledWith(oauthIdentity.subject);
-        expect(authDeps.getApiKeyBySecret).not.toHaveBeenCalled();
+  it("drops a team claim after the caller loses membership", async () => {
+    const authDeps = deps({
+      authenticateBearer: vi.fn(async () => ({
+        identity: oauthIdentity,
+        teamId: "team-revoked",
+      })),
     });
 
-    it("uses a verified team claim only while membership remains valid", async () => {
-        const authDeps = deps({
-            authenticateBearer: vi.fn(async () => ({
-                identity: oauthIdentity,
-                teamId: "team-abc",
-            })),
-            getTeamMembership: vi.fn(async () => ({ id: "membership-1" })),
-        });
+    const result = await resolveAuth({ authorization: "Bearer token" }, authDeps);
+    expect(result).toMatchObject({
+      status: "authenticated",
+      kind: "oauth",
+    });
+    expect((result as any).teamId).toBeUndefined();
+  });
 
-        await expect(
-            resolveAuth({ authorization: "Bearer token" }, authDeps),
-        ).resolves.toMatchObject({
-            status: "authenticated",
-            kind: "oauth",
-            teamId: "team-abc",
-        });
-        expect(authDeps.getTeamMembership).toHaveBeenCalledWith(
-            "team-abc",
-            user.id,
-        );
+  it("authenticates team API keys from headers or request bodies", async () => {
+    await expect(
+      resolveAuth({ apiKeyHeader: "api-key" }, deps()),
+    ).resolves.toMatchObject({
+      status: "authenticated",
+      kind: "team_key",
+      apiKeyId: "tak_1",
+      teamId: "team-1",
     });
 
-    it("drops a team claim after the caller loses membership", async () => {
-        const authDeps = deps({
-            authenticateBearer: vi.fn(async () => ({
-                identity: oauthIdentity,
-                teamId: "team-revoked",
-            })),
-        });
-
-        const result = await resolveAuth(
-            { authorization: "Bearer token" },
-            authDeps,
-        );
-        expect(result).toMatchObject({
-            status: "authenticated",
-            kind: "oauth",
-        });
-        expect((result as any).teamId).toBeUndefined();
+    await expect(
+      resolveAuth({ bodyApiKey: ["body-key"] }, deps()),
+    ).resolves.toMatchObject({
+      status: "authenticated",
+      kind: "team_key",
+      apiKeyId: "tak_1",
+      teamId: "team-1",
     });
+  });
 
-    it("authenticates team API keys from headers or request bodies", async () => {
-        await expect(
-            resolveAuth({ apiKeyHeader: "api-key" }, deps()),
-        ).resolves.toMatchObject({
-            status: "authenticated",
-            kind: "team_key",
-            apiKeyId: "tak_1",
-            teamId: "team-1",
-        });
-
-        await expect(
-            resolveAuth({ bodyApiKey: ["body-key"] }, deps()),
-        ).resolves.toMatchObject({
-            status: "authenticated",
-            kind: "team_key",
-            apiKeyId: "tak_1",
-            teamId: "team-1",
-        });
-    });
-
-    it("accepts an organization key as its explicit product credential", async () => {
-        const authDeps = deps({
-            getOrganizationApiKeyBySecret: vi.fn(
-                async () =>
-                    ({
-                        organizationId: "org-1",
-                        organizationApiKeyId: "oak-1",
-                        scopes: ["teams:provision"],
-                    }) as any,
-            ),
-        });
-
-        await expect(
-            resolveAuth(
-                { authorization: "Bearer sl_org_live_example" },
-                authDeps,
-            ),
-        ).resolves.toMatchObject({
-            status: "authenticated",
-            kind: "organization_key",
+  it("accepts an organization key as its explicit product credential", async () => {
+    const authDeps = deps({
+      getOrganizationApiKeyBySecret: vi.fn(
+        async () =>
+          ({
             organizationId: "org-1",
-        });
-        expect(authDeps.authenticateBearer).not.toHaveBeenCalled();
+            organizationApiKeyId: "oak-1",
+            scopes: ["teams:provision"],
+          }) as any,
+      ),
     });
 
-    it("prefers an explicit API key over a browser session", async () => {
-        const authDeps = deps({
-            resolveSession: vi.fn(
-                async () =>
-                    ({
-                        status: "authenticated",
-                        identity: sessionIdentity,
-                    }) as AuthenticationResult,
-            ),
-        });
-
-        await expect(
-            resolveAuth(
-                {
-                    apiKeyHeader: "api-key",
-                    headers: { cookie: "better-auth.session_token=s" },
-                },
-                authDeps,
-            ),
-        ).resolves.toMatchObject({ kind: "team_key", teamId: "team-1" });
-        expect(authDeps.resolveSession).not.toHaveBeenCalled();
+    await expect(
+      resolveAuth({ authorization: "Bearer sl_org_live_example" }, authDeps),
+    ).resolves.toMatchObject({
+      status: "authenticated",
+      kind: "organization_key",
+      organizationId: "org-1",
     });
+    expect(authDeps.authenticateBearer).not.toHaveBeenCalled();
+  });
 
-    it("distinguishes missing credentials, unknown credentials, and unavailable authentication", async () => {
-        await expect(resolveAuth({}, deps())).resolves.toEqual({
-            status: "missing",
-        });
-        await expect(
-            resolveAuth(
-                { apiKeyHeader: "wrong" },
-                deps({ getApiKeyBySecret: vi.fn(async () => null) }),
-            ),
-        ).resolves.toEqual({ status: "unauthorized" });
-        await expect(
-            resolveAuth(
-                { headers: { cookie: "better-auth.session_token=s" } },
-                deps({
-                    resolveSession: vi.fn(
-                        async () =>
-                            ({ status: "unavailable" }) as AuthenticationResult,
-                    ),
-                }),
-            ),
-        ).resolves.toEqual({ status: "unavailable" });
+  it("accepts the Platform-standard X-API-Key header", async () => {
+    const authDeps = deps();
+    await expect(
+      resolveAuth({ headers: { "x-api-key": "api-key" } }, authDeps),
+    ).resolves.toMatchObject({ kind: "team_key", teamId: "team-1" });
+    expect(authDeps.getApiKeyBySecret).toHaveBeenCalledWith("api-key");
+  });
+
+  it("distinguishes missing credentials, unknown credentials, and unavailable authentication", async () => {
+    await expect(resolveAuth({}, deps())).resolves.toEqual({
+      status: "missing",
     });
+    await expect(
+      resolveAuth(
+        { apiKeyHeader: "wrong" },
+        deps({ getApiKeyBySecret: vi.fn(async () => null) }),
+      ),
+    ).resolves.toEqual({ status: "unauthorized" });
+    await expect(
+      resolveAuth(
+        { headers: { cookie: "sendlit.session_token=s" } },
+        deps({
+          resolveSession: vi.fn(
+            async () => ({ status: "unavailable" }) as AuthenticationResult,
+          ),
+        }),
+      ),
+    ).resolves.toEqual({ status: "unavailable" });
+  });
 
-    it("maps a validated Better Auth session to a SendLit user", async () => {
-        const authDeps = deps({
-            resolveSession: vi.fn(
-                async () =>
-                    ({
-                        status: "authenticated",
-                        identity: sessionIdentity,
-                    }) as AuthenticationResult,
-            ),
-        });
-
-        await expect(
-            resolveAuth(
-                { headers: { cookie: "better-auth.session_token=s" } },
-                authDeps,
-            ),
-        ).resolves.toMatchObject({
+  it("maps a validated Better Auth session to a SendLit user", async () => {
+    const authDeps = deps({
+      resolveSession: vi.fn(
+        async () =>
+          ({
             status: "authenticated",
-            kind: "session",
-            userId: user.id,
-        });
-        expect(authDeps.getUser).toHaveBeenCalledWith(user.id);
+            identity: sessionIdentity,
+          }) as AuthenticationResult,
+      ),
     });
+
+    await expect(
+      resolveAuth({ headers: { cookie: "sendlit.session_token=s" } }, authDeps),
+    ).resolves.toMatchObject({
+      status: "authenticated",
+      kind: "session",
+      userId: user.id,
+    });
+    expect(authDeps.getUser).toHaveBeenCalledWith(user.id);
+  });
 });
 
 describe("sendAuthError", () => {
-    it("writes stable client-facing authentication errors", () => {
-        const response = {
-            setHeader: vi.fn(),
-            status: vi.fn().mockReturnThis(),
-            json: vi.fn(),
-        };
+  it("writes stable client-facing authentication errors", () => {
+    const response = {
+      setHeader: vi.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
 
-        expect(sendAuthError(response, { status: "missing" })).toBe(true);
-        expect(response.status).toHaveBeenLastCalledWith(401);
-        expect(response.json).toHaveBeenLastCalledWith(
-            expect.objectContaining({ error: "unauthorized" }),
-        );
+    expect(sendAuthError(response, { status: "missing" })).toBe(true);
+    expect(response.status).toHaveBeenLastCalledWith(401);
+    expect(response.json).toHaveBeenLastCalledWith(
+      expect.objectContaining({ error: "unauthorized" }),
+    );
 
-        expect(sendAuthError(response, { status: "unavailable" })).toBe(true);
-        expect(response.status).toHaveBeenLastCalledWith(503);
-    });
+    expect(sendAuthError(response, { status: "unavailable" })).toBe(true);
+    expect(response.status).toHaveBeenLastCalledWith(503);
+
+    expect(sendAuthError(response, { status: "ambiguous" })).toBe(true);
+    expect(response.status).toHaveBeenLastCalledWith(400);
+    expect(response.json).toHaveBeenLastCalledWith(
+      expect.objectContaining({ error: "credential_ambiguous" }),
+    );
+  });
 });

@@ -1,0 +1,93 @@
+---
+title: Sending safeguards
+description: Which sending limits and checks apply to a self-hosted install, and how to change them.
+---
+
+SendLit Cloud runs checks that protect shared infrastructure from new,
+unknown accounts. A self-hosted install (`SENDLIT_DEPLOYMENT_MODE=oss`, the
+default in `.env.example`) trusts its own users, so most of those checks are
+off. This page lists what applies where.
+
+| Safeguard | Self-hosted | SendLit Cloud |
+| --- | --- | --- |
+| Test-send limits | On | On |
+| Your ESP's own open and click tracking turned off | On | On |
+| Signup guards (disposable emails, signups per IP) | Off | On |
+| Content scan before sending | Off | On |
+| Review of a new account's large import | Off | On |
+| Review of a new account's first large broadcast through its own ESP | Off | On |
+| Pacing of a new account's sends through a shared mailbox | Off | On |
+| New-account daily ramp and monthly send caps (plans) | Off | On |
+| Auto-pause on high bounce or complaint rates | On | On |
+| Teams' own tracking domains | On, once your proxy serves them over HTTPS | On |
+
+Variables go in the root `.env` file; the Compose stack passes all of it to
+the API. The full list, with defaults, is in `apps/api/.env.example`.
+
+## Test-send limits
+
+**Send test** in the editor sends real email, so it's limited on every
+install. Each recipient counts once, over rolling windows:
+
+| Variable | Default | Limit |
+| --- | --- | --- |
+| `TEST_SEND_DAILY_LIMIT` | 100 | Test emails per team in any 24 hours |
+| `TEST_SEND_BURST_LIMIT` | 50 | Test emails per team in any `TEST_SEND_BURST_HOURS` |
+| `TEST_SEND_BURST_HOURS` | 3 | Length of the burst window (at most 24) |
+| `TEST_SEND_EMAIL_DAILY_LIMIT` | 20 | Test emails of one email in any 24 hours |
+
+The counters live in Redis, so they hold across API restarts and replicas.
+
+## Your ESP's own tracking
+
+SendLit tracks opens and clicks itself. If the ESP tracked the same email,
+every link would be wrapped a second time behind the ESP's domain, and clicks
+would be counted twice. SendLit adds a header to each tracked email that turns
+the ESP's tracking off:
+
+| ESP | What SendLit does |
+| --- | --- |
+| SendGrid | `X-SMTPAPI` with the `clicktrack` and `opentrack` filters off. SendGrid's click tracking is on by default, so this matters most here. |
+| Mailgun | `X-Mailgun-Track-Clicks: no` and `X-Mailgun-Track-Opens: no` |
+| Postmark | `X-PM-TrackOpens: false` and `X-PM-TrackLinks: None` |
+| Resend | No per-email switch: turn off open and click tracking on the domain in Resend. |
+| Amazon SES | No per-email switch: don't add open or click events to the configuration set SendLit sends through. |
+| Other SMTP | Nothing to do. |
+
+This applies to broadcasts, sequences and test sends, and to transactional
+emails where SendLit tracks opens or clicks. Headers a transactional request
+sets itself take precedence.
+
+## Tracking domains
+
+Teams can put open, click, unsubscribe and "view in browser" links on their
+own subdomain. A domain only verifies once your reverse proxy serves it over
+HTTPS, so set that up first: see [Tracking domains](/self-hosting/tracking-domains).
+Until then, links keep using your API's host.
+
+## Auto-pause
+
+A broadcast or sequence pauses itself when its bounce or complaint rate gets
+too high, or when the ESP keeps failing. This runs on every install:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `AUTO_PAUSE_MIN_SENT` | 100 | Emails sent before rates are judged |
+| `AUTO_PAUSE_BOUNCE_BPS` | 200 | Bounce rate that pauses, in basis points (200 = 2%) |
+| `AUTO_PAUSE_COMPLAINT_BPS` | 8 | Complaint rate that pauses (8 = 0.08%) |
+| `AUTO_PAUSE_CONSECUTIVE_FAILURES` | 5 | Failed sends in a row that pause |
+| `AUTO_PAUSE_CHECK_SECONDS` | 30 | How often a sending campaign's rates are rechecked |
+
+Rates need bounce and complaint feedback from your ESP; see
+[Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback) for SES.
+
+## Cloud-only checks
+
+`SENDLIT_DEPLOYMENT_MODE=cloud` turns on the account checks in the table
+above; `ABUSE_CONTROLS=off` turns them off again. They need SendLit Cloud's
+billing setup and an operator to review flagged accounts with
+`bun scripts/abuse.ts`, so they aren't meant for a self-hosted install. Their
+variables (`SIGNUP_*`, `IMPORT_*`, `PACING_HOURS`,
+`FIRST_BROADCAST_REVIEW_RECIPIENTS`, `CONTENT_SCAN`) are documented in
+`apps/api/.env.example`, and what users see is described in
+[Acceptable use](/workspace/acceptable-use).

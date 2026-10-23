@@ -1,8 +1,7 @@
 import { DEFAULT_MAX_UPLOAD_SIZE_BYTES } from "@/lib/media-limits";
 
 export const API_URL = process.env.API_URL || "http://localhost:5000";
-export const API_PUBLIC_URL =
-    process.env.API_PUBLIC_URL || "http://localhost:5000";
+export const API_PUBLIC_URL = process.env.API_PUBLIC_URL || "http://localhost:5000";
 
 /** This app's own public origin — sent to `apps/api`'s hosted login page
  * (`GET /login?redirect=...`) as where to bounce the browser back to after
@@ -17,6 +16,35 @@ export const WEB_CLIENT = process.env.WEB_CLIENT || "http://localhost:3000";
  * `MaxUploadSizeProvider`, so it can be changed at deploy/container-start
  * time without rebuilding the app — unlike `NEXT_PUBLIC_*` vars. */
 export function getMaxUploadSizeBytes() {
-    const parsed = Number(process.env.MAX_UPLOAD_SIZE);
-    return parsed > 0 ? parsed : DEFAULT_MAX_UPLOAD_SIZE_BYTES;
+  const parsed = Number(process.env.MAX_UPLOAD_SIZE);
+  return parsed > 0 ? parsed : DEFAULT_MAX_UPLOAD_SIZE_BYTES;
+}
+
+/** Public status page linked from the dashboard ("System status"), e.g.
+ * `https://status.sendlit.app`. Server-only, like the settings below; unset
+ * hides the link. */
+export function getStatusPageUrl(): string | null {
+  const url = process.env.STATUS_PAGE_URL?.trim();
+  return url && /^https?:\/\//i.test(url) ? url : null;
+}
+
+export const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
+
+/**
+ * PostHog browser config. Optional, same contract as `apps/api`: missing
+ * `POSTHOG_API_KEY` returns null and the dashboard never loads the SDK.
+ * Server-only — read from the root layout and passed into a client provider
+ * so the token can be set at container start without a rebuild.
+ */
+export function getPosthogBrowserConfig() {
+  const apiKey = process.env.POSTHOG_API_KEY?.trim() || null;
+  if (!apiKey) {
+    return null;
+  }
+
+  return {
+    apiKey,
+    host: process.env.POSTHOG_HOST?.trim() || DEFAULT_POSTHOG_HOST,
+    environment: process.env.DEPLOY_ENV || process.env.NODE_ENV || "unknown",
+  };
 }

@@ -1,8 +1,7 @@
-import { uuidv7 } from "uuidv7";
 import { customAlphabet } from "nanoid";
+import { uuidv7 } from "uuidv7";
 
-const alphabet =
-    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const randomSuffix = customAlphabet(alphabet, 24);
 
 /**
@@ -13,7 +12,7 @@ const randomSuffix = customAlphabet(alphabet, 24);
  * `utils/public.ts`. FKs between tables always reference this column.
  */
 export function genId(): string {
-    return uuidv7();
+  return uuidv7();
 }
 
 /**
@@ -24,5 +23,5 @@ export function genId(): string {
  * and the only one ever used to look a row up from the outside.
  */
 export function genPublicId(prefix: string): string {
-    return `${prefix}_${randomSuffix()}`;
+  return `${prefix}_${randomSuffix()}`;
 }

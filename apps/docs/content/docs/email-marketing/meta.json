@@ -1,5 +1,18 @@
 {
-    "title": "Email Marketing",
-    "icon": "Mail",
-    "pages": ["contacts", "templates", "broadcasts", "sequences", "settings"]
+  "title": "Email Marketing",
+  "icon": "Mail",
+  "pages": [
+    "contacts",
+    "signup-forms",
+    "templates",
+    "broadcasts",
+    "web-archive",
+    "sequences",
+    "settings",
+    "delivery-feedback",
+    "domain-authentication",
+    "tracking-domain",
+    "reputation",
+    "warm-up"
+  ]
 }

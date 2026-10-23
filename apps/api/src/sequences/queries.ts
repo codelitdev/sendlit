@@ -1,181 +1,191 @@
-import { and, eq, count, asc } from "drizzle-orm";
-import { db } from "../db/client";
-import {
-    sequences,
-    sequenceEmails,
-    emailDeliveries,
-    emailEvents,
-    contacts,
-    espConfigs,
-} from "../db/schema";
-import { resolveStartingTemplate } from "../templates/queries";
-import {
-    addRule,
-    defaultEmailContent,
-    removeRule,
-    verifyMandatoryTags,
-} from "./helpers";
-import {
-    EmailActionType,
-    EmailEventAction,
-    EventType,
-    MailType,
-    itemsPerPage,
-    maxItemsPerPage,
-    sequenceDelayBetweenMailsInMillis,
-} from "../config/constants";
-import { responses } from "../config/strings";
-import { captureEvent } from "../observability/posthog";
-import type { ContactFilterWithAggregator } from "../contacts/segment";
 import type { Email as EmailContent } from "@sendlit/email-editor";
-import { syncEmailContentMediaReferences } from "../media/email-content";
-import { deleteMediaReferencesForResource } from "../media/queries";
-import { assertMailingAddressConfigured } from "../settings/general/queries";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { assertLargeBroadcastReviewed } from "../abuse/broadcast-review";
+import { assertEmailContentAllowed } from "../abuse/content-scan";
+import { assertNoImportUnderReview } from "../abuse/imports";
 import { getMatchingContactIds } from "../automation/queries";
 import {
-    resolveDeliverySource,
-    type DeliverySourceSelection,
+  assertMarketingAllowedForContactUsage,
+  assertSendAllowedForTeam,
+  getOrganizationEntitlements,
+  PlanGateError,
+} from "../billing/entitlements";
+import { nextPlanUp } from "../billing/policies";
+import { usageForOrganization } from "../billing/usage";
+import {
+  type EmailActionType,
+  EmailEventAction,
+  EventType,
+  itemsPerPage,
+  type MailType,
+  maxItemsPerPage,
+  sequenceDelayBetweenMailsInMillis,
+} from "../config/constants";
+import { responses } from "../config/strings";
+import {
+  type ContactFilterWithAggregator,
+  sequenceAudience,
+} from "../contacts/segment";
+import { db } from "../db/client";
+import {
+  contacts,
+  emailDeliveries,
+  emailEvents,
+  espConfigs,
+  ongoingSequences,
+  sequenceEmails,
+  sequences,
+} from "../db/schema";
+import {
+  type DeliverySourceSelection,
+  resolveDeliverySource,
 } from "../delivery/queries";
+import { syncEmailContentMediaReferences } from "../media/email-content";
+import { deleteMediaReferencesForResource } from "../media/queries";
+import { captureEvent } from "../observability";
+import { assertMailingAddressConfigured } from "../settings/general/queries";
+import { getTeam } from "../team/queries";
+import { resolveStartingTemplate } from "../templates/queries";
+import {
+  addRule,
+  defaultEmailContent,
+  removeRule,
+  verifyMandatoryTags,
+} from "./helpers";
 
 export type Sequence = typeof sequences.$inferSelect;
 export type SequenceEmail = typeof sequenceEmails.$inferSelect;
 export type HydratedSequence = Sequence & {
-    emails: SequenceEmail[];
-    deliverySource: DeliverySourceSelection | null;
+  emails: SequenceEmail[];
+  deliverySource: DeliverySourceSelection | null;
+  entrantsCount?: number;
 };
 
-function clearDeletedDeliverySourceMarker(
-    report: unknown,
-): Record<string, unknown> {
-    if (!report || typeof report !== "object" || Array.isArray(report)) {
-        return {};
-    }
-    const { deliverySourceDeleted: _deleted, ...rest } = report as Record<
-        string,
-        unknown
-    >;
-    return rest;
+/** The report of a (re)started sequence: drops the deleted-delivery-source
+ * marker and the auto-pause state (#25) along with its failure streak. */
+function clearDeletedDeliverySourceMarker(report: unknown): Record<string, unknown> {
+  if (!report || typeof report !== "object" || Array.isArray(report)) {
+    return {};
+  }
+  const {
+    deliverySourceDeleted: _deleted,
+    autoPause: _autoPause,
+    health: _health,
+    ...rest
+  } = report as Record<string, unknown>;
+  return rest;
 }
 
 async function hydrate(sequence: Sequence): Promise<HydratedSequence> {
-    const emails = await db
-        .select()
-        .from(sequenceEmails)
-        .where(eq(sequenceEmails.sequenceId, sequence.id))
-        .orderBy(asc(sequenceEmails.createdAt));
-    let deliverySource =
-        (sequence.deliverySourceIntent as DeliverySourceSelection | null) ??
-        (sequence.deliverySourceType
-            ? { type: sequence.deliverySourceType as "organization" | "team" }
-            : null);
+  const emails = await db
+    .select()
+    .from(sequenceEmails)
+    .where(eq(sequenceEmails.sequenceId, sequence.id))
+    .orderBy(asc(sequenceEmails.createdAt));
+  let deliverySource =
+    (sequence.deliverySourceIntent as DeliverySourceSelection | null) ??
+    (sequence.deliverySourceType
+      ? { type: sequence.deliverySourceType as "organization" | "team" }
+      : null);
 
-    // A started team-delivery sequence is pinned to an exact ESP. Return its
-    // public ID so read-only campaign views name the sender that actually
-    // delivered the mail rather than the draft-only "team default" alias.
-    if (
-        !sequence.deliverySourceIntent &&
-        sequence.deliverySourceType === "team" &&
-        sequence.outboxId
-    ) {
-        const [esp] = await db
-            .select({ espId: espConfigs.espId })
-            .from(espConfigs)
-            .where(eq(espConfigs.id, sequence.outboxId))
-            .limit(1);
-        if (esp) deliverySource = { type: "team", espId: esp.espId };
-    }
-    return { ...sequence, emails, deliverySource };
+  // A started team-delivery sequence is pinned to an exact ESP. Return its
+  // public ID so read-only campaign views name the sender that actually
+  // delivered the mail rather than the draft-only "team default" alias.
+  if (
+    !sequence.deliverySourceIntent &&
+    sequence.deliverySourceType === "team" &&
+    sequence.outboxId
+  ) {
+    const [esp] = await db
+      .select({ espId: espConfigs.espId })
+      .from(espConfigs)
+      .where(eq(espConfigs.id, sequence.outboxId))
+      .limit(1);
+    if (esp) deliverySource = { type: "team", espId: esp.espId };
+  }
+  return { ...sequence, emails, deliverySource };
 }
 
 export async function createSequence({
-    teamId,
-    type,
-    templateId,
-    deliverySource,
+  teamId,
+  type,
+  templateId,
+  deliverySource,
 }: {
-    teamId: string;
-    type: MailType;
-    templateId: string;
-    deliverySource?: DeliverySourceSelection;
+  teamId: string;
+  type: MailType;
+  templateId: string;
+  deliverySource?: DeliverySourceSelection;
 }): Promise<HydratedSequence> {
-    const template = await resolveStartingTemplate(
-        teamId,
-        templateId,
-        "marketing",
-    );
-    if (!template) {
-        throw new Error(responses.item_not_found);
-    }
+  const template = await resolveStartingTemplate(teamId, templateId, "marketing");
+  if (!template) {
+    throw new Error(responses.item_not_found);
+  }
 
-    const [sequence] = await db
-        .insert(sequences)
-        .values({
-            teamId,
-            type,
-            title: template.title || "Untitled",
-            triggerType:
-                type === "broadcast"
-                    ? EventType.DATE_OCCURRED
-                    : EventType.SUBSCRIBER_ADDED,
-            filter: { aggregator: "or", filters: [] },
-            deliverySourceIntent: deliverySource ?? null,
-        })
-        .returning();
+  const [sequence] = await db
+    .insert(sequences)
+    .values({
+      teamId,
+      type,
+      title: template.title || "Untitled",
+      triggerType:
+        type === "broadcast" ? EventType.DATE_OCCURRED : EventType.SUBSCRIBER_ADDED,
+      filter: { aggregator: "or", filters: [] },
+      deliverySourceIntent: deliverySource ?? null,
+    })
+    .returning();
 
-    const content = (template.content as EmailContent) || defaultEmailContent;
+  const content = (template.content as EmailContent) || defaultEmailContent;
 
-    const [email] = await db
-        .insert(sequenceEmails)
-        .values({
-            sequenceId: sequence.id,
-            content: content as any,
-            subject:
-                type === "broadcast"
-                    ? sequence.title
-                    : template.title || "New email",
-            delayInMillis: 0,
-            // Broadcasts always send their single email, so it's published
-            // by definition; drip/automation emails start unpublished.
-            published: type === "broadcast",
-        })
-        .returning();
+  const [email] = await db
+    .insert(sequenceEmails)
+    .values({
+      sequenceId: sequence.id,
+      content: content as any,
+      subject: type === "broadcast" ? sequence.title : template.title || "New email",
+      delayInMillis: 0,
+      // Broadcasts always send their single email, so it's published
+      // by definition; drip/automation emails start unpublished.
+      published: type === "broadcast",
+    })
+    .returning();
 
-    const reconciledContent = await syncEmailContentMediaReferences({
-        teamId,
-        content,
-        resource: {
-            resourceType: "SEQUENCE_EMAIL",
-            resourceInternalId: email.id,
-            resourcePublicId: email.emailId,
-            parentResourceInternalId: sequence.id,
-            parentResourcePublicId: sequence.sequenceId,
-        },
-    });
-    if (reconciledContent) {
-        await db
-            .update(sequenceEmails)
-            .set({ content: reconciledContent as any, updatedAt: new Date() })
-            .where(eq(sequenceEmails.id, email.id));
-    }
+  const reconciledContent = await syncEmailContentMediaReferences({
+    teamId,
+    content,
+    resource: {
+      resourceType: "SEQUENCE_EMAIL",
+      resourceInternalId: email.id,
+      resourcePublicId: email.emailId,
+      parentResourceInternalId: sequence.id,
+      parentResourcePublicId: sequence.sequenceId,
+    },
+  });
+  if (reconciledContent) {
+    await db
+      .update(sequenceEmails)
+      .set({ content: reconciledContent as any, updatedAt: new Date() })
+      .where(eq(sequenceEmails.id, email.id));
+  }
 
-    const [updated] = await db
-        .update(sequences)
-        .set({ emailsOrder: [email.emailId] })
-        .where(eq(sequences.id, sequence.id))
-        .returning();
+  const [updated] = await db
+    .update(sequences)
+    .set({ emailsOrder: [email.emailId] })
+    .where(eq(sequences.id, sequence.id))
+    .returning();
 
-    captureEvent({
-        event: "sequence_created",
-        source: "sequences.create",
-        teamId,
-        properties: {
-            sequence_id: updated.sequenceId,
-            sequence_type: updated.type,
-            template_id: templateId,
-        },
-    });
+  captureEvent({
+    event: "sequence_created",
+    source: "sequences.create",
+    teamId,
+    properties: {
+      sequence_id: updated.sequenceId,
+      sequence_type: updated.type,
+      template_id: templateId,
+    },
+  });
 
-    return hydrate(updated);
+  return hydrate(updated);
 }
 
 /** Looks up a single `sequence_emails` row by its parent's **internal**
@@ -184,580 +194,660 @@ export async function createSequence({
  * but need the row's internal `id` to write an `email_deliveries`/`email_events`
  * FK. */
 export async function getSequenceEmailByEmailId(
-    sequenceId: string,
-    emailId: string,
+  sequenceId: string,
+  emailId: string,
 ): Promise<SequenceEmail | null> {
-    const [row] = await db
-        .select()
-        .from(sequenceEmails)
-        .where(
-            and(
-                eq(sequenceEmails.sequenceId, sequenceId),
-                eq(sequenceEmails.emailId, emailId),
-            ),
-        )
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(sequenceEmails)
+    .where(
+      and(
+        eq(sequenceEmails.sequenceId, sequenceId),
+        eq(sequenceEmails.emailId, emailId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 export async function getSequenceBySequenceId(
-    teamId: string,
-    sequenceId: string,
+  teamId: string,
+  sequenceId: string,
 ): Promise<HydratedSequence | null> {
-    const [row] = await db
-        .select()
-        .from(sequences)
-        .where(
-            and(
-                eq(sequences.teamId, teamId),
-                eq(sequences.sequenceId, sequenceId),
-            ),
-        )
-        .limit(1);
-    if (!row) return null;
-    return hydrate(row);
+  const [row] = await db
+    .select()
+    .from(sequences)
+    .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)))
+    .limit(1);
+  if (!row) return null;
+  return hydrate(row);
 }
 
 export async function listSequences({
-    teamId,
-    type,
-    offset = 1,
-    itemsPerPage: perPage = itemsPerPage,
+  teamId,
+  type,
+  offset = 1,
+  itemsPerPage: perPage = itemsPerPage,
 }: {
-    teamId: string;
-    type: MailType;
-    offset?: number;
-    itemsPerPage?: number;
+  teamId: string;
+  type: MailType;
+  offset?: number;
+  itemsPerPage?: number;
 }): Promise<HydratedSequence[]> {
-    const pageSize = Math.min(Math.max(perPage, 1), maxItemsPerPage);
-    const rows = await db
-        .select()
-        .from(sequences)
-        .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)))
-        .limit(pageSize)
-        .offset((Math.max(offset, 1) - 1) * pageSize);
-    return Promise.all(rows.map(hydrate));
+  const pageSize = Math.min(Math.max(perPage, 1), maxItemsPerPage);
+  const rows = await db
+    .select()
+    .from(sequences)
+    .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)))
+    .limit(pageSize)
+    .offset((Math.max(offset, 1) - 1) * pageSize);
+  if (rows.length === 0) return [];
+
+  const activeEntrants = await db
+    .select({ sequenceId: ongoingSequences.sequenceId, value: count() })
+    .from(ongoingSequences)
+    .where(
+      inArray(
+        ongoingSequences.sequenceId,
+        rows.map((row) => row.id),
+      ),
+    )
+    .groupBy(ongoingSequences.sequenceId);
+  const activeEntrantsBySequenceId = new Map(
+    activeEntrants.map((row) => [row.sequenceId, row.value]),
+  );
+
+  return Promise.all(
+    rows.map(async (row) => ({
+      ...(await hydrate(row)),
+      entrantsCount:
+        row.type === "broadcast"
+          ? row.entrants.length
+          : (activeEntrantsBySequenceId.get(row.id) ?? 0),
+    })),
+  );
 }
 
-export async function countSequences(
-    teamId: string,
-    type: MailType,
-): Promise<number> {
-    const [row] = await db
-        .select({ value: count() })
-        .from(sequences)
-        .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)));
-    return row?.value ?? 0;
+export async function countSequences(teamId: string, type: MailType): Promise<number> {
+  const [row] = await db
+    .select({ value: count() })
+    .from(sequences)
+    .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)));
+  return row?.value ?? 0;
 }
 
 export async function updateSequence({
-    teamId,
-    sequenceId,
-    title,
-    triggerType,
-    triggerData,
-    filter,
-    emailsOrder,
-    deliverySource,
+  teamId,
+  sequenceId,
+  title,
+  triggerType,
+  triggerData,
+  filter,
+  excludeFilter,
+  emailsOrder,
+  deliverySource,
 }: {
-    teamId: string;
-    sequenceId: string;
-    title?: string;
-    triggerType?: string;
-    triggerData?: string;
-    filter?: ContactFilterWithAggregator;
-    emailsOrder?: string[];
-    deliverySource?: DeliverySourceSelection | null;
+  teamId: string;
+  sequenceId: string;
+  title?: string;
+  triggerType?: string;
+  triggerData?: string;
+  filter?: ContactFilterWithAggregator;
+  /** `null` clears the exclusion. */
+  excludeFilter?: ContactFilterWithAggregator | null;
+  emailsOrder?: string[];
+  deliverySource?: DeliverySourceSelection | null;
 }): Promise<HydratedSequence | null> {
-    const current = await getSequenceBySequenceId(teamId, sequenceId);
-    if (!current) return null;
-    const patch: Partial<Sequence> = { updatedAt: new Date() };
-    if (title !== undefined) patch.title = title;
-    if (triggerType !== undefined) patch.triggerType = triggerType;
-    if (triggerData !== undefined) patch.triggerData = triggerData;
-    if (filter !== undefined) patch.filter = filter as any;
-    if (emailsOrder !== undefined) patch.emailsOrder = emailsOrder;
-    if (deliverySource !== undefined) {
-        if (!["draft", "paused"].includes(current.status)) {
-            throw new Error("esp_cannot_change_after_start");
-        }
-        patch.deliverySourceIntent = deliverySource as any;
+  const current = await getSequenceBySequenceId(teamId, sequenceId);
+  if (!current) return null;
+  // A sent broadcast's title is its email's subject, which can't change
+  // after it went out (its content can't either; see updateMailInSequence).
+  if (title !== undefined && title !== current.title && isBroadcastLocked(current)) {
+    throw new Error(responses.mail_already_sent);
+  }
+  const patch: Partial<Sequence> = { updatedAt: new Date() };
+  if (title !== undefined) patch.title = title;
+  if (triggerType !== undefined) patch.triggerType = triggerType;
+  if (triggerData !== undefined) patch.triggerData = triggerData;
+  if (filter !== undefined) patch.filter = filter as any;
+  if (excludeFilter !== undefined) {
+    patch.excludeFilter = excludeFilter?.filters.length ? (excludeFilter as any) : null;
+  }
+  if (emailsOrder !== undefined) patch.emailsOrder = emailsOrder;
+  if (deliverySource !== undefined) {
+    if (!["draft", "paused"].includes(current.status)) {
+      throw new Error("esp_cannot_change_after_start");
     }
+    patch.deliverySourceIntent = deliverySource as any;
+  }
 
-    const [row] = await db
-        .update(sequences)
-        .set(patch)
-        .where(
-            and(
-                eq(sequences.teamId, teamId),
-                eq(sequences.sequenceId, sequenceId),
-            ),
-        )
-        .returning();
-    if (!row) return null;
+  const [row] = await db
+    .update(sequences)
+    .set(patch)
+    .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)))
+    .returning();
+  if (!row) return null;
 
-    // Broadcasts have a single email whose subject always mirrors the
-    // broadcast's title, so the composer doesn't need a separate subject field.
-    if (row.type === "broadcast" && title !== undefined) {
-        const broadcastEmail = current.emails[0];
-        if (broadcastEmail) {
-            await db
-                .update(sequenceEmails)
-                .set({ subject: title, updatedAt: new Date() })
-                .where(eq(sequenceEmails.id, broadcastEmail.id));
-        }
+  // Broadcasts have a single email whose subject always mirrors the
+  // broadcast's title, so the composer doesn't need a separate subject field.
+  if (row.type === "broadcast" && title !== undefined) {
+    const broadcastEmail = current.emails[0];
+    if (broadcastEmail) {
+      await db
+        .update(sequenceEmails)
+        .set({ subject: title, updatedAt: new Date() })
+        .where(eq(sequenceEmails.id, broadcastEmail.id));
     }
+  }
 
-    captureEvent({
-        event: "sequence_updated",
-        source: "sequences.update",
-        teamId,
-        properties: {
-            sequence_id: row.sequenceId,
-            sequence_type: row.type,
-            sequence_status: row.status,
-        },
-    });
-    return hydrate(row);
+  captureEvent({
+    event: "sequence_updated",
+    source: "sequences.update",
+    teamId,
+    properties: {
+      sequence_id: row.sequenceId,
+      sequence_type: row.type,
+      sequence_status: row.status,
+    },
+  });
+  return hydrate(row);
 }
 
 export async function addMailToSequence({
-    teamId,
-    sequenceId,
-    templateId,
+  teamId,
+  sequenceId,
+  templateId,
 }: {
-    teamId: string;
-    sequenceId: string;
-    templateId: string;
+  teamId: string;
+  sequenceId: string;
+  templateId: string;
 }): Promise<HydratedSequence | null> {
-    const sequence = await getSequenceBySequenceId(teamId, sequenceId);
-    if (!sequence) return null;
-    if (sequence.type === "broadcast") {
-        throw new Error(responses.action_not_allowed);
-    }
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+  if (!sequence) return null;
+  if (sequence.type === "broadcast") {
+    throw new Error(responses.action_not_allowed);
+  }
 
-    const template = await resolveStartingTemplate(
-        teamId,
-        templateId,
-        "marketing",
-    );
-    if (!template) {
-        throw new Error(responses.item_not_found);
-    }
+  const template = await resolveStartingTemplate(teamId, templateId, "marketing");
+  if (!template) {
+    throw new Error(responses.item_not_found);
+  }
 
-    const content = (template.content as EmailContent) || defaultEmailContent;
+  const content = (template.content as EmailContent) || defaultEmailContent;
 
-    const [email] = await db
-        .insert(sequenceEmails)
-        .values({
-            sequenceId: sequence.id,
-            content: content as any,
-            subject: template.title || "New email",
-            delayInMillis: sequenceDelayBetweenMailsInMillis,
-        })
-        .returning();
+  const [email] = await db
+    .insert(sequenceEmails)
+    .values({
+      sequenceId: sequence.id,
+      content: content as any,
+      subject: template.title || "New email",
+      delayInMillis: sequenceDelayBetweenMailsInMillis,
+    })
+    .returning();
 
-    const reconciledContent = await syncEmailContentMediaReferences({
-        teamId,
-        content,
-        resource: {
-            resourceType: "SEQUENCE_EMAIL",
-            resourceInternalId: email.id,
-            resourcePublicId: email.emailId,
-            parentResourceInternalId: sequence.id,
-            parentResourcePublicId: sequence.sequenceId,
-        },
-    });
-    if (reconciledContent) {
-        await db
-            .update(sequenceEmails)
-            .set({ content: reconciledContent as any, updatedAt: new Date() })
-            .where(eq(sequenceEmails.id, email.id));
-    }
+  const reconciledContent = await syncEmailContentMediaReferences({
+    teamId,
+    content,
+    resource: {
+      resourceType: "SEQUENCE_EMAIL",
+      resourceInternalId: email.id,
+      resourcePublicId: email.emailId,
+      parentResourceInternalId: sequence.id,
+      parentResourcePublicId: sequence.sequenceId,
+    },
+  });
+  if (reconciledContent) {
+    await db
+      .update(sequenceEmails)
+      .set({ content: reconciledContent as any, updatedAt: new Date() })
+      .where(eq(sequenceEmails.id, email.id));
+  }
 
-    const [row] = await db
-        .update(sequences)
-        .set({ emailsOrder: [...sequence.emailsOrder, email.emailId] })
-        .where(eq(sequences.id, sequence.id))
-        .returning();
+  const [row] = await db
+    .update(sequences)
+    .set({ emailsOrder: [...sequence.emailsOrder, email.emailId] })
+    .where(eq(sequences.id, sequence.id))
+    .returning();
 
-    captureEvent({
-        event: "sequence_email_added",
-        source: "sequences.add_mail",
-        teamId,
-        properties: {
-            sequence_id: sequence.sequenceId,
-            sequence_type: sequence.type,
-            email_id: email.emailId,
-            template_id: templateId,
-        },
-    });
+  captureEvent({
+    event: "sequence_email_added",
+    source: "sequences.add_mail",
+    teamId,
+    properties: {
+      sequence_id: sequence.sequenceId,
+      sequence_type: sequence.type,
+      email_id: email.emailId,
+      template_id: templateId,
+    },
+  });
 
-    return hydrate(row);
+  return hydrate(row);
 }
 
 function isBroadcastLocked(sequence: HydratedSequence): boolean {
-    const report = (sequence.report || {}) as any;
-    return (
-        sequence.type === "broadcast" &&
-        ["active", "completed"].includes(sequence.status) &&
-        Boolean(report?.broadcast?.lockedAt)
-    );
+  const report = (sequence.report || {}) as any;
+  return (
+    sequence.type === "broadcast" &&
+    ["active", "completed"].includes(sequence.status) &&
+    Boolean(report?.broadcast?.lockedAt)
+  );
 }
 
 export async function updateMailInSequence({
-    teamId,
-    sequenceId,
-    emailId,
-    subject,
-    content,
-    delayInMillis,
-    templateId,
-    actionType,
-    actionData,
-    published,
+  teamId,
+  sequenceId,
+  emailId,
+  subject,
+  content,
+  delayInMillis,
+  templateId,
+  actionType,
+  actionData,
+  published,
 }: {
-    teamId: string;
-    sequenceId: string;
-    emailId: string;
-    subject?: string;
-    content?: unknown;
-    delayInMillis?: number;
-    templateId?: string;
-    actionType?: EmailActionType;
-    actionData?: Record<string, unknown>;
-    published?: boolean;
+  teamId: string;
+  sequenceId: string;
+  emailId: string;
+  subject?: string;
+  content?: unknown;
+  delayInMillis?: number;
+  templateId?: string;
+  actionType?: EmailActionType;
+  actionData?: Record<string, unknown>;
+  published?: boolean;
 }): Promise<HydratedSequence | null> {
-    const sequence = await getSequenceBySequenceId(teamId, sequenceId);
-    if (!sequence) return null;
-    if (isBroadcastLocked(sequence)) return sequence;
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+  if (!sequence) return null;
+  if (isBroadcastLocked(sequence)) return sequence;
 
-    const email = sequence.emails.find((e) => e.emailId === emailId);
-    if (!email) throw new Error(responses.item_not_found);
+  const email = sequence.emails.find((e) => e.emailId === emailId);
+  if (!email) throw new Error(responses.item_not_found);
 
-    if (templateId !== undefined) {
-        const template = await resolveStartingTemplate(
-            teamId,
-            templateId,
-            "marketing",
-        );
-        if (!template) throw new Error(responses.item_not_found);
-    }
+  if (templateId !== undefined) {
+    const template = await resolveStartingTemplate(teamId, templateId, "marketing");
+    if (!template) throw new Error(responses.item_not_found);
+  }
 
-    if (content) {
-        verifyMandatoryTags((content as any).content || []);
-        content =
-            (await syncEmailContentMediaReferences({
-                teamId,
-                content: content as EmailContent,
-                resource: {
-                    resourceType: "SEQUENCE_EMAIL",
-                    resourceInternalId: email.id,
-                    resourcePublicId: email.emailId,
-                    parentResourceInternalId: sequence.id,
-                    parentResourcePublicId: sequence.sequenceId,
-                },
-            })) || content;
-    }
-
-    const patch: Partial<SequenceEmail> = { updatedAt: new Date() };
-    // Broadcasts always mirror the sequence title as their subject and are
-    // always published, so those fields aren't independently editable.
-    if (sequence.type === "broadcast") {
-        patch.subject = sequence.title;
-        patch.published = true;
-    } else {
-        if (subject !== undefined) patch.subject = subject;
-        if (published !== undefined) patch.published = published;
-    }
-    if (content !== undefined) patch.content = content as any;
-    if (delayInMillis !== undefined) patch.delayInMillis = delayInMillis;
-    if (templateId !== undefined) patch.templateId = templateId;
-    if (actionType !== undefined) patch.actionType = actionType;
-    if (actionData !== undefined) patch.actionData = actionData as any;
-
-    await db
-        .update(sequenceEmails)
-        .set(patch)
-        .where(
-            and(
-                eq(sequenceEmails.sequenceId, sequence.id),
-                eq(sequenceEmails.emailId, emailId),
-            ),
-        );
-
-    captureEvent({
-        event: "sequence_email_updated",
-        source: "sequences.update_mail",
+  if (content) {
+    verifyMandatoryTags((content as any).content || []);
+    content =
+      (await syncEmailContentMediaReferences({
         teamId,
-        properties: {
-            sequence_id: sequence.sequenceId,
-            sequence_type: sequence.type,
-            email_id: email.emailId,
-            action_type: actionType,
-            template_id: templateId,
+        content: content as EmailContent,
+        resource: {
+          resourceType: "SEQUENCE_EMAIL",
+          resourceInternalId: email.id,
+          resourcePublicId: email.emailId,
+          parentResourceInternalId: sequence.id,
+          parentResourcePublicId: sequence.sequenceId,
         },
-    });
+      })) || content;
+  }
 
-    return getSequenceBySequenceId(teamId, sequenceId);
+  const patch: Partial<SequenceEmail> = { updatedAt: new Date() };
+  // Broadcasts always mirror the sequence title as their subject and are
+  // always published, so those fields aren't independently editable.
+  if (sequence.type === "broadcast") {
+    patch.subject = sequence.title;
+    patch.published = true;
+  } else {
+    if (subject !== undefined) patch.subject = subject;
+    if (published !== undefined) patch.published = published;
+  }
+  if (content !== undefined) patch.content = content as any;
+  // A running sequence sends edits straight away, so they're scanned now.
+  if (sequence.status === "active" && (patch.content || patch.subject)) {
+    await assertEmailContentAllowed({
+      teamId,
+      email,
+      subject: patch.subject ?? email.subject,
+      content: patch.content ?? email.content,
+    });
+  }
+  if (delayInMillis !== undefined) patch.delayInMillis = delayInMillis;
+  if (templateId !== undefined) patch.templateId = templateId;
+  if (actionType !== undefined) patch.actionType = actionType;
+  if (actionData !== undefined) patch.actionData = actionData as any;
+
+  await db
+    .update(sequenceEmails)
+    .set(patch)
+    .where(
+      and(
+        eq(sequenceEmails.sequenceId, sequence.id),
+        eq(sequenceEmails.emailId, emailId),
+      ),
+    );
+
+  captureEvent({
+    event: "sequence_email_updated",
+    source: "sequences.update_mail",
+    teamId,
+    properties: {
+      sequence_id: sequence.sequenceId,
+      sequence_type: sequence.type,
+      email_id: email.emailId,
+      action_type: actionType,
+      template_id: templateId,
+    },
+  });
+
+  return getSequenceBySequenceId(teamId, sequenceId);
 }
 
 export async function deleteMailFromSequence({
-    teamId,
-    sequenceId,
-    emailId,
+  teamId,
+  sequenceId,
+  emailId,
 }: {
-    teamId: string;
-    sequenceId: string;
-    emailId: string;
+  teamId: string;
+  sequenceId: string;
+  emailId: string;
 }): Promise<HydratedSequence | null> {
-    const sequence = await getSequenceBySequenceId(teamId, sequenceId);
-    if (!sequence) return null;
-    if (sequence.type === "broadcast") {
-        throw new Error(responses.action_not_allowed);
-    }
-    if (sequence.emails.length === 1) {
-        throw new Error(responses.cannot_delete_last_email);
-    }
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+  if (!sequence) return null;
+  if (sequence.type === "broadcast") {
+    throw new Error(responses.action_not_allowed);
+  }
+  if (sequence.emails.length === 1) {
+    throw new Error(responses.cannot_delete_last_email);
+  }
 
-    const email = sequence.emails.find((item) => item.emailId === emailId);
-    if (email) {
-        await deleteMediaReferencesForResource({
-            teamId,
-            resourceType: "SEQUENCE_EMAIL",
-            resourceInternalId: email.id,
-        });
-    }
-
-    await db
-        .delete(sequenceEmails)
-        .where(
-            and(
-                eq(sequenceEmails.sequenceId, sequence.id),
-                eq(sequenceEmails.emailId, emailId),
-            ),
-        );
-
-    await db
-        .update(sequences)
-        .set({
-            emailsOrder: sequence.emailsOrder.filter((id) => id !== emailId),
-        })
-        .where(eq(sequences.id, sequence.id));
-
-    captureEvent({
-        event: "sequence_email_deleted",
-        source: "sequences.delete_mail",
-        teamId,
-        properties: {
-            sequence_id: sequence.sequenceId,
-            sequence_type: sequence.type,
-            email_id: emailId,
-        },
+  const email = sequence.emails.find((item) => item.emailId === emailId);
+  if (email) {
+    await deleteMediaReferencesForResource({
+      teamId,
+      resourceType: "SEQUENCE_EMAIL",
+      resourceInternalId: email.id,
     });
+  }
 
-    return getSequenceBySequenceId(teamId, sequenceId);
+  await db
+    .delete(sequenceEmails)
+    .where(
+      and(
+        eq(sequenceEmails.sequenceId, sequence.id),
+        eq(sequenceEmails.emailId, emailId),
+      ),
+    );
+
+  await db
+    .update(sequences)
+    .set({
+      emailsOrder: sequence.emailsOrder.filter((id) => id !== emailId),
+    })
+    .where(eq(sequences.id, sequence.id));
+
+  captureEvent({
+    event: "sequence_email_deleted",
+    source: "sequences.delete_mail",
+    teamId,
+    properties: {
+      sequence_id: sequence.sequenceId,
+      sequence_type: sequence.type,
+      email_id: emailId,
+    },
+  });
+
+  return getSequenceBySequenceId(teamId, sequenceId);
 }
 
 export async function deleteSequence({
-    teamId,
-    sequenceId,
+  teamId,
+  sequenceId,
 }: {
-    teamId: string;
-    sequenceId: string;
+  teamId: string;
+  sequenceId: string;
 }): Promise<boolean> {
-    const sequence = await getSequenceBySequenceId(teamId, sequenceId);
-    if (!sequence) return false;
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+  if (!sequence) return false;
 
-    for (const email of sequence.emails) {
-        await deleteMediaReferencesForResource({
-            teamId,
-            resourceType: "SEQUENCE_EMAIL",
-            resourceInternalId: email.id,
-        });
-    }
-
-    await db
-        .delete(sequences)
-        .where(
-            and(
-                eq(sequences.teamId, teamId),
-                eq(sequences.sequenceId, sequenceId),
-            ),
-        );
-
-    captureEvent({
-        event: "sequence_deleted",
-        source: "sequences.delete",
-        teamId,
-        properties: {
-            sequence_id: sequence.sequenceId,
-            sequence_type: sequence.type,
-        },
+  for (const email of sequence.emails) {
+    await deleteMediaReferencesForResource({
+      teamId,
+      resourceType: "SEQUENCE_EMAIL",
+      resourceInternalId: email.id,
     });
+  }
 
-    return true;
+  await db
+    .delete(sequences)
+    .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)));
+
+  captureEvent({
+    event: "sequence_deleted",
+    source: "sequences.delete",
+    teamId,
+    properties: {
+      sequence_id: sequence.sequenceId,
+      sequence_type: sequence.type,
+    },
+  });
+
+  return true;
 }
 
 export async function startSequence({
-    teamId,
-    sequenceId,
+  teamId,
+  sequenceId,
 }: {
-    teamId: string;
-    sequenceId: string;
+  teamId: string;
+  sequenceId: string;
 }): Promise<HydratedSequence> {
-    await assertMailingAddressConfigured(teamId);
+  await assertMailingAddressConfigured(teamId);
 
-    const sequence = await getSequenceBySequenceId(teamId, sequenceId);
-    if (!sequence) throw new Error(responses.item_not_found);
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+  if (!sequence) throw new Error(responses.item_not_found);
 
-    if (!["draft", "paused"].includes(sequence.status)) {
-        throw new Error(responses.sequence_already_started);
-    }
-    if (!sequence.emails.some((e) => e.published)) {
-        throw new Error(responses.no_published_emails);
-    }
+  if (!["draft", "paused"].includes(sequence.status)) {
+    throw new Error(responses.sequence_already_started);
+  }
+  if (!sequence.emails.some((e) => e.published)) {
+    throw new Error(responses.no_published_emails);
+  }
 
-    const pin = await resolveDeliverySource(
-        teamId,
-        (sequence.deliverySourceIntent as DeliverySourceSelection | null) ??
-            undefined,
-    );
+  await assertSendAllowedForTeam(teamId, "marketing");
+  const team = await getTeam(teamId);
+  if (!team) throw new Error("team_not_found");
+  // Hosted abuse controls: a new account's large import waits for review,
+  // and every published email is scanned before anything goes out.
+  await assertNoImportUnderReview(team.organizationId);
+  for (const email of sequence.emails.filter((e) => e.published)) {
+    await assertEmailContentAllowed({ teamId, email });
+  }
 
-    if (sequence.type === "sequence") {
-        // Sender identity is no longer stored per-sequence — the send path
-        // always resolves one (sequence outbox -> team esp config -> team
-        // name/owner email), so only title/trigger completeness is checked.
-        if (!sequence.title || !sequence.triggerType) {
-            throw new Error(`${responses.sequence_details_missing}: basics`);
-        }
-        if (
-            [EventType.TAG_ADDED, EventType.TAG_REMOVED].includes(
-                sequence.triggerType as any,
-            ) &&
-            !sequence.triggerData
-        ) {
-            throw new Error(`${responses.sequence_details_missing}: trigger`);
-        }
-    }
-
-    // Broadcasts don't require a filter: an empty/null filter means the
-    // whole audience (buildContactFilterCondition returns no condition).
-    // Refuse to start a broadcast that currently matches nobody — otherwise
-    // the schedule would fire, lock an empty snapshot, and (without the
-    // empty-audience completion path) look stuck in "sending". Multi-step
-    // sequences are allowed with an empty list; they enroll later via triggers.
-    if (sequence.type === "broadcast") {
-        const recipientIds = await getMatchingContactIds(
-            teamId,
-            sequence.filter as ContactFilterWithAggregator | null,
-        );
-        if (recipientIds.length === 0) {
-            throw new Error(responses.broadcast_no_recipients);
-        }
-    }
-
-    const pinChanged =
-        sequence.deliverySourceType !== pin.type ||
-        sequence.outboxId !== pin.espConfigId ||
-        sequence.espGrantId !== pin.espGrantId;
-    if (
-        sequence.status === "paused" &&
-        sequence.deliverySourceType &&
-        pinChanged
-    ) {
-        // PostgreSQL correctly keeps pins immutable. A paused sequence is the
-        // one safe exception: clear the old pin first, then assign the newly
-        // resolved source below.
-        await db
-            .update(sequences)
-            .set({
-                deliverySourceType: null,
-                outboxId: null,
-                espGrantId: null,
-                updatedAt: new Date(),
-            })
-            .where(eq(sequences.id, sequence.id));
-    }
-
-    await addRule({
-        teamId,
-        sequenceId: sequence.id,
-        triggerType: sequence.triggerType!,
-        triggerData: sequence.triggerData,
-        eventDateInMillis:
-            sequence.type === "broadcast"
-                ? sequence.emails[0].delayInMillis
-                : undefined,
-    });
-
-    const [row] = await db
-        .update(sequences)
-        .set({
-            status: "active",
-            deliverySourceType: pin.type,
-            outboxId: pin.espConfigId,
-            espGrantId: pin.espGrantId,
-            report: clearDeletedDeliverySourceMarker(sequence.report),
-            updatedAt: new Date(),
-        })
-        .where(eq(sequences.id, sequence.id))
-        .returning();
-
-    captureEvent({
-        event: "sequence_started",
-        source: "sequences.start",
-        teamId,
-        properties: {
-            sequence_id: sequence.sequenceId,
-            sequence_type: sequence.type,
+  // A broadcast paused mid-send (automatically, #25) resumes its queued
+  // deliveries; running its audience again would email people twice.
+  if (
+    sequence.type === "broadcast" &&
+    sequence.status === "paused" &&
+    (sequence.report as { broadcast?: { lockedAt?: number | null } } | null)?.broadcast
+      ?.lockedAt
+  ) {
+    const [resumed] = await db
+      .update(sequences)
+      .set({
+        status: "active",
+        report: {
+          ...clearDeletedDeliverySourceMarker(sequence.report),
+          healthSince: Date.now(),
         },
+        updatedAt: new Date(),
+      })
+      .where(eq(sequences.id, sequence.id))
+      .returning();
+    captureEvent({
+      event: "sequence_resumed",
+      source: "sequences.start",
+      teamId,
+      properties: { sequence_id: sequence.sequenceId, sequence_type: sequence.type },
     });
+    return hydrate(resumed);
+  }
+  await db.transaction(async (tx) => {
+    await assertMarketingAllowedForContactUsage(tx, team.organizationId);
+  });
 
-    return hydrate(row);
+  const pin = await resolveDeliverySource(
+    teamId,
+    (sequence.deliverySourceIntent as DeliverySourceSelection | null) ?? undefined,
+    "marketing",
+  );
+
+  if (sequence.type === "sequence") {
+    // Sender identity is no longer stored per-sequence — the send path
+    // always resolves one (sequence outbox -> team esp config -> team
+    // name/owner email), so only title/trigger completeness is checked.
+    if (!sequence.title || !sequence.triggerType) {
+      throw new Error(`${responses.sequence_details_missing}: basics`);
+    }
+    if (
+      [EventType.TAG_ADDED, EventType.TAG_REMOVED].includes(
+        sequence.triggerType as any,
+      ) &&
+      !sequence.triggerData
+    ) {
+      throw new Error(`${responses.sequence_details_missing}: trigger`);
+    }
+  }
+
+  // Broadcasts don't require a filter: an empty/null filter means the
+  // whole audience (buildContactFilterCondition returns no condition).
+  // Refuse to start a broadcast that currently matches nobody — otherwise
+  // the schedule would fire, lock an empty snapshot, and (without the
+  // empty-audience completion path) look stuck in "sending". Multi-step
+  // sequences are allowed with an empty list; they enroll later via triggers.
+  if (sequence.type === "broadcast") {
+    const recipientIds = await getMatchingContactIds(
+      teamId,
+      sequenceAudience(sequence),
+    );
+    if (recipientIds.length === 0) {
+      throw new Error(responses.broadcast_no_recipients);
+    }
+    await assertLargeBroadcastReviewed({
+      organizationId: team.organizationId,
+      teamId,
+      deliverySourceType: pin.type,
+      sequence,
+      recipients: recipientIds.length,
+    });
+    const entitlements = await getOrganizationEntitlements(team.organizationId);
+    if (entitlements.monthlySendsLimit !== null) {
+      const usage = await usageForOrganization(team.organizationId);
+      const projected =
+        usage.monthlySends + usage.monthlySendsReserved + recipientIds.length;
+      if (projected > entitlements.monthlySendsLimit) {
+        throw new PlanGateError("plan_limit_reached", {
+          organizationId: team.organizationId,
+          capability: "monthly_sends",
+          limit: entitlements.monthlySendsLimit,
+          usage: usage.monthlySends + usage.monthlySendsReserved,
+          plan: entitlements.plan,
+          requiredPlan: nextPlanUp(entitlements.plan),
+        });
+      }
+    }
+  }
+
+  const pinChanged =
+    sequence.deliverySourceType !== pin.type ||
+    sequence.outboxId !== pin.espConfigId ||
+    sequence.espGrantId !== pin.espGrantId;
+  if (sequence.status === "paused" && sequence.deliverySourceType && pinChanged) {
+    // PostgreSQL correctly keeps pins immutable. A paused sequence is the
+    // one safe exception: clear the old pin first, then assign the newly
+    // resolved source below.
+    await db
+      .update(sequences)
+      .set({
+        deliverySourceType: null,
+        outboxId: null,
+        espGrantId: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(sequences.id, sequence.id));
+  }
+
+  await addRule({
+    teamId,
+    sequenceId: sequence.id,
+    triggerType: sequence.triggerType!,
+    triggerData: sequence.triggerData,
+    eventDateInMillis:
+      sequence.type === "broadcast" ? sequence.emails[0].delayInMillis : undefined,
+  });
+
+  const [row] = await db
+    .update(sequences)
+    .set({
+      status: "active",
+      deliverySourceType: pin.type,
+      outboxId: pin.espConfigId,
+      espGrantId: pin.espGrantId,
+      report: {
+        ...clearDeletedDeliverySourceMarker(sequence.report),
+        // A restarted sequence's bounce/complaint rates start over (#25).
+        ...(sequence.status === "paused" && { healthSince: Date.now() }),
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(sequences.id, sequence.id))
+    .returning();
+
+  captureEvent({
+    event: "sequence_started",
+    source: "sequences.start",
+    teamId,
+    properties: {
+      sequence_id: sequence.sequenceId,
+      sequence_type: sequence.type,
+    },
+  });
+
+  return hydrate(row);
 }
 
 export async function pauseSequence({
-    teamId,
-    sequenceId,
+  teamId,
+  sequenceId,
 }: {
-    teamId: string;
-    sequenceId: string;
+  teamId: string;
+  sequenceId: string;
 }): Promise<HydratedSequence> {
-    const sequence = await getSequenceBySequenceId(teamId, sequenceId);
-    if (!sequence) throw new Error(responses.item_not_found);
-    if (sequence.status !== "active") {
-        throw new Error(responses.sequence_not_active);
-    }
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+  if (!sequence) throw new Error(responses.item_not_found);
+  if (sequence.status !== "active") {
+    throw new Error(responses.sequence_not_active);
+  }
 
-    const report = (sequence.report || {}) as any;
-    if (
-        sequence.type === "broadcast" &&
-        (report?.broadcast?.lockedAt ||
-            sequence.emails[0].delayInMillis <= Date.now())
-    ) {
-        throw new Error(responses.mail_already_sent);
-    }
+  const report = (sequence.report || {}) as any;
+  if (
+    sequence.type === "broadcast" &&
+    (report?.broadcast?.lockedAt || sequence.emails[0].delayInMillis <= Date.now())
+  ) {
+    throw new Error(responses.mail_already_sent);
+  }
 
-    await removeRule({ teamId, sequenceId: sequence.id });
+  await removeRule({ teamId, sequenceId: sequence.id });
 
-    const [row] = await db
-        .update(sequences)
-        .set({ status: "paused", updatedAt: new Date() })
-        .where(eq(sequences.id, sequence.id))
-        .returning();
+  const [row] = await db
+    .update(sequences)
+    .set({ status: "paused", updatedAt: new Date() })
+    .where(eq(sequences.id, sequence.id))
+    .returning();
 
-    captureEvent({
-        event: "sequence_paused",
-        source: "sequences.pause",
-        teamId,
-        properties: {
-            sequence_id: sequence.sequenceId,
-            sequence_type: sequence.type,
-        },
-    });
+  captureEvent({
+    event: "sequence_paused",
+    source: "sequences.pause",
+    teamId,
+    properties: {
+      sequence_id: sequence.sequenceId,
+      sequence_type: sequence.type,
+    },
+  });
 
-    return hydrate(row);
+  return hydrate(row);
 }
 
 /** All of these take the **public** `sequenceId` (unchanged external
@@ -766,78 +856,71 @@ export async function pauseSequence({
  * store internal-id FKs. */
 
 export async function getEmailSentCount(sequenceId: string): Promise<number> {
-    const [row] = await db
-        .select({ value: count() })
-        .from(emailDeliveries)
-        .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
-        .where(eq(sequences.sequenceId, sequenceId));
-    return row?.value ?? 0;
+  const [row] = await db
+    .select({ value: count() })
+    .from(emailDeliveries)
+    .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
+    .where(eq(sequences.sequenceId, sequenceId));
+  return row?.value ?? 0;
 }
 
 export async function getSubscribers({
-    sequenceId,
-    page = 1,
-    limit = itemsPerPage,
+  sequenceId,
+  page = 1,
+  limit = itemsPerPage,
 }: {
-    sequenceId: string;
-    page?: number;
-    limit?: number;
+  sequenceId: string;
+  page?: number;
+  limit?: number;
 }): Promise<string[]> {
-    const rows = await db
-        .selectDistinct({ contactId: contacts.contactId })
-        .from(emailDeliveries)
-        .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
-        .innerJoin(contacts, eq(contacts.id, emailDeliveries.contactId))
-        .where(eq(sequences.sequenceId, sequenceId))
-        .limit(limit)
-        .offset((Math.max(page, 1) - 1) * limit);
-    return rows.map((r) => r.contactId);
+  const rows = await db
+    .selectDistinct({ contactId: contacts.contactId })
+    .from(emailDeliveries)
+    .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
+    .innerJoin(contacts, eq(contacts.id, emailDeliveries.contactId))
+    .where(eq(sequences.sequenceId, sequenceId))
+    .limit(limit)
+    .offset((Math.max(page, 1) - 1) * limit);
+  return rows.map((r) => r.contactId);
 }
 
 export async function getSubscribersCount(sequenceId: string): Promise<number> {
-    const rows = await db
-        .selectDistinct({ contactId: emailDeliveries.contactId })
-        .from(emailDeliveries)
-        .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
-        .where(eq(sequences.sequenceId, sequenceId));
-    return rows.length;
+  const rows = await db
+    .selectDistinct({ contactId: emailDeliveries.contactId })
+    .from(emailDeliveries)
+    .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
+    .where(eq(sequences.sequenceId, sequenceId));
+  return rows.length;
 }
 
 async function countDistinctContactsWithEvent(
-    sequenceId: string,
-    action: string,
+  sequenceId: string,
+  action: string,
 ): Promise<number> {
-    const rows = await db
-        .selectDistinct({ contactId: emailEvents.contactId })
-        .from(emailEvents)
-        .innerJoin(sequences, eq(sequences.id, emailEvents.sequenceId))
-        .where(
-            and(
-                eq(sequences.sequenceId, sequenceId),
-                eq(emailEvents.action, action),
-            ),
-        );
-    return rows.length;
+  const rows = await db
+    .selectDistinct({ contactId: emailEvents.contactId })
+    .from(emailEvents)
+    .innerJoin(sequences, eq(sequences.id, emailEvents.sequenceId))
+    .where(and(eq(sequences.sequenceId, sequenceId), eq(emailEvents.action, action)));
+  return rows.length;
 }
 
 export async function getSequenceOpenRate(sequenceId: string): Promise<number> {
-    const recipients = await getSubscribersCount(sequenceId);
-    if (!recipients) return 0;
-    const openers = await countDistinctContactsWithEvent(
-        sequenceId,
-        EmailEventAction.OPEN,
-    );
-    return openers / recipients;
+  const recipients = await getSubscribersCount(sequenceId);
+  if (!recipients) return 0;
+  const openers = await countDistinctContactsWithEvent(
+    sequenceId,
+    EmailEventAction.OPEN,
+  );
+  return openers / recipients;
 }
 
-export async function getSequenceClickThroughRate(
-    sequenceId: string,
-): Promise<number> {
-    const recipients = await getSubscribersCount(sequenceId);
-    if (!recipients) return 0;
-    const clickers = await countDistinctContactsWithEvent(
-        sequenceId,
-        EmailEventAction.CLICK,
-    );
-    return clickers / recipients;
+export async function getSequenceClickThroughRate(sequenceId: string): Promise<number> {
+  const recipients = await getSubscribersCount(sequenceId);
+  if (!recipients) return 0;
+  const clickers = await countDistinctContactsWithEvent(
+    sequenceId,
+    EmailEventAction.CLICK,
+  );
+  return clickers / recipients;
 }

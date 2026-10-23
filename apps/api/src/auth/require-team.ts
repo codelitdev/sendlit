@@ -1,15 +1,11 @@
-import { NextFunction, Request, Response } from "express";
-import {
-    getTeamByTeamId,
-    getTeamMembership,
-    listTeamsForUser,
-} from "../team/queries";
+import type { NextFunction, Request, Response } from "express";
+import { getTeamByTeamId, getTeamMembership, listTeamsForUser } from "../team/queries";
 
 function getHeaderValue(value: unknown): string | undefined {
-    if (Array.isArray(value)) {
-        return typeof value[0] === "string" ? value[0] : undefined;
-    }
-    return typeof value === "string" ? value : undefined;
+  if (Array.isArray(value)) {
+    return typeof value[0] === "string" ? value[0] : undefined;
+  }
+  return typeof value === "string" ? value : undefined;
 }
 
 /**
@@ -26,65 +22,65 @@ function getHeaderValue(value: unknown): string | undefined {
  *   specify one explicitly.
  */
 export async function requireTeam(
-    req: Request,
-    res: Response,
-    next: NextFunction,
+  req: Request,
+  res: Response,
+  next: NextFunction,
 ): Promise<void> {
-    const anyReq = req as any;
-    if (anyReq.teamId) return next();
-    if (!anyReq.userId) {
-        res.status(401).json({ error: "unauthorized" });
-        return;
-    }
+  const anyReq = req as any;
+  if (anyReq.teamId) return next();
+  if (!anyReq.userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
 
-    const headerTeamId = getHeaderValue(req.headers["x-sendlit-team-id"]);
-    if (headerTeamId) {
-        const team = await getTeamByTeamId(headerTeamId);
-        if (!team) {
-            res.status(400).json({
-                error: "invalid_team_id",
-                error_description: "The provided team ID is not valid.",
-            });
-            return;
-        }
-        let membership;
-        try {
-            membership = await getTeamMembership(team.id, anyReq.userId);
-        } catch {
-            res.status(400).json({
-                error: "invalid_team_id",
-                error_description: "The provided team ID is not valid.",
-            });
-            return;
-        }
-        if (!membership) {
-            res.status(403).json({
-                error: "not_a_team_member",
-                error_description: "You are not a member of this team.",
-            });
-            return;
-        }
-        anyReq.teamId = team.id;
-        return next();
+  const headerTeamId = getHeaderValue(req.headers["x-sendlit-team-id"]);
+  if (headerTeamId) {
+    const team = await getTeamByTeamId(headerTeamId);
+    if (!team) {
+      res.status(400).json({
+        error: "invalid_team_id",
+        error_description: "The provided team ID is not valid.",
+      });
+      return;
     }
+    let membership: Awaited<ReturnType<typeof getTeamMembership>>;
+    try {
+      membership = await getTeamMembership(team.id, anyReq.userId);
+    } catch {
+      res.status(400).json({
+        error: "invalid_team_id",
+        error_description: "The provided team ID is not valid.",
+      });
+      return;
+    }
+    if (!membership) {
+      res.status(403).json({
+        error: "not_a_team_member",
+        error_description: "You are not a member of this team.",
+      });
+      return;
+    }
+    anyReq.teamId = team.id;
+    return next();
+  }
 
-    const teams = await listTeamsForUser(anyReq.userId);
-    if (teams.length === 1) {
-        anyReq.teamId = teams[0].id;
-        return next();
-    }
-    if (teams.length === 0) {
-        res.status(409).json({
-            error: "no_team",
-            error_description: "This user doesn't belong to any team yet.",
-        });
-        return;
-    }
-
+  const teams = await listTeamsForUser(anyReq.userId);
+  if (teams.length === 1) {
+    anyReq.teamId = teams[0].id;
+    return next();
+  }
+  if (teams.length === 0) {
     res.status(409).json({
-        error: "team_required",
-        error_description:
-            "This user belongs to multiple teams — specify one via the X-Sendlit-Team-Id header.",
-        teams: teams.map((t) => ({ teamId: t.teamId, name: t.name })),
+      error: "no_team",
+      error_description: "This user doesn't belong to any team yet.",
     });
+    return;
+  }
+
+  res.status(409).json({
+    error: "team_required",
+    error_description:
+      "This user belongs to multiple teams — specify one via the X-Sendlit-Team-Id header.",
+    teams: teams.map((t) => ({ teamId: t.teamId, name: t.name })),
+  });
 }

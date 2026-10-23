@@ -1,0 +1,1 @@
+ALTER TABLE "esp_configs" ADD COLUMN "dkim_selector" text;

@@ -1,13 +1,15 @@
 {
-    "title": "Developers",
-    "icon": "Code",
-    "pages": [
-        "overview",
-        "authentication",
-        "api-keys",
-        "errors",
-        "mcp",
-        "transactional",
-        "provisioning"
-    ]
+  "title": "Developers",
+  "icon": "Code",
+  "pages": [
+    "overview",
+    "authentication",
+    "api-keys",
+    "sdk",
+    "errors",
+    "mcp",
+    "transactional",
+    "provisioning",
+    "headless-provisioning"
+  ]
 }

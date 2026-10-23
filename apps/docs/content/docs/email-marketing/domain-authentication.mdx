@@ -1,0 +1,78 @@
+---
+title: Domain authentication
+description: Set up SPF, DKIM and DMARC so your email reaches the inbox.
+---
+
+Mailbox providers check three DNS records to decide whether mail really comes
+from the domain in its From address. Since 2024, Gmail and Yahoo require all
+three from anyone sending more than a few thousand emails a day, and mail
+without them is likely to be rejected or land in spam.
+
+| Record | What it proves |
+| --- | --- |
+| **SPF** | The server sending the mail is allowed to send for the domain. |
+| **DKIM** | The message was signed by the domain and not changed on the way. |
+| **DMARC** | What receivers should do with mail that fails SPF and DKIM, and where to send reports. |
+
+You add these records at your DNS provider (Cloudflare, Route 53, your
+registrar, ...). Your email provider generates the DKIM keys; SendLit tells
+you which records are missing and checks them for you.
+
+## Check a domain
+
+In **Settings → Email service providers**, press the shield button on an ESP.
+SendLit looks up the DNS of its From address's domain and shows:
+
+- whether SPF, DKIM and DMARC are **Set up**, **Need attention** or are
+  **Missing**, and why;
+- the DNS records to add, with copy buttons and whether each one was found.
+  Values only your provider knows, such as DKIM keys, are marked "From your
+  provider", with a link to its console.
+
+Press **Check again** after you change DNS; changes can take a few hours to
+show up. If your provider signs with its own DKIM selector (the part before
+`._domainkey`), enter it to check that key. SendLit otherwise tries your
+provider's selectors and common ones.
+
+The same check is available as `GET /settings/esps/:espId/domain-authentication`
+in the [API](/api-reference) and as the `check_esp_domain_authentication` MCP
+tool.
+
+## What each provider needs
+
+| Provider | SPF | DKIM |
+| --- | --- | --- |
+| Amazon SES | Custom MAIL FROM domain (SendLit suggests `mail.<domain>`): `MX 10 feedback-smtp.<region>.amazonses.com` and `TXT v=spf1 include:amazonses.com ~all` | Three Easy DKIM `CNAME` records from the SES console |
+| Resend | `send.<domain>`: the same `MX` and `TXT` records as SES | `resend._domainkey` TXT record |
+| Postmark | `CNAME pm-bounces.<domain> → pm.mtasv.net` | `<date>pm._domainkey` TXT record |
+| SendGrid | Handled by its `em<id>` CNAME | `s1._domainkey` and `s2._domainkey` CNAMEs |
+| Mailgun | `include:mailgun.org` in your domain's SPF record | TXT record at the selector Mailgun shows |
+| Other SMTP | Your mail server's SPF record | Your mail server's DKIM selector |
+
+For SES, SendLit reads the region from the SMTP host
+(`email-smtp.<region>.amazonaws.com`). SES names its DKIM records with random
+tokens, so SendLit can't find them on its own: paste one token (or a whole
+`<token>._domainkey.<domain>` name) from the SES console's DKIM section into
+**Easy DKIM token** and press **Check again**. Any of the three works: SES
+rotates its keys across them, so SendLit checks that the token's CNAME points to
+`<token>.dkim.amazonses.com` rather than reading the key. SendLit remembers a
+token or selector once it passes, so later checks find DKIM without it.
+
+A domain may have only **one** SPF record. If you already have one (for
+example for Google Workspace), add the provider's `include:` to it instead of
+creating a second; SendLit suggests the merged record.
+
+## Start DMARC with monitoring
+
+If you have no DMARC record, start with:
+
+```
+_dmarc.example.com  TXT  "v=DMARC1; p=none; rua=mailto:dmarc-reports@example.com"
+```
+
+`p=none` changes nothing about delivery; receivers just send reports to the
+`rua` address. Once the reports show that only your own services send as your
+domain, move to `p=quarantine` and later `p=reject`. A DMARC record on your
+main domain also covers subdomains such as `news.example.com`.
+
+Next: [warm up](/email-marketing/warm-up) a new domain before sending in volume.

@@ -1,0 +1,95 @@
+---
+title: Signup forms
+description: Let people subscribe themselves from a hosted page or a form on your website.
+---
+
+A signup form adds the people who fill it in to your contacts. Create one in
+**Signup forms → New form**. Each form has:
+
+- **Tags** added to everyone who subscribes through it, for example
+  `newsletter`. Use them in segments, or start a sequence on the tag.
+- **Double opt-in** (on by default). SendLit emails a confirmation link and
+  subscribes the person only once they click it and press **Confirm
+  subscription**. This keeps typos, fake addresses and spam traps off your
+  list, which protects your sender reputation. The link is valid for three
+  days.
+- **Redirect after signup** (optional): an `http(s)` URL to send people to
+  after they submit the form, and after they confirm. Without it, SendLit shows
+  its own thank-you page.
+
+New subscribers trigger "subscriber added" sequences, so a welcome sequence
+starts on its own. The confirmation email is sent through your team's email
+provider and appears in the transactional log.
+
+## Double opt-in needs a sending mailbox
+
+The confirmation email has to come from somewhere, so you can't create a
+double opt-in form, or switch a form to double opt-in, until your team can
+send email. Add a mailbox under **Settings → Email service providers** (or
+ask your organization to share one), or use single opt-in.
+
+If sending stops working later, for example because the mailbox was removed
+or sending was paused, the **Signup forms** page warns you and marks the
+affected forms **Can't send confirmations**. Until you fix it, those forms
+turn signups away with "This form can't accept signups right now" rather than
+pretending a confirmation email was sent. The API returns the reason in the
+form's `sendingIssue` field.
+
+## Share or embed a form
+
+Every form has a hosted page at `https://<your SendLit API>/f/<formId>`. Open
+it from the form's row, or link to it from anywhere.
+
+To put the form on your own website, choose **Embed** and paste the HTML. Style
+it as you like, but keep the field names: `email` (required), `name`
+(optional) and the hidden `website` field, which catches spam bots.
+
+```html
+<form action="https://<your SendLit API>/f/frm_..." method="post">
+  <input type="email" name="email" placeholder="you@example.com" required>
+  <input type="text" name="name" placeholder="Your name">
+  <input type="text" name="website" tabindex="-1" autocomplete="off"
+    style="position:absolute;left:-9999px" aria-hidden="true">
+  <button type="submit">Subscribe</button>
+</form>
+```
+
+From JavaScript, post JSON to the same URL; it allows cross-origin requests:
+
+```js
+await fetch("https://<your SendLit API>/f/frm_...", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ email, name }),
+});
+// 200 { "status": "confirmation_sent" | "subscribed" }
+// 400 { "error": "invalid_email" }, 429 { "error": "too_many_requests" }
+// 503 { "error": "form_unavailable", "message": "..." } when the team can't
+//     send the confirmation email
+```
+
+## What SendLit filters out
+
+The answer is the same whether or not an address was accepted, so a form
+can't be used to find out who is on your list. (A form that can't send
+confirmations answers `503` to every address alike.) SendLit quietly drops:
+
+- addresses on your [suppression list](/activity/suppressions), and disposable
+  email domains (from the community-maintained
+  [disposable-email-domains](https://github.com/disposable-email-domains/disposable-email-domains)
+  list, refreshed weekly);
+- submissions that fill in the hidden `website` field;
+- more than two confirmation emails a day to one address.
+
+Each form takes at most 10 submissions an hour from one network and 1,000 a
+day in total; beyond that it answers `429`.
+
+A single opt-in form subscribes new addresses straight away, but never
+resubscribes someone who unsubscribed. They can come back through a double
+opt-in form, because clicking the confirmation link proves it's them.
+
+## API and MCP
+
+Manage forms with the `/forms` endpoints in the [API reference](/api-reference)
+or the `*_signup_form` MCP tools. The submission URL itself is public and
+needs no API key.

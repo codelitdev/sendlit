@@ -1,0 +1,5 @@
+{
+  "title": "Migrate to SendLit",
+  "icon": "ArrowRightLeft",
+  "pages": ["overview", "beehiiv", "substack", "mailchimp"]
+}

@@ -1,0 +1,92 @@
+---
+title: Sender reputation
+description: See how Gmail and Outlook rate your mail with Google Postmaster Tools and Microsoft SNDS.
+---
+
+Your email provider reports mail as "delivered" once Gmail or Outlook accepts
+it, even if it then lands in spam. Gmail and Outlook publish what they think
+of your mail through free tools, and SendLit shows that data on the
+**Sender reputation** card of the dashboard, with a 30-day trend.
+
+## What you see
+
+**Gmail (Google Postmaster Tools)**, per sending domain:
+
+- **Spam rate**: the share of mail Gmail users marked as spam. Keep it below
+  0.1%; Google may reject or junk mail from senders above **0.3%**.
+- **SPF, DKIM and DMARC pass rates**: should be close to 100%; see
+  [Domain authentication](/email-marketing/domain-authentication).
+- **Delivery error rate**: mail Gmail rejected or deferred.
+- **Meets Google's requirements**: Google's verdict on its bulk-sender rules
+  (authentication, one-click unsubscribe, spam rate, ...).
+
+Google retired its "domain reputation" and "IP reputation" grades in
+Postmaster Tools v2, so SendLit shows the numbers above instead.
+
+**Outlook (Microsoft SNDS)**, per IP address you send from:
+
+- **Filter result** for each day: green (under 10% of mail filtered as spam),
+  yellow (10% to 90%) or red (over 90%);
+- **complaint rate** and **spam trap hits**.
+
+SNDS covers IP addresses, so it's useful only if your email provider gives
+you a dedicated IP. On shared IPs, rely on Postmaster Tools.
+
+## Alerts
+
+SendLit checks the data every day and shows alerts on the card. It also
+emails your organization's owners when one starts or gets worse:
+
+| Signal | Warning | Critical |
+| --- | --- | --- |
+| Gmail spam rate | 0.1% or more | 0.3% or more |
+| Google sender requirements | Not met | |
+| SNDS filter result | Yellow | Red |
+
+When an alert appears, stop sending to contacts who haven't opened in months,
+check your [authentication](/email-marketing/domain-authentication), and slow
+down with a [daily send limit](/email-marketing/warm-up). Broadcasts and
+sequences also [pause on their own](/email-marketing/broadcasts) when their
+own bounce or complaint rates get too high.
+
+## Connect Google Postmaster Tools
+
+1. Open [Google Postmaster Tools](https://postmaster.google.com), add your
+   sending domain (the part after `@` in your From address) and verify it with
+   the DNS record Google shows.
+2. In SendLit, choose **Connect Google Postmaster Tools** on the dashboard and
+   sign in with the same Google account. SendLit asks only for read access to
+   Postmaster Tools traffic data.
+3. Data appears within a few minutes and refreshes daily. Google shows numbers
+   only for days on which a domain sent enough mail to Gmail users, so a small
+   list may show no data.
+
+SendLit checks every domain your email providers send from. A domain marked
+**Not in Postmaster Tools** isn't verified with the connected Google account.
+To stop, choose **Disconnect**; SendLit deletes the stored access and data.
+You can also remove SendLit's access in your Google account's security
+settings.
+
+On a self-hosted SendLit, an administrator first creates a Google OAuth client
+and sets `GOOGLE_POSTMASTER_CLIENT_ID` and `GOOGLE_POSTMASTER_CLIENT_SECRET`;
+see `.env.example`.
+
+## Connect Microsoft SNDS
+
+1. Sign in to [SNDS](https://substrate.office.com/ip-domain-management-snds/SNDS)
+   and request access to your sending IPs (**Request Access**). Microsoft
+   emails the address responsible for each IP to confirm.
+2. Open **Automated Data Access**, enable it and copy the data link.
+3. Paste the link under **Outlook · Microsoft SNDS** on the dashboard and
+   choose **Connect**. SendLit downloads the data once to check the link.
+
+SNDS links expire after 30 days. When yours does, the card says so; paste the
+new link from the same page.
+
+## API and MCP
+
+`GET /reputation` returns the same data and alerts, and `POST /reputation/sync`
+refreshes it. Connecting Google returns a sign-in URL from
+`POST /reputation/google/connect` that a person opens in a browser. SNDS is
+connected with `PUT /reputation/snds`. See the [API reference](/api-reference)
+and the `*_reputation` MCP tools.

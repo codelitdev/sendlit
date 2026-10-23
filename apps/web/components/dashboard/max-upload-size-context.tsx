@@ -1,11 +1,9 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { DEFAULT_MAX_UPLOAD_SIZE_BYTES } from "@/lib/media-limits";
 
-const MaxUploadSizeContext = createContext<number>(
-    DEFAULT_MAX_UPLOAD_SIZE_BYTES,
-);
+const MaxUploadSizeContext = createContext<number>(DEFAULT_MAX_UPLOAD_SIZE_BYTES);
 
 /**
  * Threads the server-read `MAX_UPLOAD_SIZE` env var down to client
@@ -16,19 +14,19 @@ const MaxUploadSizeContext = createContext<number>(
  * deploy/container-start time without rebuilding the app.
  */
 export function MaxUploadSizeProvider({
-    value,
-    children,
+  value,
+  children,
 }: {
-    value: number;
-    children: ReactNode;
+  value: number;
+  children: ReactNode;
 }) {
-    return (
-        <MaxUploadSizeContext.Provider value={value}>
-            {children}
-        </MaxUploadSizeContext.Provider>
-    );
+  return (
+    <MaxUploadSizeContext.Provider value={value}>
+      {children}
+    </MaxUploadSizeContext.Provider>
+  );
 }
 
 export function useMaxUploadSizeBytes() {
-    return useContext(MaxUploadSizeContext);
+  return useContext(MaxUploadSizeContext);
 }

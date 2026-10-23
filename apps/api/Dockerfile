@@ -1,58 +1,42 @@
-FROM node:24-alpine AS base
-RUN corepack enable pnpm
-
-FROM base AS deps
-RUN apk add --no-cache libc6-compat
+FROM oven/bun:1.4.1 AS packages
 WORKDIR /app
 
-COPY package.json ./
-COPY pnpm-lock.yaml ./
-COPY pnpm-workspace.yaml ./
-COPY apps/api ./apps/api
+COPY package.json bun.lock ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY packages/api-contract/package.json ./packages/api-contract/package.json
+COPY packages/test-utils/package.json ./packages/test-utils/package.json
+COPY packages/email-editor/package.json ./packages/email-editor/package.json
+COPY packages/email-blocks/package.json ./packages/email-blocks/package.json
+
+RUN bun install --frozen-lockfile --ignore-scripts --filter @sendlit/api --filter @sendlit/email-editor --filter @sendlit/email-blocks
+
 COPY packages/api-contract ./packages/api-contract
 COPY packages/email-editor ./packages/email-editor
 COPY packages/email-blocks ./packages/email-blocks
 
-RUN pnpm install --frozen-lockfile
+RUN bun --filter @sendlit/email-editor build && bun --filter @sendlit/email-blocks build
 
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/ ./
-
-RUN pnpm --filter=@sendlit/email-editor build
-RUN pnpm --filter=@sendlit/api-contract build
-RUN pnpm --filter=@sendlit/email-blocks build
-RUN pnpm --filter=@sendlit/api build
-
-FROM base AS runner
+FROM oven/bun:1.4.1 AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nodeuser
+COPY package.json bun.lock ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY packages/api-contract/package.json ./packages/api-contract/package.json
+COPY packages/test-utils/package.json ./packages/test-utils/package.json
+COPY packages/email-editor/package.json ./packages/email-editor/package.json
+COPY packages/email-blocks/package.json ./packages/email-blocks/package.json
 
-COPY --chown=nodeuser:nodejs --from=builder /app/package.json ./
-COPY --chown=nodeuser:nodejs --from=builder /app/pnpm-lock.yaml ./
-COPY --chown=nodeuser:nodejs --from=builder /app/pnpm-workspace.yaml ./
+RUN bun install --frozen-lockfile --production --ignore-scripts --filter @sendlit/api
 
-COPY --chown=nodeuser:nodejs --from=builder /app/packages/email-editor/package.json ./packages/email-editor/package.json
-COPY --chown=nodeuser:nodejs --from=builder /app/packages/email-editor/dist ./packages/email-editor/dist
+COPY packages/api-contract ./packages/api-contract
+COPY --from=packages /app/packages/email-editor/dist ./packages/email-editor/dist
+COPY --from=packages /app/packages/email-blocks/dist ./packages/email-blocks/dist
+COPY apps/api ./apps/api
 
-COPY --chown=nodeuser:nodejs --from=builder /app/packages/email-blocks/package.json ./packages/email-blocks/package.json
-COPY --chown=nodeuser:nodejs --from=builder /app/packages/email-blocks/dist ./packages/email-blocks/dist
+USER bun
 
-COPY --chown=nodeuser:nodejs --from=builder /app/packages/api-contract/package.json ./packages/api-contract/package.json
-COPY --chown=nodeuser:nodejs --from=builder /app/packages/api-contract/dist ./packages/api-contract/dist
+EXPOSE 4000
 
-COPY --chown=nodeuser:nodejs --from=builder /app/apps/api/package.json ./apps/api/package.json
-COPY --chown=nodeuser:nodejs --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --chown=nodeuser:nodejs --from=builder /app/apps/api/drizzle ./apps/api/drizzle
-
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts
-
-USER nodeuser
-
-EXPOSE 3001
-
-CMD ["node", "apps/api/dist/index.js"]
+CMD ["bun", "apps/api/src/index.ts"]

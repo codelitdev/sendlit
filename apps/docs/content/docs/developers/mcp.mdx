@@ -44,7 +44,13 @@ OAuth authorization, consent, token, introspection, revocation, and userinfo end
 
 Use Authorization Code with S256 PKCE, request only the scopes your client needs, and keep any refresh token in the client's secure credential store. The authorization request must include an explicit, non-empty `scope`; SendLit does not turn a missing value into a full-access grant. Every authorization requires a SendLit user to sign in, select a team when necessary, and approve consent.
 
-API keys always select one fixed team and currently grant the complete MCP tool set for that team. Dashboard session cookies and `X-Sendlit-Team-Id` are not accepted as MCP authentication.
+Team API keys always select one fixed team and currently grant the complete
+MCP tool set for that team, except the API key management tools
+(`list_api_keys`, `create_api_key`, `delete_api_key`), which require OAuth.
+Organization API keys, dashboard session cookies, and `X-Sendlit-Team-Id` are
+not accepted as MCP authentication. Use the REST API for organization
+discovery, shared-delivery setup, and team provisioning; see
+[Headless organization setup](/developers/headless-provisioning).
 
 OAuth clients (including MCP clients like Claude) have no way to send a custom header during authorization, so a multi-team account instead picks a team as part of the OAuth flow itself: after login, and before the consent screen, the account is shown a "select a team" step (mirroring how apps like Notion resolve their own multi-workspace ambiguity). The chosen team is baked into the issued access token and used for every subsequent request — no header needed. Accounts with exactly one team skip this step entirely.
 
@@ -71,7 +77,9 @@ OAuth access is default-deny per tool. Read and write permissions are separate:
 
 - `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`
 - `add_contact_tag`, `remove_contact_tag`, `get_contact_deliveries`
+- `import_contacts` (up to 1000 rows per call, statuses only get stricter) and `export_contacts` (CSV)
 - `list_segments`, `get_segment`, `create_segment`, `update_segment`, `delete_segment`
+- `list_signup_forms`, `get_signup_form`, `create_signup_form`, `update_signup_form`, `delete_signup_form` (public [signup forms](/email-marketing/signup-forms); contacts scopes)
 
 Segments save reusable filters over contact fields, tags, subscription state, signup date, and custom fields.
 
@@ -97,13 +105,15 @@ For AI-created content, start with `list_system_templates` and
 
 ### Broadcasts and sequences
 
-Broadcasts use the sequence resource with one email and an audience filter. Sequence tools include:
+Broadcasts use the sequence resource with one email and an audience filter. `update_sequence` also takes an `excludeFilter`; contacts matching it are never sent the broadcast or enrolled in the sequence. Sequence tools include:
 
 - `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`
 - `add_sequence_email`, `update_sequence_email`, `delete_sequence_email`
+- `send_sequence_email_test` sends a `[Test]` copy of one email to you (or up to five addresses)
 - `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_subscribers`
+- `get_broadcast_web_publishing`, `update_broadcast_web_publishing`, `list_web_issues`, `get_web_issue` ([web archive](/email-marketing/web-archive))
 
-Use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.
+Send a test with `send_sequence_email_test` and use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.
 
 ### Transactional email
 
@@ -119,26 +129,32 @@ send. Broadcast and sequence tools accept only marketing templates and report
 
 ### Sending configuration
 
-- `get_general_settings`, `update_general_settings`
+- `get_general_settings`, `update_general_settings`, `get_web_settings`, `update_web_settings`
+- `get_tracking_domain`, `set_tracking_domain`, `verify_tracking_domain` ([tracking domain](/email-marketing/tracking-domain))
+- `get_reputation`, `sync_reputation`, `connect_google_postmaster` (returns a sign-in URL for a person to open), `disconnect_google_postmaster`, `connect_snds`, `disconnect_snds` ([sender reputation](/email-marketing/reputation))
 - `get_esp_config`, `update_esp_config`, `delete_esp_config`, `send_test_email`
 - `list_esps`, `create_esp`, `get_esp`, `update_esp`, `delete_esp`, `test_esp`
+- `check_esp_domain_authentication` (live SPF, DKIM and DMARC check of the From domain, with the records to add)
 
 The ESP tools manage the team’s sending providers and default provider. Secrets are accepted for writes but are not returned in read responses.
 
 ### Teams and API keys
 
 - `list_teams`, `create_team`, `rename_team`, `delete_team`
+- `get_plan_usage` returns the current team's parent-organization plan, usage, and limits. It never returns provider IDs or portal links.
 - `list_api_keys`, `create_api_key`, `delete_api_key`
 
-The full API key secret is returned only by `create_api_key`. Store it immediately; it cannot be recovered from a later listing.
+Mutating tools such as `create_team`, `create_contact`, `update_contact`, `send_email`, and `start_sequence` return the same plan-gate error object as REST (`plan_limit_reached`, `plan_feature_unavailable`, `sending_paused`) in `structuredContent`. Checkout, portal, and invoice tools are not exposed through MCP.
+
+API key management tools are refused when the caller authenticates with an API key; connect with OAuth to use them. The full API key secret is returned only by `create_api_key`. Store it immediately; it cannot be recovered from a later listing.
 
 ### Delivery feedback and suppressions
 
 - `get_esp_feedback_connection`, `upsert_esp_feedback_connection`, `test_esp_feedback_connection`, `delete_esp_feedback_connection`
 - `list_delivery_events`, `get_delivery_event`
-- `list_suppressions`, `get_suppression`, `release_suppression`
+- `list_suppressions`, `get_suppression`, `add_suppression`, `release_suppression`
 
-Delivery-feedback connections are supported only for providers with a reviewed asynchronous feedback adapter. Releasing a SendLit suppression does not remove a provider-native suppression, and complaint suppressions are not releasable through the owner API.
+Delivery-feedback connections are supported only for providers with a reviewed asynchronous feedback adapter: Resend, Postmark, SendGrid, Mailgun, and Amazon SES. For SES, pass `expectedTopicArn` (the SNS topic subscribed to the webhook URL) to `upsert_esp_feedback_connection` instead of `credential`; see [Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback). Releasing a SendLit suppression does not remove a provider-native suppression, and complaint suppressions are not releasable through the owner API.
 
 ## Example client configuration
 

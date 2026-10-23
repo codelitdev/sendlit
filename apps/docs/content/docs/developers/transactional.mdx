@@ -8,10 +8,10 @@ password reset, OTP, or security notification. Transactional sends appear in
 the dashboard’s **Transactional log**. They do not enroll a contact in a
 sequence or use a broadcast audience.
 
-A non-empty workspace mailing address and a configured ESP are still required
-before SendLit accepts any send. This workspace policy is separate from message
-content: transactional templates do not render a marketing footer or
-unsubscribe link.
+A configured ESP is required before SendLit accepts a send. A workspace mailing
+address is not required for transactional messages: they do not render a
+marketing footer or unsubscribe link. The address remains required for
+broadcasts and sequences, whose managed footer includes it.
 
 ## Create a transactional template
 
@@ -90,8 +90,8 @@ Your code: {{ promotion.code }}
 {% endif %}
 ```
 
-`address`, `unsubscribe_link`, and `subscriber.*` are owned by the marketing
-pipeline. They are rejected both in transactional template content and as
+`address`, `unsubscribe_link`, `view_in_browser_url`, `web_version_url` and `subscriber.*` are
+owned by the marketing pipeline. They are rejected both in transactional template content and as
 top-level request variables.
 
 ## Inline HTML
@@ -100,3 +100,11 @@ Provide exactly one of `templateId` or `html`. Inline `html` is sent verbatim:
 SendLit does not run Liquid over it, and `variables` cannot be supplied with it.
 This prevents legitimate `{{` or `{%` content in caller-rendered HTML from
 being modified.
+
+## Plain-text part
+
+Every email goes out as `multipart/alternative` with an HTML and a plain-text
+part. SendLit generates the text from the final HTML: links become
+`text (url)`, list items get a `•` bullet, and images, styles and the hidden
+preview text are dropped. To send your own text instead, pass `text`; it is
+sent verbatim, like inline `html`.

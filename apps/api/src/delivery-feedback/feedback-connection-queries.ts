@@ -1,8 +1,9 @@
 import { and, eq, ne } from "drizzle-orm";
+import type { FeedbackCapableProvider } from "../config/constants";
 import { db } from "../db/client";
 import { espConfigs, espFeedbackConnections } from "../db/schema";
 import { decryptSecret, encryptSecret } from "../utils/secret-crypto";
-import type { FeedbackCapableProvider } from "../config/constants";
+import type { ControlMessageOutcome } from "./adapters/types";
 
 export type FeedbackConnection = typeof espFeedbackConnections.$inferSelect;
 
@@ -12,61 +13,61 @@ const CREDENTIAL_ROTATION_GRACE_HOURS = 24;
  * adapter to snapshot `feedbackConnectionId` onto the outbound ledger row at
  * send time (see `docs/bounces-and-complaints.md#1-outbound-message-ledger`). */
 export async function getActiveFeedbackConnectionForEspConfig(
-    espConfigId: string,
+  espConfigId: string,
 ): Promise<FeedbackConnection | null> {
-    const [row] = await db
-        .select()
-        .from(espFeedbackConnections)
-        .where(
-            and(
-                eq(espFeedbackConnections.espConfigId, espConfigId),
-                ne(espFeedbackConnections.status, "retiring"),
-                ne(espFeedbackConnections.status, "disabled"),
-            ),
-        )
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(espFeedbackConnections)
+    .where(
+      and(
+        eq(espFeedbackConnections.espConfigId, espConfigId),
+        ne(espFeedbackConnections.status, "retiring"),
+        ne(espFeedbackConnections.status, "disabled"),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 /** Team-scoped lookup for the authenticated `/settings/esps/:espId/feedback`
  * routes — validates the ESP belongs to the team before returning anything. */
 export async function getFeedbackConnectionForTeamEsp(
-    teamId: string,
-    espConfigId: string,
+  teamId: string,
+  espConfigId: string,
 ): Promise<FeedbackConnection | null> {
-    const [row] = await db
-        .select()
-        .from(espFeedbackConnections)
-        .where(
-            and(
-                eq(espFeedbackConnections.teamId, teamId),
-                eq(espFeedbackConnections.espConfigId, espConfigId),
-                ne(espFeedbackConnections.status, "retiring"),
-                ne(espFeedbackConnections.status, "disabled"),
-            ),
-        )
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(espFeedbackConnections)
+    .where(
+      and(
+        eq(espFeedbackConnections.teamId, teamId),
+        eq(espFeedbackConnections.espConfigId, espConfigId),
+        ne(espFeedbackConnections.status, "retiring"),
+        ne(espFeedbackConnections.status, "disabled"),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 export async function getFeedbackConnectionForOrganizationEsp(
-    organizationId: string,
-    espConfigId: string,
+  organizationId: string,
+  espConfigId: string,
 ): Promise<FeedbackConnection | null> {
-    const [row] = await db
-        .select()
-        .from(espFeedbackConnections)
-        .where(
-            and(
-                eq(espFeedbackConnections.organizationId, organizationId),
-                eq(espFeedbackConnections.ownerScope, "organization"),
-                eq(espFeedbackConnections.espConfigId, espConfigId),
-                ne(espFeedbackConnections.status, "retiring"),
-                ne(espFeedbackConnections.status, "disabled"),
-            ),
-        )
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(espFeedbackConnections)
+    .where(
+      and(
+        eq(espFeedbackConnections.organizationId, organizationId),
+        eq(espFeedbackConnections.ownerScope, "organization"),
+        eq(espFeedbackConnections.espConfigId, espConfigId),
+        ne(espFeedbackConnections.status, "retiring"),
+        ne(espFeedbackConnections.status, "disabled"),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 /** Resolves a public webhook `connectionId` for the *unauthenticated*
@@ -75,21 +76,21 @@ export async function getFeedbackConnectionForOrganizationEsp(
  * retired/compromised endpoint stops accepting events, but a `retiring`
  * connection still resolves (its grace-period contract). */
 export async function getFeedbackConnectionByConnectionId(
-    connectionId: string,
-    provider: string,
+  connectionId: string,
+  provider: string,
 ): Promise<FeedbackConnection | null> {
-    const [row] = await db
-        .select()
-        .from(espFeedbackConnections)
-        .where(
-            and(
-                eq(espFeedbackConnections.connectionId, connectionId),
-                eq(espFeedbackConnections.provider, provider),
-                ne(espFeedbackConnections.status, "disabled"),
-            ),
-        )
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(espFeedbackConnections)
+    .where(
+      and(
+        eq(espFeedbackConnections.connectionId, connectionId),
+        eq(espFeedbackConnections.provider, provider),
+        ne(espFeedbackConnections.status, "disabled"),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 /**
@@ -101,109 +102,148 @@ export async function getFeedbackConnectionByConnectionId(
  * signed with it isn't rejected.
  */
 export async function upsertFeedbackConnection({
-    teamId,
-    espConfigId,
-    provider,
-    credential,
-    expectedTopicArn,
+  teamId,
+  espConfigId,
+  provider,
+  credential,
+  expectedTopicArn,
 }: {
-    teamId: string;
-    espConfigId: string;
-    provider: FeedbackCapableProvider;
-    /** Raw webhook secret/public key/basic-auth value — encrypted before
-     * storage, never returned. */
-    credential: string;
-    expectedTopicArn?: string | null;
+  teamId: string;
+  espConfigId: string;
+  provider: FeedbackCapableProvider;
+  /** Raw webhook secret/public key/basic-auth value — encrypted before
+   * storage, never returned. Absent for credentialless providers (SES). */
+  credential?: string | null;
+  expectedTopicArn?: string | null;
 }): Promise<FeedbackConnection> {
-    const existing = await getFeedbackConnectionForTeamEsp(teamId, espConfigId);
-    const encryptedCredentials = encryptSecret(credential);
+  const existing = await getFeedbackConnectionForTeamEsp(teamId, espConfigId);
 
-    if (!existing) {
-        const [row] = await db
-            .insert(espFeedbackConnections)
-            .values({
-                teamId,
-                espConfigId,
-                ownerScope: "team",
-                provider,
-                encryptedCredentials,
-                expectedTopicArn: expectedTopicArn ?? null,
-                status: "pending",
-            })
-            .returning();
-        return row;
-    }
-
-    const previousExpiresAt = new Date(
-        Date.now() + CREDENTIAL_ROTATION_GRACE_HOURS * 60 * 60 * 1000,
-    );
+  if (!existing) {
     const [row] = await db
-        .update(espFeedbackConnections)
-        .set({
-            previousEncryptedCredentials: existing.encryptedCredentials,
-            previousCredentialExpiresAt: existing.encryptedCredentials
-                ? previousExpiresAt
-                : null,
-            encryptedCredentials,
-            expectedTopicArn: expectedTopicArn ?? existing.expectedTopicArn,
-            // A credential rotation on a previously-erroring connection
-            // deserves a fresh chance rather than staying flagged `error`.
-            status: existing.status === "error" ? "pending" : existing.status,
-            lastErrorCode: null,
-            updatedAt: new Date(),
-        })
-        .where(eq(espFeedbackConnections.id, existing.id))
-        .returning();
+      .insert(espFeedbackConnections)
+      .values({
+        teamId,
+        espConfigId,
+        ownerScope: "team",
+        provider,
+        encryptedCredentials: credential ? encryptSecret(credential) : null,
+        expectedTopicArn: expectedTopicArn ?? null,
+        status: "pending",
+      })
+      .returning();
     return row;
+  }
+
+  const [row] = await db
+    .update(espFeedbackConnections)
+    .set(rotationPatch(existing, { credential, expectedTopicArn }))
+    .where(eq(espFeedbackConnections.id, existing.id))
+    .returning();
+  return row;
 }
 
 export async function upsertOrganizationFeedbackConnection(input: {
-    organizationId: string;
-    espConfigId: string;
-    provider: FeedbackCapableProvider;
-    credential: string;
-    expectedTopicArn?: string | null;
+  organizationId: string;
+  espConfigId: string;
+  provider: FeedbackCapableProvider;
+  credential?: string | null;
+  expectedTopicArn?: string | null;
 }): Promise<FeedbackConnection> {
-    const existing = await getFeedbackConnectionForOrganizationEsp(
-        input.organizationId,
-        input.espConfigId,
-    );
-    const encryptedCredentials = encryptSecret(input.credential);
-    if (!existing) {
-        const [row] = await db
-            .insert(espFeedbackConnections)
-            .values({
-                organizationId: input.organizationId,
-                ownerScope: "organization",
-                espConfigId: input.espConfigId,
-                provider: input.provider,
-                encryptedCredentials,
-                expectedTopicArn: input.expectedTopicArn ?? null,
-                status: "pending",
-            })
-            .returning();
-        return row;
-    }
+  const existing = await getFeedbackConnectionForOrganizationEsp(
+    input.organizationId,
+    input.espConfigId,
+  );
+  if (!existing) {
     const [row] = await db
-        .update(espFeedbackConnections)
-        .set({
-            previousEncryptedCredentials: existing.encryptedCredentials,
-            previousCredentialExpiresAt: existing.encryptedCredentials
-                ? new Date(
-                      Date.now() +
-                          CREDENTIAL_ROTATION_GRACE_HOURS * 60 * 60 * 1000,
-                  )
-                : null,
-            encryptedCredentials,
-            expectedTopicArn:
-                input.expectedTopicArn ?? existing.expectedTopicArn,
-            status: existing.status === "error" ? "pending" : existing.status,
-            lastErrorCode: null,
-            updatedAt: new Date(),
-        })
-        .where(eq(espFeedbackConnections.id, existing.id))
-        .returning();
+      .insert(espFeedbackConnections)
+      .values({
+        organizationId: input.organizationId,
+        ownerScope: "organization",
+        espConfigId: input.espConfigId,
+        provider: input.provider,
+        encryptedCredentials: input.credential ? encryptSecret(input.credential) : null,
+        expectedTopicArn: input.expectedTopicArn ?? null,
+        status: "pending",
+      })
+      .returning();
     return row;
+  }
+  const [row] = await db
+    .update(espFeedbackConnections)
+    .set(rotationPatch(existing, input))
+    .where(eq(espFeedbackConnections.id, existing.id))
+    .returning();
+  return row;
+}
+
+/** The update applied when an existing connection is re-saved. A new
+ * credential keeps the old one valid for the rotation grace window; a new
+ * SES topic invalidates the old subscription confirmation. */
+function rotationPatch(
+  existing: FeedbackConnection,
+  {
+    credential,
+    expectedTopicArn,
+  }: { credential?: string | null; expectedTopicArn?: string | null },
+) {
+  const topicArn = expectedTopicArn ?? existing.expectedTopicArn;
+  return {
+    ...(credential
+      ? {
+          previousEncryptedCredentials: existing.encryptedCredentials,
+          previousCredentialExpiresAt: existing.encryptedCredentials
+            ? new Date(Date.now() + CREDENTIAL_ROTATION_GRACE_HOURS * 60 * 60 * 1000)
+            : null,
+          encryptedCredentials: encryptSecret(credential),
+        }
+      : {}),
+    expectedTopicArn: topicArn,
+    ...(topicArn !== existing.expectedTopicArn
+      ? { subscriptionConfirmedAt: null }
+      : {}),
+    // Re-saving a previously-erroring connection deserves a fresh
+    // chance rather than staying flagged `error`.
+    status: existing.status === "error" ? "pending" : existing.status,
+    lastErrorCode: null,
+    updatedAt: new Date(),
+  };
+}
+
+/** Backs the manual "test" action, which can't call the provider: checks
+ * the connection is fully armed. Returns the error code, or `null`. */
+export function feedbackConnectionReadinessError(
+  connection: FeedbackConnection,
+): "feedback_invalid_credentials" | "feedback_subscription_unconfirmed" | null {
+  if (connection.provider === "ses") {
+    return connection.expectedTopicArn && connection.subscriptionConfirmedAt
+      ? null
+      : "feedback_subscription_unconfirmed";
+  }
+  return decryptFeedbackCredentials(connection) ? null : "feedback_invalid_credentials";
+}
+
+/** Records the result of an authenticated SNS subscription handshake.
+ * Confirmation alone never marks the connection `healthy` — that still takes
+ * a processed event — and an unsubscribe flags it so the UI asks the
+ * customer to re-subscribe (SendLit never re-subscribes on its own). */
+export async function recordFeedbackControlOutcome(
+  id: string,
+  outcome: ControlMessageOutcome,
+): Promise<void> {
+  const patch =
+    outcome === "subscription_confirmed"
+      ? { subscriptionConfirmedAt: new Date(), lastErrorCode: null }
+      : outcome === "unsubscribed"
+        ? {
+            subscriptionConfirmedAt: null,
+            status: "error",
+            lastErrorCode: "sns_unsubscribed",
+          }
+        : { status: "error", lastErrorCode: "sns_confirmation_failed" };
+  await db
+    .update(espFeedbackConnections)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(espFeedbackConnections.id, id));
 }
 
 /** Called when an ESP's `provider` changes — the old feedback connection
@@ -215,63 +255,63 @@ export async function upsertOrganizationFeedbackConnection(input: {
  * grace period (enforced by callers checking `status`, not by this
  * function). */
 export async function retireActiveFeedbackConnection(
-    espConfigId: string,
+  espConfigId: string,
 ): Promise<void> {
-    await db
-        .update(espFeedbackConnections)
-        .set({ status: "retiring", updatedAt: new Date() })
-        .where(
-            and(
-                eq(espFeedbackConnections.espConfigId, espConfigId),
-                ne(espFeedbackConnections.status, "retiring"),
-                ne(espFeedbackConnections.status, "disabled"),
-            ),
-        );
+  await db
+    .update(espFeedbackConnections)
+    .set({ status: "retiring", updatedAt: new Date() })
+    .where(
+      and(
+        eq(espFeedbackConnections.espConfigId, espConfigId),
+        ne(espFeedbackConnections.status, "retiring"),
+        ne(espFeedbackConnections.status, "disabled"),
+      ),
+    );
 }
 
 export async function disableFeedbackConnection(
-    teamId: string,
-    espConfigId: string,
+  teamId: string,
+  espConfigId: string,
 ): Promise<boolean> {
-    const [row] = await db
-        .update(espFeedbackConnections)
-        .set({
-            status: "disabled",
-            disabledAt: new Date(),
-            updatedAt: new Date(),
-        })
-        .where(
-            and(
-                eq(espFeedbackConnections.teamId, teamId),
-                eq(espFeedbackConnections.espConfigId, espConfigId),
-                ne(espFeedbackConnections.status, "disabled"),
-            ),
-        )
-        .returning();
-    return Boolean(row);
+  const [row] = await db
+    .update(espFeedbackConnections)
+    .set({
+      status: "disabled",
+      disabledAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(espFeedbackConnections.teamId, teamId),
+        eq(espFeedbackConnections.espConfigId, espConfigId),
+        ne(espFeedbackConnections.status, "disabled"),
+      ),
+    )
+    .returning();
+  return Boolean(row);
 }
 
 export async function disableOrganizationFeedbackConnection(
-    organizationId: string,
-    espConfigId: string,
+  organizationId: string,
+  espConfigId: string,
 ): Promise<boolean> {
-    const [row] = await db
-        .update(espFeedbackConnections)
-        .set({
-            status: "disabled",
-            disabledAt: new Date(),
-            updatedAt: new Date(),
-        })
-        .where(
-            and(
-                eq(espFeedbackConnections.organizationId, organizationId),
-                eq(espFeedbackConnections.ownerScope, "organization"),
-                eq(espFeedbackConnections.espConfigId, espConfigId),
-                ne(espFeedbackConnections.status, "disabled"),
-            ),
-        )
-        .returning();
-    return Boolean(row);
+  const [row] = await db
+    .update(espFeedbackConnections)
+    .set({
+      status: "disabled",
+      disabledAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(espFeedbackConnections.organizationId, organizationId),
+        eq(espFeedbackConnections.ownerScope, "organization"),
+        eq(espFeedbackConnections.espConfigId, espConfigId),
+        ne(espFeedbackConnections.status, "disabled"),
+      ),
+    )
+    .returning();
+  return Boolean(row);
 }
 
 /** Called both by the manual "test" action and by the receipt processor
@@ -280,39 +320,37 @@ export async function disableOrganizationFeedbackConnection(
  * Never promotes a `retiring`/`disabled` connection back to `healthy` — a
  * late grace-period event is still accepted and processed, but the
  * connection's lifecycle state shouldn't imply it's taking new sends again. */
-export async function recordFeedbackConnectionVerified(
-    id: string,
-): Promise<void> {
-    await db
-        .update(espFeedbackConnections)
-        .set({
-            status: "healthy",
-            lastReceivedAt: new Date(),
-            lastVerifiedAt: new Date(),
-            lastErrorCode: null,
-            updatedAt: new Date(),
-        })
-        .where(
-            and(
-                eq(espFeedbackConnections.id, id),
-                ne(espFeedbackConnections.status, "retiring"),
-                ne(espFeedbackConnections.status, "disabled"),
-            ),
-        );
+export async function recordFeedbackConnectionVerified(id: string): Promise<void> {
+  await db
+    .update(espFeedbackConnections)
+    .set({
+      status: "healthy",
+      lastReceivedAt: new Date(),
+      lastVerifiedAt: new Date(),
+      lastErrorCode: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(espFeedbackConnections.id, id),
+        ne(espFeedbackConnections.status, "retiring"),
+        ne(espFeedbackConnections.status, "disabled"),
+      ),
+    );
 }
 
 export async function recordFeedbackConnectionError(
-    id: string,
-    errorCode: string,
+  id: string,
+  errorCode: string,
 ): Promise<void> {
-    await db
-        .update(espFeedbackConnections)
-        .set({
-            status: "error",
-            lastErrorCode: errorCode,
-            updatedAt: new Date(),
-        })
-        .where(eq(espFeedbackConnections.id, id));
+  await db
+    .update(espFeedbackConnections)
+    .set({
+      status: "error",
+      lastErrorCode: errorCode,
+      updatedAt: new Date(),
+    })
+    .where(eq(espFeedbackConnections.id, id));
 }
 
 /** Only records that an authenticated event arrived (used on every accepted
@@ -320,19 +358,17 @@ export async function recordFeedbackConnectionError(
  * which also flips `status` to `healthy`. Health status only improves on a
  * successfully *processed* receipt or a passing test send; this just tracks
  * recency for staleness checks. */
-export async function recordFeedbackConnectionReceived(
-    id: string,
-): Promise<void> {
-    await db
-        .update(espFeedbackConnections)
-        .set({ lastReceivedAt: new Date(), updatedAt: new Date() })
-        .where(eq(espFeedbackConnections.id, id));
+export async function recordFeedbackConnectionReceived(id: string): Promise<void> {
+  await db
+    .update(espFeedbackConnections)
+    .set({ lastReceivedAt: new Date(), updatedAt: new Date() })
+    .where(eq(espFeedbackConnections.id, id));
 }
 
 export interface DecryptedFeedbackCredential {
-    credential: string;
-    /** Present only within the 24h rotation grace window. */
-    previousCredential?: string;
+  credential: string;
+  /** Present only within the 24h rotation grace window. */
+  previousCredential?: string;
 }
 
 /** Decrypts both the current and (if still within its grace window) the
@@ -340,35 +376,30 @@ export interface DecryptedFeedbackCredential {
  * so an in-flight provider retry signed with a just-rotated-out secret
  * still authenticates. */
 export function decryptFeedbackCredentials(
-    connection: FeedbackConnection,
+  connection: FeedbackConnection,
 ): DecryptedFeedbackCredential | null {
-    if (!connection.encryptedCredentials) return null;
-    const credential = decryptSecret(connection.encryptedCredentials);
-    const stillInGrace =
-        connection.previousEncryptedCredentials &&
-        connection.previousCredentialExpiresAt &&
-        connection.previousCredentialExpiresAt.getTime() > Date.now();
-    return {
-        credential,
-        previousCredential: stillInGrace
-            ? decryptSecret(connection.previousEncryptedCredentials!)
-            : undefined,
-    };
+  if (!connection.encryptedCredentials) return null;
+  const credential = decryptSecret(connection.encryptedCredentials);
+  const stillInGrace =
+    connection.previousEncryptedCredentials &&
+    connection.previousCredentialExpiresAt &&
+    connection.previousCredentialExpiresAt.getTime() > Date.now();
+  return {
+    credential,
+    previousCredential: stillInGrace
+      ? decryptSecret(connection.previousEncryptedCredentials!)
+      : undefined,
+  };
 }
 
 /** Used by `settings/esp/routes.ts` to confirm an ESP belongs to the team
  * before any feedback operation touches it (feedback routes don't have
  * their own team-scoped ESP lookup otherwise). */
-export async function getTeamEspConfigById(
-    teamId: string,
-    espConfigId: string,
-) {
-    const [row] = await db
-        .select()
-        .from(espConfigs)
-        .where(
-            and(eq(espConfigs.id, espConfigId), eq(espConfigs.teamId, teamId)),
-        )
-        .limit(1);
-    return row ?? null;
+export async function getTeamEspConfigById(teamId: string, espConfigId: string) {
+  const [row] = await db
+    .select()
+    .from(espConfigs)
+    .where(and(eq(espConfigs.id, espConfigId), eq(espConfigs.teamId, teamId)))
+    .limit(1);
+  return row ?? null;
 }

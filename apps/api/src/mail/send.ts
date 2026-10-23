@@ -1,28 +1,62 @@
+import { renderEmailToPlainText } from "@sendlit/email-editor";
+import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
-import { captureError, captureEvent } from "../observability/posthog";
-import { getEspTransport, getTeamTransport } from "./transport";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
+import {
+  acquireEspSendCapacity,
+  SendDeferredError,
+  throttlingRetryDelay,
+} from "./rate-limit";
+import { getEspTransport, getTeamTransport } from "./transport";
 
 const MISSING_TEAM_ESP_ERROR = "Team ESP is not configured.";
 
-interface MailInput {
-    from: string;
-    to: string;
-    subject: string;
-    html: string;
-    headers?: Record<string, string>;
-    /** Required for campaign mail; resolves to the team's configured ESP. */
-    teamId: string;
-    /** Internal id of the user ESP pinned when the send was accepted. */
-    espConfigId?: string;
-    /** Credential revision included in the transport cache identity. */
-    secretVersion?: number;
-    /** RFC 5322 `Message-ID` value (no angle brackets — nodemailer adds
-     * them). Callers that need webhook correlation generate this up front
-     * and persist it on `outbound_messages.rfcMessageId` before calling
-     * `sendMail` — see `docs/bounces-and-complaints.md#6-correlation`. */
-    messageId?: string;
+/** Headers a provider parses as JSON (SendGrid's `X-SMTPAPI`). Nodemailer
+ * MIME-encodes a long header with no spaces, which the provider can't read,
+ * so these go out as they are while they fit on one line. */
+const RAW_HEADERS = new Set(["x-smtpapi"]);
+const MAX_RAW_HEADER_LENGTH = 900;
+
+function transportHeaders(
+  headers: Record<string, string> | undefined,
+): Record<string, string | { prepared: true; value: string }> | undefined {
+  if (!headers) return headers;
+  return Object.fromEntries(
+    Object.entries(headers).map(([name, value]) => [
+      name,
+      RAW_HEADERS.has(name.toLowerCase()) &&
+      value.length <= MAX_RAW_HEADER_LENGTH &&
+      /^[\x20-\x7e]*$/.test(value)
+        ? { prepared: true as const, value }
+        : value,
+    ]),
+  );
 }
+
+interface MailInput {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  /** The `text/plain` alternative. Generated from `html` when omitted. */
+  text?: string;
+  /** `Reply-To` header; replies go to `from` when omitted. */
+  replyTo?: string | null;
+  headers?: Record<string, string>;
+  /** Required for campaign mail; resolves to the team's configured ESP. */
+  teamId: string;
+  /** Internal id of the user ESP pinned when the send was accepted. */
+  espConfigId?: string;
+  /** Credential revision included in the transport cache identity. */
+  secretVersion?: number;
+  /** RFC 5322 `Message-ID` value (no angle brackets — nodemailer adds
+   * them). Callers that need webhook correlation generate this up front
+   * and persist it on `outbound_messages.rfcMessageId` before calling
+   * `sendMail` — see `docs/bounces-and-complaints.md#6-correlation`. */
+  messageId?: string;
+}
+
+type MailPurpose = "campaign" | "transactional";
 
 /** What `sendMail` hands back instead of discarding Nodemailer's
  * `SentMessageInfo` — the outbound ledger persists this for later
@@ -30,78 +64,105 @@ interface MailInput {
  * only logs there rather than attempting real delivery (`sendTestMail`
  * always attempts real delivery regardless of `NODE_ENV`). */
 export interface SendMailResult {
-    /** The `Message-ID` actually placed on the outgoing email (normally
-     * equal to `<messageId>` when one was supplied). */
-    messageId: string | null;
-    /** Raw final SMTP response line from the transport — some providers
-     * embed their own queue/message id in this text. */
-    providerResponse: string | null;
+  /** The `Message-ID` actually placed on the outgoing email (normally
+   * equal to `<messageId>` when one was supplied). */
+  messageId: string | null;
+  /** Raw final SMTP response line from the transport — some providers
+   * embed their own queue/message id in this text. */
+  providerResponse: string | null;
 }
 
 async function resolveTeamTransporter(
-    teamId: string,
-    espConfigId?: string,
-    secretVersion?: number,
+  teamId: string,
+  espConfigId?: string,
+  secretVersion?: number,
 ) {
-    const teamTransporter = espConfigId
-        ? await getEspTransport(teamId, espConfigId, secretVersion)
-        : await getTeamTransport(teamId);
-    if (!teamTransporter) {
-        throw new Error(MISSING_TEAM_ESP_ERROR);
-    }
-    return teamTransporter;
+  const teamTransporter = espConfigId
+    ? await getEspTransport(teamId, espConfigId, secretVersion)
+    : await getTeamTransport(teamId);
+  if (!teamTransporter) {
+    throw new Error(MISSING_TEAM_ESP_ERROR);
+  }
+  return teamTransporter;
 }
 
 export async function sendMail({
-    from,
-    to,
-    subject,
-    html,
-    headers,
-    teamId,
-    espConfigId,
-    secretVersion,
-    messageId,
-}: MailInput): Promise<SendMailResult> {
-    let result: SendMailResult = { messageId: null, providerResponse: null };
-    try {
-        // This is the final guard for all delivery paths, including queued
-        // work accepted before a team clears its address.
-        await assertMailingAddressConfigured(teamId);
-        const transporter = await resolveTeamTransporter(
-            teamId,
-            espConfigId,
-            secretVersion,
-        );
-        const info = await transporter.sendMail({
-            from,
-            to,
-            subject,
-            html,
-            headers,
-            messageId,
-        });
-        result = {
-            messageId: info?.messageId ?? null,
-            providerResponse: info?.response ?? null,
-        };
-    } catch (error) {
-        captureError({
-            error,
-            source: "mail.send",
-            teamId,
-            severity: "critical",
-        });
-        throw error;
+  purpose,
+  from,
+  to,
+  subject,
+  html,
+  text,
+  replyTo,
+  headers,
+  teamId,
+  espConfigId,
+  secretVersion,
+  messageId,
+}: MailInput & { purpose: MailPurpose }): Promise<SendMailResult> {
+  let result: SendMailResult = { messageId: null, providerResponse: null };
+  try {
+    // Marketing messages require the physical address used by their
+    // managed compliance footer. Transactional messages have no marketing
+    // footer and must remain deliverable without a workspace address.
+    if (purpose === "campaign") {
+      await assertMailingAddressConfigured(teamId);
     }
-
-    logger.info({ to, subject, teamId }, "Mail sent");
-    captureEvent({
-        event: "email_sent",
-        source: "mail.send",
-        teamId,
+    const transporter = await resolveTeamTransporter(
+      teamId,
+      espConfigId,
+      secretVersion,
+    );
+    const releaseCapacity = espConfigId
+      ? await acquireEspSendCapacity(espConfigId, purpose)
+      : undefined;
+    let info: Awaited<ReturnType<typeof transporter.sendMail>>;
+    try {
+      info = await transporter.sendMail({
+        from,
+        to,
+        subject,
+        html,
+        text: text ?? renderEmailToPlainText(html),
+        ...(replyTo ? { replyTo } : {}),
+        headers: transportHeaders(headers),
+        messageId,
+      });
+    } catch (error) {
+      // Not sent, so it doesn't count against today's cap.
+      await releaseCapacity?.();
+      throw error;
+    }
+    result = {
+      messageId: info?.messageId ?? null,
+      providerResponse: info?.response ?? null,
+    };
+  } catch (error) {
+    if (error instanceof SendDeferredError) throw error;
+    const retryAfterMs = throttlingRetryDelay(error);
+    if (retryAfterMs !== null) {
+      logger.warn(
+        { teamId, error: (error as Error).message },
+        "ESP throttled the send",
+      );
+      throw new SendDeferredError(retryAfterMs, (error as Error).message);
+    }
+    captureError({
+      error,
+      source: "mail.send",
+      teamId,
+      severity: "critical",
     });
-    return result;
+    throw error;
+  }
+
+  logger.info({ to, subject, teamId }, "Mail sent");
+  captureEvent({
+    event: "email_sent",
+    source: "mail.send",
+    teamId,
+  });
+  return result;
 }
 
 /**
@@ -110,14 +171,19 @@ export async function sendMail({
  * configuration actually works before relying on it.
  */
 export async function sendTestMail({
+  from,
+  to,
+  subject,
+  html,
+  teamId,
+  espConfigId,
+}: MailInput): Promise<void> {
+  const transporter = await resolveTeamTransporter(teamId, espConfigId);
+  await transporter.sendMail({
     from,
     to,
     subject,
     html,
-    teamId,
-    espConfigId,
-}: MailInput): Promise<void> {
-    await assertMailingAddressConfigured(teamId);
-    const transporter = await resolveTeamTransporter(teamId, espConfigId);
-    await transporter.sendMail({ from, to, subject, html });
+    text: renderEmailToPlainText(html),
+  });
 }

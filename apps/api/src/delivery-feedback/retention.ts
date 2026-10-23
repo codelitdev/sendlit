@@ -1,10 +1,10 @@
 import { and, eq, inArray, isNotNull, lt } from "drizzle-orm";
 import { db } from "../db/client";
 import {
-    emailDeliveryEvents,
-    emailSuppressions,
-    espWebhookReceipts,
-    outboundMessages,
+  emailDeliveryEvents,
+  emailSuppressions,
+  espWebhookReceipts,
+  outboundMessages,
 } from "../db/schema";
 
 const RAW_RECEIPT_RETENTION_DAYS = 30;
@@ -22,31 +22,31 @@ const BATCH_SIZE = 500;
  * batch) until it returns 0.
  */
 export async function purgeExpiredRawReceipts(): Promise<number> {
-    const cutoff = new Date(
-        Date.now() - RAW_RECEIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
-    );
-    const stale = await db
-        .select({ id: espWebhookReceipts.id })
-        .from(espWebhookReceipts)
-        .where(
-            and(
-                lt(espWebhookReceipts.receivedAt, cutoff),
-                isNotNull(espWebhookReceipts.encryptedPayload),
-            ),
-        )
-        .limit(BATCH_SIZE);
-    if (stale.length === 0) return 0;
+  const cutoff = new Date(
+    Date.now() - RAW_RECEIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const stale = await db
+    .select({ id: espWebhookReceipts.id })
+    .from(espWebhookReceipts)
+    .where(
+      and(
+        lt(espWebhookReceipts.receivedAt, cutoff),
+        isNotNull(espWebhookReceipts.encryptedPayload),
+      ),
+    )
+    .limit(BATCH_SIZE);
+  if (stale.length === 0) return 0;
 
-    await db
-        .update(espWebhookReceipts)
-        .set({ encryptedPayload: null, safeHeaders: {} })
-        .where(
-            inArray(
-                espWebhookReceipts.id,
-                stale.map((row) => row.id),
-            ),
-        );
-    return stale.length;
+  await db
+    .update(espWebhookReceipts)
+    .set({ encryptedPayload: null, safeHeaders: {} })
+    .where(
+      inArray(
+        espWebhookReceipts.id,
+        stale.map((row) => row.id),
+      ),
+    );
+  return stale.length;
 }
 
 /**
@@ -54,23 +54,23 @@ export async function purgeExpiredRawReceipts(): Promise<number> {
  * until it returns 0 — each call only touches `BATCH_SIZE` rows.
  */
 export async function purgeOldDeliveryEvents(): Promise<number> {
-    const cutoff = new Date(
-        Date.now() - DELIVERY_EVENT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
-    );
-    const stale = await db
-        .select({ id: emailDeliveryEvents.id })
-        .from(emailDeliveryEvents)
-        .where(lt(emailDeliveryEvents.occurredAt, cutoff))
-        .limit(BATCH_SIZE);
-    if (stale.length === 0) return 0;
+  const cutoff = new Date(
+    Date.now() - DELIVERY_EVENT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const stale = await db
+    .select({ id: emailDeliveryEvents.id })
+    .from(emailDeliveryEvents)
+    .where(lt(emailDeliveryEvents.occurredAt, cutoff))
+    .limit(BATCH_SIZE);
+  if (stale.length === 0) return 0;
 
-    await db.delete(emailDeliveryEvents).where(
-        inArray(
-            emailDeliveryEvents.id,
-            stale.map((row) => row.id),
-        ),
-    );
-    return stale.length;
+  await db.delete(emailDeliveryEvents).where(
+    inArray(
+      emailDeliveryEvents.id,
+      stale.map((row) => row.id),
+    ),
+  );
+  return stale.length;
 }
 
 /**
@@ -86,48 +86,39 @@ export async function purgeOldDeliveryEvents(): Promise<number> {
  * here for that case.
  */
 export async function anonymizeRecipientForPrivacyDeletion({
-    teamId,
-    normalizedRecipient,
+  teamId,
+  normalizedRecipient,
 }: {
-    teamId: string;
-    normalizedRecipient: string;
+  teamId: string;
+  normalizedRecipient: string;
 }): Promise<void> {
-    await db.transaction(async (tx) => {
-        await tx
-            .update(outboundMessages)
-            .set({ recipientEmail: "", normalizedRecipient: "" })
-            .where(
-                and(
-                    eq(outboundMessages.teamId, teamId),
-                    eq(
-                        outboundMessages.normalizedRecipient,
-                        normalizedRecipient,
-                    ),
-                ),
-            );
-        await tx
-            .update(emailDeliveryEvents)
-            .set({ recipientEmail: null, normalizedRecipient: null })
-            .where(
-                and(
-                    eq(emailDeliveryEvents.teamId, teamId),
-                    eq(
-                        emailDeliveryEvents.normalizedRecipient,
-                        normalizedRecipient,
-                    ),
-                ),
-            );
-        await tx
-            .update(emailSuppressions)
-            .set({ recipientEmail: null, normalizedRecipient: null })
-            .where(
-                and(
-                    eq(emailSuppressions.teamId, teamId),
-                    eq(
-                        emailSuppressions.normalizedRecipient,
-                        normalizedRecipient,
-                    ),
-                ),
-            );
-    });
+  await db.transaction(async (tx) => {
+    await tx
+      .update(outboundMessages)
+      .set({ recipientEmail: "", normalizedRecipient: "" })
+      .where(
+        and(
+          eq(outboundMessages.teamId, teamId),
+          eq(outboundMessages.normalizedRecipient, normalizedRecipient),
+        ),
+      );
+    await tx
+      .update(emailDeliveryEvents)
+      .set({ recipientEmail: null, normalizedRecipient: null })
+      .where(
+        and(
+          eq(emailDeliveryEvents.teamId, teamId),
+          eq(emailDeliveryEvents.normalizedRecipient, normalizedRecipient),
+        ),
+      );
+    await tx
+      .update(emailSuppressions)
+      .set({ recipientEmail: null, normalizedRecipient: null })
+      .where(
+        and(
+          eq(emailSuppressions.teamId, teamId),
+          eq(emailSuppressions.normalizedRecipient, normalizedRecipient),
+        ),
+      );
+  });
 }

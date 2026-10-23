@@ -3,8 +3,8 @@ import { z } from "zod";
 const customFieldScalarSchema = z.union([z.string(), z.number(), z.boolean()]);
 
 export const customFieldValueSchema = z.union([
-    customFieldScalarSchema,
-    z.array(customFieldScalarSchema),
+  customFieldScalarSchema,
+  z.array(customFieldScalarSchema),
 ]);
 
 export const customFieldsSchema = z.record(customFieldValueSchema).default({});

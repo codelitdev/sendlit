@@ -1,6 +1,11 @@
 # PRD: Amazon SES Bounce and Complaint Feedback
 
-_Status: proposed for review. Date: 2026-07-17. Owners: SendLit API and Web.
+_Status: implemented (issue #33); where this document and the issue differ,
+the implementation follows the issue — notably a 512 KB SNS body cap,
+`SubscribeURL` confirmation (no AWS API), configuration-set events alongside
+identity notifications, `Reject` → `rejected`, `RenderingFailure` → `failed`,
+correlation by a `sendlit_message_id` message tag, and raw payloads kept only
+for problem events. Date: 2026-07-17. Owners: SendLit API and Web.
 Scope: an Amazon SES feedback adapter delivered over the existing
 SES → SNS → HTTPS-webhook path, its SNS subscription-confirmation and
 signature-verification requirements, and the minimal interface and UI changes

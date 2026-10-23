@@ -17,4 +17,17 @@ Supported triggers:
 - A tag is added.
 - A tag is removed.
 
+A triggered contact is enrolled only if they are subscribed, match the
+sequence's `filter` (when set), and don't match its `excludeFilter`. Both are
+set through the API or MCP `update_sequence`.
+
 Each sequence email can have a delay, publish state, and optional tag action.
+
+Use **Send test** in the email editor to send yourself a `[Test]` copy of an
+email before starting the sequence. Tests work the same way as for
+[broadcasts](/email-marketing/broadcasts#send-a-test).
+
+A paused sequence sends nothing; enrolled contacts wait and continue from where
+they were when it is activated again. Sequences pause themselves on high
+bounce or complaint rates like
+[broadcasts](/email-marketing/broadcasts#automatic-pause-on-bounces-and-complaints).

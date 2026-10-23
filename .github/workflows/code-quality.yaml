@@ -1,24 +1,25 @@
 name: Code Quality
 on:
+    pull_request:
     push:
         branches:
             - "**"
         tags-ignore:
             - "*"
 
+permissions:
+    contents: read
+
 jobs:
-    lint:
+    quality:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
-            - uses: pnpm/action-setup@v4
-            - uses: actions/setup-node@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+            - uses: oven-sh/setup-bun@v2
               with:
-                  node-version: "24"
-                  cache: pnpm
-            - run: pnpm install --frozen-lockfile
-            - name: Linting and prettifying
-              run: |
-                  pnpm lint
-                  pnpm prettier
-              working-directory: ./
+                  bun-version: 1.4.1
+            - run: bun install --frozen-lockfile
+            - run: bun run lint
+            - run: bun run format:check
+            - run: bun run build:packages
+            - run: bun run typecheck

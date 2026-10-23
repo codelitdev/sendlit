@@ -15,54 +15,54 @@ export default mailQueue;
  * there's one source of truth instead of a stale copy riding along in Redis.
  */
 export async function addTransactionalMailJob({
-    transactionalEmailId,
-    dispatchId,
+  transactionalEmailId,
+  dispatchId,
 }: {
-    transactionalEmailId: string;
-    dispatchId?: string;
+  transactionalEmailId: string;
+  dispatchId?: string;
 }) {
-    await mailQueue.add(
-        "transactional",
-        { transactionalEmailId },
-        {
-            jobId: dispatchId ?? transactionalEmailId,
-            priority: 1,
-            attempts: 3,
-            backoff: { type: "exponential", delay: 30_000 },
-        },
-    );
+  await mailQueue.add(
+    "transactional",
+    { transactionalEmailId },
+    {
+      jobId: dispatchId ?? transactionalEmailId,
+      priority: 1,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 30_000 },
+    },
+  );
 }
 
 export async function addMailJob({
-    to,
-    subject,
-    body,
-    from,
-    teamId,
-    headers,
+  to,
+  subject,
+  body,
+  from,
+  teamId,
+  headers,
 }: {
-    to: string[];
-    subject: string;
-    body: string;
-    from: string;
-    teamId: string;
-    headers?: Record<string, string>;
+  to: string[];
+  subject: string;
+  body: string;
+  from: string;
+  teamId: string;
+  headers?: Record<string, string>;
 }) {
-    for (const recipient of to) {
-        await mailQueue.add(
-            "mail",
-            {
-                to: recipient,
-                subject,
-                body,
-                from,
-                teamId,
-                headers,
-            },
-            {
-                attempts: 3,
-                backoff: { type: "exponential", delay: 30_000 },
-            },
-        );
-    }
+  for (const recipient of to) {
+    await mailQueue.add(
+      "mail",
+      {
+        to: recipient,
+        subject,
+        body,
+        from,
+        teamId,
+        headers,
+      },
+      {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 30_000 },
+      },
+    );
+  }
 }

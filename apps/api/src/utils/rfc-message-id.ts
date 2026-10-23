@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { getSiteUrl } from "./mail";
 
 /**
@@ -12,12 +12,12 @@ import { getSiteUrl } from "./mail";
  * `docs/bounces-and-complaints.md#6-correlation`.
  */
 export function generateRfcMessageId(): string {
-    const random = crypto.randomBytes(16).toString("hex");
-    let domain = "sendlit.local";
-    try {
-        domain = new URL(getSiteUrl()).hostname || domain;
-    } catch {
-        // getSiteUrl() is always a valid URL in practice; fall back safely.
-    }
-    return `${random}@${domain}`;
+  const random = crypto.randomBytes(16).toString("hex");
+  let domain = "sendlit.local";
+  try {
+    domain = new URL(getSiteUrl()).hostname || domain;
+  } catch {
+    // getSiteUrl() is always a valid URL in practice; fall back safely.
+  }
+  return `${random}@${domain}`;
 }

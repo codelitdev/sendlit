@@ -1,7 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
+import type { OutboundSourceType } from "../config/constants";
 import { db } from "../db/client";
 import { outboundMessages } from "../db/schema";
-import type { OutboundSourceType } from "../config/constants";
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export type OutboundMessage = typeof outboundMessages.$inferSelect;
 
@@ -12,50 +14,52 @@ export type OutboundMessage = typeof outboundMessages.$inferSelect;
  * matching `sourceType`.
  */
 export async function createOutboundMessage(input: {
-    teamId: string;
-    deliverySourceType: "organization" | "team";
-    espConfigId: string;
-    espGrantId: string | null;
-    feedbackConnectionId: string | null;
-    sourceType: OutboundSourceType;
-    submissionKey?: string | null;
-    campaignDeliveryId?: string | null;
-    transactionalEmailId?: string | null;
-    recipientEmail: string;
-    normalizedRecipient: string;
-    provider: string | null;
-    rfcMessageId: string;
+  teamId: string;
+  deliverySourceType: "organization" | "team";
+  espConfigId: string;
+  espGrantId: string | null;
+  feedbackConnectionId: string | null;
+  sourceType: OutboundSourceType;
+  submissionKey?: string | null;
+  campaignDeliveryId?: string | null;
+  transactionalEmailId?: string | null;
+  recipientEmail: string;
+  normalizedRecipient: string;
+  provider: string | null;
+  rfcMessageId: string;
+  tx?: Transaction;
 }): Promise<OutboundMessage> {
-    const [row] = await db
-        .insert(outboundMessages)
-        .values({
-            teamId: input.teamId,
-            deliverySourceType: input.deliverySourceType,
-            espConfigId: input.espConfigId,
-            espGrantId: input.espGrantId,
-            feedbackConnectionId: input.feedbackConnectionId,
-            sourceType: input.sourceType,
-            submissionKey: input.submissionKey ?? null,
-            campaignDeliveryId: input.campaignDeliveryId ?? null,
-            transactionalEmailId: input.transactionalEmailId ?? null,
-            recipientEmail: input.recipientEmail,
-            normalizedRecipient: input.normalizedRecipient,
-            provider: input.provider,
-            rfcMessageId: input.rfcMessageId,
-        })
-        .onConflictDoNothing({ target: outboundMessages.submissionKey })
-        .returning();
-    if (row) return row;
-    if (!input.submissionKey) {
-        throw new Error("outbound_message_not_created");
-    }
-    const [existing] = await db
-        .select()
-        .from(outboundMessages)
-        .where(eq(outboundMessages.submissionKey, input.submissionKey))
-        .limit(1);
-    if (!existing) throw new Error("outbound_message_not_created");
-    return existing;
+  const database = input.tx ?? db;
+  const [row] = await database
+    .insert(outboundMessages)
+    .values({
+      teamId: input.teamId,
+      deliverySourceType: input.deliverySourceType,
+      espConfigId: input.espConfigId,
+      espGrantId: input.espGrantId,
+      feedbackConnectionId: input.feedbackConnectionId,
+      sourceType: input.sourceType,
+      submissionKey: input.submissionKey ?? null,
+      campaignDeliveryId: input.campaignDeliveryId ?? null,
+      transactionalEmailId: input.transactionalEmailId ?? null,
+      recipientEmail: input.recipientEmail,
+      normalizedRecipient: input.normalizedRecipient,
+      provider: input.provider,
+      rfcMessageId: input.rfcMessageId,
+    })
+    .onConflictDoNothing({ target: outboundMessages.submissionKey })
+    .returning();
+  if (row) return row;
+  if (!input.submissionKey) {
+    throw new Error("outbound_message_not_created");
+  }
+  const [existing] = await database
+    .select()
+    .from(outboundMessages)
+    .where(eq(outboundMessages.submissionKey, input.submissionKey))
+    .limit(1);
+  if (!existing) throw new Error("outbound_message_not_created");
+  return existing;
 }
 
 /** Called right after a successful transport submission. `accepted` never
@@ -67,47 +71,41 @@ export async function createOutboundMessage(input: {
  * "sent" log, not a pre-send intent record), so `campaignDeliveryId` is
  * threaded through and linked here rather than at ledger-creation time. */
 export async function markOutboundAccepted(
-    id: string,
-    {
-        providerMessageId,
-        campaignDeliveryId,
-    }: { providerMessageId: string | null; campaignDeliveryId?: string },
+  id: string,
+  {
+    providerMessageId,
+    campaignDeliveryId,
+  }: { providerMessageId: string | null; campaignDeliveryId?: string },
 ): Promise<void> {
-    await db
-        .update(outboundMessages)
-        .set({
-            deliveryStatus: "accepted",
-            acceptedAt: new Date(),
-            lastEventAt: new Date(),
-            providerMessageId,
-            ...(campaignDeliveryId ? { campaignDeliveryId } : {}),
-            updatedAt: new Date(),
-        })
-        .where(
-            and(
-                eq(outboundMessages.id, id),
-                eq(outboundMessages.deliveryStatus, "queued"),
-            ),
-        );
+  await db
+    .update(outboundMessages)
+    .set({
+      deliveryStatus: "accepted",
+      acceptedAt: new Date(),
+      lastEventAt: new Date(),
+      providerMessageId,
+      ...(campaignDeliveryId ? { campaignDeliveryId } : {}),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(outboundMessages.id, id), eq(outboundMessages.deliveryStatus, "queued")),
+    );
 }
 
 /** Called only for a *final* transport failure (not a transient retry still
  * in flight) — mirrors the synchronous SMTP `5xx` handling the transactional
  * pipeline already had, now recorded on the shared ledger too. */
 export async function markOutboundFailed(id: string): Promise<void> {
-    await db
-        .update(outboundMessages)
-        .set({
-            deliveryStatus: "failed",
-            lastEventAt: new Date(),
-            updatedAt: new Date(),
-        })
-        .where(
-            and(
-                eq(outboundMessages.id, id),
-                eq(outboundMessages.deliveryStatus, "queued"),
-            ),
-        );
+  await db
+    .update(outboundMessages)
+    .set({
+      deliveryStatus: "failed",
+      lastEventAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(outboundMessages.id, id), eq(outboundMessages.deliveryStatus, "queued")),
+    );
 }
 
 /** Mirrors a synchronous SMTP `5xx` permanent rejection onto the ledger —
@@ -118,86 +116,86 @@ export async function markOutboundFailed(id: string): Promise<void> {
  * accepted, then later rejected) but never regresses an already-terminal
  * `bounced`/`failed` row. */
 export async function markOutboundBounced(id: string): Promise<void> {
-    await db
-        .update(outboundMessages)
-        .set({
-            deliveryStatus: "bounced",
-            bouncedAt: new Date(),
-            lastEventAt: new Date(),
-            updatedAt: new Date(),
-        })
-        .where(
-            and(
-                eq(outboundMessages.id, id),
-                inArray(outboundMessages.deliveryStatus, [
-                    "queued",
-                    "accepted",
-                    "delayed",
-                    "delivered",
-                ]),
-            ),
-        );
+  await db
+    .update(outboundMessages)
+    .set({
+      deliveryStatus: "bounced",
+      bouncedAt: new Date(),
+      lastEventAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(outboundMessages.id, id),
+        inArray(outboundMessages.deliveryStatus, [
+          "queued",
+          "accepted",
+          "delayed",
+          "delivered",
+        ]),
+      ),
+    );
 }
 
 export async function getOutboundMessageById(
-    id: string,
+  id: string,
 ): Promise<OutboundMessage | null> {
-    const [row] = await db
-        .select()
-        .from(outboundMessages)
-        .where(eq(outboundMessages.id, id))
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(outboundMessages)
+    .where(eq(outboundMessages.id, id))
+    .limit(1);
+  return row ?? null;
 }
 
 /** Batch lookup for building delivery-event list responses — avoids one
  * query per row when enriching a page of events with their outbound
  * message's `espId`/`deliveryRoute`/public `messageId`. */
 export async function getOutboundMessagesByIds(
-    ids: string[],
+  ids: string[],
 ): Promise<Map<string, OutboundMessage>> {
-    if (ids.length === 0) return new Map();
-    const rows = await db
-        .select()
-        .from(outboundMessages)
-        .where(inArray(outboundMessages.id, [...new Set(ids)]));
-    return new Map(rows.map((row) => [row.id, row]));
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select()
+    .from(outboundMessages)
+    .where(inArray(outboundMessages.id, [...new Set(ids)]));
+  return new Map(rows.map((row) => [row.id, row]));
 }
 
 export async function getOutboundMessageByMessageId(
-    messageId: string,
+  messageId: string,
 ): Promise<OutboundMessage | null> {
-    const [row] = await db
-        .select()
-        .from(outboundMessages)
-        .where(eq(outboundMessages.messageId, messageId))
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(outboundMessages)
+    .where(eq(outboundMessages.messageId, messageId))
+    .limit(1);
+  return row ?? null;
 }
 
 /** Used by the transactional worker to load the ledger row created at
  * enqueue time, so it can submit the same `rfcMessageId` and record the
  * transport result. */
 export async function getOutboundMessageByTransactionalEmailId(
-    transactionalEmailId: string,
+  transactionalEmailId: string,
 ): Promise<OutboundMessage | null> {
-    const [row] = await db
-        .select()
-        .from(outboundMessages)
-        .where(eq(outboundMessages.transactionalEmailId, transactionalEmailId))
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(outboundMessages)
+    .where(eq(outboundMessages.transactionalEmailId, transactionalEmailId))
+    .limit(1);
+  return row ?? null;
 }
 
 /** Used by the campaign send path to load the ledger row created just
  * before transport, so it can record the transport result. */
 export async function getOutboundMessageByCampaignDeliveryId(
-    campaignDeliveryId: string,
+  campaignDeliveryId: string,
 ): Promise<OutboundMessage | null> {
-    const [row] = await db
-        .select()
-        .from(outboundMessages)
-        .where(eq(outboundMessages.campaignDeliveryId, campaignDeliveryId))
-        .limit(1);
-    return row ?? null;
+  const [row] = await db
+    .select()
+    .from(outboundMessages)
+    .where(eq(outboundMessages.campaignDeliveryId, campaignDeliveryId))
+    .limit(1);
+  return row ?? null;
 }

@@ -1,320 +1,498 @@
 "use client";
 
+import {
+  defaultMaxSendRates,
+  warmupDailyLimit,
+  warmupDays,
+} from "@sendlit/api-contract";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { Button } from "@/components/ui/codelit/button";
 import {
-    Dialog,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/codelit/dialog";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/codelit/select";
 import { Switch } from "@/components/ui/codelit/switch";
-import { ApiError } from "@/lib/api-client";
 import type { EspConfig, EspConnectionInput, EspProvider } from "@/lib/api";
-
-const PROVIDERS: Array<{ value: EspProvider; label: string }> = [
-    { value: "smtp", label: "Custom SMTP" },
-    { value: "sendgrid", label: "SendGrid" },
-    { value: "mailgun", label: "Mailgun" },
-    { value: "postmark", label: "Postmark" },
-    { value: "ses", label: "Amazon SES" },
-    { value: "resend", label: "Resend" },
-];
+import { ApiError } from "@/lib/api-client";
+import { ESP_PROVIDERS } from "@/lib/esp-providers";
+import { portForTls, tlsPortMismatch } from "@/lib/smtp";
 
 type FormState = {
-    name: string;
-    provider: EspProvider;
-    host: string;
-    port: string;
-    secure: boolean;
-    username: string;
-    password: string;
-    fromName: string;
-    fromEmail: string;
+  name: string;
+  provider: EspProvider;
+  host: string;
+  port: string;
+  secure: boolean;
+  username: string;
+  password: string;
+  fromName: string;
+  fromEmail: string;
+  replyTo: string;
+  maxSendRate: string;
+  dailySendLimit: string;
+  warmupEnabled: boolean;
+  warmupTarget: string;
 };
 
 const emptyForm: FormState = {
-    name: "",
-    provider: "smtp",
-    host: "",
-    port: "587",
-    secure: false,
-    username: "",
-    password: "",
-    fromName: "",
-    fromEmail: "",
+  name: "",
+  provider: "smtp",
+  host: "",
+  port: "587",
+  secure: false,
+  username: "",
+  password: "",
+  fromName: "",
+  fromEmail: "",
+  replyTo: "",
+  maxSendRate: "",
+  dailySendLimit: "",
+  warmupEnabled: false,
+  warmupTarget: "10000",
 };
 
 function formFor(esp: EspConfig | null): FormState {
-    if (!esp) return emptyForm;
-    return {
-        name: esp.name,
-        provider: esp.provider,
-        host: esp.host,
-        port: String(esp.port),
-        secure: esp.secure,
-        username: esp.username ?? "",
-        password: "",
-        fromName: esp.fromName ?? "",
-        fromEmail: esp.fromEmail ?? "",
-    };
+  if (!esp) return emptyForm;
+  return {
+    name: esp.name,
+    provider: esp.provider,
+    host: esp.host,
+    port: String(esp.port),
+    secure: esp.secure,
+    username: esp.username ?? "",
+    password: "",
+    fromName: esp.fromName ?? "",
+    fromEmail: esp.fromEmail ?? "",
+    replyTo: esp.replyTo ?? "",
+    maxSendRate: esp.maxSendRate ? String(esp.maxSendRate) : "",
+    dailySendLimit: esp.dailySendLimit ? String(esp.dailySendLimit) : "",
+    warmupEnabled: Boolean(esp.warmup),
+    warmupTarget: String(esp.warmup?.targetDailyVolume ?? 10_000),
+  };
 }
 
 export function EspConfigurationDialog({
-    open,
-    esp,
-    onOpenChange,
-    onSubmit,
-    createTitle = "New ESP",
-    editTitle,
-    createLabel = "Create ESP",
-    saveLabel = "Save ESP",
-    namePlaceholder = "e.g. Marketing SMTP",
+  open,
+  esp,
+  onOpenChange,
+  onSubmit,
+  createTitle = "New ESP",
+  editTitle,
+  createLabel = "Create ESP",
+  saveLabel = "Save ESP",
+  namePlaceholder = "e.g. Marketing SMTP",
 }: {
-    open: boolean;
-    esp: EspConfig | null;
-    onOpenChange: (open: boolean) => void;
-    onSubmit: (input: EspConnectionInput & { name: string }) => Promise<void>;
-    createTitle?: string;
-    editTitle?: (esp: EspConfig) => string;
-    createLabel?: string;
-    saveLabel?: string;
-    namePlaceholder?: string;
+  open: boolean;
+  esp: EspConfig | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: EspConnectionInput & { name: string }) => Promise<void>;
+  createTitle?: string;
+  editTitle?: (esp: EspConfig) => string;
+  createLabel?: string;
+  saveLabel?: string;
+  namePlaceholder?: string;
 }) {
-    const [form, setForm] = useState<FormState>(emptyForm);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const providerDefaultRate = defaultMaxSendRates[form.provider];
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (!open) return;
-        setForm(formFor(esp));
-        setError(null);
-    }, [open, esp]);
+  useEffect(() => {
+    if (!open) return;
+    setForm(formFor(esp));
+    setError(null);
+  }, [open, esp]);
 
-    async function submit() {
-        const port = Number(form.port);
-        const fromEmail = form.fromEmail.trim();
-        if (
-            !form.name.trim() ||
-            !form.host.trim() ||
-            !fromEmail ||
-            !Number.isInteger(port) ||
-            port < 1 ||
-            port > 65535
-        ) {
-            return;
-        }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromEmail)) {
-            setError("Enter a valid sender email address.");
-            return;
-        }
-
-        setSaving(true);
-        setError(null);
-        try {
-            await onSubmit({
-                name: form.name.trim(),
-                provider: form.provider,
-                host: form.host.trim(),
-                port,
-                secure: form.secure,
-                username: form.username.trim() || undefined,
-                ...(form.password ? { password: form.password } : {}),
-                fromName: form.fromName.trim() || undefined,
-                fromEmail,
-            });
-            onOpenChange(false);
-        } catch (err) {
-            setError(
-                err instanceof ApiError ? err.message : "Failed to save ESP",
-            );
-        } finally {
-            setSaving(false);
-        }
+  async function submit() {
+    const port = Number(form.port);
+    const fromEmail = form.fromEmail.trim();
+    if (
+      !form.name.trim() ||
+      !form.host.trim() ||
+      !fromEmail ||
+      !Number.isInteger(port) ||
+      port < 1 ||
+      port > 65535
+    ) {
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromEmail)) {
+      setError("Enter a valid sender email address.");
+      return;
+    }
+    const maxSendRate = form.maxSendRate.trim() ? Number(form.maxSendRate) : null;
+    if (maxSendRate !== null && !(maxSendRate > 0 && maxSendRate <= 10_000)) {
+      setError("Enter a send rate between 0 and 10,000 emails per second.");
+      return;
+    }
+    const dailySendLimit = form.dailySendLimit.trim()
+      ? Number(form.dailySendLimit)
+      : null;
+    if (
+      dailySendLimit !== null &&
+      !(Number.isInteger(dailySendLimit) && dailySendLimit > 0)
+    ) {
+      setError("Enter a whole number of emails per day.");
+      return;
+    }
+    const warmupTarget = Number(form.warmupTarget);
+    if (
+      form.warmupEnabled &&
+      !(Number.isInteger(warmupTarget) && warmupTarget >= 100)
+    ) {
+      setError("Enter a warm-up target of at least 100 emails per day.");
+      return;
+    }
+    const replyTo = form.replyTo.trim();
+    if (replyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo)) {
+      setError("Enter a valid reply-to email address.");
+      return;
     }
 
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>
-                        {esp
-                            ? (editTitle?.(esp) ?? `Edit ${esp.name}`)
-                            : createTitle}
-                    </DialogTitle>
-                </DialogHeader>
-                {error && <Banner>{error}</Banner>}
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="esp-name">Name</Label>
-                        <Input
-                            id="esp-name"
-                            value={form.name}
-                            onChange={(event) =>
-                                setForm({ ...form, name: event.target.value })
-                            }
-                            placeholder={namePlaceholder}
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label>Provider</Label>
-                        <Select
-                            value={form.provider}
-                            onValueChange={(provider) =>
-                                setForm({
-                                    ...form,
-                                    provider: provider as EspProvider,
-                                })
-                            }
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {PROVIDERS.map((provider) => (
-                                    <SelectItem
-                                        key={provider.value}
-                                        value={provider.value}
-                                    >
-                                        {provider.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="esp-host">SMTP host</Label>
-                        <Input
-                            id="esp-host"
-                            value={form.host}
-                            onChange={(event) =>
-                                setForm({ ...form, host: event.target.value })
-                            }
-                            placeholder="smtp.example.com"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="esp-port">Port</Label>
-                        <Input
-                            id="esp-port"
-                            inputMode="numeric"
-                            value={form.port}
-                            onChange={(event) =>
-                                setForm({ ...form, port: event.target.value })
-                            }
-                            placeholder="587"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="esp-username">Username</Label>
-                        <Input
-                            id="esp-username"
-                            value={form.username}
-                            onChange={(event) =>
-                                setForm({
-                                    ...form,
-                                    username: event.target.value,
-                                })
-                            }
-                            autoComplete="username"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="esp-password">
-                            {esp
-                                ? "Password / API key (leave blank to keep)"
-                                : "Password / API key"}
-                        </Label>
-                        <Input
-                            id="esp-password"
-                            type="password"
-                            value={form.password}
-                            onChange={(event) =>
-                                setForm({
-                                    ...form,
-                                    password: event.target.value,
-                                })
-                            }
-                            placeholder={
-                                esp?.hasPassword
-                                    ? "•••••••• (saved — leave blank to keep)"
-                                    : undefined
-                            }
-                            autoComplete="new-password"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="esp-from-name">From name</Label>
-                        <Input
-                            id="esp-from-name"
-                            value={form.fromName}
-                            onChange={(event) =>
-                                setForm({
-                                    ...form,
-                                    fromName: event.target.value,
-                                })
-                            }
-                            placeholder="Your name or company"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="esp-from-email">From email</Label>
-                        <Input
-                            id="esp-from-email"
-                            type="email"
-                            value={form.fromEmail}
-                            onChange={(event) =>
-                                setForm({
-                                    ...form,
-                                    fromEmail: event.target.value,
-                                })
-                            }
-                            placeholder="you@yourdomain.com"
-                        />
-                    </div>
-                    <div className="col-span-full flex items-center gap-3">
-                        <Switch
-                            id="esp-secure"
-                            checked={form.secure}
-                            onCheckedChange={(secure) =>
-                                setForm({ ...form, secure })
-                            }
-                        />
-                        <Label htmlFor="esp-secure">Use TLS (port 465)</Label>
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button
-                        variant="outline"
-                        onClick={() => onOpenChange(false)}
-                        disabled={saving}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={() => void submit()}
-                        disabled={
-                            saving ||
-                            !form.name.trim() ||
-                            !form.host.trim() ||
-                            !form.fromEmail.trim()
-                        }
-                    >
-                        {saving ? "Saving…" : esp ? saveLabel : createLabel}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit({
+        name: form.name.trim(),
+        provider: form.provider,
+        host: form.host.trim(),
+        port,
+        secure: form.secure,
+        username: form.username.trim() || undefined,
+        ...(form.password ? { password: form.password } : {}),
+        fromName: form.fromName.trim() || undefined,
+        fromEmail,
+        // "" clears a previously saved reply-to on edit.
+        ...(replyTo || esp?.replyTo ? { replyTo } : {}),
+        maxSendRate,
+        dailySendLimit,
+        // Only send a change, so saving other fields keeps the ramp's day.
+        ...(form.warmupEnabled
+          ? warmupTarget !== esp?.warmup?.targetDailyVolume && {
+              warmupTargetDailyVolume: warmupTarget,
+            }
+          : esp?.warmup && { warmupTargetDailyVolume: null }),
+      });
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save ESP");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {esp ? (editTitle?.(esp) ?? `Edit ${esp.name}`) : createTitle}
+          </DialogTitle>
+        </DialogHeader>
+        {error && <Banner>{error}</Banner>}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="esp-name">Name</Label>
+            <Input
+              id="esp-name"
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              placeholder={namePlaceholder}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Provider</Label>
+            <Select
+              value={form.provider}
+              onValueChange={(provider) =>
+                setForm({
+                  ...form,
+                  provider: provider as EspProvider,
+                })
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ESP_PROVIDERS.map((provider) => (
+                  <SelectItem key={provider.value} value={provider.value}>
+                    {provider.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="esp-host">SMTP host</Label>
+            <Input
+              id="esp-host"
+              value={form.host}
+              onChange={(event) => setForm({ ...form, host: event.target.value })}
+              placeholder="smtp.example.com"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="esp-port">Port</Label>
+            <Input
+              id="esp-port"
+              inputMode="numeric"
+              value={form.port}
+              onChange={(event) => setForm({ ...form, port: event.target.value })}
+              placeholder="587"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="esp-username">Username</Label>
+            <Input
+              id="esp-username"
+              value={form.username}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  username: event.target.value,
+                })
+              }
+              autoComplete="username"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="esp-password">
+              {esp ? "Password / API key (leave blank to keep)" : "Password / API key"}
+            </Label>
+            <Input
+              id="esp-password"
+              type="password"
+              value={form.password}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  password: event.target.value,
+                })
+              }
+              placeholder={
+                esp?.hasPassword ? "•••••••• (saved — leave blank to keep)" : undefined
+              }
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="esp-from-name">From name</Label>
+            <Input
+              id="esp-from-name"
+              value={form.fromName}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  fromName: event.target.value,
+                })
+              }
+              placeholder="Your name or company"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="esp-from-email">From email</Label>
+            <Input
+              id="esp-from-email"
+              type="email"
+              value={form.fromEmail}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  fromEmail: event.target.value,
+                })
+              }
+              placeholder="you@yourdomain.com"
+            />
+          </div>
+          <div className="col-span-full space-y-1.5">
+            <Label htmlFor="esp-reply-to">Reply-to email (optional)</Label>
+            <Input
+              id="esp-reply-to"
+              type="email"
+              value={form.replyTo}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  replyTo: event.target.value,
+                })
+              }
+              placeholder="support@yourdomain.com"
+            />
+            <p className="text-sm text-muted-foreground">
+              Replies go here instead of the from address.
+            </p>
+          </div>
+          <div className="col-span-full space-y-1.5">
+            <Label htmlFor="esp-max-send-rate">Max send rate (emails per second)</Label>
+            <Input
+              id="esp-max-send-rate"
+              type="number"
+              min="0"
+              step="any"
+              value={form.maxSendRate}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  maxSendRate: event.target.value,
+                })
+              }
+              placeholder={
+                providerDefaultRate ? `Default: ${providerDefaultRate}` : "No limit"
+              }
+            />
+            <p className="text-sm text-muted-foreground">
+              Sends through this ESP are spaced to stay under this rate. For Amazon SES,
+              use your account&apos;s maximum send rate.
+            </p>
+          </div>
+          <div className="col-span-full space-y-1.5">
+            <Label htmlFor="esp-daily-send-limit">
+              Daily send limit for warm-up (optional)
+            </Label>
+            <Input
+              id="esp-daily-send-limit"
+              type="number"
+              min="1"
+              step="1"
+              value={form.dailySendLimit}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  dailySendLimit: event.target.value,
+                })
+              }
+              placeholder="No limit"
+            />
+            <p className="text-sm text-muted-foreground">
+              Most broadcast and sequence emails sent per day (UTC). The rest wait for
+              the next day. Raise it as your new domain warms up. Transactional email is
+              never held back.
+            </p>
+          </div>
+          <div className="col-span-full space-y-3 rounded-md border p-3">
+            <div className="flex items-start gap-3">
+              <Switch
+                id="esp-warmup"
+                checked={form.warmupEnabled}
+                onCheckedChange={(warmupEnabled) => setForm({ ...form, warmupEnabled })}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="esp-warmup">Automatic warm-up</Label>
+                <p className="text-sm text-muted-foreground">
+                  For a new domain or provider account: start at 50 broadcast and
+                  sequence emails a day and grow each day, sending to your most engaged
+                  contacts first. Everything else waits for the next day.
+                </p>
+              </div>
+            </div>
+            {form.warmupEnabled && (
+              <div className="space-y-1.5">
+                <Label htmlFor="esp-warmup-target">
+                  Grow to this many emails a day
+                </Label>
+                <Input
+                  id="esp-warmup-target"
+                  type="number"
+                  min="100"
+                  step="1"
+                  value={form.warmupTarget}
+                  onChange={(event) =>
+                    setForm({ ...form, warmupTarget: event.target.value })
+                  }
+                />
+                <WarmupPreview
+                  target={Number(form.warmupTarget)}
+                  current={
+                    esp?.warmup &&
+                    Number(form.warmupTarget) === esp.warmup.targetDailyVolume
+                      ? esp.warmup
+                      : null
+                  }
+                  restarts={!esp?.warmup}
+                />
+              </div>
+            )}
+          </div>
+          <div className="col-span-full space-y-1.5">
+            <div className="flex items-center gap-3">
+              <Switch
+                id="esp-secure"
+                checked={form.secure}
+                onCheckedChange={(secure) =>
+                  setForm({ ...form, secure, port: portForTls(form.port, secure) })
+                }
+              />
+              <Label htmlFor="esp-secure">Use TLS (port 465)</Label>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Leave off for port 587; SendLit upgrades the connection with STARTTLS.
+            </p>
+            {tlsPortMismatch(form.port, form.secure) && (
+              <p role="alert" className="text-sm text-[var(--warning)]">
+                {tlsPortMismatch(form.port, form.secure)}
+              </p>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => void submit()}
+            disabled={
+              saving || !form.name.trim() || !form.host.trim() || !form.fromEmail.trim()
+            }
+          >
+            {saving ? "Saving…" : esp ? saveLabel : createLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WarmupPreview({
+  target,
+  current,
+  restarts,
+}: {
+  target: number;
+  current: NonNullable<EspConfig["warmup"]> | null;
+  restarts: boolean;
+}) {
+  if (!Number.isInteger(target) || target < 100) return null;
+  const days = warmupDays(target);
+  const steps = [0, 1, 2, 3, 4, 5, 6]
+    .filter((day) => day < days)
+    .map((day) => warmupDailyLimit(day, target).toLocaleString());
+  return (
+    <p className="text-sm text-muted-foreground">
+      {current
+        ? current.complete
+          ? `Warm-up finished: up to ${target.toLocaleString()} a day.`
+          : `Day ${current.day} of ${current.totalDays}: up to ${current.todayLimit.toLocaleString()} today.`
+        : `${restarts ? "Starts today" : "Keeps its progress"}; reaches ${target.toLocaleString()} a day on day ${days}.`}{" "}
+      Daily limits: {steps.join(", ")}
+      {days > steps.length ? ", …" : ""}.
+    </p>
+  );
 }

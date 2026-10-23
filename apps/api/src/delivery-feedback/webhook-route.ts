@@ -1,19 +1,20 @@
 import { Router, raw } from "express";
+import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
-import { captureError, captureEvent } from "../observability/posthog";
-import {
-    decryptFeedbackCredentials,
-    getFeedbackConnectionByConnectionId,
-    recordFeedbackConnectionError,
-    recordFeedbackConnectionReceived,
-} from "./feedback-connection-queries";
 import { getProviderAdapter } from "./adapters/registry";
 import {
-    createWebhookReceipt,
-    findDuplicateReceipt,
-    sanitizeHeaders,
-} from "./webhook-receipt-queries";
+  decryptFeedbackCredentials,
+  getFeedbackConnectionByConnectionId,
+  recordFeedbackConnectionError,
+  recordFeedbackConnectionReceived,
+  recordFeedbackControlOutcome,
+} from "./feedback-connection-queries";
 import { enqueueReceiptForProcessing } from "./feedback-queue";
+import {
+  createWebhookReceipt,
+  findDuplicateReceipt,
+  sanitizeHeaders,
+} from "./webhook-receipt-queries";
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MiB — PRD's configurable initial limit
 
@@ -32,144 +33,190 @@ const WEBHOOK_PATH = "/webhooks/esp/:provider/:connectionId";
  * anything is persisted or acknowledged.
  */
 router.post(
-    WEBHOOK_PATH,
-    raw({ type: "*/*", limit: MAX_BODY_BYTES }),
-    async (req, res) => {
-        const provider = String(req.params.provider);
-        const connectionId = String(req.params.connectionId);
+  WEBHOOK_PATH,
+  raw({ type: "*/*", limit: MAX_BODY_BYTES }),
+  async (req, res) => {
+    const provider = String(req.params.provider);
+    const connectionId = String(req.params.connectionId);
 
-        // 1. Resolve the opaque connection id and confirm the route
-        // provider matches it — a mismatch (e.g. a stale/copied URL) is
-        // treated identically to "unknown connection" so it leaks nothing.
-        const adapter = getProviderAdapter(provider);
-        if (!adapter) {
-            return res.status(404).json({ error: "not_found" });
+    // 1. Resolve the opaque connection id and confirm the route
+    // provider matches it — a mismatch (e.g. a stale/copied URL) is
+    // treated identically to "unknown connection" so it leaks nothing.
+    const adapter = getProviderAdapter(provider);
+    if (!adapter) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    const connection = await getFeedbackConnectionByConnectionId(
+      connectionId,
+      provider,
+    );
+    if (!connection) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const rawBody: Buffer = Buffer.isBuffer(req.body)
+      ? req.body
+      : Buffer.from(typeof req.body === "string" ? req.body : "");
+
+    if (adapter.maxBodyBytes && rawBody.length > adapter.maxBodyBytes) {
+      return res.status(413).json({ error: "payload_too_large" });
+    }
+
+    // Credentialless providers (SES) are armed by the connection's
+    // expected topic instead of a stored secret.
+    let decrypted: ReturnType<typeof decryptFeedbackCredentials> = null;
+    if (!adapter.credentialless) {
+      decrypted = decryptFeedbackCredentials(connection);
+      if (!decrypted) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+    }
+
+    // 4. Verify signature/credential.
+    let verifyResult: Awaited<ReturnType<typeof adapter.verify>>;
+    try {
+      verifyResult = await adapter.verify({
+        rawBody,
+        headers: req.headers as Record<string, string | string[] | undefined>,
+        credential: decrypted?.credential ?? "",
+        previousCredential: decrypted?.previousCredential,
+        expectedTopicArn: connection.expectedTopicArn,
+      });
+    } catch (err) {
+      captureError({
+        error: err,
+        source: "webhook.verify",
+        context: { provider, connection_id: connectionId },
+      });
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    // Verification couldn't complete (e.g. the SNS signing certificate
+    // was unreachable) — a 5xx keeps the provider retrying.
+    if (verifyResult.retryable) {
+      captureEvent({
+        event: "webhook_verification_unavailable",
+        source: "webhook.receive",
+        properties: { provider, connection_id: connectionId },
+      });
+      return res.status(503).json({ error: "unavailable" });
+    }
+
+    if (!verifyResult.valid) {
+      captureEvent({
+        event: "webhook_signature_invalid",
+        source: "webhook.receive",
+        properties: { provider, connection_id: connectionId },
+      });
+      await recordFeedbackConnectionError(connection.id, "invalid_signature").catch(
+        () => {},
+      );
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    // Authenticated duplicate (same provider request id) — ack without
+    // a second receipt/side effect.
+    if (verifyResult.providerRequestId) {
+      const duplicate = await findDuplicateReceipt(
+        connection.id,
+        verifyResult.providerRequestId,
+      );
+      if (duplicate) {
+        return res.status(200).json({ status: "ok" });
+      }
+    }
+
+    // Authenticated control message (e.g. an SNS subscription
+    // handshake) — acted on here, never stored as a receipt.
+    if (adapter.handleControl) {
+      let outcome: Awaited<ReturnType<NonNullable<typeof adapter.handleControl>>>;
+      try {
+        outcome = await adapter.handleControl(rawBody);
+        if (outcome) {
+          await recordFeedbackControlOutcome(connection.id, outcome);
         }
-        const connection = await getFeedbackConnectionByConnectionId(
-            connectionId,
-            provider,
-        );
-        if (!connection) {
-            return res.status(404).json({ error: "not_found" });
-        }
-
-        const rawBody: Buffer = Buffer.isBuffer(req.body)
-            ? req.body
-            : Buffer.from(typeof req.body === "string" ? req.body : "");
-
-        const decrypted = decryptFeedbackCredentials(connection);
-        if (!decrypted) {
-            return res.status(401).json({ error: "unauthorized" });
-        }
-
-        // 4. Verify signature/credential.
-        let verifyResult;
-        try {
-            verifyResult = adapter.verify({
-                rawBody,
-                headers: req.headers as Record<
-                    string,
-                    string | string[] | undefined
-                >,
-                credential: decrypted.credential,
-                previousCredential: decrypted.previousCredential,
-            });
-        } catch (err) {
-            captureError({
-                error: err,
-                source: "webhook.verify",
-                context: { provider, connection_id: connectionId },
-            });
-            return res.status(401).json({ error: "unauthorized" });
-        }
-
-        if (!verifyResult.valid) {
-            captureEvent({
-                event: "webhook_signature_invalid",
-                source: "webhook.receive",
-                properties: { provider, connection_id: connectionId },
-            });
-            await recordFeedbackConnectionError(
-                connection.id,
-                "invalid_signature",
-            ).catch(() => {});
-            return res.status(401).json({ error: "unauthorized" });
-        }
-
-        // Authenticated duplicate (same provider request id) — ack without
-        // a second receipt/side effect.
-        if (verifyResult.providerRequestId) {
-            const duplicate = await findDuplicateReceipt(
-                connection.id,
-                verifyResult.providerRequestId,
-            );
-            if (duplicate) {
-                return res.status(200).json({ status: "ok" });
-            }
-        }
-
-        // 5. Minimal envelope validation — not full normalization.
-        try {
-            adapter.validateEnvelope(rawBody);
-        } catch {
-            captureEvent({
-                event: "webhook_malformed_payload",
-                source: "webhook.receive",
-                properties: { provider, connection_id: connectionId },
-            });
-            return res.status(400).json({ error: "malformed_payload" });
-        }
-
-        // 6. Insert the authenticated raw receipt durably.
-        let receipt;
-        try {
-            receipt = await createWebhookReceipt({
-                connectionId: connection.id,
-                teamId:
-                    connection.ownerScope === "team" ? connection.teamId : null,
-                provider,
-                providerRequestId: verifyResult.providerRequestId ?? null,
-                rawBody,
-                safeHeaders: sanitizeHeaders(
-                    req.headers as Record<
-                        string,
-                        string | string[] | undefined
-                    >,
-                ),
-            });
-        } catch (err) {
-            captureError({
-                error: err,
-                source: "webhook.receipt_insert",
-                context: { provider, connection_id: connectionId },
-            });
-            // Provider retry must remain possible.
-            return res.status(503).json({ error: "unavailable" });
-        }
-
-        // 7. Return 200 only after the insert commits.
-        res.status(200).json({ status: "ok" });
-
-        // 8. Background dispatch — a failed enqueue here never loses the
-        // committed receipt; the recovery poller (poller.ts) picks it up.
-        await recordFeedbackConnectionReceived(connection.id).catch(() => {});
-        enqueueReceiptForProcessing(receipt.id).catch((err) => {
-            logger.error(
-                { error: err.message, receipt_id: receipt.receiptId },
-                "failed to enqueue webhook receipt for processing; recovery poller will retry",
-            );
+      } catch (err) {
+        captureError({
+          error: err,
+          source: "webhook.control",
+          context: { provider, connection_id: connectionId },
         });
-    },
+        return res.status(503).json({ error: "unavailable" });
+      }
+      if (outcome) {
+        captureEvent({
+          event: "webhook_control_message",
+          source: "webhook.receive",
+          properties: {
+            provider,
+            connection_id: connectionId,
+            outcome,
+          },
+        });
+        return outcome === "subscription_confirm_failed"
+          ? res.status(502).json({ error: outcome })
+          : res.status(200).json({ status: "ok" });
+      }
+    }
+
+    // 5. Minimal envelope validation — not full normalization.
+    try {
+      adapter.validateEnvelope(rawBody);
+    } catch {
+      captureEvent({
+        event: "webhook_malformed_payload",
+        source: "webhook.receive",
+        properties: { provider, connection_id: connectionId },
+      });
+      return res.status(400).json({ error: "malformed_payload" });
+    }
+
+    // 6. Insert the authenticated raw receipt durably.
+    let receipt: Awaited<ReturnType<typeof createWebhookReceipt>>;
+    try {
+      receipt = await createWebhookReceipt({
+        connectionId: connection.id,
+        teamId: connection.ownerScope === "team" ? connection.teamId : null,
+        provider,
+        providerRequestId: verifyResult.providerRequestId ?? null,
+        rawBody: adapter.redactForStorage ? adapter.redactForStorage(rawBody) : rawBody,
+        safeHeaders: sanitizeHeaders(
+          req.headers as Record<string, string | string[] | undefined>,
+        ),
+      });
+    } catch (err) {
+      captureError({
+        error: err,
+        source: "webhook.receipt_insert",
+        context: { provider, connection_id: connectionId },
+      });
+      // Provider retry must remain possible.
+      return res.status(503).json({ error: "unavailable" });
+    }
+
+    // 7. Return 200 only after the insert commits.
+    res.status(200).json({ status: "ok" });
+
+    // 8. Background dispatch — a failed enqueue here never loses the
+    // committed receipt; the recovery poller (poller.ts) picks it up.
+    await recordFeedbackConnectionReceived(connection.id).catch(() => {});
+    enqueueReceiptForProcessing(receipt.id).catch((err) => {
+      logger.error(
+        { error: err.message, receipt_id: receipt.receiptId },
+        "failed to enqueue webhook receipt for processing; recovery poller will retry",
+      );
+    });
+  },
 );
 
 // Route-scoped error handler: a body over MAX_BODY_BYTES makes `raw()`
 // throw before the handler above ever runs. Matched by Express as the next
 // error-handling (4-arg) middleware for this path.
 router.use(WEBHOOK_PATH, (err: any, _req: any, res: any, next: any) => {
-    if (err?.status === 413 || err?.type === "entity.too.large") {
-        return res.status(413).json({ error: "payload_too_large" });
-    }
-    next(err);
+  if (err?.status === 413 || err?.type === "entity.too.large") {
+    return res.status(413).json({ error: "payload_too_large" });
+  }
+  next(err);
 });
 
 export default router;

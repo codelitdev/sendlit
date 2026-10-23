@@ -1,41 +1,188 @@
 {
-    "version": "7",
-    "dialect": "postgresql",
-    "entries": [
-        {
-            "idx": 0,
-            "version": "7",
-            "when": 1785470058751,
-            "tag": "0000_equal_blue_blade",
-            "breakpoints": true
-        },
-        {
-            "idx": 1,
-            "version": "7",
-            "when": 1786279046698,
-            "tag": "0001_square_energizer",
-            "breakpoints": true
-        },
-        {
-            "idx": 2,
-            "version": "7",
-            "when": 1787066846079,
-            "tag": "0002_kind_masked_marvel",
-            "breakpoints": true
-        },
-        {
-            "idx": 3,
-            "version": "7",
-            "when": 1787812056977,
-            "tag": "0003_furry_broadwing",
-            "breakpoints": true
-        },
-        {
-            "idx": 4,
-            "version": "7",
-            "when": 1787852563794,
-            "tag": "0004_kind_the_executioner",
-            "breakpoints": true
-        }
-    ]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785470058751,
+      "tag": "0000_equal_blue_blade",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786279046698,
+      "tag": "0001_square_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787066846079,
+      "tag": "0002_kind_masked_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787812056977,
+      "tag": "0003_furry_broadwing",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787852563794,
+      "tag": "0004_kind_the_executioner",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788113568973,
+      "tag": "0005_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792322408451,
+      "tag": "0006_esp_feedback_subscription_confirmed",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792326651270,
+      "tag": "0007_better_auth_1_7_7",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792411138301,
+      "tag": "0008_sendlit_plan_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792411179022,
+      "tag": "0009_pure_billing_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792416090050,
+      "tag": "0010_sequence_email_last_test_sent_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792417212166,
+      "tag": "0011_transactional_email_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792417856290,
+      "tag": "0012_esp_config_reply_to",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792418220753,
+      "tag": "0013_esp_config_max_send_rate",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792419874681,
+      "tag": "0014_esp_config_daily_send_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792420743192,
+      "tag": "0015_billing_starter_plan",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792420758725,
+      "tag": "0016_grandfather_team_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792422766571,
+      "tag": "0017_abuse_review",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792427132449,
+      "tag": "0018_signup_forms",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792430185093,
+      "tag": "0019_web_publishing",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792433761368,
+      "tag": "0020_reputation",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792435988358,
+      "tag": "0021_warmup_and_priority",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792603046941,
+      "tag": "0022_esp_dkim_selector",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792652093948,
+      "tag": "0023_sent_content_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792656813284,
+      "tag": "0024_abuse_flag_broadcast",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792657025186,
+      "tag": "0025_tracking_domain",
+      "breakpoints": true
+    }
+  ]
 }

@@ -1,0 +1,46 @@
+---
+title: From Mailchimp
+description: Export your Mailchimp audience and import it into SendLit.
+---
+
+## Export from Mailchimp
+
+1. In Mailchimp, open **Audience** and pick the audience if you have more
+   than one.
+2. Choose **Export audience**, then **Export CSV**. Only Owners and Admins can
+   export.
+3. Mailchimp emails you when the export is ready. Download the ZIP file and
+   unzip it.
+
+The ZIP has a separate CSV file for each kind of contact, and the kind is in
+the file name: subscribed, unsubscribed, non-subscribed and cleaned. The
+files have no status column.
+
+## Import into SendLit
+
+Import **each file separately** in **Contacts → Import**. Because there's no
+status column, the importer asks "Everyone in this file is" and picks the
+answer from the file name. Check it before importing:
+
+| Mailchimp file | Choose |
+| --- | --- |
+| `subscribed_…` | Subscribed |
+| `unsubscribed_…` | Unsubscribed |
+| `nonsubscribed_…` (never opted in) | Unsubscribed |
+| `cleaned_…` (bounced addresses) | Bounced or cleaned (suppressed) |
+
+Import the unsubscribed and cleaned files too: SendLit then knows never to
+email those addresses, even if they turn up in a later import. Cleaned
+addresses go on your [suppression list](/activity/suppressions).
+
+SendLit recognises Mailchimp's columns: `Email Address`, `First Name`,
+`Last Name`, `TAGS` and `OPTIN_TIME` (kept as the signup date). Other audience
+fields become custom fields. Set technical columns you don't need, such as
+`MEMBER_RATING`, `LEID`, `EUID`, `LATITUDE` or `CONFIRM_IP`, to "Don't import".
+
+## Next
+
+Connect your provider, authenticate your domain, recreate your forms and
+welcome automation, and go through the checklist in
+[Moving your newsletter](/migrate/overview#the-steps). Mailchimp's merge tags such as
+`*|FNAME|*` become `{{ subscriber.name }}` in SendLit.

@@ -45,7 +45,9 @@ services:
       PIXEL_SIGNING_SECRET: ${PIXEL_SIGNING_SECRET:?Set PIXEL_SIGNING_SECRET in .env}
       ESP_CREDENTIALS_ENCRYPTION_KEY: ${ESP_CREDENTIALS_ENCRYPTION_KEY:?Set ESP_CREDENTIALS_ENCRYPTION_KEY in .env}
       SUPPRESSION_HASH_KEY: ${SUPPRESSION_HASH_KEY:?Set SUPPRESSION_HASH_KEY in .env}
-      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:?Set SUPER_ADMIN_EMAIL in .env}
+      BOOTSTRAP_ORGANIZATION_OWNER_EMAIL: ${BOOTSTRAP_ORGANIZATION_OWNER_EMAIL:?Set BOOTSTRAP_ORGANIZATION_OWNER_EMAIL in .env}
+      BOOTSTRAP_DELIVERY_SETUP_API_KEY: ${BOOTSTRAP_DELIVERY_SETUP_API_KEY:-}
+      BOOTSTRAP_TEAM_PROVISIONING_API_KEY: ${BOOTSTRAP_TEAM_PROVISIONING_API_KEY:-}
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
       WEB_CLIENT: ${WEB_CLIENT:-http://localhost:3000}
       PROTOCOL: ${PROTOCOL:-http}
@@ -56,7 +58,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["/bin/sh", "-c", "node apps/api/dist/db/migrate.js && node apps/api/dist/bootstrap-cli.js"]
+    command: ["/bin/sh", "-c", "bun apps/api/src/db/migrate.ts && bun apps/api/src/bootstrap-cli.ts"]
 
   api:
     build:
@@ -64,14 +66,17 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     env_file: .env
-    environment: *api-environment
+    environment:
+      <<: *api-environment
+      BOOTSTRAP_DELIVERY_SETUP_API_KEY: ""
+      BOOTSTRAP_TEAM_PROVISIONING_API_KEY: ""
     depends_on:
       init:
         condition: service_completed_successfully
     ports:
       - "${API_PORT:-4000}:4000"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:4000/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -88,6 +93,8 @@ services:
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
       WEB_CLIENT: ${WEB_CLIENT:-http://localhost:3000}
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10485760}
+      BOOTSTRAP_DELIVERY_SETUP_API_KEY: ""
+      BOOTSTRAP_TEAM_PROVISIONING_API_KEY: ""
     depends_on:
       api:
         condition: service_healthy
