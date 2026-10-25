@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "AGPL-3.0-or-later",
   "private": true,
-  "description": "SendLit dashboard \u2014 contacts, templates, broadcasts and sequences",
+  "description": "SendLit dashboard — contacts, templates, broadcasts and sequences",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
