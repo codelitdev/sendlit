@@ -710,6 +710,42 @@ export default function OrganizationsPage() {
     };
   }, [confirmingCheckout, selectedId, router]);
 
+  // An immediate plan change is applied only once the provider webhook
+  // confirms it. Until then keep re-reading billing, then reload the details
+  // so limits and usage show the new plan without a manual refresh.
+  const pendingChangeId =
+    billing?.pendingPlanChange?.effectiveAt === "immediately"
+      ? billing.pendingPlanChange.changeId
+      : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadDetails is recreated every render; poll once per pending change
+  useEffect(() => {
+    if (!pendingChangeId || !selectedId) return;
+    const organizationId = selectedId;
+    let cancelled = false;
+    const startedAt = Date.now();
+
+    async function poll() {
+      try {
+        const nextBilling = await getOrganizationBilling(organizationId);
+        if (cancelled) return;
+        if (nextBilling.pendingPlanChange?.changeId !== pendingChangeId) {
+          await loadDetails(organizationId, { silent: true });
+          return;
+        }
+      } catch {
+        // Keep polling. The provider webhook may still be in flight.
+      }
+      if (cancelled || Date.now() - startedAt >= 90_000) return;
+      window.setTimeout(() => void poll(), 2_000);
+    }
+
+    const timer = window.setTimeout(() => void poll(), 2_000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [pendingChangeId, selectedId]);
+
   useEffect(() => {
     if (selectedOrganization) setOrganizationName(selectedOrganization.name);
   }, [selectedOrganization]);
@@ -1292,6 +1328,7 @@ function OrganizationPlanSummary({
             <span className="text-xs text-muted-foreground">· {periodLabel}</span>
           ) : null}
         </div>
+        <PendingPlanChangeBanner billing={billing} className="mt-4" />
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-2">
@@ -1401,9 +1438,8 @@ function OrganizationPlanSummary({
                       After expiry
                     </p>
                     <p className="mt-1">
-                      The organization moves to Free: 1 active team, 1,000 subscribed
-                      contacts, and 3,000 sends per month. New additions or sends over
-                      those limits are blocked.
+                      The organization moves to the Free plan. New teams or sends over
+                      Free&apos;s team and monthly email limits are blocked.
                     </p>
                   </div>
                   <div className="rounded-lg border border-amber-300/60 bg-background/40 p-3 dark:border-amber-300/20">
@@ -2438,6 +2474,27 @@ function SendingDomainsSection({
   );
 }
 
+function PendingPlanChangeBanner({
+  billing,
+  className,
+}: {
+  billing: OrganizationBilling | null;
+  className?: string;
+}) {
+  const change = billing?.pendingPlanChange;
+  if (!change) return null;
+  return (
+    <Banner className={className} variant="success">
+      Plan change to {PLAN_LABELS[change.targetPlan]} (
+      {change.targetInterval === "month" ? "monthly" : "yearly"}) is{" "}
+      {change.effectiveAt === "immediately"
+        ? "being confirmed"
+        : "scheduled for the next billing date"}
+      .
+    </Banner>
+  );
+}
+
 function TeamsAndGrantsSection({
   organizationId,
   teams,
@@ -2479,19 +2536,7 @@ function TeamsAndGrantsSection({
         }
       />
       <CardContent>
-        {billing?.pendingPlanChange ? (
-          <Banner className="mb-4" variant="success">
-            Plan change to {PLAN_LABELS[billing.pendingPlanChange.targetPlan]} (
-            {billing.pendingPlanChange.targetInterval === "month"
-              ? "monthly"
-              : "yearly"}
-            ) is{" "}
-            {billing.pendingPlanChange.effectiveAt === "immediately"
-              ? "being confirmed"
-              : "scheduled for the next billing date"}
-            .
-          </Banner>
-        ) : null}
+        <PendingPlanChangeBanner billing={billing} className="mb-4" />
         {teamLimitReached ? (
           <Banner className="mb-4">
             This organization has reached its {billing?.entitlements.teamsLimit}-team

@@ -133,7 +133,7 @@ mock.module("@/lib/navigation", () => ({
   reloadPage: mocks.reloadPage,
 }));
 
-const { cleanup, fireEvent, render, screen, waitFor, within } = await import(
+const { act, cleanup, fireEvent, render, screen, waitFor, within } = await import(
   "@testing-library/react"
 );
 const { BreadcrumbProvider } = await import(
@@ -395,7 +395,9 @@ describe("billing presentation and entitlement hints", () => {
     expect(await screen.findByText(/Cancellation scheduled/)).toBeTruthy();
     expect(screen.getByText(/remains active until/)).toBeTruthy();
     expect(screen.getByText(/Organizations, teams, contacts, sequences/)).toBeTruthy();
-    expect(screen.getByText(/The organization moves to Free/)).toBeTruthy();
+    expect(screen.getByText(/The organization moves to the Free plan/)).toBeTruthy();
+    // Free's limits come from plan policy; the copy must not restate stale numbers.
+    expect(screen.queryByText(/subscribed contacts, and/)).toBeNull();
 
     await openTab("Teams");
     expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
@@ -499,6 +501,45 @@ describe("billing presentation and entitlement hints", () => {
     expect(screen.queryByText(/Cancellation scheduled/)).toBeNull();
     expect(mocks.createOrganizationBillingCheckout).not.toHaveBeenCalled();
   });
+
+  it("shows the new plan once the provider confirms an immediate plan change", async () => {
+    const pending = paidBilling({
+      plan: "starter",
+      pendingPlanChange: {
+        changeId: "chg_1",
+        targetPlan: "pro",
+        targetInterval: "month",
+        effectiveAt: "immediately",
+      },
+    });
+    // Initial load and the first poll still see the pending change; the
+    // webhook lands before the second poll.
+    mocks.getOrganizationBilling
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValue(paidBilling());
+
+    renderPage();
+    await openTab("Plan");
+    expect(
+      await screen.findByText(/Plan change to Pro \(monthly\) is being confirmed/),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Change plan" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    // Real sleeps, not waitFor: waitFor stalls the page's 2-second poll timer.
+    for (let i = 0; i < 40 && screen.queryByText(/is being confirmed/); i++) {
+      await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+    }
+    expect(screen.queryByText(/is being confirmed/)).toBeNull();
+    expect(screen.getByText("Pro plan")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Change plan" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  }, 60_000);
 
   it("hides cancellation controls from members who cannot manage billing", async () => {
     mocks.getOrganizationBilling.mockResolvedValue(
