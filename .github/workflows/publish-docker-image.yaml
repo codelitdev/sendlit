@@ -38,8 +38,8 @@ jobs:
         with:
           images: codelit/sendlit
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=tag
+            type=raw,value=latest
 
       - name: Build and push API
         id: docker_build_api
@@ -63,8 +63,8 @@ jobs:
         with:
           images: codelit/sendlit-web
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=tag
+            type=raw,value=latest
 
       - name: Build and push Web app
         id: docker_build_web
