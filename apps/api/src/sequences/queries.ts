@@ -132,6 +132,9 @@ export async function createSequence({
         type === "broadcast" ? EventType.DATE_OCCURRED : EventType.SUBSCRIBER_ADDED,
       filter: { aggregator: "or", filters: [] },
       deliverySourceIntent: deliverySource ?? null,
+      // Sequences are lifecycle mail (onboarding, trials) that rarely
+      // belongs on the web; broadcasts are editions readers revisit.
+      viewInBrowser: type === "broadcast",
     })
     .returning();
 

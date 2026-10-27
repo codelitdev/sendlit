@@ -134,7 +134,8 @@ export const sequenceSchema = z.object({
   emailsOrder: z.array(z.string()),
   entrants: z.array(z.string()),
   report: z.any(),
-  /** Whether sends link a hosted web version ("View in browser"). */
+  /** Whether sends link a hosted web version ("View in browser"). On for
+   * new broadcasts, off for new sequences. */
   viewInBrowser: z.boolean(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
