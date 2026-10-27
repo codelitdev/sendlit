@@ -19,10 +19,14 @@ import { AutoPauseBanner } from "@/components/dashboard/auto-pause-banner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
-import { MARKETING_EMAIL_EDITOR_BLOCKS } from "@/components/dashboard/email-editor-screen";
+import {
+  MARKETING_EMAIL_EDITOR_BLOCKS,
+  marketingPreviewContext,
+} from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
+import { ViewInBrowserSetting } from "@/components/dashboard/view-in-browser-setting";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/codelit/button";
@@ -58,14 +62,6 @@ import {
   presentDeliverySourceError,
 } from "@/lib/delivery-source";
 import { sequenceStatsMetrics } from "@/lib/stats";
-
-const MARKETING_PREVIEW_CONTEXT = {
-  footer: {
-    mailingAddress: "Your workspace mailing address",
-    unsubscribeUrl: "#unsubscribe-preview",
-    viewInBrowserUrl: "#view-in-browser-preview",
-  },
-};
 
 interface SequenceMeta {
   title: string;
@@ -368,6 +364,7 @@ export default function SequenceEditorPage({
                   })
                 }
               />
+              <ViewInBrowserSetting sequence={sequence} onSaved={setSequence} />
             </CardContent>
           </Card>
         </div>
@@ -394,7 +391,9 @@ export default function SequenceEditorPage({
               templates={templates}
               templatesLoading={templatesLoading}
               previewBlocks={MARKETING_EMAIL_EDITOR_BLOCKS}
-              previewRenderContext={MARKETING_PREVIEW_CONTEXT}
+              previewRenderContext={marketingPreviewContext({
+                viewInBrowser: sequence.viewInBrowser,
+              })}
             />
           </div>
 
@@ -532,7 +531,9 @@ export default function SequenceEditorPage({
                       content={emailDraft.content}
                       minHeight="420px"
                       blocks={MARKETING_EMAIL_EDITOR_BLOCKS}
-                      renderContext={MARKETING_PREVIEW_CONTEXT}
+                      renderContext={marketingPreviewContext({
+                        viewInBrowser: sequence.viewInBrowser,
+                      })}
                     />
                   </div>
                 </CardContent>

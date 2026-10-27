@@ -488,6 +488,7 @@ export function updateSequence(
      * it so the team's default delivery source resolves at start. Only settable while
      * the sequence/broadcast is still `draft` or `paused`. */
     deliverySource?: DeliverySourceSelection | null;
+    viewInBrowser?: boolean;
   },
 ) {
   const { filter, excludeFilter, ...rest } = patch;

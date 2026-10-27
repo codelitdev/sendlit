@@ -1,0 +1,1 @@
+ALTER TABLE "sequences" ADD COLUMN "view_in_browser" boolean DEFAULT true NOT NULL;

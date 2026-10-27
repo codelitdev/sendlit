@@ -173,7 +173,7 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
     "update_sequence",
     {
       description:
-        "Updates a broadcast/sequence's title, trigger, audience filter, exclusion filter, or selected user ESP. A sent broadcast's title (its email's subject) can't be changed.",
+        "Updates a broadcast/sequence's title, trigger, audience filter, exclusion filter, selected user ESP, or whether its emails link a hosted web version (\"View in browser\"). A sent broadcast's title (its email's subject) can't be changed.",
       inputSchema: {
         sequenceId: z.string(),
         title: z.string().optional(),
@@ -211,6 +211,12 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
           ])
           .nullable()
           .optional(),
+        viewInBrowser: z
+          .boolean()
+          .optional()
+          .describe(
+            'false leaves the "View in browser" link out of later sends and takes down the web versions behind links already sent (e.g. for onboarding or trial emails). Can be changed at any time.',
+          ),
       },
       outputSchema: sequenceSchema,
       annotations: {

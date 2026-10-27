@@ -178,6 +178,7 @@ export async function sendSequenceEmailTest({
         },
         contentVersionId: contentVersion?.versionId,
         unsubscribeToken: TEST_UNSUBSCRIBE_TOKEN,
+        viewInBrowser: sequence.viewInBrowser,
       });
       await sendMail({
         purpose: "campaign",

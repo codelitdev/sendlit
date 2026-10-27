@@ -89,8 +89,8 @@ function withoutUnsubscribeLink(html: string): string {
 /**
  * Renders a broadcast or sequence email for one recipient: liquid merge tags
  * and the managed footer. For a send (`web: false`) it also adds the open
- * pixel, click-tracked links and the "view in browser" link
- * (`{{view_in_browser_url}}`). The web version (`web: true`) has none of
+ * pixel, click-tracked links and, unless `viewInBrowser` is off, the "view
+ * in browser" link (`{{view_in_browser_url}}`). The web version (`web: true`) has none of
  * those. Real sends, test sends and the web version all go through here so
  * they look the same.
  */
@@ -103,6 +103,7 @@ export async function renderCampaignHtml({
   unsubscribeToken,
   web = false,
   publication,
+  viewInBrowser = true,
 }: {
   team: { id: string; organizationId: string };
   content: unknown;
@@ -117,6 +118,8 @@ export async function renderCampaignHtml({
   web?: boolean | "public";
   /** The broadcast's web publishing state, for `{{web_version_url}}`. */
   publication?: { webPublished: boolean; webSlug: string | null } | null;
+  /** The sequence's `viewInBrowser` setting: off leaves the link out. */
+  viewInBrowser?: boolean;
 }): Promise<string> {
   const settings = await getTeamSettingsRow(team.id);
   // Tracking, unsubscribe and web-version links use the team's verified
@@ -125,10 +128,11 @@ export async function renderCampaignHtml({
   const publicUrl = publication ? issueUrl(settings, publication) : null;
   // The footer's "view in browser" link goes to the public page once the
   // issue is published, else to the reader's own web version.
-  const viewInBrowserUrl = web
-    ? undefined
-    : (publicUrl ??
-      getCampaignViewUrl({ ...ids, versionId: contentVersionId }, origin));
+  const viewInBrowserUrl =
+    web || !viewInBrowser
+      ? undefined
+      : (publicUrl ??
+        getCampaignViewUrl({ ...ids, versionId: contentVersionId }, origin));
   const isPublic = web === "public";
   const variables = {
     subscriber: isPublic ? { email: "", name: null, tags: [] } : subscriber,

@@ -134,6 +134,9 @@ export const sequenceSchema = z.object({
   emailsOrder: z.array(z.string()),
   entrants: z.array(z.string()),
   report: z.any(),
+  /** Whether sends link a hosted web version ("View in browser"). On for
+   * new broadcasts, off for new sequences. */
+  viewInBrowser: z.boolean(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
   emails: z.array(sequenceEmailSchema),
@@ -181,6 +184,12 @@ export const updateSequenceBodySchema = z.object({
   emailsOrder: z.array(z.string()).optional(),
   /** `null` clears the intent so the default is resolved on next start. */
   deliverySource: deliverySourceSelectionSchema.nullable().optional(),
+  viewInBrowser: z
+    .boolean()
+    .optional()
+    .describe(
+      'Whether emails link a hosted web version ("View in browser"). `false` leaves the link out of later sends and takes down the web versions behind links already sent. Can be changed at any time.',
+    ),
 });
 
 export const addSequenceEmailBodySchema = z.object({

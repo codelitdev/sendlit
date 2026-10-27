@@ -108,6 +108,8 @@ export interface Sequence {
   emailsOrder: string[];
   entrants: string[];
   report: SequenceReport;
+  /** Whether its emails link a hosted web version ("View in browser"). */
+  viewInBrowser: boolean;
   createdAt: string;
   updatedAt: string;
   emails: SequenceEmail[];

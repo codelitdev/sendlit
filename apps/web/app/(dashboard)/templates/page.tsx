@@ -12,7 +12,10 @@ import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
-import { MARKETING_EMAIL_EDITOR_BLOCKS } from "@/components/dashboard/email-editor-screen";
+import {
+  MARKETING_EMAIL_EDITOR_BLOCKS,
+  marketingPreviewContext,
+} from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
@@ -41,13 +44,7 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 
-const TEMPLATE_PREVIEW_CONTEXT = {
-  footer: {
-    mailingAddress: "Your workspace mailing address",
-    unsubscribeUrl: "#unsubscribe-preview",
-    viewInBrowserUrl: "#view-in-browser-preview",
-  },
-};
+const TEMPLATE_PREVIEW_CONTEXT = marketingPreviewContext();
 
 export default function TemplatesPage() {
   useSetBreadcrumb([{ label: "Templates" }]);
