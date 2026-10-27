@@ -1360,6 +1360,10 @@ export const sequences = pgTable(
     entrants: text("entrants").array().notNull().default([]),
     // { broadcast: { sentAt, lockedAt }, sequence: { subscribers, unsubscribers, failed } }
     report: jsonb("report").notNull().default({}),
+    /** Whether sends carry a "view in browser" link and the hosted
+     * per-reader web version (`GET /view/:token`) answers. Turning it off
+     * also takes down the pages behind links already sent. */
+    viewInBrowser: boolean("view_in_browser").notNull().default(true),
     /** Broadcasts published as a public web page once they're sent. */
     webPublished: boolean("web_published").notNull().default(false),
     webSlug: text("web_slug"),

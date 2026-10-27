@@ -183,6 +183,13 @@
       "when": 1792657025186,
       "tag": "0025_tracking_domain",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793075118217,
+      "tag": "0026_view_in_browser",
+      "breakpoints": true
     }
   ]
 }

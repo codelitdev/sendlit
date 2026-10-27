@@ -497,7 +497,7 @@ const sequencesContract = c.router(
       },
       summary: "Update a broadcast or sequence",
       description:
-        "A broadcast's title is its email's subject, so once the broadcast has been sent, changing the title returns 400 with the error \"This broadcast has already been sent\".",
+        "A broadcast's title is its email's subject, so once the broadcast has been sent, changing the title returns 400 with the error \"This broadcast has already been sent\". `viewInBrowser` can be changed at any time; turning it off also takes down the web versions linked from emails already sent.",
     },
     remove: {
       method: "DELETE",

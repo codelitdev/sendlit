@@ -40,6 +40,7 @@ export function SequenceEmailEditor({
   const [deliverySource, setDeliverySource] = useState<DeliverySourceSelection | null>(
     null,
   );
+  const [viewInBrowser, setViewInBrowser] = useState(true);
 
   useEffect(() => {
     // Which delivery source a test goes through; best effort.
@@ -49,6 +50,7 @@ export function SequenceEmailEditor({
     getSequence(sequenceId)
       .then((sequence) => {
         setDeliverySource(sequence.deliverySource ?? null);
+        setViewInBrowser(sequence.viewInBrowser);
         const found = emailId
           ? sequence.emails.find((e) => e.emailId === emailId)
           : sequence.emails[0];
@@ -75,6 +77,7 @@ export function SequenceEmailEditor({
     <EmailEditorScreen
       exitFallbackHref={exitFallbackHref}
       purpose="marketing"
+      viewInBrowser={viewInBrowser}
       header={
         <h1 className="truncate text-base font-semibold">
           {email.subject || "Untitled email"}

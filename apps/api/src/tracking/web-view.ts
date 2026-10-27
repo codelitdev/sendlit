@@ -27,7 +27,8 @@ const WEB_VIEW_CSP = [
 // The hosted "view in browser" version of one broadcast or sequence email,
 // personalised for the recipient the signed link was sent to. Links carry the
 // version that was sent, so later edits don't change them; older links
-// without one show the current content.
+// without one show the current content. A sequence with "view in browser"
+// turned off has no web versions, so its links stop working.
 router.get("/view/:token", async (req: Request, res: Response) => {
   res.setHeader("X-Robots-Tag", "noindex");
   res.setHeader("Referrer-Policy", "no-referrer");
@@ -59,7 +60,7 @@ router.get("/view/:token", async (req: Request, res: Response) => {
     const isTest = ids.contactId === TEST_CONTACT_ID;
     const contact = isTest ? null : await getContactByContactId(ids.contactId);
     if (
-      !sequence ||
+      !sequence?.viewInBrowser ||
       !email ||
       !team ||
       (!isTest && (!contact || contact.teamId !== sequence.teamId))

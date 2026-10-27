@@ -105,7 +105,7 @@ For AI-created content, start with `list_system_templates` and
 
 ### Broadcasts and sequences
 
-Broadcasts use the sequence resource with one email and an audience filter. `update_sequence` also takes an `excludeFilter`; contacts matching it are never sent the broadcast or enrolled in the sequence. Sequence tools include:
+Broadcasts use the sequence resource with one email and an audience filter. `update_sequence` also takes an `excludeFilter`; contacts matching it are never sent the broadcast or enrolled in the sequence. Set `viewInBrowser: false` to send without the "View in browser" link and take down the web versions already linked. Sequence tools include:
 
 - `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`
 - `add_sequence_email`, `update_sequence_email`, `delete_sequence_email`

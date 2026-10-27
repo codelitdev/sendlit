@@ -286,6 +286,7 @@ export async function updateSequence({
   excludeFilter,
   emailsOrder,
   deliverySource,
+  viewInBrowser,
 }: {
   teamId: string;
   sequenceId: string;
@@ -297,6 +298,7 @@ export async function updateSequence({
   excludeFilter?: ContactFilterWithAggregator | null;
   emailsOrder?: string[];
   deliverySource?: DeliverySourceSelection | null;
+  viewInBrowser?: boolean;
 }): Promise<HydratedSequence | null> {
   const current = await getSequenceBySequenceId(teamId, sequenceId);
   if (!current) return null;
@@ -314,6 +316,9 @@ export async function updateSequence({
     patch.excludeFilter = excludeFilter?.filters.length ? (excludeFilter as any) : null;
   }
   if (emailsOrder !== undefined) patch.emailsOrder = emailsOrder;
+  // Allowed at any time, even after a broadcast went out: turning it off is
+  // how a team takes down web versions already linked from sent mail.
+  if (viewInBrowser !== undefined) patch.viewInBrowser = viewInBrowser;
   if (deliverySource !== undefined) {
     if (!["draft", "paused"].includes(current.status)) {
       throw new Error("esp_cannot_change_after_start");

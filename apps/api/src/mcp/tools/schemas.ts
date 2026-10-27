@@ -144,6 +144,7 @@ export const sequenceSchema = z.object({
   emailsOrder: z.array(z.string()),
   entrants: z.number().optional(),
   report: z.record(z.any()).nullable().optional(),
+  viewInBrowser: z.boolean(),
   emails: z.array(sequenceEmailSchema),
   pacing: z
     .object({

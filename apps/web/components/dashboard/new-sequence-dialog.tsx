@@ -25,15 +25,12 @@ import {
   type SystemTemplate,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
-import { MARKETING_EMAIL_EDITOR_BLOCKS } from "./email-editor-screen";
+import {
+  MARKETING_EMAIL_EDITOR_BLOCKS,
+  marketingPreviewContext,
+} from "./email-editor-screen";
 
-const MARKETING_PREVIEW_CONTEXT = {
-  footer: {
-    mailingAddress: "Your workspace mailing address",
-    unsubscribeUrl: "#unsubscribe-preview",
-    viewInBrowserUrl: "#view-in-browser-preview",
-  },
-};
+const MARKETING_PREVIEW_CONTEXT = marketingPreviewContext();
 
 export function NewSequenceDialog({
   type,

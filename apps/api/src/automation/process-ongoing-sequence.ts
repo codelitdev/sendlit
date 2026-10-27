@@ -290,6 +290,7 @@ async function attemptMailSending({
     },
     unsubscribeToken: contact.unsubscribeToken,
     publication: sequence.type === "broadcast" ? sequence : null,
+    viewInBrowser: sequence.viewInBrowser,
   });
 
   let outboundForReservation: { id: string } | null = null;
