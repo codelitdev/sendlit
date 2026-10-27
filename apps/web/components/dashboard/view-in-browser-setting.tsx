@@ -1,9 +1,9 @@
 "use client";
 
+import type { Sequence } from "@sendlit/email-blocks";
 import { useState } from "react";
 import { Label } from "@/components/ui/codelit/label";
 import { Switch } from "@/components/ui/codelit/switch";
-import type { Sequence } from "@sendlit/email-blocks";
 import { updateSequence } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 
