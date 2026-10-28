@@ -53,6 +53,16 @@ import {
   updateEspConfigBodySchema,
 } from "./schemas/esp";
 import {
+  contactEventSchema,
+  createEventDefinitionBodySchema,
+  eventDefinitionDetailSchema,
+  eventDefinitionSchema,
+  listContactEventsQuerySchema,
+  trackEventBodySchema,
+  trackEventResponseSchema,
+  updateEventDefinitionBodySchema,
+} from "./schemas/events";
+import {
   feedbackConnectionSchema,
   testFeedbackConnectionResponseSchema,
   upsertFeedbackConnectionBodySchema,
@@ -262,6 +272,15 @@ const contactsContract = c.router(
         404: errorSchema,
       },
       summary: "List broadcasts/sequence emails delivered to a contact",
+    },
+    events: {
+      method: "GET",
+      path: "/contacts/:contactId/events",
+      query: listContactEventsQuerySchema,
+      responses: { 200: paginated(contactEventSchema), 404: errorSchema },
+      summary: "List the custom events received for a contact",
+      description:
+        "Newest first by occurredAt. `enrolledSequences` lists the sequences each event started.",
     },
     remove: {
       method: "DELETE",
@@ -661,6 +680,79 @@ const transactionalContract = c.router(
     },
   },
   { metadata: { tag: "Transactional Emails" } },
+);
+
+/**
+ * Custom events — see `apps/api/docs/custom_events.md`. `track` records a
+ * named event for one contact and starts every active sequence whose
+ * `event:custom` trigger matches. Definitions are the team's list of events,
+ * registered on first receipt or by hand.
+ */
+const eventsContract = c.router(
+  {
+    track: {
+      method: "POST",
+      path: "/events",
+      body: trackEventBodySchema,
+      responses: {
+        202: trackEventResponseSchema,
+        400: errorSchema,
+        402: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+        422: errorSchema,
+        429: errorSchema,
+      },
+      summary: "Track a custom event",
+      description:
+        "Stores the event, then starts every active sequence whose trigger is `event:custom` with this name and whose filters match. An unknown email creates the contact unless `createContact` is false (then 404). An unknown `contactId` is always 404. The same `idempotencyKey` within 30 days returns the original event with `duplicate: true`. Events with `backfill: true`, or an `occurredAt` more than 72 hours old, are stored but never start a sequence.",
+    },
+    definitions: {
+      method: "GET",
+      path: "/events/definitions",
+      responses: { 200: itemsList(eventDefinitionSchema) },
+      summary: "List the team's events",
+    },
+    definition: {
+      method: "GET",
+      path: "/events/definitions/:name",
+      responses: { 200: eventDefinitionDetailSchema, 404: errorSchema },
+      summary: "Get an event, with its last payload",
+    },
+    createDefinition: {
+      method: "POST",
+      path: "/events/definitions",
+      body: createEventDefinitionBodySchema,
+      responses: {
+        201: eventDefinitionDetailSchema,
+        400: errorSchema,
+        409: errorSchema,
+        422: errorSchema,
+      },
+      summary: "Register an event before it is sent",
+    },
+    updateDefinition: {
+      method: "PATCH",
+      path: "/events/definitions/:name",
+      body: updateEventDefinitionBodySchema,
+      responses: {
+        200: eventDefinitionDetailSchema,
+        400: errorSchema,
+        404: errorSchema,
+      },
+      summary: "Update an event's description or declared properties",
+    },
+    deleteDefinition: {
+      method: "DELETE",
+      path: "/events/definitions/:name",
+      body: c.noBody(),
+      responses: { 204: c.noBody(), 404: errorSchema, 409: errorSchema },
+      summary: "Remove an event from the list",
+      description:
+        "Stored events are kept, and a later event with this name registers it again. Returns 409 event_definition_in_use while a sequence uses it as its trigger.",
+    },
+  },
+  { metadata: { tag: "Events" } },
 );
 
 const espCollectionContract = c.router(
@@ -2037,6 +2129,7 @@ export const contract = c.router({
   templates: templatesContract,
   sequences: sequencesContract,
   transactional: transactionalContract,
+  events: eventsContract,
   settings: settingsContract,
   teams: teamsContract,
   organizations: organizationsContract,

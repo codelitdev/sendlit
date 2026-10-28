@@ -15,7 +15,11 @@ import {
 } from "../delivery-feedback/suppression-queries";
 import { captureEvent } from "../observability";
 import { generateUniqueId } from "../utils/id";
-import { type Contact, replaceContactCustomFieldValues } from "./queries";
+import {
+  type Contact,
+  mergeCustomFields,
+  replaceContactCustomFieldValues,
+} from "./queries";
 
 export interface ImportContactRow {
   email: string;
@@ -68,8 +72,6 @@ function cleanTags(tags: (string | undefined)[]): string[] {
     ...new Set(tags.map((tag) => tag?.trim()).filter((tag): tag is string => !!tag)),
   ];
 }
-
-const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * Creates or updates contacts from another platform's export, matched by
@@ -311,8 +313,11 @@ function updatePatch(
   const tags = cleanTags([...current.tags, ...row.tags]);
   if (tags.length !== current.tags.length) patch.tags = tags;
   if (row.customFields) {
-    const merged = { ...(current.customFields as CustomFields), ...row.customFields };
-    if (!sameJson(merged, current.customFields)) patch.customFields = merged;
+    const merged = mergeCustomFields(
+      current.customFields as CustomFields,
+      row.customFields,
+    );
+    if (merged) patch.customFields = merged;
   }
   if (current.subscribed && !subscribed) patch.subscribed = false;
   if (row.createdAt && (!current.createdAt || row.createdAt < current.createdAt)) {

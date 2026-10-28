@@ -43,6 +43,7 @@ import templatesRoutes from "./templates/routes";
 import trackingRoutes from "./tracking/routes";
 import webViewRoutes from "./tracking/web-view";
 import transactionalRoutes from "./transactional/routes";
+import eventsRoutes from "./events/routes";
 import webPublicRoutes from "./web/public-routes";
 import webRoutes from "./web/routes";
 
@@ -160,6 +161,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(templatesRoutes);
   app.use(sequencesRoutes);
   app.use(transactionalRoutes);
+  app.use(eventsRoutes);
   app.use(espRoutes);
   app.use(generalSettingsRoutes);
   app.use(trackingDomainRoutes);

@@ -1,4 +1,5 @@
 import { sequenceAudience } from "../contacts/segment";
+import { processUnmatchedEvents } from "../events/queries";
 import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 import {
@@ -34,6 +35,14 @@ export async function processRules() {
         source: "automation.process_rules.loop",
         severity: "critical",
       });
+    }
+    try {
+      // Custom events whose inline matching was cut off — see
+      // docs/custom_events.md#recovery.
+      await processUnmatchedEvents();
+    } catch (err: any) {
+      logger.error({ error: err.message }, "event recovery sweep failed");
+      captureError({ error: err, source: "events.recovery_sweep" });
     }
 
     await new Promise((resolve) => setTimeout(resolve, 60 * 1000));

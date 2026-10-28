@@ -1,5 +1,10 @@
 import { captureError } from "../observability";
 import logger from "../services/log";
+import {
+  clearExpiredIdempotencyKeys,
+  purgeExpiredContactEvents,
+  purgeStaleEventDefinitions,
+} from "../events/queries";
 import { purgeExpiredRawReceipts, purgeOldDeliveryEvents } from "./retention";
 
 const RUN_INTERVAL_MS = 60 * 60 * 1000; // hourly — retention is not latency-sensitive
@@ -12,6 +17,10 @@ export async function startRetentionLoop(): Promise<void> {
     try {
       await drainBatches(purgeExpiredRawReceipts, "raw webhook receipts");
       await drainBatches(purgeOldDeliveryEvents, "delivery events");
+      // Custom events — see docs/custom_events.md#retention.
+      await drainBatches(clearExpiredIdempotencyKeys, "custom event idempotency keys");
+      await drainBatches(purgeExpiredContactEvents, "custom events");
+      await drainBatches(purgeStaleEventDefinitions, "stale event definitions");
     } catch (err: any) {
       logger.error({ error: err.message }, "retention loop failed");
       captureError({

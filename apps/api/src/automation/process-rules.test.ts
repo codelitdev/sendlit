@@ -23,6 +23,7 @@ mock.module("./queries", () => ({
   lockBroadcast: mocks.lockBroadcast,
   markBroadcastSent: mocks.markBroadcastSent,
 }));
+mock.module("../events/queries", () => ({ processUnmatchedEvents: vi.fn() }));
 mock.module("../observability", () => ({
   captureError: mocks.captureError,
   captureEvent: mocks.captureEvent,

@@ -13,6 +13,7 @@ import { registerTeamTools } from "./tools/teams";
 import { registerTemplateTools } from "./tools/templates";
 import { registerTrackingDomainTools } from "./tools/tracking-domain";
 import { registerTransactionalTools } from "./tools/transactional";
+import { registerEventTools } from "./tools/events";
 import { registerWebTools } from "./tools/web";
 
 export const SENDLIT_MCP_VERSION = "2.0.0";
@@ -59,6 +60,7 @@ export function buildMcpServer(): McpServer {
   registerMediaTools(tools);
   registerSequenceTools(tools);
   registerTransactionalTools(tools);
+  registerEventTools(tools);
   registerGeneralSettingsTools(tools);
   registerTrackingDomainTools(tools);
   registerEspTools(tools);

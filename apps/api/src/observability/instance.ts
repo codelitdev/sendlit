@@ -60,6 +60,15 @@ const PROPERTY_ALLOWLIST = new Set([
   "reason",
   "outcome",
   "scan_mode",
+  // Custom events (docs/custom_events.md#observability). Event names and
+  // properties are customer-defined and never sent.
+  "duplicate",
+  "contact_created",
+  "backfill",
+  "stale",
+  "sequences_enrolled",
+  "event_source",
+  "definition_origin",
   // Transactional email: already sent, were missing from the allowlist.
   "txe_id",
   "delivery_source",

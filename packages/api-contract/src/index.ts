@@ -13,6 +13,7 @@ export * from "./schemas/custom-fields";
 export * from "./schemas/delivery";
 export * from "./schemas/delivery-events";
 export * from "./schemas/esp";
+export * from "./schemas/events";
 export * from "./schemas/feedback";
 export * from "./schemas/forms";
 export * from "./schemas/media";

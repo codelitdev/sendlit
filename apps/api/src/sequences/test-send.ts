@@ -1,7 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { assertEmailContentAllowed } from "../abuse/content-scan";
-import { TEST_CONTACT_ID, TEST_UNSUBSCRIBE_TOKEN } from "../config/constants";
+import {
+  EventType,
+  TEST_CONTACT_ID,
+  TEST_UNSUBSCRIBE_TOKEN,
+} from "../config/constants";
 import { findContactByEmail } from "../contacts/queries";
+import { getEventSample } from "../events/queries";
 import { db } from "../db/client";
 import { sequenceEmails, sequences } from "../db/schema";
 import {
@@ -34,6 +39,8 @@ export interface TestSendResult {
   sent: string[];
   skipped: { email: string; reason: "suppressed" }[];
   lastTestSentAt: string | null;
+  /** Where `{{ event.* }}` came from, for an `event:custom` sequence. */
+  eventSample?: "last_event" | "none";
 }
 
 /**
@@ -114,6 +121,16 @@ export async function sendSequenceEmailTest({
         );
 
   const result: TestSendResult = { sent: [], skipped: [], lastTestSentAt: null };
+  // An event-triggered sequence renders `{{ event.* }}` from the last payload
+  // received for its event (docs/custom_events.md#merge-tags-event-prop).
+  const eventTriggered =
+    sequence.type === "sequence" &&
+    sequence.triggerType === EventType.CUSTOM_EVENT &&
+    !!sequence.triggerData;
+  const sampleEvent = eventTriggered
+    ? await getEventSample(teamId, sequence.triggerData!)
+    : null;
+  if (eventTriggered) result.eventSample = sampleEvent ? "last_event" : "none";
   const deliverable: string[] = [];
   for (const recipient of recipients) {
     if (await isRecipientSuppressed(teamId, recipient)) {
@@ -179,6 +196,7 @@ export async function sendSequenceEmailTest({
         contentVersionId: contentVersion?.versionId,
         unsubscribeToken: TEST_UNSUBSCRIBE_TOKEN,
         viewInBrowser: sequence.viewInBrowser,
+        event: sampleEvent,
       });
       await sendMail({
         purpose: "campaign",

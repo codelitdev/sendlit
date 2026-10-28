@@ -168,6 +168,11 @@ export const openApiDocument = generateOpenApi(
           "Single API-triggered sends (receipts, password resets, ...) — no audience filter, no unsubscribe footer, delivered immediately.",
       },
       {
+        name: "Events",
+        description:
+          "Custom events sent for a contact (`course purchased`, `trial ending`, ...). Sequences can start on them, and their properties render as {{ event.* }}.",
+      },
+      {
         name: "Settings",
         description:
           "Per-team settings, including email sending provider (SMTP) configuration and test sends.",
