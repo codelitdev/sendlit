@@ -1,0 +1,234 @@
+---
+title: Custom events
+description: Send events from your app to start sequences.
+---
+
+A custom event records something a contact did in your product, such as
+`course purchased` or `trial ending`. Each event can start a
+[sequence](/email-marketing/sequences#custom-events) whose trigger is
+**A custom event is received**, and its properties can be used in that
+sequence's emails.
+
+## Integration flow
+
+1. **Send events from your backend** with `POST /events` or the SDK's
+   `events.track()`. Nothing has to be defined in SendLit first.
+2. **The first event with a new name registers it**, along with its property
+   keys and an example payload. You can also register an event ahead of time
+   on the **Events** page, or from the sequence's trigger picker.
+3. **Build a sequence** with the trigger **A custom event is received**. Pick
+   the event name, or type one that hasn't been sent yet so you can build
+   ahead of launch. Add [property filters](/email-marketing/sequences#property-filters)
+   and `{{ event.* }}` [merge tags](/email-marketing/sequences#event-merge-tags).
+4. **Activate the sequence.** From then on, each matching event enrolls the
+   contact.
+5. **Test it** with **Send test event** on the Events page or in the trigger
+   picker, or by calling the API for an `@example.com` address. The sequence
+   runs, but no mail is sent. See [Test addresses](#test-addresses).
+
+<Callout type="info">
+    **Events are never applied retroactively.** Events received before a
+    sequence is activated, or while it is paused, don't enroll anyone later.
+</Callout>
+
+**Names are case-sensitive.** `Course purchased` and `course purchased` are
+different events. An event that no active sequence listens for is still
+stored, returns `202`, and counts toward the [500-name limit](#limits).
+
+## Track an event
+
+Identify the contact with exactly one of `email` or `contactId`:
+
+```sh
+curl -X POST 'https://api.sendlit.app/events' \
+  -H 'content-type: application/json' \
+  -H 'x-sendlit-apikey: sl_live_...' \
+  --data '{
+    "email": "jane@example.com",
+    "eventName": "course purchased",
+    "properties": { "courseName": "Rust 101", "price": 49, "plan": "pro" },
+    "idempotencyKey": "order_8812"
+  }'
+```
+
+The API answers `202 Accepted` once the event is stored:
+
+```json
+{
+    "eventId": "evt_...",
+    "contactId": "cnt_...",
+    "duplicate": false,
+    "contactCreated": false
+}
+```
+
+The response doesn't list the sequences the event started. To see them, open
+the contact in the dashboard or call `GET /contacts/:contactId/events`.
+
+| Field            | Notes                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| `email`          | The contact's email. Exactly one of `email` or `contactId`.                               |
+| `contactId`      | A SendLit contact ID. An unknown ID is always `404 contact_not_found`.                    |
+| `eventName`      | Up to 128 characters. Case-sensitive. Can't start with `$`.                               |
+| `properties`     | Optional JSON object. Available as `{{ event.<key> }}` in the sequence's emails.          |
+| `occurredAt`     | Optional ISO 8601 time. Defaults to now; at most 24 hours in the future.                  |
+| `idempotencyKey` | Optional, 1 to 256 characters. See [Idempotency](#idempotency).                           |
+| `backfill`       | Optional. `true` stores the event without starting any sequence.                         |
+| `createContact`  | Optional, default `true`. See [Contacts](#contacts).                                      |
+| `contact`        | Optional `{ name, customFields }` applied to the contact.                                 |
+
+A contact who has unsubscribed still gets the event stored, but it enrolls
+them in nothing.
+
+### Example: CourseLit
+
+CourseLit sends an event when a student buys a course, using the order ID as
+the idempotency key so a redelivered payment webhook can't enroll the student
+twice:
+
+```ts
+import { SendLit } from "sendlit";
+
+const sendlit = new SendLit({ apiKey: process.env.SENDLIT_API_KEY });
+
+await sendlit.events.track({
+    email: student.email,
+    eventName: "course purchased",
+    properties: {
+        courseName: course.title,
+        courseUrl: course.url,
+        price: order.amount,
+    },
+    idempotencyKey: order.id,
+    contact: { name: student.name },
+});
+```
+
+A sequence triggered by `course purchased` can then greet the student with
+`{{ event.courseName }}` and link to `{{ event.courseUrl }}`.
+
+## Idempotency
+
+Sending the same `idempotencyKey` again within **30 days** stores nothing new
+and enrolls nobody. The API returns `202` with the original `eventId` and
+`contactId`, and `duplicate: true`. The request body is not compared, and
+`contact` is not applied again.
+
+Use a key that identifies the real-world action, such as an order or invoice
+ID, so retries and webhook redeliveries are safe. With a key, the SDK also
+retries `events.track()` on `5xx` and network errors.
+
+## Contacts
+
+`createContact` defaults to `true`: an event for an unknown email creates the
+contact, and that new contact also starts sequences triggered by **A contact
+subscribes**. Pass `createContact: false` to get `404 contact_not_found`
+instead. `createContact` is ignored with `contactId`.
+
+Creating a contact counts toward your plan's contact limit. Over the limit,
+the API returns a [plan error](/developers/errors#plan-and-billing-errors) and
+stores nothing.
+
+`contact` updates the contact as part of the same request:
+
+```json
+{
+    "email": "jane@example.com",
+    "eventName": "plan upgraded",
+    "contact": { "name": "Jane", "customFields": { "plan": "pro" } }
+}
+```
+
+`customFields` are merged into the contact's existing fields, never replaced.
+Only `name` and `customFields` can be set this way; email, subscription state
+and tags can't.
+
+## Backfill history
+
+To import past events without emailing anyone, send them with
+`backfill: true` and their original `occurredAt`. Backfilled events appear on
+the contact's timeline and in the event's property list, but they start
+nothing: no event-triggered sequence, and no **A contact subscribes**
+sequence for contacts they create.
+
+Events whose `occurredAt` is more than **72 hours** before SendLit receives
+them are treated the same way, even without `backfill`. They are stored but
+never trigger.
+
+## Limits
+
+| Limit            | Value                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| Event name       | 128 characters, no control characters, no leading `$`                                  |
+| Properties       | 32 KB as JSON, 100 top-level keys, nested at most 3 levels                             |
+| Property keys    | At every level: a letter or `_`, then letters, digits or `_`, up to 64 characters      |
+| Event names      | 500 per team. A new name over the limit returns `422 event_name_limit_reached`         |
+| Rate             | `POST /events`: 600 requests per minute per team. Event reads: 300 per minute          |
+
+Property keys follow the pattern `^[A-Za-z_][A-Za-z0-9_]{0,63}$` so they work
+as merge tags. Deleting an event on the Events page frees a slot under the
+500-name limit.
+
+## Test addresses
+
+Events for these addresses run the sequence normally, but its emails are
+never sent:
+
+- `example.com`, `example.net`, `example.org` and `test.com`;
+- any address under the `.test`, `.example`, `.invalid` or `.localhost`
+  top-level domains.
+
+The contact is created and enrolled, and the sequence advances, but nothing
+reaches your ESP and the skipped emails don't count toward plan limits. The
+contact's **Events** card shows which sequences each event started. To see
+the real email, send the event for your own address, or use **Send test** in
+the email editor.
+
+## Register events
+
+Events register themselves the first time they are sent. Register one by hand
+to build a sequence before your app sends it, or to document its properties.
+Registering, editing or deleting an event never changes what `POST /events`
+accepts; it only changes what the sequence builder offers.
+
+| Method and path                    | Description                                                                                           |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `GET /events/definitions`          | List the team's events, most recently received first.                                                 |
+| `GET /events/definitions/:name`    | One event, with `lastProperties`, the last payload received.                                          |
+| `POST /events/definitions`         | Register `{ name, description?, properties?: [{ key, type }] }`. `409 event_definition_exists` if it exists. |
+| `PATCH /events/definitions/:name`  | Update `description` or `properties`. `properties` replaces the declared set; observed keys stay.    |
+| `DELETE /events/definitions/:name` | Remove the event from the list. Stored events are kept. `409 event_definition_in_use` while a sequence uses it. |
+| `GET /contacts/:contactId/events`  | A contact's events, newest first, with the sequences each one started. Filter with `?name=`.        |
+
+URL-encode the name in the path, for example
+`/events/definitions/course%20purchased`. Property types are `string`,
+`number`, `boolean`, `date`, `object` and `array`. Event names can't be
+renamed, because they come from your code.
+
+```ts
+await sendlit.events.definitions.create({
+    name: "trial ending",
+    description: "Sent three days before a trial ends",
+    properties: [{ key: "daysLeft", type: "number" }],
+});
+
+const { items } = await sendlit.events.definitions.list();
+const recent = await sendlit.contacts.events(contactId, { limit: 20 });
+```
+
+## Coming from Loops or Klaviyo
+
+| Loops                   | Klaviyo                          | SendLit                                                              |
+| ----------------------- | -------------------------------- | -------------------------------------------------------------------- |
+| `eventName`             | metric `name`                    | `eventName`                                                          |
+| `eventProperties`       | `properties`                     | `properties`                                                         |
+| `email`                 | `profile` email                  | `email`                                                              |
+| `userId`                | `profile` external ID            | No equivalent. Send `email`, or the SendLit `contactId`.             |
+| Contact properties      | `profile` attributes             | `contact: { name, customFields }`                                    |
+| `Idempotency-Key` header | `unique_id`                     | `idempotencyKey` in the body                                         |
+| —                       | `time`                           | `occurredAt`                                                         |
+| —                       | Backfilled historical events     | `backfill: true`                                                     |
+
+Unlike Loops, a repeated idempotency key returns `202` with
+`duplicate: true` rather than `409`, so a retrying caller treats it as
+success.

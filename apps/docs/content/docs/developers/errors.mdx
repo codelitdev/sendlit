@@ -1,6 +1,6 @@
 ---
 title: API errors
-description: Stable template and sending error codes.
+description: Stable template, sending, and event error codes.
 ---
 
 SendLit returns JSON errors with a stable `error` string. Clients should branch
@@ -35,6 +35,22 @@ Missing and conversion errors include the affected paths:
 All template-purpose, structural, and missing-variable checks happen before an
 email is queued. A rejected request does not create a partial destination
 template or transactional delivery.
+
+## Event and trigger errors
+
+| Status | Error                        | Meaning                                                                                                     |
+| ------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `404`  | `contact_not_found`          | `POST /events` received an unknown `contactId`, or an unknown email with `createContact: false`. Also returned by `GET /contacts/:contactId/events`. |
+| `422`  | `event_name_limit_reached`   | The event name is new and the team already has 500. Nothing was stored.                                     |
+| `409`  | `event_definition_exists`    | An event with that name is already registered.                                                              |
+| `409`  | `event_definition_in_use`    | The event can't be deleted while a sequence uses it as its trigger.                                         |
+| `404`  | `event_definition_not_found` | No event with that name is registered.                                                                      |
+| `400`  | `invalid_trigger_type`       | The trigger type isn't allowed for this broadcast or sequence.                                              |
+| `400`  | `invalid_trigger_data`       | The trigger value is invalid, for example an event name over 128 characters or starting with `$`.          |
+| `400`  | `invalid_trigger_filter`     | The `triggerFilter` is invalid or doesn't fit the trigger type, for example a filter on a tag trigger.     |
+| `400`  | `invalid_reentry`            | `reentry` was set on a broadcast, or `once_per_period` without `reentryPeriodDays` from 1 to 365.          |
+
+See [Custom events](/developers/events) and [Sequences](/email-marketing/sequences#custom-events).
 
 ## Authentication errors
 

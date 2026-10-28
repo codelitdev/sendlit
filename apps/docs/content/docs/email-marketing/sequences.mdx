@@ -16,10 +16,87 @@ Supported triggers:
 - A contact subscribes.
 - A tag is added.
 - A tag is removed.
+- A custom event is received. See [Custom events](#custom-events).
 
 A triggered contact is enrolled only if they are subscribed, match the
 sequence's `filter` (when set), and don't match its `excludeFilter`. Both are
 set through the API or MCP `update_sequence`.
+
+## Custom events
+
+The **A custom event is received** trigger (`event:custom`) starts the
+sequence when your app sends a named event, such as `course purchased`, with
+`POST /events` or the SDK. Pick a name your app has sent, or type a new one to
+build the sequence before the first event arrives. Names are case-sensitive.
+See [Custom events](/developers/events) for sending events.
+
+### Property filters
+
+Under **Only when the event's properties match…**, add up to 10 conditions
+on the event's properties. Choose whether all of them or any of them must
+match. A key can be a dot path up to three levels deep, such as `course.id`.
+
+| Condition                | Matches when the property                                                     |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| is / is not              | Equals the value. Text is compared without regard to case                    |
+| contains / doesn't contain | Contains the text, or for a list, has an element equal to the value          |
+| greater / less than (or equal) | Compares as a number. Text that isn't a number never matches             |
+| exists / doesn't exist   | Is present and not `null`                                                     |
+
+A missing property doesn't match **is**, **contains** or the number
+comparisons, and does match **is not** and **doesn't contain**. A value typed
+as text is compared as a number or `true`/`false` when the property is one.
+
+Through the API, set `triggerFilter` on the sequence:
+
+```json
+{
+    "triggerType": "event:custom",
+    "triggerData": "course purchased",
+    "triggerFilter": {
+        "aggregator": "and",
+        "filters": [{ "key": "price", "condition": "gt", "value": 100 }]
+    }
+}
+```
+
+Conditions are `is`, `is_not`, `contains`, `not_contains`, `gt`, `gte`, `lt`,
+`lte`, `exists` and `not_exists`. Changing the trigger type clears the filter.
+
+### Event merge tags
+
+A sequence started by an event can use the event's properties in its emails
+as `{{ event.<key> }}`, for example `{{ event.courseName }}` or
+`{{ event.course.id }}`. Each contact keeps the properties of the event that
+enrolled them for the whole sequence.
+
+A missing property renders as empty text. Write a fallback with Liquid's
+`default` filter:
+
+```liquid
+You're now on the {{ event.plan | default: "free" }} plan.
+```
+
+`event` holds only the event's properties: `{{ event.name }}` is a property
+called `name`, not the event name. Text values are HTML-escaped, so a
+property can't inject markup into the email. In a sequence that wasn't
+started by an event, `{{ event.* }}` renders empty. Merge tags aren't
+supported in subjects.
+
+## Who can enter
+
+**Who can enter** sets whether a contact can enroll more than once. It applies
+to every sequence trigger, and isn't available for broadcasts.
+
+| Option                          | API (`reentry`)   | A contact enrolls                                      |
+| ------------------------------- | ----------------- | ------------------------------------------------------ |
+| Every time the trigger happens  | `every_time`      | On each match. The default                             |
+| Only once                       | `once`            | The first time only                                    |
+| Once every N days               | `once_per_period` | Again after N days, set with `reentryPeriodDays` (1 to 365) |
+
+In every mode, a contact who is still going through the sequence isn't
+enrolled again, and keeps the event that enrolled them first. Setting
+`reentry` on a broadcast returns `400 invalid_reentry`.
 
 Each sequence email can have a delay, publish state, and optional tag action.
 
@@ -30,9 +107,15 @@ version. Turn it on to link one, like
 
 Use **Send test** in the email editor to send yourself a `[Test]` copy of an
 email before starting the sequence. Tests work the same way as for
-[broadcasts](/email-marketing/broadcasts#send-a-test).
+[broadcasts](/email-marketing/broadcasts#send-a-test). In an event-triggered
+sequence, `{{ event.* }}` is filled from the last event received with that
+name, and the dialog says so. If none has been received yet, those tags render
+empty. To test the trigger itself, use **Send test event**; see
+[Test addresses](/developers/events#test-addresses).
 
 A paused sequence sends nothing; enrolled contacts wait and continue from where
-they were when it is activated again. Sequences pause themselves on high
+they were when it is activated again. Triggers that happen while a sequence is
+paused or before it is first activated, including custom events, are not
+replayed when it is activated. Sequences pause themselves on high
 bounce or complaint rates like
 [broadcasts](/email-marketing/broadcasts#automatic-pause-on-bounces-and-complaints).
