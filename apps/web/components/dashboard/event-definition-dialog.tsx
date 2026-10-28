@@ -5,11 +5,6 @@ import { Check, ChevronDown, Copy, Plus, Save, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { Loading } from "@/components/dashboard/loading";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/codelit/button";
 import {
   Dialog,
@@ -30,6 +25,11 @@ import {
   SelectValue,
 } from "@/components/ui/codelit/select";
 import { Textarea } from "@/components/ui/codelit/textarea";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   createEventDefinition,
   type EventDefinitionDetail,

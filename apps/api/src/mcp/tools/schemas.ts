@@ -1,10 +1,10 @@
 import {
   contactFilterSchema,
+  sequenceEmailSchema as contractSequenceEmailSchema,
+  sequenceSchema as contractSequenceSchema,
   customFieldsSchema,
   emailContentSchema,
   espWarmupSchema,
-  sequenceEmailSchema as contractSequenceEmailSchema,
-  sequenceSchema as contractSequenceSchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
 import { feedbackCapableProviders } from "../../config/constants";

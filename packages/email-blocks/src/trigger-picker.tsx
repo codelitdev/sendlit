@@ -17,8 +17,8 @@ import {
   SelectValue,
 } from "./components/ui/select";
 import {
-  type EventPropertyFilterEditorLabels,
   EventPropertyFilterEditor,
+  type EventPropertyFilterEditorLabels,
 } from "./event-property-filter-editor";
 import { cn } from "./lib/utils";
 import type {

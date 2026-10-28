@@ -14,6 +14,14 @@ export { defaultTemplateEmail } from "./default-content";
 export type { EmailPreviewProps } from "./email-preview";
 export { EmailPreview } from "./email-preview";
 export type {
+  EventPropertyFilterEditorLabels,
+  EventPropertyFilterEditorProps,
+} from "./event-property-filter-editor";
+export {
+  defaultEventPropertyFilterEditorLabels,
+  EventPropertyFilterEditor,
+} from "./event-property-filter-editor";
+export type {
   SequenceAnalyticsMetric,
   SequenceAnalyticsProps,
 } from "./sequence-analytics";
@@ -33,14 +41,6 @@ export type {
 } from "./template-chooser";
 export { TemplateChooser } from "./template-chooser";
 export type {
-  EventPropertyFilterEditorLabels,
-  EventPropertyFilterEditorProps,
-} from "./event-property-filter-editor";
-export {
-  defaultEventPropertyFilterEditorLabels,
-  EventPropertyFilterEditor,
-} from "./event-property-filter-editor";
-export type {
   TriggerOption,
   TriggerPickerChange,
   TriggerPickerLabels,
@@ -49,6 +49,6 @@ export type {
   TriggerValueOption,
 } from "./trigger-picker";
 export { defaultTriggerPickerLabels, TriggerPicker } from "./trigger-picker";
+export * from "./types";
 export type { ValueComboboxProps } from "./value-combobox";
 export { ValueCombobox } from "./value-combobox";
-export * from "./types";

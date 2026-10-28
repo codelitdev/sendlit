@@ -1,10 +1,10 @@
-import { captureError } from "../observability";
-import logger from "../services/log";
 import {
   clearExpiredIdempotencyKeys,
   purgeExpiredContactEvents,
   purgeStaleEventDefinitions,
 } from "../events/queries";
+import { captureError } from "../observability";
+import logger from "../services/log";
 import { purgeExpiredRawReceipts, purgeOldDeliveryEvents } from "./retention";
 
 const RUN_INTERVAL_MS = 60 * 60 * 1000; // hourly — retention is not latency-sensitive

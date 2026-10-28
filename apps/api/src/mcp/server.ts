@@ -3,6 +3,7 @@ import { createMcpToolRegistrar } from "./tool-registry";
 import { registerContactTools } from "./tools/contacts";
 import { registerDeliveryFeedbackTools } from "./tools/delivery-feedback";
 import { registerEspTools } from "./tools/esp";
+import { registerEventTools } from "./tools/events";
 import { registerFormTools } from "./tools/forms";
 import { registerGeneralSettingsTools } from "./tools/general-settings";
 import { registerMediaTools } from "./tools/media";
@@ -13,7 +14,6 @@ import { registerTeamTools } from "./tools/teams";
 import { registerTemplateTools } from "./tools/templates";
 import { registerTrackingDomainTools } from "./tools/tracking-domain";
 import { registerTransactionalTools } from "./tools/transactional";
-import { registerEventTools } from "./tools/events";
 import { registerWebTools } from "./tools/web";
 
 export const SENDLIT_MCP_VERSION = "2.0.0";

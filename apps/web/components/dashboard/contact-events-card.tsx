@@ -10,13 +10,13 @@ import {
 } from "@/components/dashboard/event-definition-dialog";
 import { Loading } from "@/components/dashboard/loading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/codelit/badge";
+import { Button } from "@/components/ui/codelit/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Badge } from "@/components/ui/codelit/badge";
-import { Button } from "@/components/ui/codelit/button";
 import { getContactEvents } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
 

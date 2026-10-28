@@ -13,11 +13,6 @@ import { Banner } from "@/components/dashboard/banner";
 import { CopyButton } from "@/components/dashboard/event-definition-dialog";
 import { Loading } from "@/components/dashboard/loading";
 import { SendTestEventDialog } from "@/components/dashboard/send-test-event-dialog";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/codelit/button";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
@@ -28,6 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/codelit/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   createEventDefinition,
   type EventDefinitionDetail,

@@ -44,8 +44,8 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { espProviderLabel } from "@/lib/esp-providers";
-import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/time";
+import { cn } from "@/lib/utils";
 
 type Status = DomainAuthentication["spf"]["status"];
 type DnsRecord = DomainAuthentication["records"][number];

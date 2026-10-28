@@ -6,7 +6,6 @@ import {
   TEST_UNSUBSCRIBE_TOKEN,
 } from "../config/constants";
 import { findContactByEmail } from "../contacts/queries";
-import { getEventSample } from "../events/queries";
 import { db } from "../db/client";
 import { sequenceEmails, sequences } from "../db/schema";
 import {
@@ -20,6 +19,7 @@ import {
   type TestQuotaCharge,
 } from "../delivery/quota";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
+import { getEventSample } from "../events/queries";
 import { renderCampaignHtml } from "../mail/campaign";
 import { sendMail } from "../mail/send";
 import { captureEvent } from "../observability";

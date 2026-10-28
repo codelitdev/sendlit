@@ -21,6 +21,7 @@ import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
 import feedbackRoutes from "./delivery-feedback/feedback-routes";
 import suppressionsRoutes from "./delivery-feedback/suppressions-routes";
 import espWebhookRoutes from "./delivery-feedback/webhook-route";
+import eventsRoutes from "./events/routes";
 import signupFormPublicRoutes from "./forms/public-routes";
 import signupFormRoutes from "./forms/routes";
 import mcpRoutes from "./mcp/routes";
@@ -43,7 +44,6 @@ import templatesRoutes from "./templates/routes";
 import trackingRoutes from "./tracking/routes";
 import webViewRoutes from "./tracking/web-view";
 import transactionalRoutes from "./transactional/routes";
-import eventsRoutes from "./events/routes";
 import webPublicRoutes from "./web/public-routes";
 import webRoutes from "./web/routes";
 

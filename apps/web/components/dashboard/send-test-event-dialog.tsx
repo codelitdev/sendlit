@@ -5,11 +5,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { Loading } from "@/components/dashboard/loading";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/codelit/button";
 import {
   Dialog,
@@ -22,6 +17,11 @@ import {
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import { Textarea } from "@/components/ui/codelit/textarea";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { getEventDefinition, trackEvent } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 

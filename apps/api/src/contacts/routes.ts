@@ -8,10 +8,10 @@ import { Router } from "express";
 import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { isPlanGateError } from "../billing/errors";
+import { listContactEvents } from "../events/queries";
 import { omitInternal } from "../utils/public";
 import { serializeDates } from "../utils/serialize";
 import { exportContactsCsv } from "./export";
-import { listContactEvents } from "../events/queries";
 import { importContacts } from "./import";
 import {
   addTagToContact,

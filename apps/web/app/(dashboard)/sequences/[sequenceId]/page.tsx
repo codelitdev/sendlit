@@ -25,8 +25,8 @@ import {
 } from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
-import { SequenceTrigger } from "@/components/dashboard/sequence-trigger";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
+import { SequenceTrigger } from "@/components/dashboard/sequence-trigger";
 import { ViewInBrowserSetting } from "@/components/dashboard/view-in-browser-setting";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
