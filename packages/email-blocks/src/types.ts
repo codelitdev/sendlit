@@ -9,7 +9,60 @@ export type TriggerType =
   | "tag:added"
   | "tag:removed"
   | "subscriber:added"
-  | "date:occurred";
+  | "date:occurred"
+  | "event:custom"
+  | "contact:property_changed";
+
+export type ReentryMode = "every_time" | "once" | "once_per_period";
+
+export type EventFilterCondition =
+  | "is"
+  | "is_not"
+  | "contains"
+  | "not_contains"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "exists"
+  | "not_exists";
+
+/** Trigger filter of an `event:custom` sequence, matched against the
+ * event's properties. */
+export interface EventPropertyFilter {
+  aggregator: "and" | "or";
+  filters: {
+    key: string;
+    condition: EventFilterCondition;
+    value?: string | number | boolean;
+  }[];
+}
+
+/** Trigger filter of a `contact:property_changed` sequence. */
+export interface PropertyChangeFilter {
+  from?: string | number | boolean | null;
+  to?: string | number | boolean | null;
+}
+
+export type EventPropertyType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "date"
+  | "object"
+  | "array";
+
+/** An event the team has registered or received. */
+export interface EventDefinition {
+  name: string;
+  origin: "received" | "manual";
+  description: string | null;
+  properties: { key: string; type: EventPropertyType; declared: boolean }[];
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+  createdAt: string;
+  sequenceCount: number;
+}
 
 export type ContactFilterName =
   | "tag"
@@ -103,6 +156,9 @@ export interface Sequence {
   deliverySource?: { type: "organization" } | { type: "team"; espId?: string } | null;
   triggerType?: TriggerType | string | null;
   triggerData?: string | null;
+  triggerFilter?: EventPropertyFilter | PropertyChangeFilter | null;
+  reentry?: ReentryMode;
+  reentryPeriodDays?: number | null;
   filter?: ContactFilterWithAggregator | null;
   excludeFilter?: ContactFilterWithAggregator | null;
   emailsOrder: string[];
