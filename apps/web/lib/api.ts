@@ -1,18 +1,22 @@
 import {
   type BillingCatalogKey,
   type BillingPlan,
+  type ContactEvent,
   type CustomFields,
   contactFilterSchema,
   contract,
   type DomainAuthentication,
   type EspWarmup,
+  type EventDefinitionDetail,
   type ImportContactRow,
   type ImportContactsResult,
   type PaidPlan,
   type Reputation,
   type SignupForm,
   type SignupFormInput,
+  type TrackEventBody,
   type TrackingDomain,
+  type TriggerTypeValue,
   type WebPublishing,
   type WebSettings,
 } from "@sendlit/api-contract";
@@ -20,7 +24,12 @@ import type {
   Contact,
   ContactFilterWithAggregator,
   EmailTemplate,
+  EventDefinition,
+  EventPropertyFilter,
+  EventPropertyType,
   MailType,
+  PropertyChangeFilter,
+  ReentryMode,
   Sequence,
   SequenceStats,
 } from "@sendlit/email-blocks";
@@ -266,6 +275,72 @@ export function getContactDeliveries(contactId: string) {
   );
 }
 
+// ---- Custom events ---------------------------------------------------------
+
+export function getContactEvents(
+  contactId: string,
+  query: { page?: number; limit?: number } = {},
+) {
+  return unwrap<{ items: ContactEvent[]; total: number }>(
+    client.contacts.events({ params: { contactId }, query }),
+  );
+}
+
+export async function listEventDefinitions() {
+  const { items } = await unwrap<{ items: EventDefinition[] }>(
+    client.events.definitions(),
+  );
+  return items;
+}
+
+export function getEventDefinition(name: string) {
+  return unwrap<EventDefinitionDetail>(
+    client.events.definition({ params: { name: encodeURIComponent(name) } }),
+  );
+}
+
+export function createEventDefinition(input: {
+  name: string;
+  description?: string;
+  properties?: { key: string; type: EventPropertyType }[];
+}) {
+  return unwrap<EventDefinitionDetail>(client.events.createDefinition({ body: input }));
+}
+
+export function updateEventDefinition(
+  name: string,
+  input: {
+    description?: string | null;
+    properties?: { key: string; type: EventPropertyType }[];
+  },
+) {
+  return unwrap<EventDefinitionDetail>(
+    client.events.updateDefinition({
+      params: { name: encodeURIComponent(name) },
+      body: input,
+    }),
+  );
+}
+
+export function deleteEventDefinition(name: string) {
+  return unwrap<void>(
+    client.events.deleteDefinition({
+      params: { name: encodeURIComponent(name) },
+    }),
+  );
+}
+
+/** Sends a real event (`POST /events`) from the dashboard, e.g. to test a
+ * trigger. */
+export function trackEvent(body: TrackEventBody) {
+  return unwrap<{
+    eventId: string;
+    contactId: string;
+    duplicate: boolean;
+    contactCreated: boolean;
+  }>(client.events.track({ body }));
+}
+
 // ---- Segments --------------------------------------------------------------
 
 export interface Segment {
@@ -480,6 +555,10 @@ export function updateSequence(
     title?: string;
     triggerType?: string;
     triggerData?: string;
+    /** `null` clears it. */
+    triggerFilter?: EventPropertyFilter | PropertyChangeFilter | null;
+    reentry?: ReentryMode;
+    reentryPeriodDays?: number | null;
     filter?: ContactFilterWithAggregator;
     /** `null` clears the exclusion. */
     excludeFilter?: ContactFilterWithAggregator | null;
@@ -491,12 +570,13 @@ export function updateSequence(
     viewInBrowser?: boolean;
   },
 ) {
-  const { filter, excludeFilter, ...rest } = patch;
+  const { filter, excludeFilter, triggerType, ...rest } = patch;
   return unwrap<Sequence>(
     client.sequences.update({
       params: { sequenceId },
       body: {
         ...rest,
+        triggerType: triggerType as TriggerTypeValue | undefined,
         filter: toApiContactFilter(filter),
         ...(excludeFilter !== undefined && {
           excludeFilter:
@@ -542,7 +622,11 @@ export function updateSequenceEmail(
   );
 }
 
+export type { ContactEvent, EventDefinitionDetail };
+
 export interface SequenceEmailTestResult {
+  /** Event-triggered sequences: where `{{ event.* }}` came from. */
+  eventSample?: "last_event" | "none";
   sent: string[];
   skipped: { email: string; reason: "suppressed" }[];
   lastTestSentAt: string | null;

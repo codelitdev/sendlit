@@ -8,6 +8,7 @@ import { Loading } from "@/components/dashboard/loading";
 import { SendTestDialog } from "@/components/dashboard/send-test-dialog";
 import {
   type DeliverySourceSelection,
+  getEventDefinition,
   getSequence,
   listSendingOptions,
   type SendingOption,
@@ -41,6 +42,9 @@ export function SequenceEmailEditor({
     null,
   );
   const [viewInBrowser, setViewInBrowser] = useState(true);
+  const [eventVariables, setEventVariables] = useState<
+    { tag: string; description: string }[]
+  >([]);
 
   useEffect(() => {
     // Which delivery source a test goes through; best effort.
@@ -51,6 +55,20 @@ export function SequenceEmailEditor({
       .then((sequence) => {
         setDeliverySource(sequence.deliverySource ?? null);
         setViewInBrowser(sequence.viewInBrowser);
+        // `{{ event.* }}`: the properties of the event that starts it.
+        if (sequence.triggerType === "event:custom" && sequence.triggerData) {
+          const name = sequence.triggerData;
+          getEventDefinition(name)
+            .then((definition) =>
+              setEventVariables(
+                definition.properties.map((property) => ({
+                  tag: `{{ event.${property.key} }}`,
+                  description: `From the "${name}" event (${property.type}). Add | default: "…" for events without it.`,
+                })),
+              ),
+            )
+            .catch(() => undefined);
+        }
         const found = emailId
           ? sequence.emails.find((e) => e.emailId === emailId)
           : sequence.emails[0];
@@ -78,6 +96,7 @@ export function SequenceEmailEditor({
       exitFallbackHref={exitFallbackHref}
       purpose="marketing"
       viewInBrowser={viewInBrowser}
+      extraVariables={eventVariables}
       header={
         <h1 className="truncate text-base font-semibold">
           {email.subject || "Untitled email"}

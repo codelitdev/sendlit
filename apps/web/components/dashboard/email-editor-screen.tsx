@@ -142,6 +142,7 @@ export function EmailEditorScreen({
   header,
   actions,
   viewInBrowser = true,
+  extraVariables = [],
 }: {
   /** Where exit lands when there's no history to go back to (deep link). */
   exitFallbackHref: string;
@@ -160,6 +161,9 @@ export function EmailEditorScreen({
   actions?: (saveContent: () => Promise<void>) => ReactNode;
   /** Whether the footer preview shows the "View in browser" link. */
   viewInBrowser?: boolean;
+  /** More merge tags for this email, e.g. `{{ event.* }}` of the custom
+   * event that starts its sequence. */
+  extraVariables?: { tag: string; description: string }[];
 }) {
   const router = useRouter();
   const normalizedInitialContent = useMemo(
@@ -207,7 +211,7 @@ export function EmailEditorScreen({
   );
   const variables =
     purpose === "marketing"
-      ? MARKETING_VARIABLES
+      ? [...MARKETING_VARIABLES, ...extraVariables]
       : requiredVariables.map((path) => ({
           tag: `{{ ${path} }}`,
           description: "Required transactional variable",
