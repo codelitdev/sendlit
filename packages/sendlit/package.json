@@ -1,6 +1,6 @@
 {
   "name": "sendlit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Official server-side TypeScript SDK for the SendLit email marketing API",
   "author": "SendLit",
   "license": "MIT",
