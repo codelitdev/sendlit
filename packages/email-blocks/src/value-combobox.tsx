@@ -88,7 +88,7 @@ export function ValueCombobox({
           <ChevronDown className="size-4 shrink-0 opacity-50" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] min-w-64 p-0">
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-64 p-0">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder={searchPlaceholder}
