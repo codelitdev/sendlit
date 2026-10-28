@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   Users,
   Workflow,
+  Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
@@ -46,6 +47,7 @@ const NAV: NavMainItem[] = [
   { url: "/broadcasts", title: "Broadcasts", icon: Radio },
   { url: "/sequences", title: "Sequences", icon: Workflow },
   { url: "/contacts", title: "Contacts", icon: Users },
+  { url: "/events", title: "Events", icon: Zap },
   { url: "/forms", title: "Signup forms", icon: ClipboardList },
 ];
 

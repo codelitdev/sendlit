@@ -37,38 +37,49 @@ export function verifyMandatoryTags(emailContent: EmailBlock[]) {
   }
 }
 
-export async function addRule({
-  teamId,
-  sequenceId,
-  triggerType,
-  triggerData,
-  eventDateInMillis,
-}: {
-  teamId: string;
-  /** Internal `sequences.id` — `rules.sequenceId` is a uuid FK. */
-  sequenceId: string;
-  triggerType: string;
-  triggerData?: string | null;
-  eventDateInMillis?: number | null;
-}) {
-  await db.insert(rules).values({
+type Executor = Pick<typeof db, "insert" | "delete">;
+
+export async function addRule(
+  {
+    teamId,
+    sequenceId,
+    triggerType,
+    triggerData,
+    triggerFilter,
+    eventDateInMillis,
+  }: {
+    teamId: string;
+    /** Internal `sequences.id` — `rules.sequenceId` is a uuid FK. */
+    sequenceId: string;
+    triggerType: string;
+    triggerData?: string | null;
+    triggerFilter?: unknown;
+    eventDateInMillis?: number | null;
+  },
+  executor: Executor = db,
+) {
+  await executor.insert(rules).values({
     teamId,
     event: triggerType,
     sequenceId,
     eventDateInMillis: eventDateInMillis ?? null,
     eventData: triggerData ?? null,
+    eventFilter: triggerFilter ?? null,
   });
 }
 
-export async function removeRule({
-  teamId,
-  sequenceId,
-}: {
-  teamId: string;
-  /** Internal `sequences.id`. */
-  sequenceId: string;
-}) {
-  await db
+export async function removeRule(
+  {
+    teamId,
+    sequenceId,
+  }: {
+    teamId: string;
+    /** Internal `sequences.id`. */
+    sequenceId: string;
+  },
+  executor: Executor = db,
+) {
+  await executor
     .delete(rules)
     .where(and(eq(rules.teamId, teamId), eq(rules.sequenceId, sequenceId)));
 }

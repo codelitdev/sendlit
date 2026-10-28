@@ -190,6 +190,13 @@
       "when": 1793075118217,
       "tag": "0026_view_in_browser",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793160384309,
+      "tag": "0027_custom_events",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -1353,6 +1354,13 @@ export const sequences = pgTable(
     }),
     triggerType: text("trigger_type"), // Constants.EventType
     triggerData: text("trigger_data"),
+    /** Property filter for `event:custom` triggers, or the from/to filter
+     * for `contact:property_changed` — see docs/custom_events.md. */
+    triggerFilter: jsonb("trigger_filter"),
+    /** `every_time` | `once` | `once_per_period`. Sequences only; checked
+     * against `sequence_entries` at enrollment. */
+    reentry: text("reentry").notNull().default("every_time"),
+    reentryPeriodDays: integer("reentry_period_days"),
     // UserFilterWithAggregator — see contacts/segment.ts
     filter: jsonb("filter"),
     excludeFilter: jsonb("exclude_filter"),
@@ -1513,11 +1521,19 @@ export const rules = pgTable(
       .references(() => sequences.id, { onDelete: "cascade" }),
     eventDateInMillis: bigint("event_date_in_millis", { mode: "number" }),
     eventData: text("event_data"),
+    /** Copy of `sequences.trigger_filter`, taken by `addRule`. */
+    eventFilter: jsonb("event_filter"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({
     ruleIdCheck: publicIdCheck("rules_rule_id_check", table.ruleId, "rule"),
+    // `fireEvent` matches on all three.
+    teamEventDataIdx: index("rules_team_id_event_event_data_idx").on(
+      table.teamId,
+      table.event,
+      table.eventData,
+    ),
   }),
 );
 
@@ -1544,6 +1560,9 @@ export const ongoingSequences = pgTable(
      * contacts get the day's capacity while an ESP warms up. */
     priority: bigint("priority", { mode: "number" }).notNull().default(0),
     sentEmailIds: text("sent_email_ids").array().notNull().default([]),
+    /** Snapshot of the custom event that enrolled the contact, rendered as
+     * `{{ event.* }}`. Null for every other trigger. */
+    triggerEvent: jsonb("trigger_event").$type<TriggerEventSnapshot>(),
     processingStartedAt: timestamp("processing_started_at", {
       withTimezone: true,
     }),
@@ -1559,6 +1578,142 @@ export const ongoingSequences = pgTable(
     nextScheduledIdx: index("ongoing_sequences_next_email_scheduled_time_idx").on(
       table.nextEmailScheduledTime,
     ),
+  }),
+);
+
+export type TriggerEventSnapshot = {
+  eventId: string;
+  name: string;
+  properties: Record<string, unknown>;
+  occurredAt: string;
+};
+
+/** A custom event a team sent for one of its contacts (`POST /events`).
+ * See docs/custom_events.md. */
+export const contactEvents = pgTable(
+  "contact_events",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .unique()
+      .$defaultFn(() => genPublicId("evt")),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    properties: jsonb("properties")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    /** Cleared by the retention loop after 30 days (the dedupe window). */
+    idempotencyKey: text("idempotency_key"),
+    backfill: boolean("backfill").notNull().default(false),
+    /** False for backfilled and stale events: stored, never matched. */
+    triggers: boolean("triggers").notNull(),
+    source: text("source").notNull(), // api | session | mcp
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    eventIdCheck: publicIdCheck("contact_events_event_id_check", table.eventId, "evt"),
+    teamIdempotencyIdx: uniqueIndex("contact_events_team_id_idempotency_key_idx")
+      .on(table.teamId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} IS NOT NULL`),
+    contactTimelineIdx: index("contact_events_contact_id_occurred_at_idx").on(
+      table.contactId,
+      table.occurredAt.desc(),
+      table.id.desc(),
+    ),
+    unprocessedIdx: index("contact_events_unprocessed_idx")
+      .on(table.createdAt)
+      .where(sql`${table.processedAt} IS NULL`),
+  }),
+);
+
+/** One row per (event, sequence) the event was matched against. Makes
+ * matching idempotent across retries and the recovery sweep. */
+export const contactEventMatches = pgTable(
+  "contact_event_matches",
+  {
+    contactEventId: uuid("contact_event_id")
+      .notNull()
+      .references(() => contactEvents.id, { onDelete: "cascade" }),
+    sequenceId: uuid("sequence_id")
+      .notNull()
+      .references(() => sequences.id, { onDelete: "cascade" }),
+    enrolled: boolean("enrolled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.contactEventId, table.sequenceId] }),
+  }),
+);
+
+export type EventPropertyType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "date"
+  | "object"
+  | "array";
+
+export type EventDefinitionProperty = {
+  key: string;
+  type: EventPropertyType;
+  declared: boolean;
+};
+
+/** The team's list of events: registered on first receipt or by hand. */
+export const eventDefinitions = pgTable(
+  "event_definitions",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    origin: text("origin").notNull(), // received | manual
+    description: text("description"),
+    properties: jsonb("properties")
+      .$type<EventDefinitionProperty[]>()
+      .notNull()
+      .default([]),
+    lastProperties: jsonb("last_properties").$type<Record<string, unknown>>(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    teamNameIdx: uniqueIndex("event_definitions_team_id_name_idx").on(
+      table.teamId,
+      table.name,
+    ),
+  }),
+);
+
+/** Entry history per (sequence, contact), checked by the `once` and
+ * `once_per_period` re-entry settings. `ongoing_sequences` rows are deleted
+ * when a contact finishes, so they can't serve as history. */
+export const sequenceEntries = pgTable(
+  "sequence_entries",
+  {
+    sequenceId: uuid("sequence_id")
+      .notNull()
+      .references(() => sequences.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    firstEnteredAt: timestamp("first_entered_at", { withTimezone: true }).notNull(),
+    lastEnteredAt: timestamp("last_entered_at", { withTimezone: true }).notNull(),
+    entryCount: integer("entry_count").notNull().default(1),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.sequenceId, table.contactId] }),
   }),
 );
 
@@ -2100,7 +2255,7 @@ export const emailDeliveryEvents = pgTable(
     eventId: text("event_id")
       .notNull()
       .unique()
-      .$defaultFn(() => genPublicId("evt")),
+      .$defaultFn(() => genPublicId("dev")),
     receiptId: uuid("receipt_id")
       .notNull()
       .references(() => espWebhookReceipts.id, { onDelete: "cascade" }),
@@ -2137,10 +2292,13 @@ export const emailDeliveryEvents = pgTable(
     metadata: jsonb("metadata").notNull().default({}),
   },
   (table) => ({
-    eventIdCheck: publicIdCheck(
+    // Delivery events moved from `evt_` to `dev_` (custom events took
+    // `evt_`). Both are allowed for one release so pods still on the old
+    // code can insert during the rollout; the next migration tightens it
+    // to `^dev_` — see docs/custom_events.md#data-model.
+    eventIdCheck: check(
       "email_delivery_events_event_id_check",
-      table.eventId,
-      "evt",
+      sql`${table.eventId} ~ '^(evt|dev)_'`,
     ),
     // Event idempotency: replaying the same provider event twice must
     // insert nothing the second time.

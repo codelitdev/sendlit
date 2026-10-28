@@ -44,6 +44,7 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { espProviderLabel } from "@/lib/esp-providers";
+import { relativeTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 type Status = DomainAuthentication["spf"]["status"];
@@ -101,15 +102,6 @@ function sectionOf(record: DnsRecord): Section {
   if (record.purpose === "DMARC") return "DMARC";
   if (record.purpose.startsWith("DKIM")) return "DKIM";
   return "SPF";
-}
-
-function relativeTime(iso: string, now: number): string {
-  const seconds = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
-  if (seconds < 60) return "just now";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-  const hours = Math.round(minutes / 60);
-  return `${hours} hour${hours === 1 ? "" : "s"} ago`;
 }
 
 function list(names: string[]): string {

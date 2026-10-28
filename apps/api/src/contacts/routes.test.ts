@@ -18,6 +18,7 @@ mock.module("../auth/require-team", () => ({
 mock.module("./export", () => ({ exportContactsCsv: mocks.exportContactsCsv }));
 mock.module("./import", () => ({ importContacts: vi.fn() }));
 mock.module("./segments-queries", () => ({ getSegment: vi.fn() }));
+mock.module("../events/queries", () => ({ listContactEvents: vi.fn() }));
 mock.module("./queries", () => ({
   addTagToContact: vi.fn(),
   countContacts: vi.fn(),

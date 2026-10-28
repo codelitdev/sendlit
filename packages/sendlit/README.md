@@ -60,11 +60,12 @@ new SendLit({
 
 | Resource                 | Methods                                                                                                                                                              |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sendlit.contacts`       | `create`, `list`, `listAll`, `get`, `update`, `remove`, `addTag`, `removeTag`, `deliveries`                                                                          |
+| `sendlit.contacts`       | `create`, `list`, `listAll`, `get`, `update`, `remove`, `addTag`, `removeTag`, `deliveries`, `events`                                                                |
 | `sendlit.segments`       | `create`, `list`, `get`, `update`, `remove`                                                                                                                          |
 | `sendlit.templates`      | `list`, `listSystem`, `get`, `create`, `update`, `duplicate`, `remove`                                                                                               |
 | `sendlit.sequences`      | Broadcasts and sequences: `create`, `list`, `listAll`, `get`, `update`, `remove`, `addEmail`, `updateEmail`, `removeEmail`, `start`, `pause`, `stats`, `subscribers` |
 | `sendlit.emails`         | Transactional email: `send`, `get`, `list`, `listAll`                                                                                                                |
+| `sendlit.events`         | Custom events: `track`, and `definitions.list`, `definitions.get`, `definitions.create`, `definitions.update`, `definitions.delete`                                  |
 | `sendlit.provisioning`   | Organization key only: `provisionTeam`, `getTeam`, `updateTeam`, `createTeamKey`, `suspendTeam`, `resumeTeam`, `archiveTeam`, `getTeamUsage`                         |
 | `sendlit.suppressions`   | `list`, `listAll`, `get`, `release`                                                                                                                                  |
 | `sendlit.deliveryEvents` | `list`, `listAll`, `get`                                                                                                                                             |
@@ -84,6 +85,31 @@ Request and response types are exported too, for example `Contact`,
 - Tags passed to `create` don't fire `tag:added`. Use `subscriber:added` as
   the onboarding trigger, or call `addTag` after creating the contact if you
   want a tag trigger.
+
+### Custom events
+
+`events.track` records something a contact did in your product and starts
+every active sequence triggered by that event. Nothing has to be set up in
+SendLit first: the first event with a new name registers it.
+
+```ts
+await sendlit.events.track({
+    email: user.email,
+    eventName: "course purchased",
+    properties: { courseName: course.title, price: order.total },
+    idempotencyKey: order.id,
+});
+```
+
+- An unknown email creates the contact (`createContact` defaults to `true`).
+  Pass `createContact: false` to get a 404 instead.
+- The same `idempotencyKey` within 30 days stores one event; repeats return
+  the original with `duplicate: true`.
+- `backfill: true` imports history without starting any sequence.
+
+`events.definitions` manages the team's list of events, and
+`contacts.events(contactId)` lists the events a contact sent. See
+[Custom events](https://sendlit.app/developers/events).
 
 ### Pagination
 
@@ -133,7 +159,7 @@ jitter. It honors `Retry-After` when the response includes one.
   safe to repeat. That means `GET`, `PUT` and `DELETE` requests,
   `contacts.create` and `contacts.addTag` (both find-or-create),
   `provisioning.provisionTeam` (idempotent by `externalId`), and
-  `emails.send` when you pass an `idempotencyKey`.
+  `emails.send` and `events.track` when you pass an `idempotencyKey`.
 
 ```ts
 await sendlit.emails.send({

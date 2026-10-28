@@ -179,7 +179,8 @@ export async function seedTeamAndContact(
     .insert(schema.contacts)
     .values({
       teamId: team.id,
-      email: `reader-${crypto.randomUUID()}@example.com`,
+      // Not a reserved test domain: those skip sending (`isTestAddress`).
+      email: `reader-${crypto.randomUUID()}@inbox.sendlit.app`,
       name: "Ada Lovelace",
       unsubscribeToken: crypto.randomUUID(),
       tags: ["vip"],

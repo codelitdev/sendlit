@@ -2,6 +2,7 @@ import {
   contactFilterSchema,
   emailContentInputSchema,
   sequenceEmailTestResultSchema,
+  updateSequenceBodySchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
 import { broadcastPacing } from "../../abuse/pacing-status";
@@ -173,18 +174,15 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
     "update_sequence",
     {
       description:
-        "Updates a broadcast/sequence's title, trigger, audience filter, exclusion filter, selected user ESP, or whether its emails link a hosted web version (\"View in browser\"). A sent broadcast's title (its email's subject) can't be changed.",
+        "Updates a broadcast/sequence's title, trigger (including event:custom with the event name in triggerData and an optional property filter), re-entry setting, audience filter, exclusion filter, selected user ESP, or whether its emails link a hosted web version (\"View in browser\"). A sent broadcast's title (its email's subject) can't be changed.",
       inputSchema: {
         sequenceId: z.string(),
         title: z.string().optional(),
-        triggerType: z
-          .string()
-          .optional()
-          .describe("tag:added | tag:removed | subscriber:added | date:occurred"),
-        triggerData: z
-          .string()
-          .optional()
-          .describe("e.g. the tag name for tag triggers"),
+        triggerType: updateSequenceBodySchema.shape.triggerType,
+        triggerData: updateSequenceBodySchema.shape.triggerData,
+        triggerFilter: updateSequenceBodySchema.shape.triggerFilter,
+        reentry: updateSequenceBodySchema.shape.reentry,
+        reentryPeriodDays: updateSequenceBodySchema.shape.reentryPeriodDays,
         filter: z
           .object({
             aggregator: z.enum(["and", "or"]),

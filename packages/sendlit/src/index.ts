@@ -3,6 +3,7 @@ export { SendLitError } from "./errors";
 export * from "./resources/contacts";
 export * from "./resources/delivery-events";
 export * from "./resources/emails";
+export * from "./resources/events";
 export * from "./resources/provisioning";
 export * from "./resources/segments";
 export * from "./resources/sequences";

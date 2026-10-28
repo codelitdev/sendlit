@@ -1,10 +1,33 @@
 import { z } from "zod";
 import { emailContentInputSchema, emailContentSchema } from "./common";
 import { deliverySourceSelectionSchema } from "./delivery";
+import { eventPropertyFilterSchema, propertyChangeFilterSchema } from "./events";
 
 export const mailTypes = ["broadcast", "sequence"] as const;
 export const sequenceStatus = ["draft", "active", "paused", "completed"] as const;
 export const emailActionTypes = ["tag:add", "tag:remove"] as const;
+
+/** Every trigger a sequence row can carry. Broadcasts use `date:occurred`. */
+export const triggerTypes = [
+  "subscriber:added",
+  "tag:added",
+  "tag:removed",
+  "date:occurred",
+  "event:custom",
+  "contact:property_changed",
+] as const;
+/** The triggers a `type = 'sequence'` row may use. */
+export const sequenceTriggerTypes = [
+  "subscriber:added",
+  "tag:added",
+  "tag:removed",
+  "event:custom",
+  "contact:property_changed",
+] as const;
+export type TriggerTypeValue = (typeof triggerTypes)[number];
+
+export const reentryModes = ["every_time", "once", "once_per_period"] as const;
+export type ReentryMode = (typeof reentryModes)[number];
 
 export const sequenceEmailSchema = z.object({
   // NOTE: intentionally no `id`/`sequenceId` here — `sequence_emails.id` is
@@ -125,8 +148,14 @@ export const sequenceSchema = z.object({
   title: z.string(),
   status: z.string(),
   deliverySource: deliverySourceSelectionSchema.nullable(),
-  triggerType: z.string().nullable().optional(),
+  triggerType: z.enum(triggerTypes).nullable().optional(),
   triggerData: z.string().nullable().optional(),
+  /** Property filter (`event:custom`) or from/to filter
+   * (`contact:property_changed`). */
+  triggerFilter: z.any().nullable().optional(),
+  /** Who can enter again: sequences only. */
+  reentry: z.enum(reentryModes).optional(),
+  reentryPeriodDays: z.number().int().nullable().optional(),
   filter: z.any().nullable().optional(),
   excludeFilter: z.any().nullable().optional(),
   /** Active enrollments for a sequence or its locked recipient count for a broadcast. */
@@ -168,8 +197,32 @@ export const createSequenceBodySchema = z.object({
 
 export const updateSequenceBodySchema = z.object({
   title: z.string().optional(),
-  triggerType: z.string().optional(),
-  triggerData: z.string().optional(),
+  triggerType: z
+    .enum(triggerTypes)
+    .optional()
+    .describe(
+      "Broadcasts use date:occurred. Sequences: subscriber:added, tag:added, tag:removed, event:custom or contact:property_changed.",
+    ),
+  triggerData: z
+    .string()
+    .optional()
+    .describe(
+      "Tag name for tag triggers, event name for event:custom, custom field key for contact:property_changed.",
+    ),
+  triggerFilter: z
+    .union([eventPropertyFilterSchema, propertyChangeFilterSchema])
+    .nullable()
+    .optional()
+    .describe(
+      "event:custom: { aggregator, filters: [{ key, condition, value }] }. contact:property_changed: { from?, to? }. null clears it.",
+    ),
+  reentry: z
+    .enum(reentryModes)
+    .optional()
+    .describe(
+      "Sequences only. every_time (default), once, or once_per_period with reentryPeriodDays.",
+    ),
+  reentryPeriodDays: z.number().int().min(1).max(365).nullable().optional(),
   filter: contactFilterSchema
     .optional()
     .describe(
@@ -222,6 +275,9 @@ export const sequenceEmailTestResultSchema = z.object({
     .array(z.object({ email: z.string(), reason: z.enum(["suppressed"]) }))
     .describe("Addresses on the suppression list, which never get mail"),
   lastTestSentAt: z.string().nullable(),
+  /** Event-triggered sequences: `last_event` when `{{ event.* }}` used the
+   * last payload received for the event, `none` when there is none yet. */
+  eventSample: z.enum(["last_event", "none"]).optional(),
 });
 
 export const sequenceStatsSchema = z.object({

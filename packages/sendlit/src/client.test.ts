@@ -245,6 +245,27 @@ describe("retries", () => {
     expect(withKey.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("retries a tracked event only when it has an idempotency key", async () => {
+    const failure = { status: 502, body: { error: "bad_gateway" } };
+    const input = { email: "a@example.com", eventName: "course purchased" };
+    const tracked = {
+      eventId: "evt_1",
+      contactId: "con_1",
+      duplicate: false,
+      contactCreated: false,
+    };
+
+    const withoutKey = mockSendLit(failure);
+    await expect(withoutKey.sendlit.events.track(input)).rejects.toThrow();
+    expect(withoutKey.fetch).toHaveBeenCalledTimes(1);
+
+    const withKey = mockSendLit([failure, { status: 202, body: tracked }]);
+    await expect(
+      withKey.sendlit.events.track({ ...input, idempotencyKey: "order_1" }),
+    ).resolves.toEqual(tracked);
+    expect(withKey.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("gives up after maxRetries", async () => {
     const { sendlit, fetch } = mockSendLit(
       { status: 500, body: { error: "server_error" } },

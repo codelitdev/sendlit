@@ -9,6 +9,7 @@
     "errors",
     "mcp",
     "transactional",
+    "events",
     "provisioning",
     "headless-provisioning"
   ]

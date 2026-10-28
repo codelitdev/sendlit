@@ -70,5 +70,27 @@ function Example() {
 }
 ```
 
-Omit `triggers` to fall back to the built-in list (`subscriber:added`, `tag:added`, `tag:removed`), where
-the tag triggers use a plain text input instead of a `select`.
+Omit `triggers` to fall back to the built-in list (`subscriber:added`, `tag:added`, `tag:removed`,
+`event:custom` and `contact:property_changed`), where the tag triggers use a plain text input instead of
+a `select`.
+
+## Custom events and custom field changes
+
+The `event:custom` trigger starts a sequence when a [custom event](/developers/events) with the chosen
+name is received; `contact:property_changed` starts it when a contact's custom field changes. Both use a
+combobox for their value that lists `valueOptions[trigger]` and accepts a typed value. For these triggers
+the picker also edits `triggerFilter`: the [property filter](/email-marketing/sequences#property-filters)
+for `event:custom`, or `{ from, to }` for `contact:property_changed`. `onChange` returns
+`{ triggerType, triggerData, triggerFilter }`, and changing the trigger type clears the filter.
+
+| Prop                         | Description                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `triggerFilter`              | The current filter, or `null`.                                                                                |
+| `valueOptions`               | Options for combobox values, keyed by trigger, e.g. `{ "event:custom": ["course purchased"] }` from `GET /events/definitions`. |
+| `onCreateValue(trigger, value)` | Called when someone picks a typed value that isn't an option, e.g. to register the event with `POST /events/definitions`. |
+| `eventProperties`            | Known properties of the selected event (`{ key, type }[]`), so the filter suggests keys and uses number and boolean inputs. |
+| `valueFooter`                | Rendered under the value, e.g. a "no events received yet" note with a button to send a test event.            |
+| `valueOptionsStatus`         | Shown above the combobox options, e.g. while they load.                                                       |
+| `labels`                     | Overrides for the picker's texts (`TriggerPickerLabels`), including the filter editor's (`labels.filterEditor`). |
+
+The filter editor is also exported on its own as `EventPropertyFilterEditor`.
