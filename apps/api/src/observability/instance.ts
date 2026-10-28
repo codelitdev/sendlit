@@ -60,6 +60,9 @@ const PROPERTY_ALLOWLIST = new Set([
   "reason",
   "outcome",
   "scan_mode",
+  // Transactional email: already sent, were missing from the allowlist.
+  "txe_id",
+  "delivery_source",
 ]);
 
 /** Allowlisted keys that hold opaque record ids. They skip the package's
@@ -76,6 +79,7 @@ const IDENTIFIER_KEYS = new Set([
   "job_id",
   "organization_id",
   "form_id",
+  "txe_id",
 ]);
 
 /**
