@@ -35,9 +35,12 @@ const { default: webViewRoutes } = await import("../tracking/web-view");
 const { requestApp } = await import("../test/http");
 const express = (await import("express")).default;
 const { getUnsubLink } = await import("../utils/mail");
-const { getNextPublishedEmail, processOngoingSequence } = await import(
-  "./process-ongoing-sequence"
+const { EmailRenderError, MissingTemplateVariablesError } = await import(
+  "../mail/render"
 );
+const { TemplateValidationError } = await import("../templates/validation");
+const { getNextPublishedEmail, isPermanentRenderError, processOngoingSequence } =
+  await import("./process-ongoing-sequence");
 
 const tdb = db as unknown as TestDb;
 const mockedSendMail = sendMail as unknown as Mock<typeof sendMail>;
@@ -212,6 +215,22 @@ describe("processOngoingSequence", () => {
     await expect(processOngoingSequence(row.id)).rejects.toThrow("footer_required");
     expect(mockedSendMail).not.toHaveBeenCalled();
     expect(await tdb.select().from(emailDeliveries)).toHaveLength(0);
+  });
+
+  it("only counts content and footer render errors toward the bounce limit", () => {
+    expect(isPermanentRenderError(new EmailRenderError("footer_render_failed"))).toBe(
+      true,
+    );
+    expect(isPermanentRenderError(new TemplateValidationError("footer_required"))).toBe(
+      true,
+    );
+    expect(isPermanentRenderError(new MissingTemplateVariablesError(["name"]))).toBe(
+      true,
+    );
+    // A database blip or timeout while rendering must stay retryable.
+    expect(
+      isPermanentRenderError(new Error("Connection terminated unexpectedly")),
+    ).toBe(false);
   });
 
   it("counts a render failure toward the bounce limit instead of retrying forever", async () => {

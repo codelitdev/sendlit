@@ -11,6 +11,16 @@ const liquidEngine = new Liquid();
 
 export const MISSING_TEMPLATE_VARIABLES = "missing_template_variables";
 
+/** A render failure caused by the email's content or the team's footer
+ * settings. It repeats on every retry until one of them changes, unlike a
+ * transient dependency error (database, entitlements) hit while rendering. */
+export class EmailRenderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EmailRenderError";
+  }
+}
+
 export class MissingTemplateVariablesError extends Error {
   readonly missingVariables: string[];
 
@@ -275,7 +285,7 @@ export async function renderEmailContent({
       typeof unsubscribeUrl !== "string" ||
       unsubscribeUrl.trim().length === 0
     ) {
-      const error = new Error("footer_render_context_required");
+      const error = new EmailRenderError("footer_render_context_required");
       captureError({
         error,
         source: "mail.footer_context",
@@ -294,7 +304,7 @@ export async function renderEmailContent({
     renderContext,
   });
   if (html.includes("<h1>Error:")) {
-    throw new Error("render_failed");
+    throw new EmailRenderError("render_failed");
   }
   if (renderContext?.footer) {
     const document = new JSDOM(html).window.document;
@@ -310,7 +320,7 @@ export async function renderEmailContent({
       (anchor) => anchor.getAttribute("href") === renderContext!.footer!.unsubscribeUrl,
     );
     if (!hasAddress || !hasUnsubscribeUrl) {
-      const error = new Error("footer_render_failed");
+      const error = new EmailRenderError("footer_render_failed");
       captureError({
         error,
         source: "mail.footer_compliance_assertion",

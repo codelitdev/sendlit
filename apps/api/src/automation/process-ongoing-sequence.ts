@@ -24,6 +24,7 @@ import {
 } from "../delivery-feedback/outbound-send";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
 import { renderCampaignHtml } from "../mail/campaign";
+import { EmailRenderError, MissingTemplateVariablesError } from "../mail/render";
 import { quotaExhaustionDeferral, SendDeferredError } from "../mail/rate-limit";
 import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
@@ -32,6 +33,7 @@ import logger from "../services/log";
 import { withoutProviderTracking } from "../settings/esp/provider-capabilities";
 import { trackingOriginForTeam } from "../settings/tracking-domain/queries";
 import { getTeam } from "../team/queries";
+import { TemplateValidationError } from "../templates/validation";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
 import {
@@ -294,10 +296,13 @@ async function attemptMailSending({
       publication: sequence.type === "broadcast" ? sequence : null,
     });
   } catch (err: any) {
-    // A render failure (e.g. the managed footer check) is permanent for this
-    // recipient until the content or settings change. Count it like any other
-    // failed attempt so it eventually stops instead of retrying forever.
-    await recordFailedAttempt({ sequence, contact, ongoingSequence });
+    // A content or footer-settings failure repeats on every retry until the
+    // content or settings change, so count it like any other failed attempt
+    // and let it stop instead of retrying forever. Anything else (a database
+    // blip while rendering) is transient: retry without using up the limit.
+    if (isPermanentRenderError(err)) {
+      await recordFailedAttempt({ sequence, contact, ongoingSequence });
+    }
     throw err;
   }
 
@@ -427,6 +432,14 @@ async function attemptMailSending({
     );
     throw err;
   }
+}
+
+export function isPermanentRenderError(err: unknown): boolean {
+  return (
+    err instanceof EmailRenderError ||
+    err instanceof TemplateValidationError ||
+    err instanceof MissingTemplateVariablesError
+  );
 }
 
 /** Counts one failed attempt for this recipient. At `sequenceBounceLimit` the
