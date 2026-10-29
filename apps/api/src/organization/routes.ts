@@ -150,7 +150,8 @@ async function resolveAuthorization(
   keyScopes: string[] | null;
 } | null> {
   const organization = await getOrganizationByPublicId(publicOrganizationId);
-  if (!organization) return null;
+  // A deleted (closed) organization is gone for every caller.
+  if (!organization || organization.status === "closed") return null;
   if (req.authKind === "organization_key") {
     if (req.organizationId !== organization.id) return null;
     return {

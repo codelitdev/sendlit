@@ -247,6 +247,32 @@ describe("DELETE /organizations/:organizationId", () => {
     );
   });
 
+  it("hides a deleted organization from its members", async () => {
+    const owner = await insertUser("Owner");
+    const admin = await insertUser("Admin");
+    const { organization } = await seedOrganization(owner, "acme");
+    await addOrganizationMemberByEmail(organization.id, admin.email, "admin");
+    authState.userId = owner.id;
+    await requestApp(app(), deletePath(organization.organizationId), {
+      method: "DELETE",
+    });
+
+    for (const userId of [owner.id, admin.id]) {
+      authState.userId = userId;
+      for (const path of ["", "/teams", "/members"]) {
+        const response = await requestApp(
+          app(),
+          `${deletePath(organization.organizationId)}${path}`,
+        );
+        expect(response.status).toBe(404);
+      }
+      const again = await requestApp(app(), deletePath(organization.organizationId), {
+        method: "DELETE",
+      });
+      expect(again.status).toBe(404);
+    }
+  });
+
   it("still deletes when MediaLit fails, keeping the failed file's row", async () => {
     const owner = await insertUser("Owner");
     const { organization, mediaLitIds } = await seedOrganization(owner, "acme");
@@ -277,7 +303,9 @@ describe("DELETE /organizations/:organizationId", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(response.json<{ error: string }>()).toEqual({ error: "organization_owner_required" });
+    expect(response.json<{ error: string }>()).toEqual({
+      error: "organization_owner_required",
+    });
     expect(await organizationStatus(organization.id)).toBe("active");
     expect(deleteMediaMock).not.toHaveBeenCalled();
   });
@@ -310,7 +338,9 @@ describe("DELETE /organizations/:organizationId", () => {
     });
 
     expect(response.status).toBe(409);
-    expect(response.json<{ error: string }>()).toEqual({ error: "active_subscription_exists" });
+    expect(response.json<{ error: string }>()).toEqual({
+      error: "active_subscription_exists",
+    });
     expect(await organizationStatus(organization.id)).toBe("active");
     expect(deleteMediaMock).not.toHaveBeenCalled();
     expect(await tdb.select().from(schema.media)).toHaveLength(4);
