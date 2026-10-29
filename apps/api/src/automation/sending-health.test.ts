@@ -226,6 +226,32 @@ describe("auto-pause (#25)", () => {
     expect(await tdb.select().from(schema.ongoingSequences)).toHaveLength(2);
   });
 
+  it("pauses after several recipients in a row fail a guarded content error", async () => {
+    process.env.AUTO_PAUSE_CONSECUTIVE_FAILURES = "2";
+    const { sequenceRow, rows } = await broadcastTo(3);
+    // The include only runs for contacts with a name, so a render without
+    // contact data succeeds and each failure looks per-recipient.
+    await tdb
+      .update(schema.sequenceEmails)
+      .set({
+        content: emailContent({
+          text: "Hi {% if subscriber.name %}{% include greeting %}{% endif %}",
+        }) as any,
+      })
+      .where(eq(schema.sequenceEmails.sequenceId, sequenceRow.id));
+    await tdb.update(schema.contacts).set({ name: "Ada" });
+
+    for (const row of rows) await processOngoingSequence(row.id);
+
+    expect(mockedSendMail).not.toHaveBeenCalled();
+    const paused = await sequenceById(sequenceRow.id);
+    expect(paused.status).toBe("paused");
+    expect((paused.report as any).autoPause.reason).toBe("render_error");
+    // Only the first recipient was skipped; the rest wait for the fix.
+    expect((paused.report as any).sequence.failed).toHaveLength(1);
+    expect(await tdb.select().from(schema.ongoingSequences)).toHaveLength(2);
+  });
+
   it("skips only the recipient whose own data breaks the Liquid render", async () => {
     const { sequenceRow, rows } = await broadcastTo(2);
     await tdb

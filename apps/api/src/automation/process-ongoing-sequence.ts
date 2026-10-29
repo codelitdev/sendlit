@@ -318,7 +318,7 @@ async function attemptMailSending({
       isPermanentRenderError(err) ||
       (err instanceof RenderError &&
         !(await rendersWithoutContactData(team, email.content, ids)));
-    if (contentWide) {
+    const pauseSend = async () => {
       const paused = await autoPauseSequence(sequence, "render_error", {
         error: String(err?.message ?? err).slice(0, 300),
       });
@@ -326,13 +326,22 @@ async function attemptMailSending({
         throw new SequencePausedError();
       }
       throw err;
-    }
+    };
+    if (contentWide) await pauseSend();
     // The email renders without contact data, so the Liquid error comes from
     // this contact's data (for example a filter on their name) and only
     // affects this recipient. Like a suppressed
     // recipient, skip this email for them, record it, and move on rather
     // than pausing everyone or retrying forever.
     if (err instanceof RenderError) {
+      // The probe can't see content errors behind a condition on contact
+      // data (e.g. `{% if subscriber.name %}{% include x %}{% endif %}`), so
+      // a run of recipients failing in a row also counts as content-wide: it
+      // pauses, keeping this recipient and everyone after them queued.
+      const failures = await recordSendFailure(sequence.id);
+      if (failures >= readSendingHealthConfig().consecutiveFailures) {
+        await pauseSend();
+      }
       await recordRecipientFailed(sequence.id, contact.contactId);
       captureError({
         error: err,
