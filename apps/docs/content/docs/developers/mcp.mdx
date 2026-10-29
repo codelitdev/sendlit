@@ -76,6 +76,7 @@ OAuth access is default-deny per tool. Read and write permissions are separate:
 ### Contacts and segments
 
 - `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`
+- `preview_delete_contacts`, `delete_contacts` (bulk, by ids or by search/segment/filter; requires the previewed `expectedCount` for a match) and `get_contact_deletion` (progress of a large background deletion). See [Delete contacts](/email-marketing/contacts#delete-contacts).
 - `add_contact_tag`, `remove_contact_tag`, `get_contact_deliveries`
 - `import_contacts` (up to 1000 rows per call, statuses only get stricter) and `export_contacts` (CSV)
 - `list_segments`, `get_segment`, `create_segment`, `update_segment`, `delete_segment`
@@ -186,4 +187,4 @@ Prefer the client’s secure secret-store or environment-variable mechanism. Do 
 
 ## Operational limits
 
-The MCP endpoint is rate limited to 60 requests per minute. High-impact tools such as sending email, tracking events (`track_event`), activating sequences, testing ESPs, managing API keys, deleting teams, and releasing suppressions are limited to 20 requests per minute. A missing or invalid credential returns HTTP 401, a missing OAuth scope returns an `insufficient_scope` tool error, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.
+The MCP endpoint is rate limited to 60 requests per minute. High-impact tools such as sending email, tracking events (`track_event`), activating sequences, testing ESPs, managing API keys, deleting teams, deleting contacts in bulk (`delete_contacts`), and releasing suppressions are limited to 20 requests per minute. A missing or invalid credential returns HTTP 401, a missing OAuth scope returns an `insufficient_scope` tool error, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.
