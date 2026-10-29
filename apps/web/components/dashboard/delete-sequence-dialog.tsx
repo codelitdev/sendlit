@@ -111,7 +111,7 @@ export function DeleteSequenceDialog({
                   {plural(preview.emailsSentCount, "sent email", "sent emails")}
                 </span>{" "}
                 (deliveries, opens and clicks) are deleted and can't be recovered. To
-                keep them, pause the sequence instead.
+                keep them, leave the sequence paused instead; it sends nothing.
               </>
             ) : (
               "It hasn't sent any email, so no stats are lost."
