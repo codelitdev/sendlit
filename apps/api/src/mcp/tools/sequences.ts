@@ -9,6 +9,7 @@ import { z } from "zod";
 import { broadcastPacing } from "../../abuse/pacing-status";
 import { sequenceDeliveryRates } from "../../automation/sending-health";
 import { emailActionTypes, mailTypes } from "../../config/constants";
+import { sequenceDeleteBlockerMessage } from "../../sequences/delete-blockers";
 import type { HydratedSequence } from "../../sequences/queries";
 import {
   addMailToSequence,
@@ -29,7 +30,6 @@ import {
   updateMailInSequence,
   updateSequence,
 } from "../../sequences/queries";
-import { sequenceDeleteBlockerMessage } from "../../sequences/delete-blockers";
 import { sendSequenceEmailTest } from "../../sequences/test-send";
 import { omitInternal } from "../../utils/public";
 import type { McpToolRegistrar } from "../tool-registry";

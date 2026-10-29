@@ -50,13 +50,13 @@ import { captureEvent } from "../observability";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
 import { resolveStartingTemplate } from "../templates/queries";
+import { type SequenceDeleteBlocker, sequenceDeleteBlocker } from "./delete-blockers";
 import {
   addRule,
   defaultEmailContent,
   removeRule,
   verifyMandatoryTags,
 } from "./helpers";
-import { type SequenceDeleteBlocker, sequenceDeleteBlocker } from "./delete-blockers";
 import { TRIGGERS_NEEDING_DATA, validateTriggerState } from "./trigger";
 
 export type Sequence = typeof sequences.$inferSelect;

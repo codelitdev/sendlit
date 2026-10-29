@@ -15,16 +15,17 @@ import {
   updateWebPublishing,
   WebPublishingError,
 } from "../web/queries";
+import { isSequenceDeleteBlocker } from "./delete-blockers";
 import {
   addMailToSequence,
   countSequences,
   createSequence,
   deleteMailFromSequence,
   deleteSequence,
-  getSequenceDeletionImpact,
   getEmailSentCount,
   getSequenceBySequenceId,
   getSequenceClickThroughRate,
+  getSequenceDeletionImpact,
   getSequenceOpenRate,
   getSubscribers,
   getSubscribersCount,
@@ -35,7 +36,6 @@ import {
   updateMailInSequence,
   updateSequence,
 } from "./queries";
-import { isSequenceDeleteBlocker } from "./delete-blockers";
 import { sendSequenceEmailTest } from "./test-send";
 
 const router = Router();
