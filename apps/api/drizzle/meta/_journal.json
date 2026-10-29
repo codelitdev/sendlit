@@ -197,6 +197,13 @@
       "when": 1793160384309,
       "tag": "0027_custom_events",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793274088220,
+      "tag": "0028_broadcast_archive",
+      "breakpoints": true
     }
   ]
 }

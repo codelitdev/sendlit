@@ -1383,6 +1383,10 @@ export const sequences = pgTable(
     webNoindex: boolean("web_noindex").notNull().default(false),
     /** Where the issue really lives when a platform hosts it. */
     webCanonicalUrl: text("web_canonical_url"),
+    /** When a sent broadcast was archived (#147): hidden from the default
+     * list and the public web archive, with its report and delivery
+     * history kept. `null` when not archived. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },

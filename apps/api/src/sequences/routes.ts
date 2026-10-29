@@ -15,7 +15,7 @@ import {
   updateWebPublishing,
   WebPublishingError,
 } from "../web/queries";
-import { isSequenceDeleteBlocker } from "./delete-blockers";
+import { broadcastArchiveErrors, isSequenceDeleteBlocker } from "./delete-blockers";
 import {
   addMailToSequence,
   countSequences,
@@ -32,6 +32,7 @@ import {
   type HydratedSequence,
   listSequences,
   pauseSequence,
+  setBroadcastArchived,
   startSequence,
   updateMailInSequence,
   updateSequence,
@@ -97,8 +98,9 @@ const impl = s.router(contract.sequences, {
         type: query.type,
         offset: query.offset,
         itemsPerPage: query.itemsPerPage,
+        archived: query.archived,
       }),
-      countSequences(teamId, query.type),
+      countSequences(teamId, query.type, query.archived),
     ]);
     return { status: 200, body: { items: items.map(toBody), total } };
   },
@@ -232,6 +234,31 @@ const impl = s.router(contract.sequences, {
     }
     if (!deleted) return { status: 404, body: { error: "Sequence not found" } };
     return { status: 204, body: undefined };
+  },
+  archive: async ({ params, req }) => {
+    try {
+      const sequence = await setBroadcastArchived({
+        teamId: (req as any).teamId,
+        sequenceId: params.sequenceId,
+        archived: true,
+      });
+      if (!sequence) return { status: 404, body: { error: "Broadcast not found" } };
+      return { status: 200, body: toBody(sequence) };
+    } catch (err: any) {
+      if (err.message in broadcastArchiveErrors) {
+        return { status: 409, body: { error: err.message } };
+      }
+      throw err;
+    }
+  },
+  unarchive: async ({ params, req }) => {
+    const sequence = await setBroadcastArchived({
+      teamId: (req as any).teamId,
+      sequenceId: params.sequenceId,
+      archived: false,
+    });
+    if (!sequence) return { status: 404, body: { error: "Broadcast not found" } };
+    return { status: 200, body: toBody(sequence) };
   },
   deletionPreview: async ({ params, req }) => {
     const preview = await getSequenceDeletionImpact(

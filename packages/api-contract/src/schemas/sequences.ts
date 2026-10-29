@@ -166,6 +166,8 @@ export const sequenceSchema = z.object({
   /** Whether sends link a hosted web version ("View in browser"). On for
    * new broadcasts, off for new sequences. */
   viewInBrowser: z.boolean(),
+  /** When a sent broadcast was archived; `null` when it isn't. */
+  archivedAt: z.string().nullable().optional(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
   emails: z.array(sequenceEmailSchema),
@@ -183,8 +185,16 @@ export const sequenceSchema = z.object({
     .optional(),
 });
 
+export const archivedFilters = ["exclude", "only", "include"] as const;
+
 export const listSequencesQuerySchema = z.object({
   type: z.enum(mailTypes),
+  archived: z
+    .enum(archivedFilters)
+    .optional()
+    .describe(
+      "Archived broadcasts: exclude (default) hides them, only lists just them, include lists both",
+    ),
   offset: z.coerce.number().int().min(1).optional(),
   itemsPerPage: z.coerce.number().int().min(1).max(50).optional(),
 });
@@ -293,10 +303,10 @@ export const sequenceStatsSchema = z.object({
 export const sequenceDeletionPreviewSchema = z.object({
   status: z.string().describe("The broadcast or sequence's current status"),
   blocker: z
-    .enum(["sequence_active"])
+    .enum(["sequence_active", "broadcast_sent"])
     .nullable()
     .describe(
-      "Why it can't be deleted right now (sequence_active: pause it first), or null when it can",
+      "Why it can't be deleted right now (sequence_active: pause it first; broadcast_sent: archive the broadcast instead), or null when it can",
     ),
   enrolledCount: z
     .number()

@@ -1,5 +1,16 @@
 import type { Email as EmailContent } from "@sendlit/email-editor";
-import { and, asc, count, eq, inArray, notInArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { assertLargeBroadcastReviewed } from "../abuse/broadcast-review";
 import { assertEmailContentAllowed } from "../abuse/content-scan";
 import { assertNoImportUnderReview } from "../abuse/imports";
@@ -50,7 +61,11 @@ import { captureEvent } from "../observability";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
 import { resolveStartingTemplate } from "../templates/queries";
-import { type SequenceDeleteBlocker, sequenceDeleteBlocker } from "./delete-blockers";
+import {
+  broadcastArchiveBlocker,
+  type SequenceDeleteBlocker,
+  sequenceDeleteBlocker,
+} from "./delete-blockers";
 import {
   addRule,
   defaultEmailContent,
@@ -232,22 +247,34 @@ export async function getSequenceBySequenceId(
   return hydrate(row);
 }
 
+/** Which broadcasts a list shows: archived ones are hidden by default. */
+export type ArchivedFilter = "exclude" | "only" | "include";
+
+function listCondition(teamId: string, type: MailType, archived: ArchivedFilter) {
+  const conditions: SQL[] = [eq(sequences.teamId, teamId), eq(sequences.type, type)];
+  if (archived === "exclude") conditions.push(isNull(sequences.archivedAt));
+  if (archived === "only") conditions.push(isNotNull(sequences.archivedAt));
+  return and(...conditions);
+}
+
 export async function listSequences({
   teamId,
   type,
   offset = 1,
   itemsPerPage: perPage = itemsPerPage,
+  archived = "exclude",
 }: {
   teamId: string;
   type: MailType;
   offset?: number;
   itemsPerPage?: number;
+  archived?: ArchivedFilter;
 }): Promise<HydratedSequence[]> {
   const pageSize = Math.min(Math.max(perPage, 1), maxItemsPerPage);
   const rows = await db
     .select()
     .from(sequences)
-    .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)))
+    .where(listCondition(teamId, type, archived))
     .limit(pageSize)
     .offset((Math.max(offset, 1) - 1) * pageSize);
   if (rows.length === 0) return [];
@@ -277,11 +304,15 @@ export async function listSequences({
   );
 }
 
-export async function countSequences(teamId: string, type: MailType): Promise<number> {
+export async function countSequences(
+  teamId: string,
+  type: MailType,
+  archived: ArchivedFilter = "exclude",
+): Promise<number> {
   const [row] = await db
     .select({ value: count() })
     .from(sequences)
-    .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)));
+    .where(listCondition(teamId, type, archived));
   return row?.value ?? 0;
 }
 
@@ -732,15 +763,35 @@ export interface SequenceDeletionImpact {
   emailsSentCount: number;
 }
 
+function deleteBlockerOf(sequence: HydratedSequence) {
+  return sequenceDeleteBlocker({
+    status: sequence.status,
+    type: sequence.type,
+    report: sequence.report,
+    sendAt: sequence.emails[0]?.delayInMillis,
+  });
+}
+
+/**
+ * Rows that may be deleted right now, repeated in the delete statement so a
+ * sequence started (or a broadcast that began sending) since the check is
+ * kept: not active, except a broadcast still waiting for its send time;
+ * and never a broadcast that has started sending.
+ */
+const deletableNow = () => {
+  const notStarted = sql`${sequences.report}->'broadcast'->>'lockedAt' IS NULL`;
+  return or(
+    and(eq(sequences.type, "sequence"), sql`${sequences.status} <> 'active'`),
+    and(eq(sequences.type, "broadcast"), notStarted),
+  );
+};
+
 /** What deleting a sequence would remove, shown before the user confirms. */
 export async function getSequenceDeletionImpact(
   teamId: string,
   sequenceId: string,
 ): Promise<SequenceDeletionImpact | null> {
-  const [sequence] = await db
-    .select({ id: sequences.id, status: sequences.status })
-    .from(sequences)
-    .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)));
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
   if (!sequence) return null;
   const [[enrolled], [sent]] = await Promise.all([
     db
@@ -754,7 +805,7 @@ export async function getSequenceDeletionImpact(
   ]);
   return {
     status: sequence.status,
-    blocker: sequenceDeleteBlocker(sequence),
+    blocker: deleteBlockerOf(sequence),
     enrolledCount: enrolled?.value ?? 0,
     emailsSentCount: sent?.value ?? 0,
   };
@@ -776,7 +827,7 @@ export async function deleteSequence({
 }): Promise<boolean> {
   const sequence = await getSequenceBySequenceId(teamId, sequenceId);
   if (!sequence) return false;
-  const blocker = sequenceDeleteBlocker(sequence);
+  const blocker = deleteBlockerOf(sequence);
   if (blocker) throw new Error(blocker);
 
   const impact = await getSequenceDeletionImpact(teamId, sequenceId);
@@ -788,12 +839,12 @@ export async function deleteSequence({
   // Guarded on status so a sequence started since the read above is kept.
   const removed = await db
     .delete(sequences)
-    .where(and(eq(sequences.id, sequence.id), notInArray(sequences.status, ["active"])))
+    .where(and(eq(sequences.id, sequence.id), deletableNow()))
     .returning({ id: sequences.id });
   if (!removed.length) {
     const current = await getSequenceBySequenceId(teamId, sequenceId);
     if (!current) return false;
-    throw new Error(sequenceDeleteBlocker(current) ?? "sequence_active");
+    throw new Error(deleteBlockerOf(current) ?? "sequence_active");
   }
 
   const mediaIds = await releaseEmailMedia(teamId, emailIds, sentIds);
@@ -816,6 +867,52 @@ export async function deleteSequence({
   return true;
 }
 
+/**
+ * Archives (or, with `archived: false`, restores) a sent broadcast (#147).
+ * An archived broadcast is hidden from the default list and the public web
+ * archive; its report, delivery history and images are kept. Throws
+ * `broadcast_not_sent` for a draft or scheduled broadcast (delete it
+ * instead) and `sequence_active` while it is sending; returns null when
+ * there is no such broadcast.
+ */
+export async function setBroadcastArchived({
+  teamId,
+  sequenceId,
+  archived,
+}: {
+  teamId: string;
+  sequenceId: string;
+  archived: boolean;
+}): Promise<HydratedSequence | null> {
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+  if (sequence?.type !== "broadcast") return null;
+  if (archived) {
+    const blocker = broadcastArchiveBlocker({
+      status: sequence.status,
+      type: sequence.type,
+      report: sequence.report,
+      sendAt: sequence.emails[0]?.delayInMillis,
+    });
+    if (blocker) throw new Error(blocker);
+  }
+  if (Boolean(sequence.archivedAt) === archived) return sequence;
+
+  const [row] = await db
+    .update(sequences)
+    .set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() })
+    .where(eq(sequences.id, sequence.id))
+    .returning();
+
+  captureEvent({
+    event: archived ? "broadcast_archived" : "broadcast_unarchived",
+    source: archived ? "sequences.archive" : "sequences.unarchive",
+    teamId,
+    properties: { sequence_id: sequence.sequenceId, sequence_status: sequence.status },
+  });
+
+  return hydrate(row);
+}
+
 export async function startSequence({
   teamId,
   sequenceId,
@@ -831,6 +928,8 @@ export async function startSequence({
   if (!["draft", "paused"].includes(sequence.status)) {
     throw new Error(responses.sequence_already_started);
   }
+  // An archived broadcast was paused mid-send; restore it before resuming.
+  if (sequence.archivedAt) throw new Error(responses.broadcast_archived);
   if (!sequence.emails.some((e) => e.published)) {
     throw new Error(responses.no_published_emails);
   }
