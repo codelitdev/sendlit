@@ -9,13 +9,25 @@ import {
   SequenceAnalytics,
   type SequenceStats,
 } from "@sendlit/email-blocks";
-import { CalendarClock, Check, Pencil, Send, X } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  CalendarClock,
+  Check,
+  Pencil,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
+import { ArchiveBroadcastDialog } from "@/components/dashboard/archive-broadcast-dialog";
 import { AutoPauseBanner } from "@/components/dashboard/auto-pause-banner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { BroadcastWebDialog } from "@/components/dashboard/broadcast-web-dialog";
+import { DeleteSequenceDialog } from "@/components/dashboard/delete-sequence-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import {
   MARKETING_EMAIL_EDITOR_BLOCKS,
@@ -40,6 +52,11 @@ import {
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/codelit/tooltip";
+import {
   type DeliverySourceSelection,
   getSequence,
   getSequenceStats,
@@ -48,11 +65,16 @@ import {
   pauseSequence,
   type SendingOption,
   startSequence,
+  unarchiveBroadcast,
   updateSequence,
   updateSequenceEmail,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
-import { broadcastScheduledFor, presentBroadcastStatus } from "@/lib/broadcast";
+import {
+  broadcastDeleteActions,
+  broadcastScheduledFor,
+  presentBroadcastStatus,
+} from "@/lib/broadcast";
 import {
   isDeletedDeliverySource,
   presentDeliverySourceError,
@@ -104,6 +126,9 @@ export default function BroadcastEditorPage({
   const [working, setWorking] = useState(false);
   const [audienceCount, setAudienceCount] = useState<number>();
   const [sendingOptions, setSendingOptions] = useState<SendingOption[]>([]);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const router = useRouter();
   const { segmentProps, clearSelection } = useSegments(setError);
   const exclusionSegments = useSegments(setError);
 
@@ -255,6 +280,18 @@ export default function BroadcastEditorPage({
     }
   }
 
+  async function unarchive() {
+    setWorking(true);
+    setError(null);
+    try {
+      setSequence(await unarchiveBroadcast(sequenceId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Action failed");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   function openSchedule() {
     setScheduleAt(toLocalInputValue(new Date(Date.now() + 60 * 60_000)));
     setScheduleOpen(true);
@@ -284,6 +321,7 @@ export default function BroadcastEditorPage({
   }
 
   const status = presentBroadcastStatus(sequence);
+  const removal = broadcastDeleteActions(sequence);
   const scheduledFor = broadcastScheduledFor(sequence);
   const scheduledForLabel = scheduledFor?.toLocaleString();
   // A broadcast paused mid-send is resumed, not edited or re-sent.
@@ -306,8 +344,43 @@ export default function BroadcastEditorPage({
               {sequence.title || "Untitled broadcast"}
             </h1>
             <Badge variant={status.variant}>{status.label}</Badge>
+            {sequence.archivedAt && <Badge variant="outline">archived</Badge>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {sequence.archivedAt ? (
+              <Button variant="outline" onClick={unarchive} disabled={working}>
+                <ArchiveRestore className="size-4" />
+                Unarchive
+              </Button>
+            ) : removal.archive.allowed ? (
+              <Button
+                variant="outline"
+                onClick={() => setArchiveOpen(true)}
+                disabled={working}
+              >
+                <Archive className="size-4" />
+                Archive
+              </Button>
+            ) : null}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* A disabled button gets no pointer events; the span shows why. */}
+                <span tabIndex={removal.delete.allowed ? -1 : 0}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDeleteOpen(true)}
+                    disabled={!removal.delete.allowed || working}
+                    aria-label="Delete broadcast"
+                  >
+                    <Trash2 className="size-4" />
+                    Delete
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {removal.delete.reason && (
+                <TooltipContent>{removal.delete.reason}</TooltipContent>
+              )}
+            </Tooltip>
             <BroadcastWebDialog sequenceId={sequenceId} />
             {editable && (
               <>
@@ -351,9 +424,32 @@ export default function BroadcastEditorPage({
           </div>
         </div>
 
+        <DeleteSequenceDialog
+          sequence={deleteOpen ? sequence : null}
+          type="broadcast"
+          onOpenChange={setDeleteOpen}
+          onDeleted={() => router.push("/broadcasts")}
+          onArchiveInstead={() => {
+            setDeleteOpen(false);
+            setArchiveOpen(true);
+          }}
+        />
+        <ArchiveBroadcastDialog
+          broadcast={archiveOpen ? sequence : null}
+          onOpenChange={setArchiveOpen}
+          onArchived={load}
+        />
+
         {error && (
           <Banner className="mb-4">
             <SendErrorMessage error={error} />
+          </Banner>
+        )}
+
+        {sequence.archivedAt && (
+          <Banner variant="info" className="mb-4">
+            This broadcast is archived. It&apos;s hidden from the broadcasts list and
+            your web archive; its report is kept. Unarchive it to bring it back.
           </Banner>
         )}
 

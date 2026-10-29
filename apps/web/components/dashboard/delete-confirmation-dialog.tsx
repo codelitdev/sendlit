@@ -20,6 +20,8 @@ export function DeleteConfirmationDialog({
   description = "This action cannot be undone.",
   confirmLabel = "Delete",
   confirmDisabled = false,
+  confirmVariant = "destructive",
+  pendingLabel = "Deleting…",
   errorMessage,
   children,
 }: {
@@ -31,6 +33,10 @@ export function DeleteConfirmationDialog({
   confirmLabel?: string;
   /** Holds the confirm button, e.g. while the details below load. */
   confirmDisabled?: boolean;
+  /** `primary` for reversible actions such as archiving. */
+  confirmVariant?: "destructive" | "primary";
+  /** Shown on the confirm button while `onConfirm` runs. */
+  pendingLabel?: string;
   /** Explains a failed delete; defaults to a generic retry message. */
   errorMessage?: (error: unknown) => ReactNode;
   /** Details shown between the description and the buttons. */
@@ -71,7 +77,7 @@ export function DeleteConfirmationDialog({
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
-            variant="destructive"
+            variant={confirmVariant}
             disabled={isDeleting || confirmDisabled}
             onClick={async (event) => {
               event.preventDefault();
@@ -90,7 +96,7 @@ export function DeleteConfirmationDialog({
               }
             }}
           >
-            {isDeleting ? "Deleting…" : confirmLabel}
+            {isDeleting ? pendingLabel : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

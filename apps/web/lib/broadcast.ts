@@ -36,3 +36,42 @@ export function broadcastScheduledFor(sequence: Sequence): Date | null {
   const sendAt = sequence.emails[0]?.delayInMillis ?? 0;
   return sendAt > Date.now() ? new Date(sendAt) : null;
 }
+
+export interface BroadcastActionState {
+  allowed: boolean;
+  /** Why it isn't allowed, shown next to the disabled action. */
+  reason?: string;
+}
+
+/**
+ * Which of delete and archive a broadcast allows now, mirroring the API's
+ * blockers (`apps/api/src/sequences/delete-blockers.ts`): drafts and
+ * scheduled broadcasts can be deleted, a sending one neither, and one that
+ * has started sending can only be archived.
+ */
+export function broadcastDeleteActions(sequence: Sequence): {
+  delete: BroadcastActionState;
+  archive: BroadcastActionState;
+} {
+  const started = Boolean(sequence.report?.broadcast?.lockedAt);
+  if (sequence.status === "active" && !broadcastScheduledFor(sequence)) {
+    const reason = "It's sending. Pause it first.";
+    return { delete: { allowed: false, reason }, archive: { allowed: false, reason } };
+  }
+  if (started) {
+    return {
+      delete: {
+        allowed: false,
+        reason: "Sent broadcasts are archived, not deleted, to keep their report.",
+      },
+      archive: { allowed: true },
+    };
+  }
+  return {
+    delete: { allowed: true },
+    archive: {
+      allowed: false,
+      reason: "Only sent broadcasts can be archived.",
+    },
+  };
+}
