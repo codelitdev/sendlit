@@ -308,6 +308,8 @@ export const sequenceDeletionPreviewSchema = z.object({
     .describe("Emails it has sent; their delivery, open and click history is deleted"),
 });
 
+export type SequenceDeletionPreview = z.infer<typeof sequenceDeletionPreviewSchema>;
+
 export const listSubscribersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).optional(),
