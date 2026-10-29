@@ -25,7 +25,9 @@ const schema = await import("../db/schema");
 const { sendMail } = await import("../mail/send");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
-const { seedOngoingSequence, seedSequence } = await import("../test/fixtures");
+const { emailContent, seedOngoingSequence, seedSequence } = await import(
+  "../test/fixtures"
+);
 const { isPermanentRenderError, processOngoingSequence } = await import(
   "./process-ongoing-sequence"
 );
@@ -190,6 +192,47 @@ describe("auto-pause (#25)", () => {
     expect(mockedSendMail).toHaveBeenCalledTimes(1);
   });
 
+  it("pauses on a Liquid syntax error in the email content", async () => {
+    const { sequenceRow, rows } = await broadcastTo(1);
+    await tdb
+      .update(schema.sequenceEmails)
+      .set({ content: emailContent({ text: "Hello {{ subscriber.name" }) as any })
+      .where(eq(schema.sequenceEmails.sequenceId, sequenceRow.id));
+
+    await processOngoingSequence(rows[0].id);
+
+    expect(mockedSendMail).not.toHaveBeenCalled();
+    const paused = await sequenceById(sequenceRow.id);
+    expect(paused.status).toBe("paused");
+    expect((paused.report as any).autoPause.reason).toBe("render_error");
+    expect(await tdb.select().from(schema.ongoingSequences)).toHaveLength(1);
+  });
+
+  it("skips only the recipient whose own data breaks the Liquid render", async () => {
+    const { sequenceRow, rows } = await broadcastTo(2);
+    await tdb
+      .update(schema.sequenceEmails)
+      .set({
+        content: emailContent({ text: "Hi {{ subscriber.name | url_decode }}" }) as any,
+      })
+      .where(eq(schema.sequenceEmails.sequenceId, sequenceRow.id));
+    // An invalid percent-encoding makes url_decode throw for this contact only.
+    const [broken] = await tdb
+      .update(schema.contacts)
+      .set({ name: "O%E0Brien" })
+      .where(eq(schema.contacts.id, rows[0].contactId))
+      .returning();
+
+    for (const row of rows) await processOngoingSequence(row.id);
+
+    expect(mockedSendMail).toHaveBeenCalledTimes(1);
+    const after = await sequenceById(sequenceRow.id);
+    expect(after.status).toBe("completed");
+    expect((after.report as any).autoPause).toBeUndefined();
+    expect((after.report as any).sequence.failed).toEqual([broken.contactId]);
+    expect(await tdb.select().from(schema.ongoingSequences)).toHaveLength(0);
+  });
+
   it("treats only content and footer errors as permanent render errors", () => {
     expect(isPermanentRenderError(new EmailRenderError("footer_render_failed"))).toBe(
       true,
@@ -210,8 +253,10 @@ describe("auto-pause (#25)", () => {
     expect(renderErrorReason("footer_render_context_required")).toContain(
       "no mailing address",
     );
-    expect(renderErrorReason("footer_render_failed")).toContain("footer");
-    expect(renderErrorReason("footer_required")).toContain("footer");
+    expect(renderErrorReason("footer_render_failed")).toContain("mailing address");
+    // A missing footer block is a content problem, not a mailing-address one.
+    expect(renderErrorReason("footer_required")).toContain("footer block");
+    expect(renderErrorReason("footer_required")).not.toContain("mailing address");
   });
 
   it("resumes a paused broadcast's queued deliveries without running its audience again", async () => {

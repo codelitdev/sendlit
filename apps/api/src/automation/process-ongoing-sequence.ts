@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import { LiquidError } from "liquidjs";
+import { eq, sql } from "drizzle-orm";
+import { ParseError, RenderError, TokenizationError } from "liquidjs";
 import { recordPacedSend } from "../abuse/telemetry";
 import { commitSendReservation, releaseSendReservation } from "../billing/entitlements";
 import { sequenceBounceLimit } from "../config/constants";
@@ -312,10 +312,27 @@ async function attemptMailSending({
     // other error (a database blip while rendering) is transient and is
     // simply retried.
     if (isPermanentRenderError(err)) {
-      await autoPauseSequence(sequence, "render_error", {
+      const paused = await autoPauseSequence(sequence, "render_error", {
         error: String(err?.message ?? err).slice(0, 300),
       });
-      throw new SequencePausedError();
+      if (paused || (await isSequencePaused(sequence.id))) {
+        throw new SequencePausedError();
+      }
+      throw err;
+    }
+    // A Liquid error while rendering this contact's data (for example a
+    // filter on their name) only affects this recipient. Like a suppressed
+    // recipient, skip this email for them, record it, and move on rather
+    // than pausing everyone or retrying forever.
+    if (err instanceof RenderError) {
+      await recordRecipientFailed(sequence.id, contact.contactId);
+      captureError({
+        error: err,
+        source: "automation.render_recipient",
+        teamId: team.id,
+        context: { sequence_id: sequence.sequenceId, contact_id: contact.contactId },
+      });
+      return;
     }
     throw err;
   }
@@ -478,8 +495,22 @@ export function isPermanentRenderError(err: unknown): boolean {
   return (
     err instanceof EmailRenderError ||
     err instanceof TemplateValidationError ||
-    err instanceof LiquidError
+    // Liquid syntax errors break the email for everyone. Liquid errors while
+    // rendering one contact's data (`RenderError`) don't: see attemptMailSending.
+    err instanceof ParseError ||
+    err instanceof TokenizationError
   );
+}
+
+/** Appends a contact to the sequence report's failed list in one statement,
+ * so concurrent workers don't overwrite each other's entries. */
+async function recordRecipientFailed(sequenceId: string, publicContactId: string) {
+  await db
+    .update(sequences)
+    .set({
+      report: sql`jsonb_set(coalesce(${sequences.report}, '{}'::jsonb), '{sequence}', coalesce(${sequences.report}->'sequence', '{}'::jsonb) || jsonb_build_object('failed', coalesce(${sequences.report}->'sequence'->'failed', '[]'::jsonb) || to_jsonb(${publicContactId}::text)))`,
+    })
+    .where(eq(sequences.id, sequenceId));
 }
 
 /** Applies the email's on-send action (`tag:add` / `tag:remove`). The mail is

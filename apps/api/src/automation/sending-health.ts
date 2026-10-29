@@ -100,13 +100,18 @@ const PERCENT = (value: number) => `${(value * 100).toFixed(2)}%`;
  */
 /** Why a `render_error` auto-pause happened, in words for the team. */
 export function renderErrorReason(code: string): string {
-  if (code === "footer_render_context_required") {
-    return "the workspace has no mailing address for the footer";
+  switch (code) {
+    case "footer_render_context_required":
+      return "the workspace has no mailing address for the footer";
+    case "footer_render_failed":
+      return "the footer with your mailing address couldn't be built";
+    case "footer_required":
+    case "footer_not_allowed":
+    case "invalid_footer":
+      return "the email's footer block is missing or invalid";
+    default:
+      return `the email's content couldn't be built (${code})`;
   }
-  if (code.startsWith("footer_") || code === "invalid_footer") {
-    return "the footer with your mailing address couldn't be built";
-  }
-  return `the email's content couldn't be built (${code})`;
 }
 
 export async function autoPauseSequence(

@@ -9,13 +9,18 @@ const percent = (value: unknown) => `${(Number(value) * 100).toFixed(2)}%`;
 
 /** Mirrors `renderErrorReason` in the API's automation/sending-health.ts. */
 function renderErrorReason(code: string): string {
-  if (code === "footer_render_context_required") {
-    return "The workspace has no mailing address for the footer.";
+  switch (code) {
+    case "footer_render_context_required":
+      return "The workspace has no mailing address for the footer.";
+    case "footer_render_failed":
+      return "The footer with your mailing address couldn't be built.";
+    case "footer_required":
+    case "footer_not_allowed":
+    case "invalid_footer":
+      return "The email's footer block is missing or invalid.";
+    default:
+      return `The email's content couldn't be built (${code}).`;
   }
-  if (code.startsWith("footer_") || code === "invalid_footer") {
-    return "The footer with your mailing address couldn't be built.";
-  }
-  return `The email's content couldn't be built (${code}).`;
 }
 
 /** Why SendLit paused a running broadcast or sequence (#25), with a way to
