@@ -153,6 +153,13 @@ export function SendTestDialog({
           `Test sent to ${result.sent.join(", ")}${sendingVia ? ` via ${sendingVia.name}` : ""}`,
         );
       }
+      if (result.sent.length > 0 && result.eventSample) {
+        toast.info(
+          result.eventSample === "last_event"
+            ? "{{ event.* }} used the last event received."
+            : "No event received yet, so {{ event.* }} is empty.",
+        );
+      }
       if (result.skipped.length > 0) {
         toast.warning(
           `Skipped ${result.skipped.map((s) => s.email).join(", ")}: on the suppression list`,

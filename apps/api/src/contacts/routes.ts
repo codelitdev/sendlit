@@ -8,6 +8,7 @@ import { Router } from "express";
 import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { isPlanGateError } from "../billing/errors";
+import { listContactEvents } from "../events/queries";
 import { omitInternal } from "../utils/public";
 import { serializeDates } from "../utils/serialize";
 import { exportContactsCsv } from "./export";
@@ -194,6 +195,14 @@ const impl = s.router(contract.contacts, {
     }
     const deliveries = await getDeliveriesByContact(teamId, contact.id);
     return { status: 200, body: serializeDates(deliveries) };
+  },
+  events: async ({ params, query, req }) => {
+    const teamId = (req as any).teamId;
+    const contact = await getContactByContactId(params.contactId);
+    if (!contact || contact.teamId !== teamId) {
+      return { status: 404, body: { error: "contact_not_found" } };
+    }
+    return { status: 200, body: await listContactEvents(contact.id, query) };
   },
   remove: async ({ params, req }) => {
     await deleteContact((req as any).teamId, params.contactId);

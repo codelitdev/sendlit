@@ -4,6 +4,7 @@ import { TEST_CONTACT_ID, TEST_UNSUBSCRIBE_TOKEN } from "../config/constants";
 import { getContactByContactId } from "../contacts/queries";
 import { db } from "../db/client";
 import { sequenceEmails, sequences } from "../db/schema";
+import { getContactEventForView } from "../events/queries";
 import { renderCampaignHtml, verifyCampaignViewToken } from "../mail/campaign";
 import { captureError } from "../observability";
 import { getContentVersion } from "../sequences/content-versions";
@@ -27,7 +28,8 @@ const WEB_VIEW_CSP = [
 // The hosted "view in browser" version of one broadcast or sequence email,
 // personalised for the recipient the signed link was sent to. Links carry the
 // version that was sent, so later edits don't change them; older links
-// without one show the current content.
+// without one show the current content. A sequence with "view in browser"
+// turned off has no web versions, so its links stop working.
 router.get("/view/:token", async (req: Request, res: Response) => {
   res.setHeader("X-Robots-Tag", "noindex");
   res.setHeader("Referrer-Policy", "no-referrer");
@@ -59,7 +61,7 @@ router.get("/view/:token", async (req: Request, res: Response) => {
     const isTest = ids.contactId === TEST_CONTACT_ID;
     const contact = isTest ? null : await getContactByContactId(ids.contactId);
     if (
-      !sequence ||
+      !sequence?.viewInBrowser ||
       !email ||
       !team ||
       (!isTest && (!contact || contact.teamId !== sequence.teamId))
@@ -73,9 +75,20 @@ router.get("/view/:token", async (req: Request, res: Response) => {
       return res.status(404).type("html").send(emailUnavailablePage());
     }
 
+    // `{{ event.* }}` comes from the custom event that started the
+    // sequence, only if it belongs to this same contact and team.
+    const event =
+      contact && ids.eventId
+        ? await getContactEventForView({
+            eventId: ids.eventId,
+            teamId: sequence.teamId,
+            contactId: contact.id,
+          })
+        : null;
     const html = await renderCampaignHtml({
       team,
       content: version ? version.content : email.content,
+      event: event?.properties ?? {},
       subscriber: contact
         ? { email: contact.email, name: contact.name, tags: contact.tags }
         : { email: "", name: null, tags: [] },

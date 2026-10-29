@@ -28,95 +28,111 @@ import {
 export type Contact = typeof contacts.$inferSelect;
 type ContactListFilter = ContactFilterWithAggregator | ContactFilterWithAggregator[];
 
-export async function createContact({
-  teamId,
-  email,
-  name,
-  tags = [],
-  customFields = {},
-}: {
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export type CreateContactInput = {
   teamId: string;
   email: string;
   name?: string;
   tags?: string[];
   customFields?: CustomFields;
-}): Promise<Contact> {
+};
+
+/** Find-or-create inside the caller's transaction. Pair it with
+ * `afterContactCreated` once the transaction commits. */
+export async function createContactInTx(
+  tx: Tx,
+  { teamId, email, name, tags = [], customFields = {} }: CreateContactInput,
+): Promise<{ contact: Contact; created: boolean }> {
   // Someone who reported spam stays unsubscribed even when re-added.
   const complained =
-    (await getActiveSuppressionReasons(teamId, [email])).get(normalizeEmail(email)) ===
-    "complaint";
-  const result = await db.transaction(async (tx) => {
-    const [team] = await tx
-      .select({ organizationId: teams.organizationId })
-      .from(teams)
-      .where(eq(teams.id, teamId))
-      .limit(1);
-    if (!team) throw new Error("team_not_found");
-    const [existing] = await tx
-      .select()
-      .from(contacts)
-      .where(
-        and(
-          eq(contacts.teamId, teamId),
-          eq(contacts.email, email.toLowerCase().trim()),
-        ),
-      )
-      .limit(1)
-      .for("update");
-    if (existing) return { contact: existing, created: false };
-    if (!complained) {
-      await reserveSubscribedContactSlot(tx, team.organizationId, teamId);
-    }
-    const [created] = await tx
-      .insert(contacts)
-      .values({
-        teamId,
-        email: email.toLowerCase().trim(),
-        name,
-        tags,
-        customFields,
-        subscribed: !complained,
-        unsubscribeToken: generateUniqueId(),
-      })
-      .onConflictDoNothing({ target: [contacts.teamId, contacts.email] })
-      .returning();
-    if (created) return { contact: created, created: true };
-    const [raced] = await tx
-      .select()
-      .from(contacts)
-      .where(
-        and(
-          eq(contacts.teamId, teamId),
-          eq(contacts.email, email.toLowerCase().trim()),
-        ),
-      )
-      .limit(1);
-    if (!raced) throw new Error("contact_create_race_failed");
-    return { contact: raced, created: false };
-  });
-
-  if (result.created) {
-    const contact = result.contact;
-    await syncContactCustomFieldValues({
+    (await getActiveSuppressionReasons(teamId, [email], tx)).get(
+      normalizeEmail(email),
+    ) === "complaint";
+  const [team] = await tx
+    .select({ organizationId: teams.organizationId })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  if (!team) throw new Error("team_not_found");
+  const [existing] = await tx
+    .select()
+    .from(contacts)
+    .where(
+      and(eq(contacts.teamId, teamId), eq(contacts.email, email.toLowerCase().trim())),
+    )
+    .limit(1)
+    .for("update");
+  if (existing) return { contact: existing, created: false };
+  if (!complained) {
+    await reserveSubscribedContactSlot(tx, team.organizationId, teamId);
+  }
+  const [created] = await tx
+    .insert(contacts)
+    .values({
       teamId,
-      contactId: contact.id,
+      email: email.toLowerCase().trim(),
+      name,
+      tags,
       customFields,
-    });
+      subscribed: !complained,
+      unsubscribeToken: generateUniqueId(),
+    })
+    .onConflictDoNothing({ target: [contacts.teamId, contacts.email] })
+    .returning();
+  if (created) return { contact: created, created: true };
+  const [raced] = await tx
+    .select()
+    .from(contacts)
+    .where(
+      and(eq(contacts.teamId, teamId), eq(contacts.email, email.toLowerCase().trim())),
+    )
+    .limit(1);
+  if (!raced) throw new Error("contact_create_race_failed");
+  return { contact: raced, created: false };
+}
+
+/** Side effects of a new contact, run after its transaction commits.
+ * `fireTriggers: false` creates it silently, the way imports and
+ * backfilled events do. */
+export async function afterContactCreated(
+  contact: Contact,
+  { fireTriggers = true }: { fireTriggers?: boolean } = {},
+) {
+  await syncContactCustomFieldValues({
+    teamId: contact.teamId,
+    contactId: contact.id,
+    customFields: contact.customFields as CustomFields,
+  });
+  if (fireTriggers) {
     await fireEvent({
-      teamId,
+      teamId: contact.teamId,
       event: EventType.SUBSCRIBER_ADDED,
       contactId: contact.id,
     });
-    captureEvent({
-      event: "contact_created",
-      source: "contacts.create",
-      teamId,
-      properties: { contact_id: contact.contactId },
-    });
-    return contact;
   }
+  captureEvent({
+    event: "contact_created",
+    source: "contacts.create",
+    teamId: contact.teamId,
+    properties: { contact_id: contact.contactId },
+  });
+}
 
+export async function createContact(input: CreateContactInput): Promise<Contact> {
+  const result = await db.transaction((tx) => createContactInTx(tx, input));
+  if (result.created) await afterContactCreated(result.contact);
   return result.contact;
+}
+
+/** Shallow-merges incoming custom fields into the current ones. `null` when
+ * nothing would change. */
+export function mergeCustomFields(
+  current: CustomFields,
+  incoming: CustomFields,
+): CustomFields | null {
+  const merged = { ...current, ...incoming };
+  return JSON.stringify(merged) === JSON.stringify(current) ? null : merged;
 }
 
 export async function findContactByEmail(
@@ -222,51 +238,112 @@ export async function countContacts(
   return row?.value ?? 0;
 }
 
+export type ContactPatch = Partial<
+  Pick<Contact, "name" | "tags" | "subscribed" | "customFields">
+>;
+
+/** Updates a contact (public id) inside the caller's transaction, after
+ * locking its row. With `mergeCustomFields`, `patch.customFields` is merged
+ * into the locked row's fields instead of replacing them. Pair it with
+ * `afterContactUpdated` once the transaction commits. */
+export async function updateContactInTx(
+  tx: Tx,
+  teamId: string,
+  contactId: string,
+  patch: ContactPatch,
+  { mergeCustomFields: merge = false }: { mergeCustomFields?: boolean } = {},
+): Promise<{ row: Contact; previous: Contact } | null> {
+  const [current] = await tx
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.teamId, teamId), eq(contacts.contactId, contactId)))
+    .limit(1)
+    .for("update");
+  if (!current) return null;
+  const effective: ContactPatch = { ...patch };
+  if (merge && patch.customFields) {
+    const merged = mergeCustomFields(
+      current.customFields as CustomFields,
+      patch.customFields,
+    );
+    if (merged) effective.customFields = merged;
+    else delete effective.customFields;
+  }
+  if (effective.subscribed === true && !current.subscribed) {
+    const [team] = await tx
+      .select({ organizationId: teams.organizationId })
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) throw new Error("team_not_found");
+    await reserveSubscribedContactSlot(tx, team.organizationId, teamId);
+  }
+  if (Object.keys(effective).length === 0) return { row: current, previous: current };
+  const [updated] = await tx
+    .update(contacts)
+    .set({ ...effective, updatedAt: new Date() })
+    .where(eq(contacts.id, current.id))
+    .returning();
+  return updated ? { row: updated, previous: current } : null;
+}
+
+/** Side effects of a contact update, run after its transaction commits:
+ * the custom-field index, telemetry, and `contact:property_changed` for
+ * each custom field whose value changed (unless `fireTriggers` is false). */
+export async function afterContactUpdated(
+  { row, previous }: { row: Contact; previous: Contact },
+  {
+    fireTriggers = true,
+    customFieldsWritten = false,
+  }: {
+    fireTriggers?: boolean;
+    /** Rebuild the custom-field index even if the values didn't change. */
+    customFieldsWritten?: boolean;
+  } = {},
+) {
+  const before = previous.customFields as CustomFields;
+  const after = row.customFields as CustomFields;
+  const changedKeys = [
+    ...new Set([...Object.keys(before), ...Object.keys(after)]),
+  ].filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+  if (customFieldsWritten || changedKeys.length > 0) {
+    await syncContactCustomFieldValues({
+      teamId: row.teamId,
+      contactId: row.id,
+      customFields: after,
+    });
+  }
+  captureEvent({
+    event: "contact_updated",
+    source: "contacts.update",
+    teamId: row.teamId,
+    properties: { contact_id: row.contactId },
+  });
+  if (!fireTriggers) return;
+  for (const key of changedKeys) {
+    await fireEvent({
+      teamId: row.teamId,
+      event: EventType.CONTACT_PROPERTY_CHANGED,
+      eventData: key,
+      contactId: row.id,
+      payload: { key, from: before[key] ?? null, to: after[key] ?? null },
+    });
+  }
+}
+
 export async function updateContact(
   teamId: string,
   contactId: string,
-  patch: Partial<Pick<Contact, "name" | "tags" | "subscribed" | "customFields">>,
+  patch: ContactPatch,
 ): Promise<Contact | null> {
-  const row = await db.transaction(async (tx) => {
-    const [current] = await tx
-      .select()
-      .from(contacts)
-      .where(and(eq(contacts.teamId, teamId), eq(contacts.contactId, contactId)))
-      .limit(1)
-      .for("update");
-    if (!current) return null;
-    if (patch.subscribed === true && !current.subscribed) {
-      const [team] = await tx
-        .select({ organizationId: teams.organizationId })
-        .from(teams)
-        .where(eq(teams.id, teamId))
-        .limit(1);
-      if (!team) throw new Error("team_not_found");
-      await reserveSubscribedContactSlot(tx, team.organizationId, teamId);
-    }
-    const [updated] = await tx
-      .update(contacts)
-      .set({ ...patch, updatedAt: new Date() })
-      .where(eq(contacts.id, current.id))
-      .returning();
-    return updated ?? null;
+  const result = await db.transaction((tx) =>
+    updateContactInTx(tx, teamId, contactId, patch),
+  );
+  if (!result) return null;
+  await afterContactUpdated(result, {
+    customFieldsWritten: Object.hasOwn(patch, "customFields"),
   });
-  if (row && Object.hasOwn(patch, "customFields")) {
-    await syncContactCustomFieldValues({
-      teamId,
-      contactId: row.id,
-      customFields: patch.customFields ?? {},
-    });
-  }
-  if (row) {
-    captureEvent({
-      event: "contact_updated",
-      source: "contacts.update",
-      teamId,
-      properties: { contact_id: row.contactId },
-    });
-  }
-  return row ?? null;
+  return result.row;
 }
 
 export async function addTagToContact(

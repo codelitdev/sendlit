@@ -315,13 +315,39 @@ export async function renderEmailContent({
       throw error;
     }
   }
+  const source = decodeLiquidTags(html);
   if (requireVariables) {
-    const missingVariables = findMissingTemplateVariables(html, variables);
+    const missingVariables = findMissingTemplateVariables(source, variables);
     if (missingVariables.length > 0) {
       throw new MissingTemplateVariablesError(missingVariables);
     }
   }
-  return liquidEngine.parseAndRender(html, variables);
+  return liquidEngine.parseAndRender(source, variables);
+}
+
+const LIQUID_TAG = /{{[\s\S]*?}}|{%[\s\S]*?%}/g;
+const TAG_ENTITIES: Record<string, string> = {
+  "&quot;": '"',
+  "&#34;": '"',
+  "&#39;": "'",
+  "&#x27;": "'",
+  "&apos;": "'",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&amp;": "&",
+};
+
+/** Block content is HTML-escaped before Liquid runs, which turns the quotes
+ * of a string literal inside a tag (`{{ name | default: "friend" }}`) into
+ * `&quot;` and breaks the parse. Inside `{{ }}`/`{% %}` entities are never
+ * meant literally, so decode them there and nowhere else. */
+export function decodeLiquidTags(html: string): string {
+  return html.replace(LIQUID_TAG, (tag) =>
+    tag.replace(
+      /&(?:quot|#34|#39|#x27|apos|lt|gt|amp);/g,
+      (entity) => TAG_ENTITIES[entity]!,
+    ),
+  );
 }
 
 /** Adds a 1x1 tracking pixel before rendering. Marketing content keeps its

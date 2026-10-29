@@ -26,6 +26,7 @@ router.use(
 const highImpactTools = new Set([
   "send_email",
   "send_test_email",
+  "track_event",
   "test_esp",
   "start_sequence",
   "create_api_key",

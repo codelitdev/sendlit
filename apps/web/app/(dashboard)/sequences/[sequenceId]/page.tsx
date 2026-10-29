@@ -5,12 +5,12 @@ import {
   type EmailActionType,
   EmailPreview,
   type EmailTemplate,
+  type ReentryMode,
   type Sequence,
   SequenceAnalytics,
   SequenceEmailList,
   type SequenceStats,
   TagEditor,
-  TriggerPicker,
 } from "@sendlit/email-blocks";
 import { Check, Pause, Pencil, Play } from "lucide-react";
 import Link from "next/link";
@@ -19,10 +19,15 @@ import { AutoPauseBanner } from "@/components/dashboard/auto-pause-banner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
-import { MARKETING_EMAIL_EDITOR_BLOCKS } from "@/components/dashboard/email-editor-screen";
+import {
+  MARKETING_EMAIL_EDITOR_BLOCKS,
+  marketingPreviewContext,
+} from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
+import { SequenceTrigger } from "@/components/dashboard/sequence-trigger";
+import { ViewInBrowserSetting } from "@/components/dashboard/view-in-browser-setting";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/codelit/button";
@@ -59,18 +64,13 @@ import {
 } from "@/lib/delivery-source";
 import { sequenceStatsMetrics } from "@/lib/stats";
 
-const MARKETING_PREVIEW_CONTEXT = {
-  footer: {
-    mailingAddress: "Your workspace mailing address",
-    unsubscribeUrl: "#unsubscribe-preview",
-    viewInBrowserUrl: "#view-in-browser-preview",
-  },
-};
-
 interface SequenceMeta {
   title: string;
   triggerType?: string | null;
   triggerData?: string | null;
+  triggerFilter?: Sequence["triggerFilter"];
+  reentry: ReentryMode;
+  reentryPeriodDays?: number | null;
   deliverySource?: DeliverySourceSelection | null;
 }
 
@@ -125,6 +125,9 @@ export default function SequenceEditorPage({
         title: s.title,
         triggerType: s.triggerType,
         triggerData: s.triggerData,
+        triggerFilter: s.triggerFilter ?? null,
+        reentry: s.reentry ?? "every_time",
+        reentryPeriodDays: s.reentryPeriodDays ?? null,
         deliverySource: s.deliverySource,
       });
       const nextSelected =
@@ -191,7 +194,12 @@ export default function SequenceEditorPage({
       const updated = await updateSequence(sequenceId, {
         title: meta.title,
         triggerType: meta.triggerType || undefined,
-        triggerData: meta.triggerData || undefined,
+        // An empty value is sent too, so a trigger value can be cleared.
+        triggerData: meta.triggerData ?? undefined,
+        triggerFilter: meta.triggerFilter ?? null,
+        reentry: meta.reentry,
+        reentryPeriodDays:
+          meta.reentry === "once_per_period" ? (meta.reentryPeriodDays ?? 7) : null,
         ...(espEditable ? { deliverySource: meta.deliverySource ?? null } : {}),
       });
       setSequence(updated);
@@ -357,17 +365,11 @@ export default function SequenceEditorPage({
                   })}
                 />
               </div>
-              <TriggerPicker
-                triggerType={meta.triggerType}
-                triggerData={meta.triggerData}
-                onChange={({ triggerType, triggerData }) =>
-                  setMeta({
-                    ...meta,
-                    triggerType,
-                    triggerData,
-                  })
-                }
+              <SequenceTrigger
+                meta={meta}
+                onChange={(patch) => setMeta({ ...meta, ...patch })}
               />
+              <ViewInBrowserSetting sequence={sequence} onSaved={setSequence} />
             </CardContent>
           </Card>
         </div>
@@ -394,7 +396,9 @@ export default function SequenceEditorPage({
               templates={templates}
               templatesLoading={templatesLoading}
               previewBlocks={MARKETING_EMAIL_EDITOR_BLOCKS}
-              previewRenderContext={MARKETING_PREVIEW_CONTEXT}
+              previewRenderContext={marketingPreviewContext({
+                viewInBrowser: sequence.viewInBrowser,
+              })}
             />
           </div>
 
@@ -532,7 +536,9 @@ export default function SequenceEditorPage({
                       content={emailDraft.content}
                       minHeight="420px"
                       blocks={MARKETING_EMAIL_EDITOR_BLOCKS}
-                      renderContext={MARKETING_PREVIEW_CONTEXT}
+                      renderContext={marketingPreviewContext({
+                        viewInBrowser: sequence.viewInBrowser,
+                      })}
                     />
                   </div>
                 </CardContent>

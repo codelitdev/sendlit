@@ -123,6 +123,7 @@ describe("sequence queries", () => {
       status: "draft",
       title: "Starter",
       triggerType: EventType.SUBSCRIBER_ADDED,
+      viewInBrowser: false,
     });
     expect(sequence.emails).toHaveLength(1);
     expect(sequence.emailsOrder).toEqual([sequence.emails[0].emailId]);
@@ -166,6 +167,7 @@ describe("sequence queries", () => {
       type: "broadcast",
       templateId: template.templateId,
     });
+    expect(broadcast.viewInBrowser).toBe(true);
     await tdb
       .update(sequences)
       .set({

@@ -17,11 +17,15 @@ import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { BroadcastWebDialog } from "@/components/dashboard/broadcast-web-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
-import { MARKETING_EMAIL_EDITOR_BLOCKS } from "@/components/dashboard/email-editor-screen";
+import {
+  MARKETING_EMAIL_EDITOR_BLOCKS,
+  marketingPreviewContext,
+} from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { SendTestDialog } from "@/components/dashboard/send-test-dialog";
+import { ViewInBrowserSetting } from "@/components/dashboard/view-in-browser-setting";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/codelit/badge";
 import { Button } from "@/components/ui/codelit/button";
@@ -56,14 +60,6 @@ import {
 } from "@/lib/delivery-source";
 import { sequenceStatsMetrics } from "@/lib/stats";
 import { useSegments } from "@/lib/use-segments";
-
-const MARKETING_PREVIEW_CONTEXT = {
-  footer: {
-    mailingAddress: "Your workspace mailing address",
-    unsubscribeUrl: "#unsubscribe-preview",
-    viewInBrowserUrl: "#view-in-browser-preview",
-  },
-};
 
 interface BroadcastMeta {
   title: string;
@@ -492,6 +488,7 @@ export default function BroadcastEditorPage({
                   searchAriaLabel="Exclude by email"
                 />
               </div>
+              <ViewInBrowserSetting sequence={sequence} onSaved={setSequence} />
             </CardContent>
           </Card>
 
@@ -512,7 +509,9 @@ export default function BroadcastEditorPage({
                 content={email.content}
                 minHeight="420px"
                 blocks={MARKETING_EMAIL_EDITOR_BLOCKS}
-                renderContext={MARKETING_PREVIEW_CONTEXT}
+                renderContext={marketingPreviewContext({
+                  viewInBrowser: sequence.viewInBrowser,
+                })}
               />
             </CardContent>
           </Card>

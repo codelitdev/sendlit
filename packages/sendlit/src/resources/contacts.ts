@@ -9,6 +9,8 @@ export type CreateContactInput = Body<typeof routes.create>;
 export type UpdateContactInput = Body<typeof routes.update>;
 export type ListContactsQuery = Query<typeof routes.list>;
 export type ContactDelivery = Ok<typeof routes.deliveries>[number];
+export type ContactEvent = Ok<typeof routes.events>["items"][number];
+export type ListContactEventsQuery = Query<typeof routes.events>;
 
 export class Contacts {
   constructor(private readonly http: HttpClient) {}
@@ -80,6 +82,18 @@ export class Contacts {
   async deliveries(contactId: string): Promise<ContactDelivery[]> {
     return this.http.request(routes.deliveries, {
       params: { contactId: assertId(contactId, "contactId") },
+    });
+  }
+
+  /** Custom events received for this contact, newest first, with the
+   * sequences each one started. */
+  async events(
+    contactId: string,
+    query: ListContactEventsQuery = {},
+  ): Promise<Ok<typeof routes.events>> {
+    return this.http.request(routes.events, {
+      params: { contactId: assertId(contactId, "contactId") },
+      query,
     });
   }
 }

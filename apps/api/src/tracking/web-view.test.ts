@@ -11,11 +11,11 @@ const { db } = await import("../db/client");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
 const { emailContent, seedSequence } = await import("../test/fixtures");
-const { sequenceEmails } = await import("../db/schema");
+const { sequenceEmails, sequences } = await import("../db/schema");
 const { getOrCreateContentVersion } = await import("../sequences/content-versions");
 const { requestApp } = await import("../test/http");
 const { TEST_CONTACT_ID } = await import("../config/constants");
-const { getCampaignViewUrl } = await import("../mail/campaign");
+const { getCampaignViewUrl, renderCampaignHtml } = await import("../mail/campaign");
 const { generatePixelToken } = await import("../utils/pixel-jwt");
 const { default: webViewRoutes } = await import("./web-view");
 
@@ -114,6 +114,28 @@ describe("GET /view/:token", () => {
     expect(legacy.body).toContain("Edited after sending");
   });
 
+  it("404s once the sequence has view in browser turned off", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const { sequenceRow, emailRows } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const path = pathOf(
+      getCampaignViewUrl({
+        contactId: contact.contactId,
+        sequenceId: sequenceRow.sequenceId,
+        emailId: emailRows[0].emailId,
+      }),
+    );
+    expect((await requestApp(app(), path)).status).toBe(200);
+
+    await tdb
+      .update(sequences)
+      .set({ viewInBrowser: false })
+      .where(eq(sequences.id, sequenceRow.id));
+    expect((await requestApp(app(), path)).status).toBe(404);
+  });
+
   it("404s a version that belongs to another email", async () => {
     const { team, contact } = await seedTeamAndContact(tdb);
     const { sequenceRow, emailRows } = await seedSequence(tdb, {
@@ -155,5 +177,30 @@ describe("GET /view/:token", () => {
     expect((await requestApp(app(), `/view/${generatePixelToken(ids)}`)).status).toBe(
       404,
     );
+  });
+});
+
+describe("renderCampaignHtml", () => {
+  it("leaves the view in browser link out when it's turned off", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const render = (viewInBrowser?: boolean) =>
+      renderCampaignHtml({
+        team,
+        content: emailContent({ text: "Online: [{{ view_in_browser_url }}]" }),
+        subscriber: { email: contact.email, name: contact.name, tags: [] },
+        ids: { contactId: contact.contactId, sequenceId: "seq_s", emailId: "email_e" },
+        unsubscribeToken: contact.unsubscribeToken,
+        viewInBrowser,
+      });
+
+    const on = await render();
+    expect(on).toContain("View in browser");
+    expect(on).toMatch(/Online: \[https?:\/\/[^\]]+\/view\//);
+
+    const off = await render(false);
+    expect(off).not.toContain("View in browser");
+    expect(off).not.toContain("/view/");
+    expect(off).toContain("Online: []");
+    expect(off).toContain("/unsubscribe/");
   });
 });

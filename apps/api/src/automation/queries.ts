@@ -7,7 +7,16 @@ import {
   buildContactFilterCondition,
 } from "../contacts/segment";
 import { db } from "../db/client";
-import { contacts, ongoingSequences, rules, sequences, teams } from "../db/schema";
+import {
+  contactEventMatches,
+  contacts,
+  ongoingSequences,
+  rules,
+  sequenceEntries,
+  sequences,
+  type TriggerEventSnapshot,
+  teams,
+} from "../db/schema";
 import { engagementPriorities } from "./engagement";
 
 export async function getDueDateRules() {
@@ -133,6 +142,149 @@ export async function enrollContactsInOngoingSequence({
     .onConflictDoNothing({
       target: [ongoingSequences.sequenceId, ongoingSequences.contactId],
     });
+}
+
+export type TriggerEnrollmentOutcome =
+  | "enrolled"
+  | "already_matched"
+  | "already_in_sequence"
+  | "reentry_refused";
+
+class ReentryRefused extends Error {}
+
+/**
+ * Enrolls one contact from a trigger (`fireEvent`), in one transaction:
+ *
+ * 1. When the trigger is a stored custom event, claim its
+ *    `contact_event_matches` row, so a retry or the recovery sweep can't
+ *    enroll the contact twice from one event.
+ * 2. Insert the `ongoing_sequences` row; a conflict means the contact is
+ *    already in the sequence.
+ * 3. For sequences, apply the re-entry setting to `sequence_entries` as one
+ *    atomic upsert. A refusal rolls back the enrollment.
+ *
+ * See docs/custom_events.md#matching-matcheventtriggers-and-fireevent.
+ */
+export async function enrollContactFromTrigger({
+  teamId,
+  sequence,
+  contactId,
+  triggerEvent,
+}: {
+  teamId: string;
+  sequence: {
+    id: string;
+    type: string;
+    reentry: string;
+    reentryPeriodDays: number | null;
+  };
+  /** Internal `contacts.id`. */
+  contactId: string;
+  triggerEvent?: { contactEventId?: string; snapshot: TriggerEventSnapshot };
+}): Promise<TriggerEnrollmentOutcome> {
+  const [team] = await db
+    .select({ organizationId: teams.organizationId })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  const now = Date.now();
+  const priorities = await engagementPriorities(teamId, [contactId], now);
+  const contactEventId = triggerEvent?.contactEventId;
+  try {
+    return await db.transaction(async (tx) => {
+      if (team) await assertMarketingAllowedForContactUsage(tx, team.organizationId);
+      if (contactEventId) {
+        const [claimed] = await tx
+          .insert(contactEventMatches)
+          .values({ contactEventId, sequenceId: sequence.id })
+          .onConflictDoNothing()
+          .returning({ sequenceId: contactEventMatches.sequenceId });
+        if (!claimed) return "already_matched";
+      }
+      const [inserted] = await tx
+        .insert(ongoingSequences)
+        .values({
+          teamId,
+          sequenceId: sequence.id,
+          contactId,
+          nextEmailScheduledTime: now,
+          priority: priorities.get(contactId) ?? 0,
+          triggerEvent: triggerEvent?.snapshot ?? null,
+        })
+        .onConflictDoNothing({
+          target: [ongoingSequences.sequenceId, ongoingSequences.contactId],
+        })
+        .returning({ id: ongoingSequences.id });
+      if (!inserted) return "already_in_sequence";
+      if (
+        sequence.type === "sequence" &&
+        !(await recordEntry(tx, sequence, contactId))
+      ) {
+        throw new ReentryRefused();
+      }
+      if (contactEventId) {
+        await tx
+          .update(contactEventMatches)
+          .set({ enrolled: true })
+          .where(
+            and(
+              eq(contactEventMatches.contactEventId, contactEventId),
+              eq(contactEventMatches.sequenceId, sequence.id),
+            ),
+          );
+      }
+      return "enrolled";
+    });
+  } catch (err) {
+    if (!(err instanceof ReentryRefused)) throw err;
+    if (contactEventId) {
+      await db
+        .insert(contactEventMatches)
+        .values({ contactEventId, sequenceId: sequence.id, enrolled: false })
+        .onConflictDoNothing();
+    }
+    return "reentry_refused";
+  }
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** The re-entry check and the history write as one statement, so two
+ * concurrent events can't both pass a `once` check. Returns whether the
+ * entry is allowed. */
+async function recordEntry(
+  tx: Tx,
+  sequence: { id: string; reentry: string; reentryPeriodDays: number | null },
+  contactId: string,
+): Promise<boolean> {
+  const values = {
+    sequenceId: sequence.id,
+    contactId,
+    firstEnteredAt: sql`now()`,
+    lastEnteredAt: sql`now()`,
+    entryCount: 1,
+  };
+  const target = [sequenceEntries.sequenceId, sequenceEntries.contactId];
+  const bump = {
+    lastEnteredAt: sql`now()`,
+    entryCount: sql`${sequenceEntries.entryCount} + 1`,
+  };
+  const insert = tx.insert(sequenceEntries).values(values as any);
+  let rows: unknown[];
+  if (sequence.reentry === "once") {
+    rows = await insert.onConflictDoNothing({ target }).returning();
+  } else if (sequence.reentry === "once_per_period") {
+    rows = await insert
+      .onConflictDoUpdate({
+        target,
+        set: bump,
+        setWhere: sql`${sequenceEntries.lastEnteredAt} < now() - make_interval(days => ${sequence.reentryPeriodDays ?? 1}::int)`,
+      })
+      .returning();
+  } else {
+    rows = await insert.onConflictDoUpdate({ target, set: bump }).returning();
+  }
+  return rows.length > 0;
 }
 
 export async function lockBroadcast(sequenceRowId: string, entrants: string[]) {

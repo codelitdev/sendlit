@@ -33,7 +33,7 @@ import { withoutProviderTracking } from "../settings/esp/provider-capabilities";
 import { trackingOriginForTeam } from "../settings/tracking-domain/queries";
 import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
-import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
+import { getEmailFrom, getListUnsubscribeHeaders, isTestAddress } from "../utils/mail";
 import {
   claimOngoingSequence,
   countOngoingSequencesForSequence,
@@ -266,6 +266,25 @@ async function attemptMailSending({
     return;
   }
 
+  // Reserved test addresses run the sequence but never reach the ESP and
+  // never count as a send — see docs/custom_events.md#test-addresses.
+  if (isTestAddress(to)) {
+    logger.info(
+      { sequence_id: sequence.sequenceId, contactId: contact.contactId },
+      "skipped test address",
+    );
+    captureEvent({
+      event: "email_send_test_address_skipped",
+      source: "automation.attempt_mail_sending",
+      teamId: team.id,
+      properties: {
+        sequence_id: sequence.sequenceId,
+        sequence_type: sequence.type,
+      },
+    });
+    return;
+  }
+
   // The "view in browser" link shows this copy, not later edits.
   const contentVersion = await getOrCreateContentVersion({
     ...email,
@@ -290,6 +309,9 @@ async function attemptMailSending({
     },
     unsubscribeToken: contact.unsubscribeToken,
     publication: sequence.type === "broadcast" ? sequence : null,
+    viewInBrowser: sequence.viewInBrowser,
+    event: ongoingSequence.triggerEvent?.properties,
+    eventId: ongoingSequence.triggerEvent?.eventId || undefined,
   });
 
   let outboundForReservation: { id: string } | null = null;

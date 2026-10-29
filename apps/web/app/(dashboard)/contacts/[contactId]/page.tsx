@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { ContactEventsCard } from "@/components/dashboard/contact-events-card";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -200,6 +201,8 @@ export default function ContactDetailPage({
             newField={newCustomField}
             onNewFieldChange={setNewCustomField}
           />
+
+          <ContactEventsCard contactId={contactId} />
 
           <Card>
             <CardHeader>

@@ -52,3 +52,16 @@ export function getViewInBrowserUrl(token: string, origin = getSiteUrl()): strin
 export function isViewInBrowserUrl(url: string, origin?: string): boolean {
   return [getSiteUrl(), origin].some((o) => o && url.startsWith(`${o}/view/`));
 }
+
+/** Domains whose mail runs a sequence but is never sent: the RFC 2606/6761
+ * reserved names, and `test.com` as Loops does (a real domain whose owner
+ * shouldn't get our test mail). See docs/custom_events.md#test-addresses. */
+const TEST_DOMAINS = new Set(["example.com", "example.net", "example.org", "test.com"]);
+const TEST_TLDS = ["test", "example", "invalid", "localhost"];
+
+export function isTestAddress(email: string): boolean {
+  const domain = email.trim().toLowerCase().split("@").pop() ?? "";
+  if (TEST_DOMAINS.has(domain)) return true;
+  const tld = domain.split(".").pop() ?? "";
+  return TEST_TLDS.includes(tld);
+}

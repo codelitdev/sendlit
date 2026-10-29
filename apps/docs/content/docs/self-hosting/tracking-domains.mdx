@@ -28,7 +28,7 @@ whether the domain belongs to a team first: `GET /tls/ask?domain=<host>`
 returns 200 for a team's current or previous tracking domain and 404
 otherwise.
 
-```caddyfile
+```text
 {
   on_demand_tls {
     ask http://api:4000/tls/ask

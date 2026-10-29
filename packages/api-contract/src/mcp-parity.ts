@@ -95,6 +95,7 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("contacts.addTag", "add_contact_tag", "write"),
   required("contacts.removeTag", "remove_contact_tag", "write"),
   required("contacts.deliveries", "get_contact_deliveries", "read"),
+  required("contacts.events", "get_contact_events", "read"),
   required("contacts.remove", "delete_contact", "destructive"),
 
   // Segments
@@ -168,6 +169,14 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("transactional.send", "send_email", "write"),
   required("transactional.get", "get_email", "read"),
   required("transactional.list", "list_emails", "read"),
+
+  // Custom events
+  required("events.track", "track_event", "write"),
+  required("events.definitions", "list_event_definitions", "read"),
+  required("events.definition", "get_event_definition", "read"),
+  required("events.createDefinition", "create_event_definition", "write"),
+  required("events.updateDefinition", "update_event_definition", "write"),
+  required("events.deleteDefinition", "delete_event_definition", "destructive"),
 
   // User-managed ESPs
   required("settings.esps.list", "list_esps", "read"),

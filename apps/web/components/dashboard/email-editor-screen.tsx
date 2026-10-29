@@ -105,6 +105,24 @@ export const MARKETING_EMAIL_EDITOR_BLOCKS = [
 ];
 export const TRANSACTIONAL_EMAIL_EDITOR_BLOCKS = BASE_EMAIL_EDITOR_BLOCKS;
 
+/** What a marketing email's managed footer shows in previews. The "View in
+ * browser" link is left out when the sequence has it turned off. */
+export function marketingPreviewContext({
+  mailingAddress = "Your workspace mailing address",
+  viewInBrowser = true,
+}: {
+  mailingAddress?: string;
+  viewInBrowser?: boolean;
+} = {}): SendLitEmailRenderContext {
+  return {
+    footer: {
+      mailingAddress,
+      unsubscribeUrl: "#unsubscribe-preview",
+      ...(viewInBrowser && { viewInBrowserUrl: "#view-in-browser-preview" }),
+    },
+  };
+}
+
 /**
  * Full-screen email editing screen — the only place `EmailEditor` is rendered,
  * mounted under the chrome-free `/editor` layout (no dashboard sidebar). It
@@ -123,6 +141,8 @@ export function EmailEditorScreen({
   saveLabel = "Save",
   header,
   actions,
+  viewInBrowser = true,
+  extraVariables = [],
 }: {
   /** Where exit lands when there's no history to go back to (deep link). */
   exitFallbackHref: string;
@@ -139,6 +159,11 @@ export function EmailEditorScreen({
   /** Extra top-bar controls. `saveContent` persists the current document
    * (throwing on failure), e.g. before sending a test of it. */
   actions?: (saveContent: () => Promise<void>) => ReactNode;
+  /** Whether the footer preview shows the "View in browser" link. */
+  viewInBrowser?: boolean;
+  /** More merge tags for this email, e.g. `{{ event.* }}` of the custom
+   * event that starts its sequence. */
+  extraVariables?: { tag: string; description: string }[];
 }) {
   const router = useRouter();
   const normalizedInitialContent = useMemo(
@@ -180,19 +205,13 @@ export function EmailEditorScreen({
   const renderContext = useMemo<SendLitEmailRenderContext | undefined>(
     () =>
       purpose === "marketing"
-        ? {
-            footer: {
-              mailingAddress,
-              unsubscribeUrl: "#unsubscribe-preview",
-              viewInBrowserUrl: "#view-in-browser-preview",
-            },
-          }
+        ? marketingPreviewContext({ mailingAddress, viewInBrowser })
         : undefined,
-    [mailingAddress, purpose],
+    [mailingAddress, purpose, viewInBrowser],
   );
   const variables =
     purpose === "marketing"
-      ? MARKETING_VARIABLES
+      ? [...MARKETING_VARIABLES, ...extraVariables]
       : requiredVariables.map((path) => ({
           tag: `{{ ${path} }}`,
           description: "Required transactional variable",

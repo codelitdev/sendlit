@@ -52,6 +52,7 @@ import {
   removeRule,
   verifyMandatoryTags,
 } from "./helpers";
+import { TRIGGERS_NEEDING_DATA, validateTriggerState } from "./trigger";
 
 export type Sequence = typeof sequences.$inferSelect;
 export type SequenceEmail = typeof sequenceEmails.$inferSelect;
@@ -132,6 +133,9 @@ export async function createSequence({
         type === "broadcast" ? EventType.DATE_OCCURRED : EventType.SUBSCRIBER_ADDED,
       filter: { aggregator: "or", filters: [] },
       deliverySourceIntent: deliverySource ?? null,
+      // Sequences are lifecycle mail (onboarding, trials) that rarely
+      // belongs on the web; broadcasts are editions readers revisit.
+      viewInBrowser: type === "broadcast",
     })
     .returning();
 
@@ -282,21 +286,30 @@ export async function updateSequence({
   title,
   triggerType,
   triggerData,
+  triggerFilter,
+  reentry,
+  reentryPeriodDays,
   filter,
   excludeFilter,
   emailsOrder,
   deliverySource,
+  viewInBrowser,
 }: {
   teamId: string;
   sequenceId: string;
   title?: string;
   triggerType?: string;
   triggerData?: string;
+  /** `null` clears it. */
+  triggerFilter?: unknown;
+  reentry?: string;
+  reentryPeriodDays?: number | null;
   filter?: ContactFilterWithAggregator;
   /** `null` clears the exclusion. */
   excludeFilter?: ContactFilterWithAggregator | null;
   emailsOrder?: string[];
   deliverySource?: DeliverySourceSelection | null;
+  viewInBrowser?: boolean;
 }): Promise<HydratedSequence | null> {
   const current = await getSequenceBySequenceId(teamId, sequenceId);
   if (!current) return null;
@@ -307,13 +320,50 @@ export async function updateSequence({
   }
   const patch: Partial<Sequence> = { updatedAt: new Date() };
   if (title !== undefined) patch.title = title;
-  if (triggerType !== undefined) patch.triggerType = triggerType;
-  if (triggerData !== undefined) patch.triggerData = triggerData;
+  const triggerChanged =
+    triggerType !== undefined ||
+    triggerData !== undefined ||
+    triggerFilter !== undefined ||
+    reentry !== undefined ||
+    reentryPeriodDays !== undefined;
+  if (triggerChanged) {
+    if (
+      current.type === "broadcast" &&
+      (reentry !== undefined || reentryPeriodDays != null)
+    ) {
+      throw new Error("invalid_reentry");
+    }
+    const typeChanged =
+      triggerType !== undefined && triggerType !== current.triggerType;
+    const trigger = validateTriggerState({
+      type: current.type,
+      triggerType: triggerType ?? current.triggerType,
+      triggerData: triggerData !== undefined ? triggerData : current.triggerData,
+      // Changing the trigger type drops a filter written for the old one.
+      triggerFilter:
+        triggerFilter !== undefined
+          ? triggerFilter
+          : typeChanged
+            ? null
+            : current.triggerFilter,
+      reentry: reentry ?? current.reentry,
+      reentryPeriodDays:
+        reentryPeriodDays !== undefined ? reentryPeriodDays : current.reentryPeriodDays,
+    });
+    patch.triggerType = trigger.triggerType;
+    patch.triggerData = trigger.triggerData;
+    patch.triggerFilter = trigger.triggerFilter as any;
+    patch.reentry = trigger.reentry;
+    patch.reentryPeriodDays = trigger.reentryPeriodDays;
+  }
   if (filter !== undefined) patch.filter = filter as any;
   if (excludeFilter !== undefined) {
     patch.excludeFilter = excludeFilter?.filters.length ? (excludeFilter as any) : null;
   }
   if (emailsOrder !== undefined) patch.emailsOrder = emailsOrder;
+  // Allowed at any time, even after a broadcast went out: turning it off is
+  // how a team takes down web versions already linked from sent mail.
+  if (viewInBrowser !== undefined) patch.viewInBrowser = viewInBrowser;
   if (deliverySource !== undefined) {
     if (!["draft", "paused"].includes(current.status)) {
       throw new Error("esp_cannot_change_after_start");
@@ -321,11 +371,39 @@ export async function updateSequence({
     patch.deliverySourceIntent = deliverySource as any;
   }
 
-  const [row] = await db
-    .update(sequences)
-    .set(patch)
-    .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)))
-    .returning();
+  // An active sequence fires on its `rules` row, so a trigger edit has to
+  // replace it in the same transaction, or the old trigger keeps firing
+  // until the sequence is paused and resumed.
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(sequences)
+      .set(patch)
+      .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)))
+      .returning();
+    if (!updated) return null;
+    if (
+      updated.type === "sequence" &&
+      updated.status === "active" &&
+      (updated.triggerType !== current.triggerType ||
+        updated.triggerData !== current.triggerData ||
+        JSON.stringify(updated.triggerFilter) !== JSON.stringify(current.triggerFilter))
+    ) {
+      await removeRule({ teamId, sequenceId: updated.id }, tx);
+      if (updated.triggerType) {
+        await addRule(
+          {
+            teamId,
+            sequenceId: updated.id,
+            triggerType: updated.triggerType,
+            triggerData: updated.triggerData,
+            triggerFilter: updated.triggerFilter,
+          },
+          tx,
+        );
+      }
+    }
+    return updated;
+  });
   if (!row) return null;
 
   // Broadcasts have a single email whose subject always mirrors the
@@ -701,12 +779,7 @@ export async function startSequence({
     if (!sequence.title || !sequence.triggerType) {
       throw new Error(`${responses.sequence_details_missing}: basics`);
     }
-    if (
-      [EventType.TAG_ADDED, EventType.TAG_REMOVED].includes(
-        sequence.triggerType as any,
-      ) &&
-      !sequence.triggerData
-    ) {
+    if (TRIGGERS_NEEDING_DATA.includes(sequence.triggerType) && !sequence.triggerData) {
       throw new Error(`${responses.sequence_details_missing}: trigger`);
     }
   }
@@ -774,6 +847,7 @@ export async function startSequence({
     sequenceId: sequence.id,
     triggerType: sequence.triggerType!,
     triggerData: sequence.triggerData,
+    triggerFilter: sequence.triggerFilter,
     eventDateInMillis:
       sequence.type === "broadcast" ? sequence.emails[0].delayInMillis : undefined,
   });

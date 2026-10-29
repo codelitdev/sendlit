@@ -36,6 +36,17 @@ footer link goes to its public page instead, and so does the
 `{{ web_version_url }}` merge tag. Before that, `{{ web_version_url }}` is the
 recipient's own web version.
 
+### Turn the web version off
+
+Some emails don't belong on the web, such as onboarding, trial or account
+emails. New sequences start with **View in browser** off. Turn it off on a
+broadcast or an older sequence (through the
+API or MCP `update_sequence`, this is `viewInBrowser: false`). Its emails are
+then sent without the footer link, `{{ view_in_browser_url }}` is empty, and
+the web versions behind links already sent stop working. Turning it back on
+restores them. It doesn't affect a broadcast's
+[public page](/email-marketing/web-archive), which you publish separately.
+
 ## Automatic pause on bounces and complaints
 
 While a broadcast or sequence sends, SendLit watches its bounce and spam
