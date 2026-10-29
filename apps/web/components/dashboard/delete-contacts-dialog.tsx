@@ -13,7 +13,8 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 
-/** Deleting more contacts than this asks for the count to be typed. */
+/** Deleting more contacts than this asks for the count to be typed, as does
+ * every "all matching" selection. */
 export const TYPED_CONFIRMATION_THRESHOLD = 100;
 
 function plural(count: number, word: string) {
@@ -66,7 +67,9 @@ export function DeleteContactsDialog({
   }, [selection]);
 
   const count = preview?.count ?? 0;
-  const needsTyping = count > TYPED_CONFIRMATION_THRESHOLD;
+  // "All matching" can reach contacts on pages nobody looked at.
+  const needsTyping =
+    (selection !== null && "match" in selection) || count > TYPED_CONFIRMATION_THRESHOLD;
   const title = preview ? `Delete ${plural(count, "contact")}?` : "Delete contacts?";
 
   return (

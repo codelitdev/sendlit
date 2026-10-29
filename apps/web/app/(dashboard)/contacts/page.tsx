@@ -292,13 +292,7 @@ export default function ContactsPage() {
                   <th className="w-10 py-3 pl-4">
                     <Checkbox
                       aria-label="Select all contacts on this page"
-                      checked={
-                        allMatching || pageSelected
-                          ? true
-                          : selectedIds.size > 0
-                            ? "indeterminate"
-                            : false
-                      }
+                      checked={allMatching || pageSelected}
                       onCheckedChange={(checked) => {
                         setAllMatching(false);
                         setSelectedIds(checked === true ? new Set(pageIds) : new Set());
