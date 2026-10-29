@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { LiquidError } from "liquidjs";
 import { recordPacedSend } from "../abuse/telemetry";
 import { commitSendReservation, releaseSendReservation } from "../billing/entitlements";
 import { sequenceBounceLimit } from "../config/constants";
@@ -24,7 +25,7 @@ import {
 } from "../delivery-feedback/outbound-send";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
 import { renderCampaignHtml } from "../mail/campaign";
-import { EmailRenderError, MissingTemplateVariablesError } from "../mail/render";
+import { EmailRenderError } from "../mail/render";
 import { quotaExhaustionDeferral, SendDeferredError } from "../mail/rate-limit";
 import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
@@ -296,12 +297,25 @@ async function attemptMailSending({
       publication: sequence.type === "broadcast" ? sequence : null,
     });
   } catch (err: any) {
-    // A content or footer-settings failure repeats on every retry until the
-    // content or settings change, so count it like any other failed attempt
-    // and let it stop instead of retrying forever. Anything else (a database
-    // blip while rendering) is transient: retry without using up the limit.
+    logger.error(
+      {
+        error: err.message,
+        sequence_id: sequence.sequenceId,
+        contactId: contact.contactId,
+      },
+      "attemptMailSending render failed",
+    );
+    // Content or footer-settings problems fail the same way for every
+    // recipient until the team fixes them, so retrying can't help and
+    // dropping recipients would lose them. Pause the whole send instead: the
+    // team is notified and everyone stays queued for when it is resumed. Any
+    // other error (a database blip while rendering) is transient and is
+    // simply retried.
     if (isPermanentRenderError(err)) {
-      await recordFailedAttempt({ sequence, contact, ongoingSequence });
+      await autoPauseSequence(sequence, "render_error", {
+        error: String(err?.message ?? err).slice(0, 300),
+      });
+      throw new SequencePausedError();
     }
     throw err;
   }
@@ -416,12 +430,36 @@ async function attemptMailSending({
       });
       throw new SequencePausedError();
     }
-    await recordFailedAttempt({
-      sequence,
-      contact,
-      ongoingSequence,
-      outboundId: outboundForReservation?.id,
-    });
+    const retryCount = ongoingSequence.retryCount + 1;
+    if (retryCount >= sequenceBounceLimit) {
+      if (outboundForReservation) {
+        await releaseSendReservation(outboundForReservation.id).catch(() => undefined);
+      }
+      await db
+        .update(sequences)
+        .set({
+          report: {
+            ...(sequence.report as any),
+            sequence: {
+              ...(sequence.report as any)?.sequence,
+              failed: [
+                ...((sequence.report as any)?.sequence?.failed || []),
+                contact.contactId,
+              ],
+            },
+          },
+        })
+        .where(eq(sequences.id, sequence.id));
+      await deleteOngoingSequence(ongoingSequence.id);
+    } else {
+      // Keep the reservation through a transient retry. It expires and
+      // is reopened atomically by reserveSend, preventing a retry from
+      // bypassing the monthly quota.
+      await db
+        .update(ongoingSequences)
+        .set({ retryCount })
+        .where(eq(ongoingSequences.id, ongoingSequence.id));
+    }
     logger.error(
       {
         error: err.message,
@@ -434,58 +472,14 @@ async function attemptMailSending({
   }
 }
 
+/** Whether a render error comes from the email's content or the team's footer
+ * settings, and so repeats for every recipient until the team changes them. */
 export function isPermanentRenderError(err: unknown): boolean {
   return (
     err instanceof EmailRenderError ||
     err instanceof TemplateValidationError ||
-    err instanceof MissingTemplateVariablesError
+    err instanceof LiquidError
   );
-}
-
-/** Counts one failed attempt for this recipient. At `sequenceBounceLimit` the
- * recipient is recorded as failed and dropped; before that the row stays due
- * for another try. */
-async function recordFailedAttempt({
-  sequence,
-  contact,
-  ongoingSequence,
-  outboundId,
-}: {
-  sequence: typeof sequences.$inferSelect;
-  contact: NonNullable<Awaited<ReturnType<typeof getContactById>>>;
-  ongoingSequence: OngoingSequenceRow;
-  outboundId?: string;
-}) {
-  const retryCount = ongoingSequence.retryCount + 1;
-  if (retryCount >= sequenceBounceLimit) {
-    if (outboundId) {
-      await releaseSendReservation(outboundId).catch(() => undefined);
-    }
-    await db
-      .update(sequences)
-      .set({
-        report: {
-          ...(sequence.report as any),
-          sequence: {
-            ...(sequence.report as any)?.sequence,
-            failed: [
-              ...((sequence.report as any)?.sequence?.failed || []),
-              contact.contactId,
-            ],
-          },
-        },
-      })
-      .where(eq(sequences.id, sequence.id));
-    await deleteOngoingSequence(ongoingSequence.id);
-  } else {
-    // Keep the reservation through a transient retry. It expires and
-    // is reopened atomically by reserveSend, preventing a retry from
-    // bypassing the monthly quota.
-    await db
-      .update(ongoingSequences)
-      .set({ retryCount })
-      .where(eq(ongoingSequences.id, ongoingSequence.id));
-  }
 }
 
 /** Applies the email's on-send action (`tag:add` / `tag:remove`). The mail is

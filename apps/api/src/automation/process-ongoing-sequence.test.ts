@@ -35,12 +35,9 @@ const { default: webViewRoutes } = await import("../tracking/web-view");
 const { requestApp } = await import("../test/http");
 const express = (await import("express")).default;
 const { getUnsubLink } = await import("../utils/mail");
-const { EmailRenderError, MissingTemplateVariablesError } = await import(
-  "../mail/render"
+const { getNextPublishedEmail, processOngoingSequence } = await import(
+  "./process-ongoing-sequence"
 );
-const { TemplateValidationError } = await import("../templates/validation");
-const { getNextPublishedEmail, isPermanentRenderError, processOngoingSequence } =
-  await import("./process-ongoing-sequence");
 
 const tdb = db as unknown as TestDb;
 const mockedSendMail = sendMail as unknown as Mock<typeof sendMail>;
@@ -185,7 +182,7 @@ describe("processOngoingSequence", () => {
     expect(outbound.providerMessageId).toBe("0100018f-ses-id-000000");
   });
 
-  it("rejects corrupted marketing content without a final managed footer before transport", async () => {
+  it("pauses on corrupted marketing content without a final managed footer, before transport", async () => {
     const { team, contact } = await seedTeamAndContact(tdb);
     const { sequenceRow, emailRows } = await seedSequence(tdb, {
       teamId: team.id,
@@ -212,71 +209,18 @@ describe("processOngoingSequence", () => {
       contactId: contact.id,
     });
 
-    await expect(processOngoingSequence(row.id)).rejects.toThrow("footer_required");
+    await processOngoingSequence(row.id);
     expect(mockedSendMail).not.toHaveBeenCalled();
     expect(await tdb.select().from(emailDeliveries)).toHaveLength(0);
-  });
-
-  it("only counts content and footer render errors toward the bounce limit", () => {
-    expect(isPermanentRenderError(new EmailRenderError("footer_render_failed"))).toBe(
-      true,
-    );
-    expect(isPermanentRenderError(new TemplateValidationError("footer_required"))).toBe(
-      true,
-    );
-    expect(isPermanentRenderError(new MissingTemplateVariablesError(["name"]))).toBe(
-      true,
-    );
-    // A database blip or timeout while rendering must stay retryable.
-    expect(
-      isPermanentRenderError(new Error("Connection terminated unexpectedly")),
-    ).toBe(false);
-  });
-
-  it("counts a render failure toward the bounce limit instead of retrying forever", async () => {
-    const { team, contact } = await seedTeamAndContact(tdb);
-    const { sequenceRow, emailRows } = await seedSequence(tdb, {
-      teamId: team.id,
-      emails: [{ emailId: "email_e1", subject: "Broken" }],
-    });
-    await tdb
-      .update(sequenceEmails)
-      .set({
-        content: {
-          style: {},
-          meta: {},
-          content: [{ blockType: "text", settings: { content: "No footer" } }],
-        },
-      })
-      .where(eq(sequenceEmails.id, emailRows[0].id));
-    const row = await seedOngoingSequence(tdb, {
-      teamId: team.id,
-      sequenceId: sequenceRow.id,
-      contactId: contact.id,
-    });
-
-    await expect(processOngoingSequence(row.id)).rejects.toThrow("footer_required");
-    const [after] = await tdb
-      .select()
-      .from(ongoingSequences)
-      .where(eq(ongoingSequences.id, row.id));
-    expect(after.retryCount).toBe(1);
-
-    // sequenceBounceLimit defaults to 3: two more failures drop the row.
-    await tdb
-      .update(ongoingSequences)
-      .set({ retryCount: 2 })
-      .where(eq(ongoingSequences.id, row.id));
-    await expect(processOngoingSequence(row.id)).rejects.toThrow("footer_required");
-    expect(
-      await tdb.select().from(ongoingSequences).where(eq(ongoingSequences.id, row.id)),
-    ).toHaveLength(0);
-    const [seqAfter] = await tdb
+    const [paused] = await tdb
       .select()
       .from(sequences)
       .where(eq(sequences.id, sequenceRow.id));
-    expect((seqAfter.report as any).sequence.failed).toContain(contact.contactId);
-    expect(mockedSendMail).not.toHaveBeenCalled();
+    expect(paused.status).toBe("paused");
+    expect((paused.report as any).autoPause).toMatchObject({
+      reason: "render_error",
+      error: "footer_required",
+    });
   });
 
   it("skips a suppressed recipient without sending or recording a delivery", async () => {
