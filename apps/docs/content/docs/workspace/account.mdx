@@ -1,6 +1,6 @@
 ---
 title: Account
-description: Understand account access and organization-scoped billing.
+description: Understand account access, organization-scoped billing, and deleting your account.
 ---
 
 The dashboard home shows the current team’s delivery activity and allowance: sent, queued, failed, bounced, active sequences, scheduled broadcasts, and daily/monthly quota usage.
@@ -14,3 +14,38 @@ for the complete plan rules.
 Quotas shown on the dashboard are team-scoped, so switching teams changes the
 numbers shown there. Organization billing usage is shown on the organization's
 **Plan** tab.
+
+## Delete your account
+
+Open **Account** and choose **Delete account** in the danger zone. The
+dialog lists every organization you belong to and what happens to it:
+
+- **Will be deleted**: you are its only owner. It is deleted like
+  [deleting an organization](/workspace/organizations), and the personal
+  data it holds about its contacts is erased: contacts and their fields,
+  events and enrolments, signup confirmations, recipient addresses in
+  delivery history and transactional email, and raw ESP webhook payloads.
+  Suppressed addresses stay blocked through an anonymous hash.
+- **You'll leave**: another owner stays in charge. The organization keeps
+  its contacts, campaigns, keys and billing; you only lose access.
+
+Some things have to happen first, and the dialog links to where you fix
+them:
+
+- an organization you own alone has an active or paid-through
+  subscription, or an open checkout: cancel it first;
+- you own an organization alone and other people are members: make one of
+  them an owner, or remove them;
+- you pay for the subscription of an organization you would leave: ask an
+  owner to cancel it or take over billing.
+
+To confirm, type your email and enter the code SendLit emails you. Codes
+expire after 5 minutes. When the account is deleted your name and email are
+erased and you are signed out everywhere, including OAuth and MCP clients.
+Billing records and audit events are kept for accounting and security, with
+an anonymous id instead of your name or email. Signing up again with the
+same email creates a new, empty account.
+
+The REST API offers the same flow from a dashboard session only:
+`GET /account/deletion`, `POST /account/deletion/code` and `DELETE /account`.
+It isn't available over MCP or with API keys.

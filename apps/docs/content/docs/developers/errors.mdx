@@ -55,6 +55,17 @@ template or transactional delivery.
 
 See [Custom events](/developers/events) and [Sequences](/email-marketing/sequences#custom-events).
 
+## Account deletion errors
+
+`DELETE /account` (dashboard session only):
+
+| Status | Error                      | Meaning                                                                                                                    |
+| ------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `403`  | `human_session_required`   | Account deletion needs a dashboard session. OAuth tokens and API keys can't delete an account.                              |
+| `400`  | `email_mismatch`           | The typed email isn't the account's email.                                                                                 |
+| `400`  | `invalid_code`             | The code from `POST /account/deletion/code` is wrong or expired. Request a new one.                                        |
+| `409`  | `account_deletion_blocked` | Something has to happen first. The body lists `organizations` with their `blocker`: `active_subscription_exists`, `billing_checkout_pending`, `last_organization_owner` or `billing_manager_required`. |
+
 ## Authentication errors
 
 | Status | Error                        | Meaning                                                                                                 |
