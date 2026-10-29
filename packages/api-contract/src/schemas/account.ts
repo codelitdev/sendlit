@@ -38,3 +38,8 @@ export const deleteAccountBodySchema = z.object({
 export const accountDeletionBlockedSchema = accountDeletionPreviewSchema
   .omit({ email: true })
   .extend({ error: z.literal("account_deletion_blocked") });
+
+export type AccountDeletionPreview = z.infer<typeof accountDeletionPreviewSchema>;
+export type AccountDeletionOrganization = z.infer<
+  typeof accountDeletionOrganizationSchema
+>;

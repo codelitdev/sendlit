@@ -1,4 +1,6 @@
 import {
+  type AccountDeletionOrganization,
+  type AccountDeletionPreview,
   type BillingCatalogKey,
   type BillingPlan,
   type ContactDeletion,
@@ -1203,6 +1205,29 @@ export function deleteOrganization(organizationId: string) {
     `/organizations/${organizationId}`,
     { method: "DELETE" },
   );
+}
+
+// ---- Account --------------------------------------------------------------
+
+export type { AccountDeletionOrganization, AccountDeletionPreview };
+
+/** What deleting the account does to each organization, and what blocks it. */
+export function getAccountDeletion() {
+  return organizationRequest<AccountDeletionPreview>("/account/deletion");
+}
+
+/** Emails the code `deleteAccount` needs. */
+export function sendAccountDeletionCode() {
+  return organizationRequest<void>("/account/deletion/code", { method: "POST" });
+}
+
+/** Deletes the signed-in account (ADR 0009). Fails with `email_mismatch`,
+ * `invalid_code` or `account_deletion_blocked`. */
+export function deleteAccount(email: string, code: string) {
+  return organizationRequest<void>("/account", {
+    method: "DELETE",
+    body: JSON.stringify({ email, code }),
+  });
 }
 
 export function createOrganization(name: string) {
