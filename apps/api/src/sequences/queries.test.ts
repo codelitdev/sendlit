@@ -15,12 +15,14 @@ mock.module("../media/service", () => ({
   ),
   deleteMedia: vi.fn(),
 }));
+mock.module("../media/deletion-queue", () => ({ queueMediaLitDeletion: vi.fn() }));
 
 const { EmailEventAction, EventType } = await import("../config/constants");
 const { responses } = await import("../config/strings");
 const { db } = await import("../db/client");
 const {
   contacts,
+  emailContentVersions,
   emailDeliveries,
   emailEvents,
   espConfigs,
@@ -667,77 +669,169 @@ describe("sequence queries", () => {
     ).toHaveLength(0);
   });
 
-  it("removes only media references when a sequence email is deleted", async () => {
+  async function sequenceWithImages(
+    teamId: string,
+    type: "sequence" | "broadcast",
+    images: string[],
+  ) {
+    const template = await makeTemplate(teamId);
+    let sequence = await createSequence({
+      teamId,
+      type,
+      templateId: template.templateId,
+    });
+    for (let index = 1; index < images.length; index++) {
+      sequence = (await addMailToSequence({
+        teamId,
+        sequenceId: sequence.sequenceId,
+        templateId: template.templateId,
+      }))!;
+    }
+    for (const [index, image] of images.entries()) {
+      await updateMailInSequence({
+        teamId,
+        sequenceId: sequence.sequenceId,
+        emailId: sequence.emails[index].emailId,
+        content: emailWithImage(image),
+      });
+    }
+    vi.clearAllMocks();
+    return (await getSequenceBySequenceId(teamId, sequence.sequenceId))!;
+  }
+
+  /** Records that an email went out, the way a send does. */
+  async function markSent(teamId: string, email: { id: string; content: unknown }) {
+    await tdb.insert(emailContentVersions).values({
+      teamId,
+      sequenceEmailId: email.id,
+      contentHash: crypto.randomUUID(),
+      subject: "Sent",
+      content: email.content,
+    });
+  }
+
+  function deletedMediaLitIds() {
+    return (deleteMedia as ReturnType<typeof vi.fn>).mock.calls
+      .map(([id]) => id)
+      .sort();
+  }
+
+  async function remainingMediaLitIds() {
+    return (await tdb.select().from(media)).map((row) => row.mediaLitId).sort();
+  }
+
+  it("deletes a deleted sequence email's media and keeps media another email uses", async () => {
     const { team } = await seedTeamAndContact(tdb);
-    const template = await makeTemplate(team.id);
-    const sequence = await createSequence({
-      teamId: team.id,
-      type: "sequence",
-      templateId: template.templateId,
-    });
-    const withSecondEmail = await addMailToSequence({
-      teamId: team.id,
-      sequenceId: sequence.sequenceId,
-      templateId: template.templateId,
-    });
-    const emailToDelete = withSecondEmail!.emails[0];
+    const sequence = await sequenceWithImages(team.id, "sequence", [
+      "email-only-media",
+      "email-shared-media",
+    ]);
+    // The second email also shows the first email's shared image.
     await updateMailInSequence({
       teamId: team.id,
       sequenceId: sequence.sequenceId,
-      emailId: emailToDelete.emailId,
-      content: emailWithImage("sequence-email-deleted-media"),
+      emailId: sequence.emails[0].emailId,
+      content: (() => {
+        const content = emailWithImage("email-only-media");
+        const shared = emailWithImage("email-shared-media").content.find(
+          (block) => block.blockType === "image",
+        )!;
+        return {
+          ...content,
+          content: [...content.content.slice(0, -1), shared, content.content.at(-1)!],
+        };
+      })(),
     });
     vi.clearAllMocks();
 
     await deleteMailFromSequence({
       teamId: team.id,
       sequenceId: sequence.sequenceId,
-      emailId: emailToDelete.emailId,
+      emailId: sequence.emails[0].emailId,
     });
 
-    expect(deleteMedia).not.toHaveBeenCalled();
+    expect(deletedMediaLitIds()).toEqual(["email-only-media"]);
     expect(sealMedia).not.toHaveBeenCalled();
-    expect(await tdb.select().from(media)).toHaveLength(1);
+    expect(await remainingMediaLitIds()).toEqual(["email-shared-media"]);
     expect(
       await tdb
         .select()
         .from(mediaReferences)
-        .where(eq(mediaReferences.resourceInternalId, emailToDelete.id)),
+        .where(eq(mediaReferences.resourceInternalId, sequence.emails[0].id)),
     ).toHaveLength(0);
   });
 
-  it("removes only media references when a broadcast is deleted", async () => {
+  it("deletes the media of every email of a deleted sequence, keeping shared media", async () => {
     const { team } = await seedTeamAndContact(tdb);
-    const template = await makeTemplate(team.id);
-    const broadcast = await createSequence({
+    await createTemplate({
       teamId: team.id,
-      type: "broadcast",
-      templateId: template.templateId,
+      title: "Uses the shared image",
+      content: emailWithImage("sequence-shared-media"),
     });
-    await updateMailInSequence({
-      teamId: team.id,
-      sequenceId: broadcast.sequenceId,
-      emailId: broadcast.emails[0].emailId,
-      content: emailWithImage("broadcast-deleted-media"),
-    });
-    vi.clearAllMocks();
+    const sequence = await sequenceWithImages(team.id, "sequence", [
+      "sequence-media-1",
+      "sequence-media-2",
+      "sequence-shared-media",
+    ]);
 
     await expect(
-      deleteSequence({
-        teamId: team.id,
-        sequenceId: broadcast.sequenceId,
-      }),
+      deleteSequence({ teamId: team.id, sequenceId: sequence.sequenceId }),
     ).resolves.toBe(true);
 
-    expect(deleteMedia).not.toHaveBeenCalled();
+    expect(deletedMediaLitIds()).toEqual(["sequence-media-1", "sequence-media-2"]);
+    expect(await remainingMediaLitIds()).toEqual(["sequence-shared-media"]);
+  });
+
+  it("deletes a draft broadcast's media", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const broadcast = await sequenceWithImages(team.id, "broadcast", [
+      "broadcast-deleted-media",
+    ]);
+
+    await expect(
+      deleteSequence({ teamId: team.id, sequenceId: broadcast.sequenceId }),
+    ).resolves.toBe(true);
+
+    expect(deletedMediaLitIds()).toEqual(["broadcast-deleted-media"]);
     expect(sealMedia).not.toHaveBeenCalled();
-    expect(await tdb.select().from(media)).toHaveLength(1);
-    expect(
-      await tdb
-        .select()
-        .from(mediaReferences)
-        .where(eq(mediaReferences.resourceInternalId, broadcast.emails[0].id)),
-    ).toHaveLength(0);
+    expect(await remainingMediaLitIds()).toEqual([]);
+    expect(await tdb.select().from(mediaReferences)).toHaveLength(0);
     expect(await getSequenceBySequenceId(team.id, broadcast.sequenceId)).toBeNull();
+  });
+
+  it("keeps the media of a sent broadcast", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const broadcast = await sequenceWithImages(team.id, "broadcast", [
+      "broadcast-sent-media",
+    ]);
+    await markSent(team.id, broadcast.emails[0]);
+
+    await deleteSequence({ teamId: team.id, sequenceId: broadcast.sequenceId });
+
+    expect(deleteMedia).not.toHaveBeenCalled();
+    expect(await remainingMediaLitIds()).toEqual(["broadcast-sent-media"]);
+  });
+
+  it("keeps media a sent sequence email shows when a draft email is deleted", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const sequence = await sequenceWithImages(team.id, "sequence", [
+      "sequence-sent-media",
+      "sequence-sent-media",
+      "sequence-draft-media",
+    ]);
+    await markSent(team.id, sequence.emails[0]);
+
+    // The draft copy of the sent image goes, the sent email still shows it.
+    await deleteMailFromSequence({
+      teamId: team.id,
+      sequenceId: sequence.sequenceId,
+      emailId: sequence.emails[1].emailId,
+    });
+    expect(deleteMedia).not.toHaveBeenCalled();
+
+    await deleteSequence({ teamId: team.id, sequenceId: sequence.sequenceId });
+
+    expect(deletedMediaLitIds()).toEqual(["sequence-draft-media"]);
+    expect(await remainingMediaLitIds()).toEqual(["sequence-sent-media"]);
   });
 });

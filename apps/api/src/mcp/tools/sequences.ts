@@ -365,7 +365,7 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
     "delete_sequence_email",
     {
       description:
-        "Removes an email from a sequence. Broadcasts cannot have their only email removed.",
+        "Removes an email from a sequence. Broadcasts cannot have their only email removed. Images only this email used are deleted from the media library, unless it was already sent.",
       inputSchema: { sequenceId: z.string(), emailId: z.string() },
       outputSchema: sequenceSchema,
       annotations: {

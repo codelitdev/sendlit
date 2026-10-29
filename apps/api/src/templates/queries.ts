@@ -2,9 +2,12 @@ import type { TemplatePurpose } from "@sendlit/api-contract";
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "../db/client";
-import { emailTemplates } from "../db/schema";
+import { emailTemplates, transactionalEmails } from "../db/schema";
 import { syncEmailContentMediaReferences } from "../media/email-content";
-import { deleteMediaReferencesForResource } from "../media/queries";
+import {
+  deleteMediaReferencesForResource,
+  deleteOrphanedMedia,
+} from "../media/queries";
 import { captureEvent } from "../observability";
 import { getSystemTemplate } from "./system-templates";
 import {
@@ -333,8 +336,9 @@ export async function deleteTemplate(
     .from(emailTemplates)
     .where(eq(emailTemplates.templateId, templateId))
     .limit(1);
+  let mediaIds: string[] = [];
   if (template && template.teamId === teamId) {
-    await deleteMediaReferencesForResource({
+    mediaIds = await deleteMediaReferencesForResource({
       teamId,
       resourceType: "TEMPLATE",
       resourceInternalId: template.id,
@@ -346,10 +350,26 @@ export async function deleteTemplate(
     .where(
       and(eq(emailTemplates.teamId, teamId), eq(emailTemplates.templateId, templateId)),
     );
+  // Broadcasts and sequences copy a template's content (their emails hold
+  // their own references), but transactional sends render the template
+  // itself: once one went out, inboxes load its images, so they stay.
+  const [sent] = mediaIds.length
+    ? await db
+        .select({ id: transactionalEmails.id })
+        .from(transactionalEmails)
+        .where(
+          and(
+            eq(transactionalEmails.teamId, teamId),
+            eq(transactionalEmails.templateId, templateId),
+          ),
+        )
+        .limit(1)
+    : [];
+  const media = await deleteOrphanedMedia(teamId, sent ? [] : mediaIds);
   captureEvent({
     event: "template_deleted",
     source: "templates.delete",
     teamId,
-    properties: { template_id: templateId },
+    properties: { template_id: templateId, media_deleted_count: media.deleted },
   });
 }

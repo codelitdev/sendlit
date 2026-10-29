@@ -29,6 +29,7 @@ import {
 import { db } from "../db/client";
 import {
   contacts,
+  emailContentVersions,
   emailDeliveries,
   emailEvents,
   espConfigs,
@@ -41,7 +42,10 @@ import {
   resolveDeliverySource,
 } from "../delivery/queries";
 import { syncEmailContentMediaReferences } from "../media/email-content";
-import { deleteMediaReferencesForResource } from "../media/queries";
+import {
+  deleteMediaReferencesForResource,
+  deleteOrphanedMedia,
+} from "../media/queries";
 import { captureEvent } from "../observability";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
@@ -613,6 +617,47 @@ export async function updateMailInSequence({
   return getSequenceBySequenceId(teamId, sequenceId);
 }
 
+/**
+ * Removes the media references of sequence emails about to be deleted and
+ * returns the media rows to pass to `deleteOrphanedMedia` after the delete.
+ * Media of an email that was already sent (it has a delivery or a stored
+ * content version) is left out: inboxes and "view in browser" pages load
+ * its images by URL, so it stays in the media library until the user
+ * deletes it there.
+ */
+async function releaseEmailMedia(
+  teamId: string,
+  emailIds: string[],
+): Promise<string[]> {
+  if (!emailIds.length) return [];
+  const [delivered, versioned] = await Promise.all([
+    db
+      .selectDistinct({ id: emailDeliveries.emailId })
+      .from(emailDeliveries)
+      .where(inArray(emailDeliveries.emailId, emailIds)),
+    db
+      .selectDistinct({ id: emailContentVersions.sequenceEmailId })
+      .from(emailContentVersions)
+      .where(inArray(emailContentVersions.sequenceEmailId, emailIds)),
+  ]);
+  const sentIds = new Set([...delivered, ...versioned].map((row) => row.id));
+  const draftIds = emailIds.filter((id) => !sentIds.has(id));
+
+  const kept = new Set(
+    await deleteMediaReferencesForResource({
+      teamId,
+      resourceType: "SEQUENCE_EMAIL",
+      resourceInternalId: [...sentIds],
+    }),
+  );
+  const released = await deleteMediaReferencesForResource({
+    teamId,
+    resourceType: "SEQUENCE_EMAIL",
+    resourceInternalId: draftIds,
+  });
+  return released.filter((id) => !kept.has(id));
+}
+
 export async function deleteMailFromSequence({
   teamId,
   sequenceId,
@@ -632,13 +677,7 @@ export async function deleteMailFromSequence({
   }
 
   const email = sequence.emails.find((item) => item.emailId === emailId);
-  if (email) {
-    await deleteMediaReferencesForResource({
-      teamId,
-      resourceType: "SEQUENCE_EMAIL",
-      resourceInternalId: email.id,
-    });
-  }
+  const mediaIds = email ? await releaseEmailMedia(teamId, [email.id]) : [];
 
   await db
     .delete(sequenceEmails)
@@ -655,6 +694,7 @@ export async function deleteMailFromSequence({
       emailsOrder: sequence.emailsOrder.filter((id) => id !== emailId),
     })
     .where(eq(sequences.id, sequence.id));
+  const media = await deleteOrphanedMedia(teamId, mediaIds);
 
   captureEvent({
     event: "sequence_email_deleted",
@@ -664,6 +704,7 @@ export async function deleteMailFromSequence({
       sequence_id: sequence.sequenceId,
       sequence_type: sequence.type,
       email_id: emailId,
+      media_deleted_count: media.deleted,
     },
   });
 
@@ -680,17 +721,15 @@ export async function deleteSequence({
   const sequence = await getSequenceBySequenceId(teamId, sequenceId);
   if (!sequence) return false;
 
-  for (const email of sequence.emails) {
-    await deleteMediaReferencesForResource({
-      teamId,
-      resourceType: "SEQUENCE_EMAIL",
-      resourceInternalId: email.id,
-    });
-  }
+  const mediaIds = await releaseEmailMedia(
+    teamId,
+    sequence.emails.map((email) => email.id),
+  );
 
   await db
     .delete(sequences)
     .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)));
+  const media = await deleteOrphanedMedia(teamId, mediaIds);
 
   captureEvent({
     event: "sequence_deleted",
@@ -698,6 +737,7 @@ export async function deleteSequence({
     teamId,
     properties: {
       sequence_id: sequence.sequenceId,
+      media_deleted_count: media.deleted,
       sequence_type: sequence.type,
     },
   });

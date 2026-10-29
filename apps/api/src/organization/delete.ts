@@ -31,9 +31,9 @@ export interface OrganizationDeletionResult {
  *   revoked and ESP grants cancelled (`closeOrganization`);
  * - team API keys are revoked, sending domains revoked, and every ESP
  *   config (shared and team-owned) retired with its credentials wiped;
- * - every MediaLit file of its teams is deleted. A MediaLit failure does not
- *   undo the deletion: that file's `media` row stays for a later retry (#157)
- *   and the error goes to `captureError`.
+ * - every `media` row of its teams is deleted with its MediaLit file. A
+ *   MediaLit failure does not undo the deletion: the file is queued for
+ *   retry (`media/deletion-queue.ts`) and the error goes to `captureError`.
  */
 export async function deleteOrganization(
   organizationId: string,

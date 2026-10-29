@@ -19,6 +19,8 @@ mock.module("../auth/middleware", () => ({
   },
 }));
 mock.module("../media/service", () => ({ deleteMedia: vi.fn() }));
+const queueMediaLitDeletion = vi.fn();
+mock.module("../media/deletion-queue", () => ({ queueMediaLitDeletion }));
 const realSecurity = await import("../billing/security");
 // The billing-action token is covered in billing/security.test.ts.
 mock.module("../billing/security", () => ({
@@ -166,6 +168,7 @@ async function organizationStatus(id: string) {
 beforeEach(async () => {
   await truncateAll(tdb);
   deleteMediaMock.mockReset();
+  queueMediaLitDeletion.mockReset();
   captureEvent.mockReset();
   authState.userId = "";
   authState.authKind = "session";
@@ -273,7 +276,7 @@ describe("DELETE /organizations/:organizationId", () => {
     }
   });
 
-  it("still deletes when MediaLit fails, keeping the failed file's row", async () => {
+  it("still deletes when MediaLit fails, queueing the failed file for retry", async () => {
     const owner = await insertUser("Owner");
     const { organization, mediaLitIds } = await seedOrganization(owner, "acme");
     deleteMediaMock.mockImplementation(async (id: string) => {
@@ -287,8 +290,10 @@ describe("DELETE /organizations/:organizationId", () => {
 
     expect(response.status).toBe(204);
     expect(await organizationStatus(organization.id)).toBe("closed");
-    const remaining = await tdb.select().from(schema.media);
-    expect(remaining.map((row) => row.mediaLitId)).toEqual([mediaLitIds[0]]);
+    expect(await tdb.select().from(schema.media)).toHaveLength(0);
+    expect(queueMediaLitDeletion.mock.calls.map(([job]) => job.mediaLitId)).toEqual([
+      mediaLitIds[0],
+    ]);
   });
 
   it("is owner only", async () => {
