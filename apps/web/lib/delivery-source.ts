@@ -30,7 +30,13 @@ export function presentDeliverySourceError(error: string): string {
     case "organization_quota_exhausted":
       return "The organization's shared mailbox has reached its sending quota for now. Ask an organization admin to raise it, or wait for it to reset.";
     case "delivery_source_in_use":
-      return "This ESP can't be removed while it is used by an active sequence, queued email, or delivery integration.";
+      return "This ESP is used by a sending sequence or broadcast, or by queued email. Pause or finish that work, or wait for the queue to empty, then try again.";
+    case "esp_is_default":
+      return "This ESP is the team's default delivery source. Make another ESP the default, or retire this one, before removing it.";
+    case "esp_has_delivery_history":
+      return "This ESP has delivery history (transactional email, delivery feedback or shared-mailbox assignments), so it can't be removed. Retire it instead: it stops sending and its history stays intact.";
+    case "esp_retire_instead":
+      return "This ESP has been activated, so it can't be deleted. Retire it instead: it stops sending and its reports stay intact.";
     default:
       return error;
   }

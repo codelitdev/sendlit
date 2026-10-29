@@ -220,7 +220,11 @@ const ORGANIZATION_ERROR_MESSAGES: Record<string, string> = {
   delivery_policy_not_found:
     "Delivery settings are not available for this organization.",
   delivery_source_in_use:
-    "This mailbox is still assigned to a team. Remove its assignments and try again.",
+    "This mailbox is still in use by sending campaigns or queued email. Let that work finish, or retire the mailbox to cancel it, and try again.",
+  esp_has_delivery_history:
+    "This mailbox has delivery history, so it stays retired to keep reports intact. A retired mailbox can't send.",
+  esp_retire_instead:
+    "A mailbox that has been activated can't be deleted. Retire it instead; it stops sending and its reports stay intact.",
   domain_exists: "That sending domain has already been added.",
   domain_invalid: "Enter a valid domain, such as example.com.",
   domain_not_found: "That sending domain could not be found.",
@@ -2015,54 +2019,59 @@ function SharedEspsSection({
                           <Mail className="size-4" />
                         </IconButton>
                       )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <IconButton
-                            aria-label={`Mailbox actions for ${esp.name}`}
-                            variant="outline"
-                            size="sm"
-                          >
-                            <MoreHorizontal />
-                          </IconButton>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {esp.status !== "retired" && esp.status !== "draining" && (
-                            <DropdownMenuItem
-                              disabled={transitioningId === esp.espId}
-                              onSelect={() => void transition(esp)}
+                      {esp.status !== "retired" && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <IconButton
+                              aria-label={`Mailbox actions for ${esp.name}`}
+                              variant="outline"
+                              size="sm"
                             >
-                              <Activity />
-                              {transitioningId === esp.espId
-                                ? "Working…"
-                                : esp.status === "active"
-                                  ? "Suspend"
-                                  : esp.status === "suspended"
-                                    ? "Resume"
-                                    : "Activate"}
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuSeparator />
-                          {esp.status !== "retired" ? (
-                            <DropdownMenuItem
-                              variant="destructive"
-                              disabled={transitioningId === esp.espId}
-                              onSelect={() => setRetiringEsp(esp)}
-                            >
-                              <Archive />
-                              Retire shared ESP
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              variant="destructive"
-                              disabled={transitioningId === esp.espId}
-                              onSelect={() => setDeletingEsp(esp)}
-                            >
-                              <Trash2 />
-                              Delete shared ESP
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                              <MoreHorizontal />
+                            </IconButton>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {esp.status !== "draining" && (
+                              <DropdownMenuItem
+                                disabled={transitioningId === esp.espId}
+                                onSelect={() => void transition(esp)}
+                              >
+                                <Activity />
+                                {transitioningId === esp.espId
+                                  ? "Working…"
+                                  : esp.status === "active"
+                                    ? "Suspend"
+                                    : esp.status === "suspended"
+                                      ? "Resume"
+                                      : "Activate"}
+                              </DropdownMenuItem>
+                            )}
+                            {/* A never-activated draft is deleted; anything that
+                                has been live is retired and kept for its history
+                                (#12). A retired mailbox has nothing left to do. */}
+                            <DropdownMenuSeparator />
+                            {esp.status === "draft" && !esp.activatedAt ? (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                disabled={transitioningId === esp.espId}
+                                onSelect={() => setDeletingEsp(esp)}
+                              >
+                                <Trash2 />
+                                Delete shared ESP
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                disabled={transitioningId === esp.espId}
+                                onSelect={() => setRetiringEsp(esp)}
+                              >
+                                <Archive />
+                                Retire shared ESP
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -2107,7 +2116,8 @@ function SharedEspsSection({
             <AlertDialogHeader>
               <AlertDialogTitle>Delete {deletingEsp?.name}?</AlertDialogTitle>
               <AlertDialogDescription>
-                This permanently removes the retired shared ESP. It cannot be restored.
+                This permanently removes the draft shared ESP. It has never been
+                activated, so no team or report depends on it. It cannot be restored.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

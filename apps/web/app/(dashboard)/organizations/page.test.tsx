@@ -30,6 +30,7 @@ const mocks = {
   createOrganization: mock(),
   abandonPendingOrganization: mock(),
   deleteOrganization: mock(),
+  deleteOrganizationEsp: mock(),
   clearOrganizationIdCookie: mock(),
   clearTeamIdCookie: mock(),
   navigateTo: mock(),
@@ -98,7 +99,7 @@ mock.module("@/lib/api", () => ({
   archiveOrganizationTeam: mock(),
   createOrganizationEsp: mock(),
   updateOrganizationEsp: mock(),
-  deleteOrganizationEsp: mock(),
+  deleteOrganizationEsp: mocks.deleteOrganizationEsp,
   testOrganizationEsp: mock(),
   activateOrganizationEsp: mock(),
   suspendOrganizationEsp: mock(),
@@ -894,5 +895,90 @@ describe("organization danger zone", () => {
       "/organizations?tab=plan",
       expect.anything(),
     );
+  });
+});
+
+describe("shared mailbox delete (#12)", () => {
+  const esp = (overrides: Record<string, unknown>) => ({
+    espId: "esp_x",
+    name: "Mailbox",
+    provider: "smtp",
+    host: "smtp.example.com",
+    port: 587,
+    secure: false,
+    username: null,
+    hasPassword: false,
+    fromName: null,
+    fromEmail: "a@example.com",
+    lastTestedAt: null,
+    lastTestStatus: null,
+    lastTestError: null,
+    status: "draft",
+    secretVersion: 1,
+    activatedAt: null,
+    drainUntil: null,
+    retiredAt: null,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+    ...overrides,
+  });
+
+  async function openMenu(name: string) {
+    const trigger = await screen.findByRole("button", {
+      name: `Mailbox actions for ${name}`,
+    });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    return screen.findByRole("menu");
+  }
+
+  beforeEach(() => {
+    mocks.listOrganizationEsps.mockResolvedValue({
+      items: [
+        esp({ espId: "esp_draft", name: "Draft box" }),
+        esp({
+          espId: "esp_live",
+          name: "Live box",
+          status: "active",
+          activatedAt: "2026-08-01T00:00:00.000Z",
+        }),
+        esp({
+          espId: "esp_old",
+          name: "Old box",
+          status: "retired",
+          activatedAt: "2026-08-01T00:00:00.000Z",
+          retiredAt: "2026-08-02T00:00:00.000Z",
+        }),
+      ],
+    });
+  });
+
+  it("deletes a never-activated draft and retires anything that has been live", async () => {
+    mocks.deleteOrganizationEsp.mockResolvedValue(undefined);
+    renderPage();
+    await openTab("Delivery");
+
+    const draftMenu = await openMenu("Draft box");
+    expect(within(draftMenu).queryByRole("menuitem", { name: /Retire/ })).toBeNull();
+    fireEvent.click(
+      within(draftMenu).getByRole("menuitem", { name: /Delete shared ESP/ }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Delete shared ESP" }),
+      );
+    });
+    await waitFor(() =>
+      expect(mocks.deleteOrganizationEsp).toHaveBeenCalledWith("org_1", "esp_draft"),
+    );
+
+    const liveMenu = await openMenu("Live box");
+    expect(
+      within(liveMenu).getByRole("menuitem", { name: /Retire shared ESP/ }),
+    ).toBeTruthy();
+    expect(within(liveMenu).queryByRole("menuitem", { name: /Delete/ })).toBeNull();
+
+    expect(
+      screen.queryByRole("button", { name: "Mailbox actions for Old box" }),
+    ).toBeNull();
   });
 });

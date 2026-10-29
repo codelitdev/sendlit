@@ -870,6 +870,13 @@ export function activateEsp(espId: string) {
   return unwrap<EspConfig>(client.settings.esps.activate({ params: { espId } }));
 }
 
+/** Retires a team ESP now: it stops sending and keeps its delivery history. */
+export function retireEsp(espId: string) {
+  return unwrap<EspConfig>(
+    client.settings.esps.retire({ params: { espId }, body: { transition: "cancel" } }),
+  );
+}
+
 // ---- Bounce/complaint delivery feedback ------------------------------------
 
 /** Providers with a reviewed webhook adapter — see
