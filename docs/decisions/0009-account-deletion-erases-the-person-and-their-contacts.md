@@ -30,7 +30,7 @@ workspace.
   organization and what happens to it, then asks the person to type their
   email and enter a code emailed to them (Better Auth's email OTP,
   `email-verification` type, reserved for this). The API
-  (`GET /account/deletion`, `POST /account/deletion/code`, `DELETE /account`)
+  (`GET /account/deletion`, `POST /account/deletion/code`, `POST /account/deletion`)
   accepts dashboard sessions only, with the same origin and CSRF checks as
   billing actions. MCP and API keys can't delete an account.
 - **Blockers.** Nothing changes while any of these hold, and the dialog

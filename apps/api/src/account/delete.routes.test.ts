@@ -70,8 +70,8 @@ const sessionHeaders = {
 };
 
 function deleteRequest(body: { email: string; code: string }) {
-  return requestApp(app(), "/account", {
-    method: "DELETE",
+  return requestApp(app(), "/account/deletion", {
+    method: "POST",
     headers: sessionHeaders,
     body: JSON.stringify(body),
   });
@@ -269,7 +269,9 @@ describe("GET /account/deletion", () => {
     const response = await requestApp(app(), "/account/deletion");
 
     expect(response.status).toBe(403);
-    expect(response.json()).toEqual({ error: "human_session_required" });
+    expect(response.json<{ error: string }>()).toEqual({
+      error: "human_session_required",
+    });
   });
 });
 
@@ -303,7 +305,7 @@ describe("POST /account/deletion/code", () => {
   });
 });
 
-describe("DELETE /account", () => {
+describe("POST /account/deletion", () => {
   it("deletes sole-owned organizations, leaves shared ones and erases the person", async () => {
     const owner = await insertUser("Owner");
     const partner = await insertUser("Partner");
@@ -535,11 +537,11 @@ describe("DELETE /account", () => {
       code: "123456",
     });
     expect(mismatch.status).toBe(400);
-    expect(mismatch.json()).toEqual({ error: "email_mismatch" });
+    expect(mismatch.json<{ error: string }>()).toEqual({ error: "email_mismatch" });
 
     const wrongCode = await deleteRequest({ email: owner.email, code: "000000" });
     expect(wrongCode.status).toBe(400);
-    expect(wrongCode.json()).toEqual({ error: "invalid_code" });
+    expect(wrongCode.json<{ error: string }>()).toEqual({ error: "invalid_code" });
 
     expect(await organizationStatus(solo.organization.id)).toBe("active");
     expect((await userRow(owner.id)).deletedAt).toBeNull();

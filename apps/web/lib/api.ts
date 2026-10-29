@@ -1224,8 +1224,8 @@ export function sendAccountDeletionCode() {
 /** Deletes the signed-in account (ADR 0009). Fails with `email_mismatch`,
  * `invalid_code` or `account_deletion_blocked`. */
 export function deleteAccount(email: string, code: string) {
-  return organizationRequest<void>("/account", {
-    method: "DELETE",
+  return organizationRequest<void>("/account/deletion", {
+    method: "POST",
     body: JSON.stringify({ email, code }),
   });
 }

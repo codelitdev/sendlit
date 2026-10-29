@@ -2288,11 +2288,11 @@ const accountContract = c.router({
     },
     summary: "Email a code to confirm deleting your account",
     description:
-      "Dashboard session only. Sends a one-time code, valid for 5 minutes, to the account's email. `DELETE /account` needs it.",
+      "Dashboard session only. Sends a one-time code, valid for 5 minutes, to the account's email. `POST /account/deletion` needs it.",
   },
   delete: {
-    method: "DELETE",
-    path: "/account",
+    method: "POST",
+    path: "/account/deletion",
     body: deleteAccountBodySchema,
     responses: {
       204: c.noBody(),

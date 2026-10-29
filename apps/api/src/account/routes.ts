@@ -34,6 +34,8 @@ router.post(
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "too_many_requests" },
+    // Per person: the route is authenticated, and IPs behind the web proxy are shared.
+    keyGenerator: (req) => (req as any).userId,
   }),
 );
 
