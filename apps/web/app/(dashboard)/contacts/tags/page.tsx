@@ -1,7 +1,7 @@
 "use client";
 
 import type { TagReferences, TagSummary } from "@sendlit/api-contract";
-import { TriangleAlert, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
@@ -35,15 +35,28 @@ import {
 import { deleteTag, getTagReferences, listTags, renameTag } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 
-const plural = (count: number, word: string) =>
-  `${count.toLocaleString()} ${word}${count === 1 ? "" : "s"}`;
+const plural = (count: number, word: string, words = `${word}s`) =>
+  `${count.toLocaleString()} ${count === 1 ? word : words}`;
+
+/** "2 contacts and 1 segment", leaving out the zeros. */
+function listCounts(counts: [number, string, string?][]) {
+  const parts = counts
+    .filter(([count]) => count > 0)
+    .map(([count, word, words]) => plural(count, word, words));
+  if (parts.length <= 1) return parts[0] ?? "nothing";
+  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+}
 
 export default function TagsPage() {
   const [tags, setTags] = useState<TagSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The selected tag outlives `open`, so the dialogs keep their content
+  // while they animate closed.
   const [renaming, setRenaming] = useState<TagSummary | null>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
   const [deleting, setDeleting] = useState<TagSummary | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useSetBreadcrumb([{ label: "Contacts", href: "/contacts" }, { label: "Tags" }]);
 
@@ -76,9 +89,8 @@ export default function TagsPage() {
 
       <RenameTagDialog
         tag={renaming}
-        onOpenChange={(open) => {
-          if (!open) setRenaming(null);
-        }}
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
         onRenamed={async (message) => {
           setNotice(message);
           await load();
@@ -86,9 +98,8 @@ export default function TagsPage() {
       />
       <DeleteTagDialog
         tag={deleting}
-        onOpenChange={(open) => {
-          if (!open) setDeleting(null);
-        }}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
         onDeleted={async (message) => {
           setNotice(message);
           await load();
@@ -126,13 +137,19 @@ export default function TagsPage() {
                     <TableCell className="px-4 text-right">
                       <IconButton
                         aria-label={`Rename ${tag.tag}`}
-                        onClick={() => setRenaming(tag)}
+                        onClick={() => {
+                          setRenaming(tag);
+                          setRenameOpen(true);
+                        }}
                       >
                         <Pencil className="size-4" />
                       </IconButton>
                       <IconButton
                         aria-label={`Delete ${tag.tag}`}
-                        onClick={() => setDeleting(tag)}
+                        onClick={() => {
+                          setDeleting(tag);
+                          setDeleteOpen(true);
+                        }}
                       >
                         <Trash2 className="size-4" />
                       </IconButton>
@@ -150,10 +167,12 @@ export default function TagsPage() {
 
 function RenameTagDialog({
   tag,
+  open,
   onOpenChange,
   onRenamed,
 }: {
   tag: TagSummary | null;
+  open: boolean;
   onOpenChange: (open: boolean) => void;
   onRenamed: (message: string) => Promise<void>;
 }) {
@@ -162,9 +181,10 @@ function RenameTagDialog({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (!open) return;
     setName(tag?.tag ?? "");
     setError(null);
-  }, [tag]);
+  }, [tag, open]);
 
   async function submit() {
     if (!tag) return;
@@ -174,7 +194,12 @@ function RenameTagDialog({
       const result = await renameTag(tag.tag, name.trim());
       onOpenChange(false);
       await onRenamed(
-        `Renamed ${result.previousTag} to ${result.tag} on ${plural(result.contactsUpdated, "contact")}, ${plural(result.segmentsUpdated, "segment")}, ${plural(result.sequencesUpdated, "broadcast or sequence")} and ${plural(result.signupFormsUpdated, "signup form")}.`,
+        `Renamed ${result.previousTag} to ${result.tag} on ${listCounts([
+          [result.contactsUpdated, "contact"],
+          [result.segmentsUpdated, "segment"],
+          [result.sequencesUpdated, "broadcast or sequence", "broadcasts or sequences"],
+          [result.signupFormsUpdated, "signup form"],
+        ])}.`,
       );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to rename the tag");
@@ -185,7 +210,7 @@ function RenameTagDialog({
 
   const unchanged = !name.trim() || name.trim() === tag?.tag;
   return (
-    <Dialog open={tag !== null} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
@@ -239,10 +264,12 @@ const usageLabels: Record<
 
 function DeleteTagDialog({
   tag,
+  open,
   onOpenChange,
   onDeleted,
 }: {
   tag: TagSummary | null;
+  open: boolean;
   onOpenChange: (open: boolean) => void;
   onDeleted: (message: string) => Promise<void>;
 }) {
@@ -250,9 +277,9 @@ function DeleteTagDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!open || !tag) return;
     setReferences(null);
     setError(null);
-    if (!tag) return;
     let cancelled = false;
     getTagReferences(tag.tag)
       .then((result) => {
@@ -268,7 +295,7 @@ function DeleteTagDialog({
     return () => {
       cancelled = true;
     };
-  }, [tag]);
+  }, [tag, open]);
 
   const referenceCount = references
     ? references.segments.length +
@@ -278,7 +305,7 @@ function DeleteTagDialog({
 
   return (
     <DeleteConfirmationDialog
-      open={tag !== null}
+      open={open}
       onOpenChange={onOpenChange}
       title={`Delete the tag "${tag?.tag ?? ""}"?`}
       description={
