@@ -25,8 +25,8 @@ import {
 } from "../delivery-feedback/outbound-send";
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
 import { renderCampaignHtml } from "../mail/campaign";
-import { EmailRenderError } from "../mail/render";
 import { quotaExhaustionDeferral, SendDeferredError } from "../mail/rate-limit";
+import { EmailRenderError } from "../mail/render";
 import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
 import { getOrCreateContentVersion } from "../sequences/content-versions";
