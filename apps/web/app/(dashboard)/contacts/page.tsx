@@ -6,7 +6,7 @@ import {
   type ContactFilterWithAggregator,
   TagEditor,
 } from "@sendlit/email-blocks";
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Tags, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
@@ -97,6 +97,12 @@ export default function ContactsPage() {
         description="Your audience, filterable into saved segments."
         action={
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/contacts/tags">
+                <Tags className="size-4" />
+                Manage tags
+              </Link>
+            </Button>
             <Button variant="outline" onClick={exportCsv} disabled={exporting}>
               <Download className="size-4" />
               {exporting ? "Exporting…" : "Export"}

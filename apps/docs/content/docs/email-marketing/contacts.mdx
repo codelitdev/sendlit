@@ -59,6 +59,26 @@ tags, created_at, suppression_reason and one column per custom field. Over
 the API use `GET /contacts/export` (optionally with `segmentId` or `filter`);
 the MCP tool is `export_contacts`. The file can be imported again as is.
 
+## Manage tags
+
+**Contacts → Tags** lists every tag your contacts carry, with how many
+contacts have each one. From there you can:
+
+- **Rename** a tag. SendLit renames it on every contact and in the segments,
+  broadcast and sequence filters, tag triggers, email tag actions and signup
+  forms that use it. Renaming to a tag that already exists merges the two.
+  Sent broadcasts keep their original filters.
+- **Delete** a tag. It is removed from every contact. Before you confirm,
+  SendLit shows how many contacts have it and everything that still uses it.
+  Those keep the old name: a filter on a deleted tag matches nobody, and a
+  trigger, email action or signup form can add the tag again, so update them
+  first.
+
+Renaming or deleting a tag doesn't start tag-added or tag-removed sequences.
+The API endpoints are under `/tags` (the Tags section in the API reference);
+the MCP tools are `list_tags`, `get_tag_references`, `rename_tag` and
+`delete_tag`.
+
 ## Segments
 
 A segment is a saved, named contact filter — a combination of tag, email, subscription status, and signup date conditions joined with `and`/`or`. Build the filter once, save it as a segment, and reuse it instead of rebuilding it for every broadcast or sequence.
