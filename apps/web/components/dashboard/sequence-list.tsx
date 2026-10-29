@@ -1,11 +1,12 @@
 "use client";
 
 import type { MailType, Sequence } from "@sendlit/email-blocks";
-import { Pause, Play } from "lucide-react";
+import { MoreHorizontal, Pause, Play, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { DeleteSequenceDialog } from "@/components/dashboard/delete-sequence-dialog";
 import { ListPagination } from "@/components/dashboard/list-pagination";
 import { Loading } from "@/components/dashboard/loading";
 import { NewSequenceDialog } from "@/components/dashboard/new-sequence-dialog";
@@ -14,6 +15,12 @@ import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { Badge } from "@/components/ui/codelit/badge";
 import { Card, CardContent } from "@/components/ui/codelit/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/codelit/dropdown-menu";
 import { IconButton } from "@/components/ui/codelit/icon-button";
 import { listSequences, pauseSequence, startSequence } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
@@ -46,6 +53,9 @@ export function SequenceListPage({
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [loadingPage, setLoadingPage] = useState(false);
+  const [sequencePendingDelete, setSequencePendingDelete] = useState<Sequence | null>(
+    null,
+  );
 
   useSetBreadcrumb([{ label: title }]);
 
@@ -96,6 +106,17 @@ export function SequenceListPage({
             onCreated={(sequenceId) => router.push(`${basePath}/${sequenceId}`)}
           />
         }
+      />
+
+      <DeleteSequenceDialog
+        sequence={sequencePendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setSequencePendingDelete(null);
+        }}
+        onDeleted={async () => {
+          const lastOnPage = sequences?.length === 1 && page > 1;
+          await load(lastOnPage ? page - 1 : page);
+        }}
       />
 
       {error && (
@@ -175,6 +196,38 @@ export function SequenceListPage({
                             )}
                           </IconButton>
                         )}
+                      {/* Broadcast delete and archive arrive with #147. */}
+                      {type === "sequence" && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <IconButton
+                              aria-label={`Actions for ${sequence.title || "Untitled"}`}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </IconButton>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <DropdownMenuItem
+                              disabled={sequence.status === "active"}
+                              title={
+                                sequence.status === "active"
+                                  ? "Pause the sequence before deleting it."
+                                  : undefined
+                              }
+                              onSelect={() => setSequencePendingDelete(sequence)}
+                            >
+                              <Trash2 className="size-4" />
+                              {sequence.status === "active"
+                                ? "Delete (pause first)"
+                                : "Delete"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </td>
                   </tr>
                 ))}

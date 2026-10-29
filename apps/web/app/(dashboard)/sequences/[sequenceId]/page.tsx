@@ -12,12 +12,14 @@ import {
   type SequenceStats,
   TagEditor,
 } from "@sendlit/email-blocks";
-import { Check, Pause, Pencil, Play } from "lucide-react";
+import { Check, Pause, Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { AutoPauseBanner } from "@/components/dashboard/auto-pause-banner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { DeleteSequenceDialog } from "@/components/dashboard/delete-sequence-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import {
   MARKETING_EMAIL_EDITOR_BLOCKS,
@@ -111,6 +113,8 @@ export default function SequenceEditorPage({
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [sendingOptions, setSendingOptions] = useState<SendingOption[]>([]);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const router = useRouter();
 
   useSetBreadcrumb([
     { label: "Sequences", href: "/sequences" },
@@ -292,17 +296,38 @@ export default function SequenceEditorPage({
             </h1>
             <Badge variant={STATUS_VARIANT[sequence.status]}>{sequence.status}</Badge>
           </div>
-          {sequence.status !== "completed" && (
-            <Button onClick={toggleStatus}>
-              {sequence.status === "active" ? (
-                <Pause className="size-4" />
-              ) : (
-                <Play className="size-4" />
-              )}
-              {sequence.status === "active" ? "Pause" : "Activate"}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(true)}
+              disabled={sequence.status === "active"}
+              title={
+                sequence.status === "active"
+                  ? "Pause the sequence before deleting it."
+                  : undefined
+              }
+            >
+              <Trash2 className="size-4" />
+              Delete
             </Button>
-          )}
+            {sequence.status !== "completed" && (
+              <Button onClick={toggleStatus}>
+                {sequence.status === "active" ? (
+                  <Pause className="size-4" />
+                ) : (
+                  <Play className="size-4" />
+                )}
+                {sequence.status === "active" ? "Pause" : "Activate"}
+              </Button>
+            )}
+          </div>
         </div>
+
+        <DeleteSequenceDialog
+          sequence={deleteOpen ? sequence : null}
+          onOpenChange={setDeleteOpen}
+          onDeleted={() => router.push("/sequences")}
+        />
 
         {error && (
           <Banner className="mb-4">

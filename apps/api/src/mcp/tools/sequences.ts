@@ -1,6 +1,7 @@
 import {
   contactFilterSchema,
   emailContentInputSchema,
+  sequenceDeletionPreviewSchema,
   sequenceEmailTestResultSchema,
   updateSequenceBodySchema,
 } from "@sendlit/api-contract";
@@ -8,15 +9,18 @@ import { z } from "zod";
 import { broadcastPacing } from "../../abuse/pacing-status";
 import { sequenceDeliveryRates } from "../../automation/sending-health";
 import { emailActionTypes, mailTypes } from "../../config/constants";
+import { sequenceDeleteBlockerMessage } from "../../sequences/delete-blockers";
 import type { HydratedSequence } from "../../sequences/queries";
 import {
   addMailToSequence,
   countSequences,
   createSequence,
   deleteMailFromSequence,
+  deleteSequence,
   getEmailSentCount,
   getSequenceBySequenceId,
   getSequenceClickThroughRate,
+  getSequenceDeletionImpact,
   getSequenceOpenRate,
   getSubscribers,
   getSubscribersCount,
@@ -39,7 +43,12 @@ import {
   NOT_FOUND,
   planGateResult,
 } from "./responses";
-import { sequenceListSchema, sequenceSchema, sequenceStatsSchema } from "./schemas";
+import {
+  sequenceListSchema,
+  sequenceSchema,
+  sequenceStatsSchema,
+  successMessageSchema,
+} from "./schemas";
 
 // `sequenceEmails.sequenceId` stores its *parent* sequence's internal `id`
 // (see the file-level doc comment in `db/schema.ts`) — dropped here rather
@@ -387,6 +396,54 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
         return jsonResult(toPublicSequence(sequence));
       } catch (err: any) {
         return errorResult(err.message);
+      }
+    },
+  );
+
+  server.registerTool(
+    "preview_sequence_deletion",
+    {
+      description:
+        "Shows what delete_sequence would remove without changing anything: how many contacts are enrolled, how many emails it has sent, and whether it can be deleted now (blocker sequence_active means pause it first).",
+      inputSchema: { sequenceId: z.string() },
+      outputSchema: sequenceDeletionPreviewSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const preview = await getSequenceDeletionImpact(teamId, args.sequenceId);
+      if (!preview) return NOT_FOUND;
+      return jsonResult(preview);
+    },
+  );
+
+  server.registerTool(
+    "delete_sequence",
+    {
+      description:
+        "Permanently deletes a broadcast or sequence with its emails and triggers. An active one must be paused first (pause_sequence). Contacts still enrolled leave it, and its delivery, open and click history (its stats) is deleted and can't be recovered; call preview_sequence_deletion first and confirm with the user. Images only it used are deleted; images in sent mail are kept.",
+      inputSchema: { sequenceId: z.string() },
+      outputSchema: successMessageSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        const deleted = await deleteSequence({ teamId, sequenceId: args.sequenceId });
+        if (!deleted) return NOT_FOUND;
+        return jsonResult({ message: "Sequence deleted." });
+      } catch (err: any) {
+        return errorResult(sequenceDeleteBlockerMessage(err.message) ?? err.message);
       }
     },
   );

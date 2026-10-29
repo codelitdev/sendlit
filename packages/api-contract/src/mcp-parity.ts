@@ -139,10 +139,8 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("sequences.list", "list_sequences", "read"),
   required("sequences.get", "get_sequence", "read"),
   required("sequences.update", "update_sequence", "write"),
-  restOnly(
-    "sequences.remove",
-    "Deleting a whole broadcast or sequence (and its delivery history) is REST/dashboard-only; MCP can remove individual sequence emails and pause sequences.",
-  ),
+  required("sequences.remove", "delete_sequence", "destructive"),
+  required("sequences.deletionPreview", "preview_sequence_deletion", "read"),
   required("sequences.addEmail", "add_sequence_email", "write"),
   required("sequences.updateEmail", "update_sequence_email", "write"),
   required("contacts.import", "import_contacts", "write"),

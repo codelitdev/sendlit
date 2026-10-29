@@ -15,6 +15,7 @@ import {
   type PaidPlan,
   type RenameTagResult,
   type Reputation,
+  type SequenceDeletionPreview,
   type SignupForm,
   type SignupFormInput,
   type TagReferences,
@@ -714,6 +715,13 @@ export function startSequence(sequenceId: string) {
 
 export function pauseSequence(sequenceId: string) {
   return unwrap<Sequence>(client.sequences.pause({ params: { sequenceId } }));
+}
+
+/** Enrolled contacts and sent emails a delete would remove, and any blocker. */
+export function getSequenceDeletionPreview(sequenceId: string) {
+  return unwrap<SequenceDeletionPreview>(
+    client.sequences.deletionPreview({ params: { sequenceId } }),
+  );
 }
 
 export function getSequenceStats(sequenceId: string) {

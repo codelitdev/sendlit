@@ -115,6 +115,7 @@ import {
   listSequencesQuerySchema,
   listSubscribersQuerySchema,
   sendSequenceEmailTestBodySchema,
+  sequenceDeletionPreviewSchema,
   sequenceEmailTestResultSchema,
   sequenceSchema,
   sequenceStatsSchema,
@@ -620,10 +621,18 @@ const sequencesContract = c.router(
     remove: {
       method: "DELETE",
       path: "/sequences/:sequenceId",
-      responses: { 204: c.noBody(), 404: errorSchema },
+      responses: { 204: c.noBody(), 404: errorSchema, 409: errorSchema },
       summary: "Delete a broadcast or sequence",
       description:
-        "Permanently deletes the broadcast or sequence. Images it uses that nothing else uses are deleted from the media library and storage; images used by sent mail are kept.",
+        "Permanently deletes the broadcast or sequence, its emails and triggers. An active one can't be deleted: pause it first (409 `sequence_active`). Contacts still enrolled in a paused sequence leave it, and its delivery, open and click history is deleted too, so its stats are gone; check GET /sequences/{sequenceId}/deletion-preview first. The outbound message log and suppressions are kept. Images it uses that nothing else uses are deleted from the media library and storage; images used by sent mail are kept.",
+    },
+    deletionPreview: {
+      method: "GET",
+      path: "/sequences/:sequenceId/deletion-preview",
+      responses: { 200: sequenceDeletionPreviewSchema, 404: errorSchema },
+      summary: "Preview what deleting a broadcast or sequence removes",
+      description:
+        "How many contacts are enrolled and how many emails it has sent, and whether it can be deleted right now. Nothing is changed.",
     },
     addEmail: {
       method: "POST",

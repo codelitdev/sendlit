@@ -6,6 +6,8 @@ const mocks = {
   addMailToSequence: vi.fn(),
   updateMailInSequence: vi.fn(),
   sendSequenceEmailTest: vi.fn(),
+  deleteSequence: vi.fn(),
+  getSequenceDeletionImpact: vi.fn(),
 };
 
 mock.module("../auth/middleware", () => ({
@@ -34,7 +36,8 @@ mock.module("./queries", () => ({
   createSequence: mocks.createSequence,
   addMailToSequence: mocks.addMailToSequence,
   countSequences: vi.fn(),
-  deleteSequence: vi.fn(),
+  deleteSequence: mocks.deleteSequence,
+  getSequenceDeletionImpact: mocks.getSequenceDeletionImpact,
   deleteMailFromSequence: vi.fn(),
   getEmailSentCount: vi.fn(),
   getSequenceBySequenceId: vi.fn(),
@@ -152,5 +155,47 @@ describe("POST /sequences/:sequenceId/emails/:emailId/test", () => {
         })
       ).status,
     ).toBe(400);
+  });
+});
+
+describe("sequence delete route", () => {
+  it("answers 409 sequence_active for an active sequence", async () => {
+    mocks.deleteSequence.mockRejectedValue(new Error("sequence_active"));
+
+    const response = await requestApp(app(), "/sequences/seq_1", { method: "DELETE" });
+
+    expect(response.status).toBe(409);
+    expect(response.json<unknown>()).toEqual({ error: "sequence_active" });
+  });
+
+  it("answers 204 once deleted and 404 when missing", async () => {
+    mocks.deleteSequence.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    expect(
+      (await requestApp(app(), "/sequences/seq_1", { method: "DELETE" })).status,
+    ).toBe(204);
+    expect(
+      (await requestApp(app(), "/sequences/seq_1", { method: "DELETE" })).status,
+    ).toBe(404);
+    expect(mocks.deleteSequence).toHaveBeenCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq_1",
+    });
+  });
+
+  it("previews the deletion for the caller's team", async () => {
+    const preview = {
+      status: "paused",
+      blocker: null,
+      enrolledCount: 3,
+      emailsSentCount: 9,
+    };
+    mocks.getSequenceDeletionImpact.mockResolvedValue(preview);
+
+    const response = await requestApp(app(), "/sequences/seq_1/deletion-preview");
+
+    expect(response.status).toBe(200);
+    expect(response.json<unknown>()).toEqual(preview);
+    expect(mocks.getSequenceDeletionImpact).toHaveBeenCalledWith("team-1", "seq_1");
   });
 });

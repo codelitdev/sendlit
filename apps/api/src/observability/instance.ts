@@ -81,6 +81,9 @@ const PROPERTY_ALLOWLIST = new Set([
   "suppressed_count",
   // ESP deletion (settings/esp, organization ESPs): public esp_ id.
   "esp_id",
+  // Sequence deletion (sequences/queries.ts deleteSequence): counts only.
+  "enrolled_count",
+  "emails_sent_count",
 ]);
 
 /** Allowlisted keys that hold opaque record ids. They skip the package's

@@ -1,5 +1,5 @@
 import type { Email as EmailContent } from "@sendlit/email-editor";
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, notInArray } from "drizzle-orm";
 import { assertLargeBroadcastReviewed } from "../abuse/broadcast-review";
 import { assertEmailContentAllowed } from "../abuse/content-scan";
 import { assertNoImportUnderReview } from "../abuse/imports";
@@ -50,6 +50,7 @@ import { captureEvent } from "../observability";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
 import { resolveStartingTemplate } from "../templates/queries";
+import { type SequenceDeleteBlocker, sequenceDeleteBlocker } from "./delete-blockers";
 import {
   addRule,
   defaultEmailContent,
@@ -618,18 +619,11 @@ export async function updateMailInSequence({
 }
 
 /**
- * Removes the media references of sequence emails about to be deleted and
- * returns the media rows to pass to `deleteOrphanedMedia` after the delete.
- * Media of an email that was already sent (it has a delivery or a stored
- * content version) is left out: inboxes and "view in browser" pages load
- * its images by URL, so it stays in the media library until the user
- * deletes it there.
+ * The ids of the given sequence emails that were already sent: they have a
+ * delivery or a stored content version.
  */
-async function releaseEmailMedia(
-  teamId: string,
-  emailIds: string[],
-): Promise<string[]> {
-  if (!emailIds.length) return [];
+async function sentEmailIds(emailIds: string[]): Promise<Set<string>> {
+  if (!emailIds.length) return new Set();
   const [delivered, versioned] = await Promise.all([
     db
       .selectDistinct({ id: emailDeliveries.emailId })
@@ -640,14 +634,31 @@ async function releaseEmailMedia(
       .from(emailContentVersions)
       .where(inArray(emailContentVersions.sequenceEmailId, emailIds)),
   ]);
-  const sentIds = new Set([...delivered, ...versioned].map((row) => row.id));
-  const draftIds = emailIds.filter((id) => !sentIds.has(id));
+  return new Set([...delivered, ...versioned].map((row) => row.id));
+}
+
+/**
+ * Removes the media references of sequence emails about to be deleted and
+ * returns the media rows to pass to `deleteOrphanedMedia` after the delete.
+ * Media of an email that was already sent (`sentIds`) is left out: inboxes
+ * and "view in browser" pages load its images by URL, so it stays in the
+ * media library until the user deletes it there. Pass `sentIds` when the
+ * deliveries that prove it are gone by now.
+ */
+async function releaseEmailMedia(
+  teamId: string,
+  emailIds: string[],
+  sentIds?: Set<string>,
+): Promise<string[]> {
+  if (!emailIds.length) return [];
+  const sent = sentIds ?? (await sentEmailIds(emailIds));
+  const draftIds = emailIds.filter((id) => !sent.has(id));
 
   const kept = new Set(
     await deleteMediaReferencesForResource({
       teamId,
       resourceType: "SEQUENCE_EMAIL",
-      resourceInternalId: [...sentIds],
+      resourceInternalId: emailIds.filter((id) => sent.has(id)),
     }),
   );
   const released = await deleteMediaReferencesForResource({
@@ -711,6 +722,51 @@ export async function deleteMailFromSequence({
   return getSequenceBySequenceId(teamId, sequenceId);
 }
 
+export interface SequenceDeletionImpact {
+  status: string;
+  /** Why it can't be deleted now, or null when it can. */
+  blocker: SequenceDeleteBlocker | null;
+  /** Contacts currently moving through it; they stop receiving it. */
+  enrolledCount: number;
+  /** Emails it has sent; their delivery and open/click history is deleted. */
+  emailsSentCount: number;
+}
+
+/** What deleting a sequence would remove, shown before the user confirms. */
+export async function getSequenceDeletionImpact(
+  teamId: string,
+  sequenceId: string,
+): Promise<SequenceDeletionImpact | null> {
+  const [sequence] = await db
+    .select({ id: sequences.id, status: sequences.status })
+    .from(sequences)
+    .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)));
+  if (!sequence) return null;
+  const [[enrolled], [sent]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(ongoingSequences)
+      .where(eq(ongoingSequences.sequenceId, sequence.id)),
+    db
+      .select({ value: count() })
+      .from(emailDeliveries)
+      .where(eq(emailDeliveries.sequenceId, sequence.id)),
+  ]);
+  return {
+    status: sequence.status,
+    blocker: sequenceDeleteBlocker(sequence),
+    enrolledCount: enrolled?.value ?? 0,
+    emailsSentCount: sent?.value ?? 0,
+  };
+}
+
+/**
+ * Permanently deletes a broadcast or sequence that isn't active (see ADR
+ * 0007). Contacts still enrolled in a paused sequence leave it, and its
+ * delivery and open/click history goes with it; the outbound message log
+ * and suppressions are kept. Throws a `SequenceDeleteBlocker` code when it
+ * can't be deleted; returns false when it doesn't exist.
+ */
 export async function deleteSequence({
   teamId,
   sequenceId,
@@ -720,15 +776,27 @@ export async function deleteSequence({
 }): Promise<boolean> {
   const sequence = await getSequenceBySequenceId(teamId, sequenceId);
   if (!sequence) return false;
+  const blocker = sequenceDeleteBlocker(sequence);
+  if (blocker) throw new Error(blocker);
 
-  const mediaIds = await releaseEmailMedia(
-    teamId,
-    sequence.emails.map((email) => email.id),
-  );
+  const impact = await getSequenceDeletionImpact(teamId, sequenceId);
+  const emailIds = sequence.emails.map((email) => email.id);
+  // Read before the delete: the deliveries that mark an email as sent
+  // cascade away with the sequence.
+  const sentIds = await sentEmailIds(emailIds);
 
-  await db
+  // Guarded on status so a sequence started since the read above is kept.
+  const removed = await db
     .delete(sequences)
-    .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)));
+    .where(and(eq(sequences.id, sequence.id), notInArray(sequences.status, ["active"])))
+    .returning({ id: sequences.id });
+  if (!removed.length) {
+    const current = await getSequenceBySequenceId(teamId, sequenceId);
+    if (!current) return false;
+    throw new Error(sequenceDeleteBlocker(current) ?? "sequence_active");
+  }
+
+  const mediaIds = await releaseEmailMedia(teamId, emailIds, sentIds);
   const media = await deleteOrphanedMedia(teamId, mediaIds);
 
   captureEvent({
@@ -739,6 +807,9 @@ export async function deleteSequence({
       sequence_id: sequence.sequenceId,
       media_deleted_count: media.deleted,
       sequence_type: sequence.type,
+      sequence_status: sequence.status,
+      enrolled_count: impact?.enrolledCount ?? 0,
+      emails_sent_count: impact?.emailsSentCount ?? 0,
     },
   });
 
