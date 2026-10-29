@@ -113,9 +113,24 @@ export const mcpProtectedResourceMetadataUrl = `${authBaseUrl}/.well-known/oauth
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
-async function sendOtpEmail(email: string, otp: string) {
+/** Codes of type `email-verification` only confirm deleting an account
+ * (`POST /account/deletion/code`); every other code signs in. */
+function otpEmailCopy(type: string) {
+  return type === "email-verification"
+    ? {
+        subject: "Confirm deleting your SendLit account",
+        intro:
+          "Enter this code to confirm deleting your SendLit account. If you didn't ask to delete it, ignore this email and sign in to check your account.",
+      }
+    : {
+        subject: "Your SendLit verification code",
+        intro: "Enter this code to sign in to SendLit:",
+      };
+}
+
+async function sendOtpEmail(email: string, otp: string, type = "sign-in") {
   if (process.env.NODE_ENV !== "production") {
-    logger.info({ email, otp }, "[Dev] Better Auth OTP generated");
+    logger.info({ email, otp, type }, "[Dev] Better Auth OTP generated");
     return;
   }
 
@@ -137,12 +152,13 @@ async function sendOtpEmail(email: string, otp: string) {
       : undefined,
   });
 
+  const copy = otpEmailCopy(type);
   await transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: email,
-    subject: "Your SendLit verification code",
-    text: `Enter this code to sign in to SendLit: ${otp}`,
-    html: `<p>Enter this code to sign in to SendLit:</p><h2>${otp}</h2>`,
+    subject: copy.subject,
+    text: `${copy.intro} ${otp}`,
+    html: `<p>${copy.intro}</p><h2>${otp}</h2>`,
   });
 }
 
@@ -186,6 +202,11 @@ export const auth = betterAuth({
     additionalFields: {
       defaultOrganizationId: {
         type: "string",
+        required: false,
+        input: false,
+      },
+      deletedAt: {
+        type: "date",
         required: false,
         input: false,
       },
@@ -262,8 +283,8 @@ export const auth = betterAuth({
   },
   plugins: [
     emailOTP({
-      async sendVerificationOTP({ email, otp }) {
-        await sendOtpEmail(email, otp);
+      async sendVerificationOTP({ email, otp, type }) {
+        await sendOtpEmail(email, otp, type);
       },
       storeOTP: "hashed",
       expiresIn: 5 * 60,

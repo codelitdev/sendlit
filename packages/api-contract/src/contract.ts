@@ -1,6 +1,11 @@
 import { initContract } from "@ts-rest/core";
 import { z } from "zod";
 import {
+  accountDeletionBlockedSchema,
+  accountDeletionPreviewSchema,
+  deleteAccountBodySchema,
+} from "./schemas/account";
+import {
   billingActionTokenBodySchema,
   billingActionTokenResponseSchema,
   billingCancellationResponseSchema,
@@ -2258,7 +2263,52 @@ const billingContract = c.router(
   { metadata: { tag: "Billing" } },
 );
 
+const accountContract = c.router({
+  getDeletion: {
+    method: "GET",
+    path: "/account/deletion",
+    responses: {
+      200: accountDeletionPreviewSchema,
+      401: errorSchema,
+      403: errorSchema,
+    },
+    summary: "Preview deleting your account",
+    description:
+      "Dashboard session only. Lists every organization you belong to and what deleting your account does to it: `delete` when you are its last owner (it is deleted and its contacts' personal data erased), `leave` otherwise. `blocker` says what has to happen first: `active_subscription_exists` or `billing_checkout_pending` (cancel billing), `last_organization_owner` (other people are members: make one of them an owner or remove them), `billing_manager_required` (you pay for a running subscription of an organization you would leave).",
+  },
+  sendDeletionCode: {
+    method: "POST",
+    path: "/account/deletion/code",
+    body: c.noBody(),
+    responses: {
+      204: c.noBody(),
+      401: errorSchema,
+      403: errorSchema,
+      429: errorSchema,
+    },
+    summary: "Email a code to confirm deleting your account",
+    description:
+      "Dashboard session only. Sends a one-time code, valid for 5 minutes, to the account's email. `DELETE /account` needs it.",
+  },
+  delete: {
+    method: "DELETE",
+    path: "/account",
+    body: deleteAccountBodySchema,
+    responses: {
+      204: c.noBody(),
+      400: errorSchema,
+      401: errorSchema,
+      403: errorSchema,
+      409: accountDeletionBlockedSchema,
+    },
+    summary: "Delete your account",
+    description:
+      "Dashboard session only, with the account's email typed to confirm and the code from `POST /account/deletion/code` (`400 email_mismatch`, `400 invalid_code`). Fails with `409 account_deletion_blocked`, listing the blocking organizations, while any blocker from `GET /account/deletion` remains; nothing changes then. Otherwise every organization you are the last owner of is deleted like `DELETE /organizations/:organizationId` and its contacts, signup confirmations, recipient addresses and raw webhook payloads are erased (suppression hashes stay); you leave every other organization and team; your sessions, sign-in methods, OAuth tokens and consents end; and your name and email are erased. Billing records and audit events keep an anonymous id. Signing in again with the same email creates a new, empty account.",
+  },
+});
+
 export const contract = c.router({
+  account: accountContract,
   contacts: contactsContract,
   segments: segmentsContract,
   tags: tagsContract,

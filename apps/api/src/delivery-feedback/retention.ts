@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, lt } from "drizzle-orm";
+import { type AnyColumn, and, eq, inArray, isNotNull, lt } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   emailDeliveryEvents,
@@ -92,6 +92,26 @@ export async function anonymizeRecipientForPrivacyDeletion({
   teamId: string;
   normalizedRecipient: string;
 }): Promise<void> {
+  await anonymizeRecipients(teamId, normalizedRecipient);
+}
+
+/**
+ * The same erasure for every recipient of a team, used when the team's
+ * owner deletes their account (#134, ADR 0009). Suppression hashes stay.
+ */
+export async function anonymizeTeamRecipientsForPrivacyDeletion(
+  teamId: string,
+): Promise<void> {
+  await anonymizeRecipients(teamId, null);
+}
+
+async function anonymizeRecipients(
+  teamId: string,
+  normalizedRecipient: string | null,
+): Promise<void> {
+  // `null` means every recipient of the team.
+  const recipient = (column: AnyColumn) =>
+    normalizedRecipient === null ? undefined : eq(column, normalizedRecipient);
   await db.transaction(async (tx) => {
     await tx
       .update(outboundMessages)
@@ -99,7 +119,7 @@ export async function anonymizeRecipientForPrivacyDeletion({
       .where(
         and(
           eq(outboundMessages.teamId, teamId),
-          eq(outboundMessages.normalizedRecipient, normalizedRecipient),
+          recipient(outboundMessages.normalizedRecipient),
         ),
       );
     await tx
@@ -108,7 +128,7 @@ export async function anonymizeRecipientForPrivacyDeletion({
       .where(
         and(
           eq(emailDeliveryEvents.teamId, teamId),
-          eq(emailDeliveryEvents.normalizedRecipient, normalizedRecipient),
+          recipient(emailDeliveryEvents.normalizedRecipient),
         ),
       );
     await tx
@@ -117,7 +137,7 @@ export async function anonymizeRecipientForPrivacyDeletion({
       .where(
         and(
           eq(emailSuppressions.teamId, teamId),
-          eq(emailSuppressions.normalizedRecipient, normalizedRecipient),
+          recipient(emailSuppressions.normalizedRecipient),
         ),
       );
   });

@@ -10,6 +10,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import { CLIENT_IP_HEADER } from "./abuse/signup";
+import accountRoutes from "./account/routes";
 import { auth } from "./auth/better-auth";
 import oauthPagesRoutes from "./auth/oauth-pages";
 import billingRoutes from "./billing/routes";
@@ -149,6 +150,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(billingRoutes);
   app.use(provisioningRoutes);
   app.use(organizationRoutes);
+  app.use(accountRoutes);
 
   // Team management is user-scoped: `/teams` must be registered before the
   // routers below, whose blanket `requireTeam` middleware otherwise intercepts
