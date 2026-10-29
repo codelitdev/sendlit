@@ -79,6 +79,7 @@ OAuth access is default-deny per tool. Read and write permissions are separate:
 - `add_contact_tag`, `remove_contact_tag`, `get_contact_deliveries`
 - `import_contacts` (up to 1000 rows per call, statuses only get stricter) and `export_contacts` (CSV)
 - `list_segments`, `get_segment`, `create_segment`, `update_segment`, `delete_segment`
+- `list_tags` (with contact counts), `get_tag_references`, `rename_tag`, `delete_tag` (team-wide; contacts scopes)
 - `list_signup_forms`, `get_signup_form`, `create_signup_form`, `update_signup_form`, `delete_signup_form` (public [signup forms](/email-marketing/signup-forms); contacts scopes)
 
 Segments save reusable filters over contact fields, tags, subscription state, signup date, and custom fields.

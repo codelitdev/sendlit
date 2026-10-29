@@ -16,6 +16,7 @@ import billingRoutes from "./billing/routes";
 import billingWebhookRoutes from "./billing/webhooks/routes";
 import contactsRoutes from "./contacts/routes";
 import segmentsRoutes from "./contacts/segments-routes";
+import tagsRoutes from "./contacts/tags-routes";
 import deliveryRoutes from "./delivery/routes";
 import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
 import feedbackRoutes from "./delivery-feedback/feedback-routes";
@@ -157,6 +158,7 @@ export function createApp(options: CreateAppOptions) {
 
   app.use(contactsRoutes);
   app.use(segmentsRoutes);
+  app.use(tagsRoutes);
   app.use(mediaRoutes);
   app.use(templatesRoutes);
   app.use(sequencesRoutes);
