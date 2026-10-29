@@ -69,7 +69,8 @@ export function DeleteContactsDialog({
   const count = preview?.count ?? 0;
   // "All matching" can reach contacts on pages nobody looked at.
   const needsTyping =
-    (selection !== null && "match" in selection) || count > TYPED_CONFIRMATION_THRESHOLD;
+    (selection !== null && "match" in selection) ||
+    count > TYPED_CONFIRMATION_THRESHOLD;
   const title = preview ? `Delete ${plural(count, "contact")}?` : "Delete contacts?";
 
   return (
