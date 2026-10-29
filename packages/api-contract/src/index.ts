@@ -6,6 +6,7 @@ export {
   type McpParityRisk,
   mcpParityManifest,
 } from "./mcp-parity";
+export * from "./schemas/account";
 export * from "./schemas/billing";
 export * from "./schemas/common";
 export * from "./schemas/contacts";

@@ -94,6 +94,10 @@ export const user = pgTable("user", {
     () => organizations.id,
     { onDelete: "set null" },
   ),
+  /** Set when the person deleted their account (#134). The row stays as an
+   * anonymous tombstone so ids in billing, audit and trial records still
+   * resolve; its name and email are erased and it can never sign in. */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

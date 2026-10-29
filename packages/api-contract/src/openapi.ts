@@ -61,6 +61,7 @@ function getAuthMode(path: string, method: string): AuthMode {
   if (dashboardSessionOnlyOperations.has(`${verb} ${path}`)) {
     return "dashboardSession";
   }
+  if (path === "/account" || path.startsWith("/account/")) return "dashboardSession";
   if (path === "/billing/catalog") return "public";
   if (path.startsWith("/provisioning/")) return "organization";
   if (path.startsWith("/teams")) return "user";

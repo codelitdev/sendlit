@@ -370,15 +370,11 @@ export async function abandonPendingOrganization(
   });
 }
 
-export async function closeOrganization(
+/** Why billing stops an organization from being closed right now, if it
+ * does: an active or paid-through subscription, or an open checkout. */
+export async function organizationCloseBlocker(
   organizationId: string,
-  actor: {
-    type: "user" | "organization_key" | "team_key" | "system";
-    id?: string | null;
-  } = {
-    type: "system",
-  },
-): Promise<void> {
+): Promise<"active_subscription_exists" | "billing_checkout_pending" | null> {
   const { getBillingEngine } = await import("../billing/engine.js");
   const blockers = await getBillingEngine().getBillableEntityBillingBlockers(
     { kind: "organization", id: organizationId },
@@ -388,11 +384,23 @@ export async function closeOrganization(
     blockers.includes("nonterminal_subscription") ||
     blockers.includes("future_paid_entitlement")
   ) {
-    throw new Error("active_subscription_exists");
+    return "active_subscription_exists";
   }
-  if (blockers.includes("live_checkout")) {
-    throw new Error("billing_checkout_pending");
-  }
+  if (blockers.includes("live_checkout")) return "billing_checkout_pending";
+  return null;
+}
+
+export async function closeOrganization(
+  organizationId: string,
+  actor: {
+    type: "user" | "organization_key" | "team_key" | "system";
+    id?: string | null;
+  } = {
+    type: "system",
+  },
+): Promise<void> {
+  const blocker = await organizationCloseBlocker(organizationId);
+  if (blocker) throw new Error(blocker);
   await db.transaction(async (tx) => {
     // Re-check on locked rows so a projection cannot slip in between the
     // blocker check above and the close.
@@ -562,12 +570,15 @@ async function assertNotLastOwner(
   }
 }
 
-async function assertBillingManagerRetained(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+/** Whether the user pays for a subscription of the organization that is
+ * still running, so they can't leave it until billing moves or ends. */
+export async function isActiveBillingManager(
+  tx: Pick<typeof db, "select">,
   organizationId: string,
   userId: string,
-): Promise<void> {
-  const subscriptions = await tx
+  lock = false,
+): Promise<boolean> {
+  const query = tx
     .select({
       id: billingSubscriptions.id,
       status: billingSubscriptions.status,
@@ -581,9 +592,17 @@ async function assertBillingManagerRetained(
         eq(billingSubscriptions.payerId, userId),
       ),
     )
-    .orderBy(asc(billingSubscriptions.id))
-    .for("update");
-  if (subscriptions.some(blocksBillingChange)) {
+    .orderBy(asc(billingSubscriptions.id));
+  const subscriptions = lock ? await query.for("update") : await query;
+  return subscriptions.some(blocksBillingChange);
+}
+
+async function assertBillingManagerRetained(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  organizationId: string,
+  userId: string,
+): Promise<void> {
+  if (await isActiveBillingManager(tx, organizationId, userId, true)) {
     throw new Error("billing_manager_required");
   }
 }
@@ -691,7 +710,8 @@ export async function ensureDefaultOrganization(
       .where(eq(user.id, userId))
       .limit(1)
       .for("update");
-    if (!identity) return null;
+    // A deleted account (#134) never gets a new organization.
+    if (!identity || identity.deletedAt) return null;
 
     if (identity.defaultOrganizationId) {
       const [existing] = await tx

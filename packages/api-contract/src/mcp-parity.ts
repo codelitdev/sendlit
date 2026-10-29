@@ -73,6 +73,8 @@ function mcpOnly(tool: string, reason: string): McpParityManifestEntry {
 
 const BILLING_SESSION_ONLY =
   "Billing is dashboard-session only: plan changes, checkout, portal, cancellation and action tokens require a human session with recent authentication, so there are no MCP tools.";
+const ACCOUNT_DELETION =
+  "Deleting an account is dashboard-session only and needs a code emailed to the person; MCP and API keys must never be able to erase a person's account.";
 const ORGANIZATION_ADMIN =
   "Organization administration (members, teams, shared ESPs, feedback, delivery policy, sending domains, usage and audit) is organization-scoped; MCP is team-scoped and accepts neither organization sessions nor organization API keys.";
 const ORGANIZATION_KEYS =
@@ -227,6 +229,9 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("teams.removeKey", "delete_api_key", "destructive"),
 
   // Organization administration
+  restOnly("account.getDeletion", ACCOUNT_DELETION),
+  restOnly("account.sendDeletionCode", ACCOUNT_DELETION),
+  restOnly("account.delete", ACCOUNT_DELETION),
   restOnly("organizations.list", ORGANIZATION_ADMIN),
   restOnly("organizations.create", ORGANIZATION_ADMIN),
   restOnly("organizations.get", ORGANIZATION_ADMIN),

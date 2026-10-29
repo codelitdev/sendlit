@@ -51,6 +51,8 @@ Organization API keys, dashboard session cookies, and `X-Sendlit-Team-Id` are
 not accepted as MCP authentication. Use the REST API for organization
 discovery, shared-delivery setup, and team provisioning; see
 [Headless organization setup](/developers/headless-provisioning).
+Deleting an account is dashboard-only and has no MCP tool; see
+[Account](/workspace/account#delete-your-account).
 
 OAuth clients (including MCP clients like Claude) have no way to send a custom header during authorization, so a multi-team account instead picks a team as part of the OAuth flow itself: after login, and before the consent screen, the account is shown a "select a team" step (mirroring how apps like Notion resolve their own multi-workspace ambiguity). The chosen team is baked into the issued access token and used for every subsequent request — no header needed. Accounts with exactly one team skip this step entirely.
 
