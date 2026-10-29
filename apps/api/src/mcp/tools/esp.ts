@@ -6,6 +6,7 @@ import {
 import { z } from "zod";
 import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
 import { warmupState } from "../../mail/warmup";
+import { espDeleteBlockerMessage } from "../../settings/esp/delete-blockers";
 import {
   checkAndRememberDomainAuthentication,
   createEspConfig,
@@ -145,7 +146,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
     "delete_esp_config",
     {
       description:
-        "Removes the team's default ESP configuration. If another user ESP exists, it's promoted to default; otherwise campaign/transactional sends fail until a new ESP is configured.",
+        "Legacy: removes the team's first ESP configuration. A live team default can't be removed (make another source the default, or retire it with retire_esp, first), and an ESP with delivery history or queued work is never deleted.",
       outputSchema: successMessageSchema,
       annotations: {
         readOnlyHint: false,
@@ -159,11 +160,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
       try {
         await deleteEspConfig(teamId);
       } catch (err: any) {
-        return errorResult(
-          err.message === "esp_in_use"
-            ? "ESP is in use by an active sequence or a queued transactional email and cannot be removed."
-            : err.message,
-        );
+        return errorResult(espDeleteBlockerMessage(err.message) ?? err.message);
       }
       invalidateTeamTransport(teamId);
       return jsonResult({ message: "ESP configuration removed." });
@@ -358,7 +355,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
     "delete_esp",
     {
       description:
-        "Removes an ESP that has no active or queued delivery work. Draft, paused, and completed sequences are detached first.",
+        "Deletes an ESP that has never carried delivery history. Blocked when it is the team's live default, is used by a sending sequence or broadcast or by queued email, or has transactional email, delivery feedback or grants (retire it with retire_esp instead). Draft, paused and completed sequences are detached first; sent-mail history is kept.",
       inputSchema: { espId: z.string().min(1) },
       outputSchema: successMessageSchema,
       annotations: {
@@ -375,11 +372,7 @@ export function registerEspTools(server: McpToolRegistrar): void {
       try {
         await deleteEspConfig(teamId, args.espId);
       } catch (err: any) {
-        return errorResult(
-          err.message === "delivery_source_in_use"
-            ? "ESP is in use and cannot be removed."
-            : err.message,
-        );
+        return errorResult(espDeleteBlockerMessage(err.message) ?? err.message);
       }
       invalidateEspTransport(teamId, config.id);
       return jsonResult({ message: "ESP configuration removed." });
@@ -411,6 +404,36 @@ export function registerEspTools(server: McpToolRegistrar): void {
           err.message === "esp_verification_required"
             ? "ESP verification is required: send a successful test after its latest configuration change, and configure a sender email."
             : err.message,
+        );
+      }
+    },
+  );
+
+  server.registerTool(
+    "retire_esp",
+    {
+      description:
+        "Retires a team-owned ESP (active, suspended or draining) so it no longer sends. This is how an ESP with delivery history is archived; its history stays intact. A retired ESP can be deleted with delete_esp only if it has no history.",
+      inputSchema: { espId: z.string().min(1) },
+      outputSchema: espConfigSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const config = await getEspConfigByEspId(teamId, args.espId);
+      if (!config) return NOT_FOUND;
+      try {
+        const retired = await transitionEspConfig(config, "retire", { cancel: true });
+        invalidateEspTransport(teamId, config.id);
+        return jsonResult(toPublicShape(retired));
+      } catch {
+        return errorResult(
+          "Only an active, suspended or draining ESP can be retired. Delete a draft ESP instead.",
         );
       }
     },

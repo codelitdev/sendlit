@@ -35,7 +35,8 @@ mock.module("../../mail/transport", () => ({
 mock.module("./test", () => ({
   testEspConfig: vi.fn().mockResolvedValue({ success: true }),
 }));
-mock.module("../../observability", () => ({ captureEvent: vi.fn() }));
+const captureEvent = vi.fn();
+mock.module("../../observability", () => ({ captureEvent }));
 
 const { db } = await import("../../db/client");
 const { espConfigs, outboundMessages } = await import("../../db/schema");
@@ -147,12 +148,41 @@ describe("ESP settings routes", () => {
     });
 
     expect(response.status).toBe(409);
+    expect((await response.json()) as unknown).toEqual({
+      error: "delivery_source_in_use",
+    });
     expect(transportMocks.invalidateEsp).not.toHaveBeenCalled();
     const [stillPresent] = await tdb
       .select()
       .from(espConfigs)
       .where(eq(espConfigs.id, config.id));
     expect(stillPresent).toBeTruthy();
+  });
+
+  it("explains why the team's live default can't be deleted (#12)", async () => {
+    const owner = await seedTeamAndContact(tdb);
+    const [seeded] = await tdb
+      .select()
+      .from(espConfigs)
+      .where(eq(espConfigs.teamId, owner.team.id));
+    requestContext.teamId = owner.team.id;
+    requestContext.userId = owner.account.id;
+
+    const response = await requestApp(app(), `/settings/esps/${seeded.espId}`, {
+      method: "DELETE",
+    });
+
+    expect(response.status).toBe(409);
+    expect((await response.json()) as unknown).toEqual({ error: "esp_is_default" });
+    expect(captureEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "esp_config_delete_blocked",
+        properties: { esp_id: seeded.espId, reason: "esp_is_default" },
+      }),
+    );
+    await expect(
+      getEspConfigByEspId(owner.team.id, seeded.espId),
+    ).resolves.not.toBeNull();
   });
 
   it("deletes an ESP used only by a completed broadcast", async () => {

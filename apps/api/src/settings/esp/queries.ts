@@ -352,27 +352,30 @@ export async function upsertEspConfig(
 }
 
 async function deleteOwnedEspConfig(config: EspConfig): Promise<boolean> {
-  // Organization ESPs retain their stricter, never-activated delete rule.
-  // A team can remove an otherwise-unused active ESP from Settings; its
-  // delivery default is cleared (or moved to another active team ESP)
-  // atomically before the foreign-key-protected row is removed.
+  // Organization ESPs keep their stricter rule: only a never-activated
+  // draft is deleted. Anything that has been live is retired instead.
   if (
     config.ownerScope === "organization" &&
     (config.status !== "draft" || config.activatedAt)
   ) {
-    throw new Error("delivery_source_in_use");
+    throw new Error("esp_retire_instead");
   }
   return db.transaction(async (tx) => {
-    const [grant] = await tx
-      .select({ id: espConfigTeamGrants.id })
-      .from(espConfigTeamGrants)
-      .where(eq(espConfigTeamGrants.espConfigId, config.id))
-      .limit(1);
-    const [feedback] = await tx
-      .select({ id: espFeedbackConnections.id })
-      .from(espFeedbackConnections)
-      .where(eq(espFeedbackConnections.espConfigId, config.id))
-      .limit(1);
+    // A live team default can't vanish from under the team's sends. A
+    // retired one no longer sends, so deleting it just clears the pointer.
+    if (config.ownerScope === "team" && config.teamId && config.status !== "retired") {
+      const [defaultFor] = await tx
+        .select({ teamId: teamDeliverySettings.teamId })
+        .from(teamDeliverySettings)
+        .where(
+          and(
+            eq(teamDeliverySettings.teamId, config.teamId),
+            eq(teamDeliverySettings.defaultTeamEspConfigId, config.id),
+          ),
+        )
+        .limit(1);
+      if (defaultFor) throw new Error("esp_is_default");
+    }
     const [activeSequence] = await tx
       .select({ id: sequences.id })
       .from(sequences)
@@ -383,10 +386,15 @@ async function deleteOwnedEspConfig(config: EspConfig): Promise<boolean> {
         ),
       )
       .limit(1);
-    const [transactional] = await tx
+    const [queuedTransactional] = await tx
       .select({ id: transactionalEmails.id })
       .from(transactionalEmails)
-      .where(eq(transactionalEmails.outboxId, config.id))
+      .where(
+        and(
+          eq(transactionalEmails.outboxId, config.id),
+          eq(transactionalEmails.status, "queued"),
+        ),
+      )
       .limit(1);
     const [queuedOutbound] = await tx
       .select({ id: outboundMessages.id })
@@ -398,8 +406,29 @@ async function deleteOwnedEspConfig(config: EspConfig): Promise<boolean> {
         ),
       )
       .limit(1);
-    if (grant || feedback || activeSequence || transactional || queuedOutbound) {
+    if (activeSequence || queuedTransactional || queuedOutbound) {
       throw new Error("delivery_source_in_use");
+    }
+    // Grants carry usage history, feedback connections own delivery events
+    // (which cascade), and transactional email must keep its source. None
+    // of these may be lost, so such an ESP is retired, not deleted.
+    const [grant] = await tx
+      .select({ id: espConfigTeamGrants.id })
+      .from(espConfigTeamGrants)
+      .where(eq(espConfigTeamGrants.espConfigId, config.id))
+      .limit(1);
+    const [feedback] = await tx
+      .select({ id: espFeedbackConnections.id })
+      .from(espFeedbackConnections)
+      .where(eq(espFeedbackConnections.espConfigId, config.id))
+      .limit(1);
+    const [transactional] = await tx
+      .select({ id: transactionalEmails.id })
+      .from(transactionalEmails)
+      .where(eq(transactionalEmails.outboxId, config.id))
+      .limit(1);
+    if (grant || feedback || transactional) {
+      throw new Error("esp_has_delivery_history");
     }
 
     // Draft and paused sequences resolve a fresh source when started or
@@ -615,10 +644,13 @@ export async function transitionEspConfig(
     if (config.status !== "suspended") throw new Error("invalid_lifecycle_transition");
     values.status = "active";
   } else {
-    if (
-      !["active", "suspended", "draining"].includes(config.status) ||
-      config.status === "retired"
-    ) {
+    // An ESP that was once live and went back to draft (a credential
+    // change does that) may still carry history, so it can be retired too.
+    // A never-activated draft is deleted instead.
+    const retirable =
+      ["active", "suspended", "draining"].includes(config.status) ||
+      (config.status === "draft" && config.activatedAt !== null);
+    if (!retirable) {
       throw new Error("invalid_lifecycle_transition");
     }
     if (options?.cancel) {

@@ -8,10 +8,16 @@ import {
 } from "./delivery-source";
 
 describe("presentDeliverySourceError", () => {
-  it("explains why an ESP cannot be removed", () => {
-    expect(presentDeliverySourceError("delivery_source_in_use")).toBe(
-      "This ESP can't be removed while it is used by an active sequence, queued email, or delivery integration.",
+  it("explains each reason an ESP cannot be removed (#12)", () => {
+    expect(presentDeliverySourceError("delivery_source_in_use")).toContain(
+      "sending sequence or broadcast",
     );
+    expect(presentDeliverySourceError("esp_is_default")).toContain(
+      "Make another ESP the default",
+    );
+    for (const code of ["esp_has_delivery_history", "esp_retire_instead"]) {
+      expect(presentDeliverySourceError(code)).toContain("Retire it instead");
+    }
   });
 
   it("explains paused and suspended sending instead of showing the code", () => {

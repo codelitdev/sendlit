@@ -80,7 +80,7 @@ const ORGANIZATION_KEYS =
 const PROVISIONING =
   "Team provisioning authenticates with organization API keys; MCP is team-scoped and does not accept organization keys.";
 const ESP_LIFECYCLE =
-  "ESP suspend, resume and retire are operational lifecycle controls kept REST/dashboard-only; MCP exposes create, activate, test and delete.";
+  "ESP suspend and resume are operational lifecycle controls kept REST/dashboard-only; MCP exposes create, activate, test, retire and delete.";
 const DELIVERY_SELECTION =
   "Team delivery-source selection (shared organization delivery vs user ESPs) is REST/dashboard-only; MCP manages user ESP configurations directly.";
 const DEFAULT_ESP_ALIAS =
@@ -202,7 +202,7 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("settings.esps.activate", "activate_esp", "write"),
   restOnly("settings.esps.suspend", ESP_LIFECYCLE),
   restOnly("settings.esps.resume", ESP_LIFECYCLE),
-  restOnly("settings.esps.retire", ESP_LIFECYCLE),
+  required("settings.esps.retire", "retire_esp", "destructive"),
   mcpOnly("get_esp_config", DEFAULT_ESP_ALIAS),
   mcpOnly("update_esp_config", DEFAULT_ESP_ALIAS),
   mcpOnly("delete_esp_config", DEFAULT_ESP_ALIAS),

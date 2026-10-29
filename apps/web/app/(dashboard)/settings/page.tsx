@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Archive,
   CheckCircle2,
   Copy,
   Mail,
@@ -26,6 +27,16 @@ import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { TrackingDomainSettings } from "@/components/dashboard/tracking-domain-settings";
 import { WebArchiveSettings } from "@/components/dashboard/web-archive-settings";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -62,6 +73,7 @@ import {
   getTeamDeliverySettings,
   listEsps,
   listTeamKeys,
+  retireEsp,
   setTeamEspAsDefault,
   testEsp,
   updateEsp,
@@ -99,6 +111,7 @@ export default function SettingsPage() {
   const [espFormOpen, setEspFormOpen] = useState(false);
   const [editingEsp, setEditingEsp] = useState<EspConfig | null>(null);
   const [espPendingDelete, setEspPendingDelete] = useState<EspConfig | null>(null);
+  const [espPendingRetire, setEspPendingRetire] = useState<EspConfig | null>(null);
   const [feedbackEsp, setFeedbackEsp] = useState<EspConfig | null>(null);
   const [domainAuthEsp, setDomainAuthEsp] = useState<EspConfig | null>(null);
   const [testingEspId, setTestingEspId] = useState<string | null>(null);
@@ -199,16 +212,24 @@ export default function SettingsPage() {
     }
   }
 
+  // A blocked delete throws, so the confirmation dialog stays open and says
+  // why (#12) instead of closing with the reason far up the page.
   async function handleDelete(esp: EspConfig) {
     setError(null);
+    await deleteEsp(esp.espId);
+    await load();
+  }
+
+  async function handleRetire(esp: EspConfig) {
+    setError(null);
     try {
-      await deleteEsp(esp.espId);
+      await retireEsp(esp.espId);
       await load();
     } catch (err) {
       setError(
         err instanceof ApiError
           ? presentDeliverySourceError(err.message)
-          : "Failed to remove ESP",
+          : "Failed to retire ESP",
       );
     }
   }
@@ -294,11 +315,44 @@ export default function SettingsPage() {
           title="Remove email service provider?"
           description={`This will permanently remove "${espPendingDelete?.name ?? "this email service provider"}". Sending through it will no longer be available.`}
           confirmLabel="Remove ESP"
+          errorMessage={(failure) =>
+            failure instanceof ApiError
+              ? presentDeliverySourceError(failure.message)
+              : "Failed to remove ESP. Please try again."
+          }
           onConfirm={async () => {
             if (!espPendingDelete) return;
             await handleDelete(espPendingDelete);
           }}
         />
+        <AlertDialog
+          open={espPendingRetire !== null}
+          onOpenChange={(open) => {
+            if (!open) setEspPendingRetire(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Retire {espPendingRetire?.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                It stops sending now and can't be reactivated. Its delivery history and
+                reports stay intact. Campaigns pinned to it need another delivery
+                source.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep ESP</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => {
+                  if (espPendingRetire) void handleRetire(espPendingRetire);
+                }}
+              >
+                Retire ESP
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <DeleteConfirmationDialog
           open={apiKeyPendingDelete !== null}
           onOpenChange={(open) => {
@@ -683,6 +737,17 @@ export default function SettingsPage() {
                               >
                                 <Pencil className="size-4" />
                               </IconButton>
+                              {esp.status !== "retired" &&
+                                (esp.status !== "draft" || esp.activatedAt) && (
+                                  <IconButton
+                                    title="Retire (stop sending, keep history)"
+                                    aria-label={`Retire ${esp.name}`}
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => setEspPendingRetire(esp)}
+                                  >
+                                    <Archive className="size-4" />
+                                  </IconButton>
+                                )}
                               <IconButton
                                 title="Remove"
                                 aria-label={`Remove ${esp.name}`}

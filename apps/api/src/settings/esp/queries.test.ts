@@ -7,19 +7,26 @@ mock.module("../../db/client", async () => {
 });
 
 const { db } = await import("../../db/client");
-const { espConfigs, outboundMessages, sequences, teamDeliverySettings } = await import(
-  "../../db/schema"
-);
+const {
+  espConfigs,
+  outboundMessages,
+  sequences,
+  teamDeliverySettings,
+  transactionalEmails,
+} = await import("../../db/schema");
 const { seedTeamAndContact, truncateAll } = await import("../../test/db");
 type TestDb = import("../../test/db").TestDb;
 const { seedSequence } = await import("../../test/fixtures");
 const {
   createEspConfig,
+  createOrganizationEspConfig,
   deleteEspConfig,
+  deleteOrganizationEspConfig,
   getDecryptedEspCredentials,
   getEspConfigByEspId,
   listEspConfigs,
   recordEspTestResult,
+  transitionEspConfig,
   upsertEspConfig,
   checkAndRememberDomainAuthentication,
 } = await import("./queries");
@@ -103,26 +110,152 @@ describe("ESP config queries", () => {
     await expect(getEspConfigByEspId(team.id, draft.espId)).resolves.toBeNull();
   });
 
-  it("deletes an unused active default and clears its delivery selection", async () => {
+  it("refuses to delete the team's live default", async () => {
     const { team } = await seedTeamAndContact(tdb);
     const [active] = await listEspConfigs(team.id);
 
-    await expect(deleteEspConfig(team.id, active.espId)).resolves.toBe(true);
-    await expect(getEspConfigByEspId(team.id, active.espId)).resolves.toBeNull();
+    await expect(deleteEspConfig(team.id, active.espId)).rejects.toThrow(
+      "esp_is_default",
+    );
+    await expect(getEspConfigByEspId(team.id, active.espId)).resolves.not.toBeNull();
+  });
+
+  it("deletes a retired default and moves the default to another active ESP", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const [retired] = await listEspConfigs(team.id);
+    await tdb
+      .update(espConfigs)
+      .set({ status: "retired", retiredAt: new Date() })
+      .where(eq(espConfigs.id, retired.id));
+    const backup = await createEspConfig(team.id, {
+      name: "Backup",
+      provider: "smtp",
+      host: "backup.example.com",
+      port: 587,
+      secure: false,
+    });
+    await tdb
+      .update(espConfigs)
+      .set({ status: "active" })
+      .where(eq(espConfigs.id, backup.id));
+
+    await expect(deleteEspConfig(team.id, retired.espId)).resolves.toBe(true);
 
     const [delivery] = await tdb
       .select()
       .from(teamDeliverySettings)
       .where(eq(teamDeliverySettings.teamId, team.id));
     expect(delivery).toMatchObject({
-      defaultSource: null,
-      defaultTeamEspConfigId: null,
+      defaultSource: "team",
+      defaultTeamEspConfigId: backup.id,
     });
+  });
+
+  it("keeps an ESP with transactional history and asks for retirement", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const esp = await createEspConfig(team.id, {
+      name: "Transactional",
+      provider: "smtp",
+      host: "tx.example.com",
+      port: 587,
+      secure: false,
+    });
+    await tdb.insert(transactionalEmails).values({
+      teamId: team.id,
+      deliverySourceType: "team",
+      outboxId: esp.id,
+      toEmail: "recipient@example.com",
+      subject: "Receipt",
+      status: "sent",
+    });
+
+    await expect(deleteEspConfig(team.id, esp.espId)).rejects.toThrow(
+      "esp_has_delivery_history",
+    );
+    await expect(getEspConfigByEspId(team.id, esp.espId)).resolves.not.toBeNull();
+  });
+
+  it("blocks a delete while transactional email is queued on the ESP", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const esp = await createEspConfig(team.id, {
+      name: "Queued",
+      provider: "smtp",
+      host: "queued.example.com",
+      port: 587,
+      secure: false,
+    });
+    await tdb.insert(transactionalEmails).values({
+      teamId: team.id,
+      deliverySourceType: "team",
+      outboxId: esp.id,
+      toEmail: "recipient@example.com",
+      subject: "Receipt",
+      status: "queued",
+    });
+
+    await expect(deleteEspConfig(team.id, esp.espId)).rejects.toThrow(
+      "delivery_source_in_use",
+    );
+  });
+
+  it("deletes a never-activated organization draft but not an activated one", async () => {
+    const { organization } = await seedTeamAndContact(tdb);
+    const draft = await createOrganizationEspConfig(organization.id, {
+      name: "Draft",
+      provider: "smtp",
+      host: "org-draft.example.com",
+      port: 587,
+      secure: false,
+    });
+    const retired = await createOrganizationEspConfig(organization.id, {
+      name: "Retired",
+      provider: "smtp",
+      host: "org-retired.example.com",
+      port: 587,
+      secure: false,
+    });
+    await tdb
+      .update(espConfigs)
+      .set({ status: "retired", activatedAt: new Date(), retiredAt: new Date() })
+      .where(eq(espConfigs.id, retired.id));
+
+    await expect(
+      deleteOrganizationEspConfig(organization.id, draft.espId),
+    ).resolves.toBe(true);
+    await expect(
+      deleteOrganizationEspConfig(organization.id, retired.espId),
+    ).rejects.toThrow("esp_retire_instead");
+  });
+
+  it("retires a once-active draft but not a never-activated one", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const fresh = await createEspConfig(team.id, {
+      name: "Fresh",
+      provider: "smtp",
+      host: "fresh.example.com",
+      port: 587,
+      secure: false,
+    });
+    await expect(
+      transitionEspConfig(fresh, "retire", { cancel: true }),
+    ).rejects.toThrow("invalid_lifecycle_transition");
+    const [edited] = await tdb
+      .update(espConfigs)
+      .set({ activatedAt: new Date() })
+      .where(eq(espConfigs.id, fresh.id))
+      .returning();
+    await expect(
+      transitionEspConfig(edited, "retire", { cancel: true }),
+    ).resolves.toMatchObject({ status: "retired" });
   });
 
   it("deletes an ESP pinned only to draft, paused, or completed sequences", async () => {
     const { team } = await seedTeamAndContact(tdb);
     const [active] = await listEspConfigs(team.id);
+    await tdb
+      .update(teamDeliverySettings)
+      .set({ defaultSource: null, defaultTeamEspConfigId: null })
+      .where(eq(teamDeliverySettings.teamId, team.id));
     const draft = await seedSequence(tdb, {
       teamId: team.id,
       status: "draft",
