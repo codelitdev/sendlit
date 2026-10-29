@@ -96,6 +96,8 @@ const toolPolicies = {
   delete_sequence_email: MCP_SCOPES.sequencesWrite,
   delete_sequence: MCP_SCOPES.sequencesWrite,
   preview_sequence_deletion: MCP_SCOPES.sequencesRead,
+  archive_broadcast: MCP_SCOPES.sequencesWrite,
+  unarchive_broadcast: MCP_SCOPES.sequencesWrite,
   start_sequence: MCP_SCOPES.sequencesWrite,
   pause_sequence: MCP_SCOPES.sequencesWrite,
 

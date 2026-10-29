@@ -258,6 +258,42 @@ describe("public web pages", () => {
     expect(sitemap.body).not.toContain("/p/elsewhere");
   });
 
+  it("takes archived broadcasts off the archive, feed and sitemap until restored", async () => {
+    const { team } = await setup();
+    const kept = await seedBroadcast(team.id, "Kept");
+    const archived = await seedBroadcast(team.id, "Archived issue");
+    await updateWebPublishing(kept, { published: true });
+    await updateWebPublishing(archived, { published: true });
+    const setArchived = (archivedAt: Date | null) =>
+      tdb.update(sequences).set({ archivedAt }).where(eq(sequences.id, archived.id));
+
+    await setArchived(new Date());
+    const archive = await requestApp(app(), "/w/acme-weekly");
+    expect(archive.body).toContain("Kept");
+    expect(archive.body).not.toContain("Archived issue");
+    expect((await requestApp(app(), "/w/acme-weekly/p/archived-issue")).status).toBe(
+      404,
+    );
+    expect((await requestApp(app(), "/w/acme-weekly/feed.xml")).body).not.toContain(
+      "Archived issue",
+    );
+    expect((await requestApp(app(), "/w/acme-weekly/sitemap.xml")).body).not.toContain(
+      "/p/archived-issue",
+    );
+    expect((await listIssues(team.id)).total).toBe(1);
+    const [row] = await tdb
+      .select()
+      .from(sequences)
+      .where(eq(sequences.id, archived.id));
+    expect((await toWebPublishing(row)).live).toBe(false);
+
+    await setArchived(null);
+    expect((await requestApp(app(), "/w/acme-weekly/p/archived-issue")).status).toBe(
+      200,
+    );
+    expect((await listIssues(team.id)).total).toBe(2);
+  });
+
   it("404s unpublished issues, and everything once hosting is off", async () => {
     const { team } = await setup();
     const issue = await seedBroadcast(team.id, "Gone");

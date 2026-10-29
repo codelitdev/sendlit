@@ -1,4 +1,5 @@
 import {
+  archivedFilters,
   contactFilterSchema,
   emailContentInputSchema,
   sequenceDeletionPreviewSchema,
@@ -9,7 +10,10 @@ import { z } from "zod";
 import { broadcastPacing } from "../../abuse/pacing-status";
 import { sequenceDeliveryRates } from "../../automation/sending-health";
 import { emailActionTypes, mailTypes } from "../../config/constants";
-import { sequenceDeleteBlockerMessage } from "../../sequences/delete-blockers";
+import {
+  broadcastArchiveErrors,
+  sequenceDeleteBlockerMessage,
+} from "../../sequences/delete-blockers";
 import type { HydratedSequence } from "../../sequences/queries";
 import {
   addMailToSequence,
@@ -26,6 +30,7 @@ import {
   getSubscribersCount,
   listSequences,
   pauseSequence,
+  setBroadcastArchived,
   startSequence,
   updateMailInSequence,
   updateSequence,
@@ -72,9 +77,13 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
     "list_sequences",
     {
       description:
-        "Returns a paginated list of broadcasts (type=broadcast, one-off) or sequences (type=sequence, multi-step, event-triggered).",
+        "Returns a paginated list of broadcasts (type=broadcast, one-off) or sequences (type=sequence, multi-step, event-triggered). Archived broadcasts are left out unless archived is only or include.",
       inputSchema: {
         type: z.enum(mailTypes),
+        archived: z
+          .enum(archivedFilters)
+          .optional()
+          .describe("exclude (default), only or include archived broadcasts"),
         offset: z.number().int().min(1).optional().describe("Page number (default: 1)"),
         itemsPerPage: z.number().int().min(1).max(50).optional(),
       },
@@ -95,8 +104,9 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
             type: args.type,
             offset: args.offset,
             itemsPerPage: args.itemsPerPage,
+            archived: args.archived,
           }),
-          countSequences(teamId, args.type),
+          countSequences(teamId, args.type, args.archived),
         ]);
         return jsonResult({
           items: items.map(toPublicSequence),
@@ -404,7 +414,7 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
     "preview_sequence_deletion",
     {
       description:
-        "Shows what delete_sequence would remove without changing anything: how many contacts are enrolled, how many emails it has sent, and whether it can be deleted now (blocker sequence_active means pause it first).",
+        "Shows what delete_sequence would remove without changing anything: how many contacts are enrolled, how many emails it has sent, and whether it can be deleted now (blocker sequence_active means pause it first; broadcast_sent means archive the broadcast with archive_broadcast instead).",
       inputSchema: { sequenceId: z.string() },
       outputSchema: sequenceDeletionPreviewSchema,
       annotations: {
@@ -426,7 +436,7 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
     "delete_sequence",
     {
       description:
-        "Permanently deletes a broadcast or sequence with its emails and triggers. An active one must be paused first (pause_sequence). Contacts still enrolled leave it, and its delivery, open and click history (its stats) is deleted and can't be recovered; call preview_sequence_deletion first and confirm with the user. Images only it used are deleted; images in sent mail are kept.",
+        "Permanently deletes a broadcast or sequence with its emails and triggers. An active sequence or sending broadcast must be paused first (pause_sequence). A draft or scheduled broadcast can be deleted; a broadcast that has started sending can't (broadcast_sent): use archive_broadcast. Contacts still enrolled leave it, and its delivery, open and click history (its stats) is deleted and can't be recovered; call preview_sequence_deletion first and confirm with the user. Images only it used are deleted; images in sent mail are kept.",
       inputSchema: { sequenceId: z.string() },
       outputSchema: successMessageSchema,
       annotations: {
@@ -447,6 +457,42 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
       }
     },
   );
+
+  for (const archived of [true, false]) {
+    server.registerTool(
+      archived ? "archive_broadcast" : "unarchive_broadcast",
+      {
+        description: archived
+          ? "Archives a sent broadcast: it leaves the broadcasts list (list_sequences with archived=only shows it) and the public web archive, feed and sitemap. Its report, delivery history and images are kept. Drafts and scheduled broadcasts can't be archived; delete them with delete_sequence."
+          : "Restores an archived broadcast to the broadcasts list, and to the web archive when it is published there.",
+        inputSchema: { sequenceId: z.string() },
+        outputSchema: sequenceSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      },
+      async (args: any, extra: any) => {
+        const teamId = getTeamId(extra);
+        if (!teamId) return AUTH_ERROR;
+        try {
+          const sequence = await setBroadcastArchived({
+            teamId,
+            sequenceId: args.sequenceId,
+            archived,
+          });
+          if (!sequence) return NOT_FOUND;
+          return jsonResult(toPublicSequence(sequence));
+        } catch (err: any) {
+          const message =
+            broadcastArchiveErrors[err.message as keyof typeof broadcastArchiveErrors];
+          return errorResult(message ?? err.message);
+        }
+      },
+    );
+  }
 
   server.registerTool(
     "start_sequence",

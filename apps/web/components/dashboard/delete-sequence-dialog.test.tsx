@@ -5,7 +5,7 @@ registerDom();
 
 const getSequenceDeletionPreview = mock(async (_sequenceId: string) => ({
   status: "paused",
-  blocker: null as "sequence_active" | null,
+  blocker: null as "sequence_active" | "broadcast_sent" | null,
   enrolledCount: 3,
   emailsSentCount: 12,
 }));
@@ -79,5 +79,59 @@ describe("DeleteSequenceDialog", () => {
     expect(screen.getByText(/Pause it before deleting it/)).toBeTruthy();
     expect(confirmButton().disabled).toBe(true);
     expect(deleteSequence).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete a sent broadcast and offers to archive it", async () => {
+    getSequenceDeletionPreview.mockResolvedValueOnce({
+      status: "completed",
+      blocker: "broadcast_sent",
+      enrolledCount: 0,
+      emailsSentCount: 40,
+    });
+    const onArchiveInstead = mock();
+    render(
+      <DeleteSequenceDialog
+        type="broadcast"
+        sequence={{ sequenceId: "seq_3", title: "October news" }}
+        onOpenChange={mock()}
+        onDeleted={mock()}
+        onArchiveInstead={onArchiveInstead}
+      />,
+    );
+    await settle();
+
+    expect(screen.getByText(/its report would be lost/)).toBeTruthy();
+    const confirm = screen.getByRole("button", {
+      name: "Delete broadcast",
+    }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Archive instead" }));
+    expect(onArchiveInstead).toHaveBeenCalled();
+    expect(deleteSequence).not.toHaveBeenCalled();
+  });
+
+  it("deletes a scheduled broadcast and says its send is cancelled", async () => {
+    getSequenceDeletionPreview.mockResolvedValueOnce({
+      status: "active",
+      blocker: null,
+      enrolledCount: 0,
+      emailsSentCount: 0,
+    });
+    const onDeleted = mock();
+    render(
+      <DeleteSequenceDialog
+        type="broadcast"
+        sequence={{ sequenceId: "seq_4", title: "Launch" }}
+        onOpenChange={mock()}
+        onDeleted={onDeleted}
+      />,
+    );
+    await settle();
+
+    expect(screen.getByText(/scheduled send is cancelled/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete broadcast" }));
+    await settle();
+    expect(deleteSequence).toHaveBeenCalledWith("seq_4");
+    expect(onDeleted).toHaveBeenCalled();
   });
 });

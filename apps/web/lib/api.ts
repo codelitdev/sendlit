@@ -539,7 +539,12 @@ export function deleteTemplate(templateId: string) {
 
 export function listSequences(
   type: MailType,
-  params: { offset?: number; itemsPerPage?: number } = {},
+  params: {
+    offset?: number;
+    itemsPerPage?: number;
+    /** Archived broadcasts are left out unless this is `only` or `include`. */
+    archived?: "exclude" | "only" | "include";
+  } = {},
 ) {
   return unwrap<Paginated<Sequence>>(
     client.sequences.list({ query: { type, ...params } }),
@@ -715,6 +720,15 @@ export function startSequence(sequenceId: string) {
 
 export function pauseSequence(sequenceId: string) {
   return unwrap<Sequence>(client.sequences.pause({ params: { sequenceId } }));
+}
+
+/** Hides a sent broadcast from the list and the web archive, keeping its report. */
+export function archiveBroadcast(sequenceId: string) {
+  return unwrap<Sequence>(client.sequences.archive({ params: { sequenceId } }));
+}
+
+export function unarchiveBroadcast(sequenceId: string) {
+  return unwrap<Sequence>(client.sequences.unarchive({ params: { sequenceId } }));
 }
 
 /** Enrolled contacts and sent emails a delete would remove, and any blocker. */

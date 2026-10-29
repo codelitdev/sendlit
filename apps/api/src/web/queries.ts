@@ -1,5 +1,5 @@
 import type { WebIssue, WebPublishing, WebSettings } from "@sendlit/api-contract";
-import { and, count, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { TEST_UNSUBSCRIBE_TOKEN } from "../config/constants";
 import { db } from "../db/client";
 import { sequenceEmails, sequences, settings, signupForms, teams } from "../db/schema";
@@ -39,13 +39,15 @@ async function firstFree(base: string, taken: (candidate: string) => Promise<boo
   }
 }
 
-/** Sent broadcasts published to the web: the issues anyone can read. */
+/** Sent broadcasts published to the web: the issues anyone can read.
+ * Archived broadcasts leave the archive, its feed and sitemap (#147). */
 const liveIssue = (teamId: string) =>
   and(
     eq(sequences.teamId, teamId),
     eq(sequences.type, "broadcast"),
     eq(sequences.webPublished, true),
     isNotNull(sequences.webSlug),
+    isNull(sequences.archivedAt),
     sql`${sequences.report}->'broadcast'->>'lockedAt' IS NOT NULL`,
   );
 
@@ -197,7 +199,9 @@ export async function toWebPublishing(
     ogImage: sequence.webOgImage,
     noindex: sequence.webNoindex,
     canonicalUrl: sequence.webCanonicalUrl,
-    live: Boolean(sequence.webPublished && sequence.webSlug && sent),
+    live: Boolean(
+      sequence.webPublished && sequence.webSlug && sent && !sequence.archivedAt,
+    ),
     publishedAt: sequence.webPublished && sent ? sent.toISOString() : null,
     url: issueUrl(row, sequence),
   };

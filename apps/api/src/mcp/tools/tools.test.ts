@@ -18,6 +18,7 @@ const mocks = {
 
   createSequence: vi.fn(),
   deleteSequence: vi.fn(),
+  setBroadcastArchived: vi.fn(),
   getSequenceDeletionImpact: vi.fn(),
   getSequenceBySequenceId: vi.fn(),
   getEmailSentCount: vi.fn(),
@@ -150,6 +151,7 @@ mock.module("../../sequences/queries", () => ({
   updateMailInSequence: mocks.updateMailInSequence,
   deleteMailFromSequence: mocks.deleteMailFromSequence,
   deleteSequence: mocks.deleteSequence,
+  setBroadcastArchived: mocks.setBroadcastArchived,
   getSequenceDeletionImpact: mocks.getSequenceDeletionImpact,
   startSequence: mocks.startSequence,
   pauseSequence: mocks.pauseSequence,
@@ -528,6 +530,57 @@ describe("MCP sequence tools", () => {
     await expect(
       tools.get("delete_sequence")!.handler({ sequenceId: "seq-2" }, auth),
     ).resolves.toEqual(NOT_FOUND);
+  });
+
+  it("explains why a sent broadcast can't be deleted", async () => {
+    const tools = makeToolRegistry(registerSequenceTools);
+    mocks.deleteSequence.mockRejectedValueOnce(new Error("broadcast_sent"));
+
+    const result = await tools
+      .get("delete_sequence")!
+      .handler({ sequenceId: "seq-1" }, auth);
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Archive it instead");
+  });
+
+  it("archives and restores a broadcast of the caller's team", async () => {
+    const tools = makeToolRegistry(registerSequenceTools);
+    const archivedAt = new Date("2026-10-29T00:00:00Z");
+    mocks.setBroadcastArchived
+      .mockResolvedValueOnce({ sequenceId: "seq-1", archivedAt, emails: [] })
+      .mockResolvedValueOnce({ sequenceId: "seq-1", archivedAt: null, emails: [] })
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error("broadcast_not_sent"));
+
+    const archived = await tools
+      .get("archive_broadcast")!
+      .handler({ sequenceId: "seq-1" }, auth);
+    expect(archived.structuredContent).toMatchObject({
+      archivedAt: archivedAt.toISOString(),
+    });
+    expect(mocks.setBroadcastArchived).toHaveBeenLastCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq-1",
+      archived: true,
+    });
+    const restored = await tools
+      .get("unarchive_broadcast")!
+      .handler({ sequenceId: "seq-1" }, auth);
+    expect(restored.structuredContent).toMatchObject({ archivedAt: null });
+    expect(mocks.setBroadcastArchived).toHaveBeenLastCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq-1",
+      archived: false,
+    });
+    await expect(
+      tools.get("archive_broadcast")!.handler({ sequenceId: "seq-2" }, auth),
+    ).resolves.toEqual(NOT_FOUND);
+    const draft = await tools
+      .get("archive_broadcast")!
+      .handler({ sequenceId: "seq-3" }, auth);
+    expect(draft.isError).toBe(true);
+    expect(draft.content[0].text).toContain("Only a sent broadcast can be archived");
   });
 
   it("previews a sequence deletion", async () => {

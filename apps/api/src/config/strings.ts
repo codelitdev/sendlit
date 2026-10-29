@@ -10,6 +10,7 @@ export const responses = {
   broadcast_no_recipients:
     "This broadcast has no matching recipients. Add contacts or widen the audience filter before sending.",
   mail_already_sent: "This broadcast has already been sent",
+  broadcast_archived: "This broadcast is archived. Unarchive it before resuming it",
   cannot_delete_last_email: "Cannot delete the last email in a sequence",
   mandatory_tags_missing:
     "Marketing email content must contain exactly one final managed footer",

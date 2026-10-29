@@ -171,6 +171,8 @@ export interface Sequence {
   report: SequenceReport;
   /** Whether its emails link a hosted web version ("View in browser"). */
   viewInBrowser: boolean;
+  /** When a sent broadcast was archived; `null` when it isn't. */
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   emails: SequenceEmail[];

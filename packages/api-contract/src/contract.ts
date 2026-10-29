@@ -598,6 +598,8 @@ const sequencesContract = c.router(
       query: listSequencesQuerySchema,
       responses: { 200: paginated(sequenceSchema) },
       summary: "List broadcasts or sequences",
+      description:
+        "Archived broadcasts are left out unless `archived` is `only` or `include`.",
     },
     get: {
       method: "GET",
@@ -624,7 +626,7 @@ const sequencesContract = c.router(
       responses: { 204: c.noBody(), 404: errorSchema, 409: errorSchema },
       summary: "Delete a broadcast or sequence",
       description:
-        "Permanently deletes the broadcast or sequence, its emails and triggers. An active one can't be deleted: pause it first (409 `sequence_active`). Contacts still enrolled in a paused sequence leave it, and its delivery, open and click history is deleted too, so its stats are gone; check GET /sequences/{sequenceId}/deletion-preview first. The outbound message log and suppressions are kept. Images it uses that nothing else uses are deleted from the media library and storage; images used by sent mail are kept.",
+        "Permanently deletes the broadcast or sequence, its emails and triggers. An active sequence or a sending broadcast can't be deleted: pause it first (409 `sequence_active`). A draft or scheduled broadcast can be deleted; one that has started sending can't (409 `broadcast_sent`): archive it instead with POST /sequences/{sequenceId}/archive. Contacts still enrolled in a paused sequence leave it, and its delivery, open and click history is deleted too, so its stats are gone; check GET /sequences/{sequenceId}/deletion-preview first. The outbound message log and suppressions are kept. Images it uses that nothing else uses are deleted from the media library and storage; images used by sent mail are kept.",
     },
     deletionPreview: {
       method: "GET",
@@ -633,6 +635,24 @@ const sequencesContract = c.router(
       summary: "Preview what deleting a broadcast or sequence removes",
       description:
         "How many contacts are enrolled and how many emails it has sent, and whether it can be deleted right now. Nothing is changed.",
+    },
+    archive: {
+      method: "POST",
+      path: "/sequences/:sequenceId/archive",
+      body: c.noBody(),
+      responses: { 200: sequenceSchema, 404: errorSchema, 409: errorSchema },
+      summary: "Archive a sent broadcast",
+      description:
+        'Hides a sent broadcast from the broadcasts list (see `archived` on GET /sequences) and from the public web archive, its feed and sitemap. Its report, delivery history and images are kept, and recipients\' "view in browser" links keep working. 409 `broadcast_not_sent` for a draft or scheduled broadcast (delete it instead) and `sequence_active` while it is sending. Archiving an archived broadcast changes nothing. 404 for sequences.',
+    },
+    unarchive: {
+      method: "POST",
+      path: "/sequences/:sequenceId/unarchive",
+      body: c.noBody(),
+      responses: { 200: sequenceSchema, 404: errorSchema },
+      summary: "Restore an archived broadcast",
+      description:
+        "Puts an archived broadcast back in the broadcasts list, and back on the web archive when it is published there.",
     },
     addEmail: {
       method: "POST",

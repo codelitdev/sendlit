@@ -141,6 +141,8 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("sequences.update", "update_sequence", "write"),
   required("sequences.remove", "delete_sequence", "destructive"),
   required("sequences.deletionPreview", "preview_sequence_deletion", "read"),
+  required("sequences.archive", "archive_broadcast", "write"),
+  required("sequences.unarchive", "unarchive_broadcast", "write"),
   required("sequences.addEmail", "add_sequence_email", "write"),
   required("sequences.updateEmail", "update_sequence_email", "write"),
   required("contacts.import", "import_contacts", "write"),

@@ -8,6 +8,9 @@ const mocks = {
   sendSequenceEmailTest: vi.fn(),
   deleteSequence: vi.fn(),
   getSequenceDeletionImpact: vi.fn(),
+  setBroadcastArchived: vi.fn(),
+  listSequences: vi.fn(),
+  countSequences: vi.fn(),
 };
 
 mock.module("../auth/middleware", () => ({
@@ -35,8 +38,9 @@ mock.module("./test-send", () => ({
 mock.module("./queries", () => ({
   createSequence: mocks.createSequence,
   addMailToSequence: mocks.addMailToSequence,
-  countSequences: vi.fn(),
+  countSequences: mocks.countSequences,
   deleteSequence: mocks.deleteSequence,
+  setBroadcastArchived: mocks.setBroadcastArchived,
   getSequenceDeletionImpact: mocks.getSequenceDeletionImpact,
   deleteMailFromSequence: vi.fn(),
   getEmailSentCount: vi.fn(),
@@ -45,7 +49,7 @@ mock.module("./queries", () => ({
   getSequenceOpenRate: vi.fn(),
   getSubscribers: vi.fn(),
   getSubscribersCount: vi.fn(),
-  listSequences: vi.fn(),
+  listSequences: mocks.listSequences,
   pauseSequence: vi.fn(),
   startSequence: vi.fn(),
   updateMailInSequence: mocks.updateMailInSequence,
@@ -197,5 +201,75 @@ describe("sequence delete route", () => {
     expect(response.status).toBe(200);
     expect(response.json<unknown>()).toEqual(preview);
     expect(mocks.getSequenceDeletionImpact).toHaveBeenCalledWith("team-1", "seq_1");
+  });
+});
+
+describe("broadcast archive routes", () => {
+  it("answers 409 broadcast_sent when deleting a sent broadcast", async () => {
+    mocks.deleteSequence.mockRejectedValue(new Error("broadcast_sent"));
+
+    const response = await requestApp(app(), "/sequences/seq_1", { method: "DELETE" });
+
+    expect(response.status).toBe(409);
+    expect(response.json<unknown>()).toEqual({ error: "broadcast_sent" });
+  });
+
+  it("archives and restores, and refuses unsent broadcasts with 409", async () => {
+    mocks.setBroadcastArchived
+      .mockResolvedValueOnce({
+        sequenceId: "seq_1",
+        archivedAt: new Date(0),
+        emails: [],
+      })
+      .mockResolvedValueOnce({ sequenceId: "seq_1", archivedAt: null, emails: [] })
+      .mockRejectedValueOnce(new Error("broadcast_not_sent"))
+      .mockResolvedValueOnce(null);
+
+    const archived = await requestApp(app(), "/sequences/seq_1/archive", {
+      method: "POST",
+    });
+    expect(archived.status).toBe(200);
+    expect(archived.json<any>().archivedAt).toBe(new Date(0).toISOString());
+    expect(mocks.setBroadcastArchived).toHaveBeenLastCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq_1",
+      archived: true,
+    });
+
+    const restored = await requestApp(app(), "/sequences/seq_1/unarchive", {
+      method: "POST",
+    });
+    expect(restored.json<any>().archivedAt).toBeNull();
+    expect(mocks.setBroadcastArchived).toHaveBeenLastCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq_1",
+      archived: false,
+    });
+
+    const draft = await requestApp(app(), "/sequences/seq_1/archive", {
+      method: "POST",
+    });
+    expect(draft.status).toBe(409);
+    expect(draft.json<unknown>()).toEqual({ error: "broadcast_not_sent" });
+    expect(
+      (await requestApp(app(), "/sequences/seq_9/archive", { method: "POST" })).status,
+    ).toBe(404);
+  });
+
+  it("passes the archived filter to the list", async () => {
+    mocks.listSequences.mockResolvedValue([]);
+    mocks.countSequences.mockResolvedValue(0);
+
+    const response = await requestApp(app(), "/sequences?type=broadcast&archived=only");
+
+    expect(response.status).toBe(200);
+    expect(mocks.listSequences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamId: "team-1",
+        type: "broadcast",
+        archived: "only",
+      }),
+    );
+    expect(mocks.countSequences).toHaveBeenCalledWith("team-1", "broadcast", "only");
   });
 });
