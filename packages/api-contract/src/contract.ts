@@ -19,13 +19,17 @@ import {
 } from "./schemas/billing";
 import { errorSchema, itemsList, paginated } from "./schemas/common";
 import {
+  contactDeletionSchema,
   type contactDeliverySchema,
   contactSchema,
+  contactSelectionSchema,
   createContactBodySchema,
+  deleteContactsBodySchema,
   exportContactsQuerySchema,
   importContactsBodySchema,
   importContactsResultSchema,
   listContactsQuerySchema,
+  previewContactDeletionResultSchema,
   updateContactBodySchema,
 } from "./schemas/contacts";
 import {
@@ -240,6 +244,42 @@ const contactsContract = c.router(
       summary: "Export contacts as CSV",
       description:
         "Returns every contact, or those matching segmentId and/or filter, as CSV: email, name, status (subscribed, unsubscribed, bounced or complained), tags, created_at, suppression_reason, then one column per custom field.",
+    },
+    previewBulkDelete: {
+      method: "POST",
+      path: "/contacts/bulk-delete/preview",
+      body: contactSelectionSchema,
+      responses: {
+        200: previewContactDeletionResultSchema,
+        400: errorSchema,
+        404: errorSchema,
+      },
+      summary: "Preview a bulk contact deletion",
+      description:
+        "Counts the contacts a bulk delete would remove (and how many are unsubscribed) without deleting anything. Pass the count to bulkDelete as expectedCount. 404 when segmentId doesn't exist.",
+    },
+    bulkDelete: {
+      method: "POST",
+      path: "/contacts/bulk-delete",
+      body: deleteContactsBodySchema,
+      responses: {
+        200: contactDeletionSchema,
+        202: contactDeletionSchema,
+        400: errorSchema,
+        404: errorSchema,
+        409: errorSchema.extend({ count: z.number().int().optional() }),
+      },
+      summary: "Delete contacts in bulk",
+      description:
+        "Permanently deletes up to 1000 contacts by id, or every contact matching q, segmentId and filter. With match, pass the preview's count as expectedCount; if the live count differs nothing is deleted (409 count_changed, with the new count). Only contacts that existed when the request arrived are deleted. Up to 1000 contacts are deleted before the response (200, status completed); larger selections run in the background (202, status queued) and report progress at GET /contacts/bulk-delete/{deletionId}. Each contact's custom field values, sequence progress, events and delivery records are deleted with it, and no sequence triggers fire. Suppressions are kept, and the address of every deleted unsubscribed contact is added to the suppression list (reason manual), so re-importing or re-adding it never mails it again. This is not a full privacy erasure: delivery logs and the suppression list keep the address.",
+    },
+    bulkDeleteStatus: {
+      method: "GET",
+      path: "/contacts/bulk-delete/:deletionId",
+      responses: { 200: contactDeletionSchema, 404: errorSchema },
+      summary: "Get a bulk contact deletion",
+      description:
+        "Progress of a background bulk delete. Finished deletions are kept for 24 hours.",
     },
     get: {
       method: "GET",

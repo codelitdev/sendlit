@@ -11,6 +11,10 @@ const mocks = {
   addTagToContact: vi.fn(),
   removeTagFromContact: vi.fn(),
   deleteContact: vi.fn(),
+  startContactDeletion: vi.fn(),
+  getContactDeletion: vi.fn(),
+  selectionCondition: vi.fn(),
+  countSelection: vi.fn(),
 
   createSequence: vi.fn(),
   getSequenceBySequenceId: vi.fn(),
@@ -110,6 +114,14 @@ mock.module("../../contacts/queries", () => ({
   deleteContact: mocks.deleteContact,
 }));
 
+mock.module("../../contacts/bulk-delete", () => ({
+  selectionCondition: mocks.selectionCondition,
+  countSelection: mocks.countSelection,
+}));
+mock.module("../../contacts/deletion-queue", () => ({
+  startContactDeletion: mocks.startContactDeletion,
+  getContactDeletion: mocks.getContactDeletion,
+}));
 mock.module("../../contacts/import", () => ({ importContacts: vi.fn() }));
 mock.module("../../contacts/export", () => ({ exportContactsCsv: vi.fn() }));
 
@@ -369,6 +381,66 @@ describe("MCP contact tools", () => {
         .get("create_contact")!
         .config.outputSchema.safeParse(createResult.structuredContent).success,
     ).toBe(true);
+  });
+
+  it("bulk deletes only with a valid selection and passes the acting team", async () => {
+    const tools = makeToolRegistry(registerContactTools);
+    const deleteContacts = tools.get("delete_contacts")!;
+    expect(deleteContacts.config.annotations.destructiveHint).toBe(true);
+
+    const missingCount = await deleteContacts.handler({ match: {} }, auth);
+    expect(missingCount.isError).toBe(true);
+    expect(mocks.startContactDeletion).not.toHaveBeenCalled();
+
+    mocks.startContactDeletion.mockResolvedValue({
+      status: 409,
+      body: { error: "count_changed", count: 7 },
+    });
+    const changed = await deleteContacts.handler(
+      { match: { q: "old" }, expectedCount: 5 },
+      auth,
+    );
+    expect(changed).toMatchObject({
+      isError: true,
+      structuredContent: { error: "count_changed", count: 7 },
+    });
+    expect(mocks.startContactDeletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamId: "team-1",
+        selection: { match: { q: "old" } },
+        expectedCount: 5,
+      }),
+    );
+
+    const queued = {
+      deletionId: "cdel_1",
+      status: "queued",
+      count: 5000,
+      deleted: 0,
+      suppressed: 0,
+    };
+    mocks.startContactDeletion.mockResolvedValue({ status: 202, body: queued });
+    await expect(
+      deleteContacts.handler({ match: {}, expectedCount: 5000 }, auth),
+    ).resolves.toMatchObject({ structuredContent: queued });
+
+    mocks.getContactDeletion.mockResolvedValue(null);
+    await expect(
+      tools.get("get_contact_deletion")!.handler({ deletionId: "cdel_1" }, auth),
+    ).resolves.toEqual(NOT_FOUND);
+  });
+
+  it("previews a bulk delete", async () => {
+    const tools = makeToolRegistry(registerContactTools);
+    mocks.selectionCondition.mockResolvedValue({ condition: "sql" });
+    mocks.countSelection.mockResolvedValue({ count: 4, unsubscribed: 1 });
+
+    await expect(
+      tools.get("preview_delete_contacts")!.handler({ contactIds: ["cnt_a"] }, auth),
+    ).resolves.toMatchObject({ structuredContent: { count: 4, unsubscribed: 1 } });
+    expect(mocks.selectionCondition).toHaveBeenCalledWith("team-1", {
+      contactIds: ["cnt_a"],
+    });
   });
 
   it("does not leak contacts from another team", async () => {

@@ -6,6 +6,8 @@ import {
   validateBillingConfig,
 } from "./billing/lifecycle";
 import { createInitialOrganizationOwnerIfMissing } from "./bootstrap";
+import contactDeletionQueue from "./contacts/deletion-queue";
+import contactDeletionWorker from "./contacts/deletion-worker";
 import { checkDatabaseConnection, pool } from "./db/client";
 import {
   startDeliveryLifecycleJobs,
@@ -80,9 +82,11 @@ checkConfig()
         { name: "mail_worker", run: () => mailWorker.close() },
         { name: "sequence_worker", run: () => sequenceWorker.close() },
         { name: "feedback_worker", run: () => feedbackWorker.close() },
+        { name: "contact_deletion_worker", run: () => contactDeletionWorker.close() },
         { name: "mail_queue", run: () => mailQueue.close() },
         { name: "sequence_queue", run: () => sequenceQueue.close() },
         { name: "feedback_queue", run: () => feedbackQueue.close() },
+        { name: "contact_deletion_queue", run: () => contactDeletionQueue.close() },
         { name: "send_rate_limiter", run: closeSendRateLimiter },
         { name: "database", run: () => pool.end() },
         { name: "observability", run: () => shutdownObservability(2_000) },

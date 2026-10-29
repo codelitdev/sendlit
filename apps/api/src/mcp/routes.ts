@@ -32,6 +32,7 @@ const highImpactTools = new Set([
   "create_api_key",
   "delete_api_key",
   "delete_team",
+  "delete_contacts",
   "release_suppression",
 ]);
 

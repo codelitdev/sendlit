@@ -141,3 +141,84 @@ export const exportContactsQuerySchema = z.object({
 
 export type ImportContactRow = z.infer<typeof importContactRowSchema>;
 export type ImportContactsResult = z.infer<typeof importContactsResultSchema>;
+
+/** Which contacts a bulk delete targets: an explicit list, or every
+ * contact matching a search, saved segment and/or filter (combined with AND;
+ * an empty `match` means every contact in the team). */
+export const contactSelectionObjectSchema = z.object({
+  contactIds: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(1000)
+    .optional()
+    .describe("Contact IDs, up to 1000. Unknown IDs are ignored."),
+  match: z
+    .object({
+      q: z.string().optional().describe("Search term matched against email or name"),
+      segmentId: z.string().optional().describe("Only contacts in this saved segment"),
+      filter: contactFilterSchema
+        .optional()
+        .describe("Inline ContactFilterWithAggregator; combines with q and segmentId"),
+    })
+    .optional()
+    .describe(
+      "Every contact matching q, segmentId and filter (AND). `{}` selects every contact in the team.",
+    ),
+});
+
+const exactlyOneSelection = (body: { contactIds?: unknown; match?: unknown }) =>
+  Boolean(body.contactIds) !== Boolean(body.match);
+const exactlyOneSelectionMessage = {
+  message: "Pass exactly one of contactIds or match",
+};
+
+export const contactSelectionSchema = contactSelectionObjectSchema.refine(
+  exactlyOneSelection,
+  exactlyOneSelectionMessage,
+);
+
+export const previewContactDeletionResultSchema = z.object({
+  count: z.number().int().describe("Contacts that would be deleted right now"),
+  unsubscribed: z
+    .number()
+    .int()
+    .describe(
+      "How many of them are unsubscribed; their addresses are added to the suppression list",
+    ),
+});
+
+export const deleteContactsObjectSchema = contactSelectionObjectSchema.extend({
+  expectedCount: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "The count from the preview. Required with match: if the live count differs, nothing is deleted and the response is 409 count_changed.",
+    ),
+});
+
+export const deleteContactsBodySchema = deleteContactsObjectSchema
+  .refine(exactlyOneSelection, exactlyOneSelectionMessage)
+  .refine((body) => !body.match || body.expectedCount !== undefined, {
+    message: "expectedCount is required with match",
+    path: ["expectedCount"],
+  });
+
+export const contactDeletionSchema = z.object({
+  deletionId: z
+    .string()
+    .nullable()
+    .describe("Background job id for large deletions; null when it ran inline"),
+  status: z.enum(["queued", "running", "completed", "failed"]),
+  count: z.number().int().describe("Contacts selected for deletion"),
+  deleted: z.number().int().describe("Contacts deleted so far"),
+  suppressed: z
+    .number()
+    .int()
+    .describe("Unsubscribed addresses newly added to the suppression list"),
+});
+
+export type ContactSelection = z.infer<typeof contactSelectionSchema>;
+export type DeleteContactsBody = z.infer<typeof deleteContactsBodySchema>;
+export type ContactDeletion = z.infer<typeof contactDeletionSchema>;

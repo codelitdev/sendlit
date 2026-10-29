@@ -1,10 +1,20 @@
 import {
+  contactDeletionSchema,
   contactFilterSchema,
+  contactSelectionObjectSchema,
+  contactSelectionSchema,
   customFieldsSchema,
+  deleteContactsBodySchema,
+  deleteContactsObjectSchema,
   importContactsBodySchema,
   importContactsResultSchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
+import { countSelection, selectionCondition } from "../../contacts/bulk-delete";
+import {
+  getContactDeletion,
+  startContactDeletion,
+} from "../../contacts/deletion-queue";
 import { exportContactsCsv } from "../../contacts/export";
 import { importContacts } from "../../contacts/import";
 import {
@@ -25,6 +35,7 @@ import type { McpToolRegistrar } from "../tool-registry";
 import { getAuthUser, getTeamId } from "./auth";
 import {
   AUTH_ERROR,
+  errorResult,
   INTERNAL_ERROR,
   isPlanGateError,
   jsonResult,
@@ -376,8 +387,117 @@ export function registerContactTools(server: McpToolRegistrar): void {
       const teamId = getTeamId(extra);
       if (!teamId) return AUTH_ERROR;
       try {
-        await deleteContact(teamId, args.contactId);
+        await deleteContact(teamId, args.contactId, getAuthUser(extra)?.id ?? null);
         return jsonResult({ message: "Contact deleted." });
+      } catch {
+        return INTERNAL_ERROR;
+      }
+    },
+  );
+
+  server.registerTool(
+    "preview_delete_contacts",
+    {
+      description:
+        "Counts the contacts delete_contacts would remove, and how many of them are unsubscribed, without deleting anything. Select either contactIds or match (q, segmentId and filter, combined with AND; {} is every contact). Pass the count to delete_contacts as expectedCount.",
+      inputSchema: contactSelectionObjectSchema.shape,
+      outputSchema: z.object({
+        count: z.number().int(),
+        unsubscribed: z.number().int(),
+      }),
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const parsed = contactSelectionSchema.safeParse(args);
+      if (!parsed.success)
+        return errorResult("Pass exactly one of contactIds or match.");
+      try {
+        const resolved = await selectionCondition(teamId, parsed.data);
+        if ("error" in resolved) {
+          return resolved.error === "segment_not_found"
+            ? NOT_FOUND
+            : errorResult(resolved.error);
+        }
+        return jsonResult(await countSelection(resolved.condition));
+      } catch {
+        return INTERNAL_ERROR;
+      }
+    },
+  );
+
+  server.registerTool(
+    "delete_contacts",
+    {
+      description:
+        "Permanently deletes contacts in bulk: up to 1000 contactIds, or every contact matching match (q, segmentId, filter; {} is every contact). Call preview_delete_contacts first and confirm the count with the user; with match, expectedCount is required and nothing is deleted if the live count differs (count_changed). Up to 1000 contacts are deleted immediately; larger selections run in the background — poll get_contact_deletion with the returned deletionId. Deleting doesn't trigger sequences. Unsubscribed contacts' addresses are added to the suppression list so they are never mailed again. Delivery logs and suppressions keep the address, so this is not a full privacy erasure. Cannot be undone.",
+      inputSchema: deleteContactsObjectSchema.shape,
+      outputSchema: contactDeletionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      const parsed = deleteContactsBodySchema.safeParse(args);
+      if (!parsed.success) {
+        return errorResult(
+          parsed.error.issues.map((issue) => issue.message).join("; "),
+        );
+      }
+      const { expectedCount, ...selection } = parsed.data;
+      try {
+        const result = await startContactDeletion({
+          teamId,
+          selection,
+          expectedCount,
+          actorUserId: getAuthUser(extra)?.id ?? null,
+        });
+        if (result.status === 404) return NOT_FOUND;
+        if (result.status === 400 || result.status === 409) {
+          return {
+            ...errorResult(JSON.stringify(result.body)),
+            structuredContent: result.body,
+          };
+        }
+        return jsonResult(result.body);
+      } catch {
+        return INTERNAL_ERROR;
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_contact_deletion",
+    {
+      description:
+        "Returns the progress of a background delete_contacts run: status (queued, running, completed, failed), count, deleted and suppressed. Kept for 24 hours after it finishes.",
+      inputSchema: {
+        deletionId: z.string().describe("deletionId from delete_contacts"),
+      },
+      outputSchema: contactDeletionSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        const deletion = await getContactDeletion(teamId, args.deletionId);
+        if (!deletion) return NOT_FOUND;
+        return jsonResult(deletion);
       } catch {
         return INTERNAL_ERROR;
       }
