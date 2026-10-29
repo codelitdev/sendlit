@@ -845,7 +845,10 @@ Changing only the display name does not invalidate connection verification.
 
 `POST .../retire` performs retirement. `DELETE` performs physical deletion and
 is allowed only for a never-activated draft with no grant, feedback connection,
-pinned work, outbound message, or audit reference. Historical FKs use
+pinned work, outbound message, or audit reference. A blocked delete answers
+`409` with the reason: `esp_retire_instead` (it has been activated; retire it),
+`esp_has_delivery_history` (grants, feedback, or transactional email point at
+it), or `delivery_source_in_use` (sending or queued work needs it). Historical FKs use
 `RESTRICT` or soft-retained references; they never cascade-delete delivery or
 feedback history. Operator-only organization/team purge workflows retire and
 then explicitly delete/anonymize dependants in retention order.
@@ -2213,6 +2216,9 @@ content, or unredacted webhook credentials.
 | 404    | `esp_not_found`                     | Missing/foreign ESP in the relevant owner scope                |
 | 409    | `provisioning_conflict`             | External ID exists with conflicting immutable fields           |
 | 409    | `delivery_source_in_use`            | Unsafe source disable/delete                                   |
+| 409    | `esp_retire_instead`                | Delete of an activated organization ESP; retire it instead     |
+| 409    | `esp_has_delivery_history`          | Delete of an ESP with grants, feedback, or transactional mail  |
+| 409    | `esp_is_default`                    | Delete of a team's live default ESP                            |
 | 409    | `invalid_lifecycle_transition`      | ESP/grant transition is not permitted                          |
 | 409    | `last_organization_owner`           | Operation would leave no owner                                 |
 | 422    | `delivery_source_required`          | No unambiguous default                                         |
