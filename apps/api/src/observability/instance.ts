@@ -75,6 +75,8 @@ const PROPERTY_ALLOWLIST = new Set([
   // Organization deletion (organization/delete.ts): counts only.
   "teams_count",
   "media_failed_count",
+  // Bulk contact deletion (contacts/bulk-delete.ts): counts only.
+  "suppressed_count",
 ]);
 
 /** Allowlisted keys that hold opaque record ids. They skip the package's

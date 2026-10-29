@@ -79,6 +79,47 @@ The API endpoints are under `/tags` (the Tags section in the API reference);
 the MCP tools are `list_tags`, `get_tag_references`, `rename_tag` and
 `delete_tag`.
 
+## Delete contacts
+
+Delete one contact from its row, or several at once:
+
+- **Select rows** with the checkboxes on **Contacts**, then choose **Delete**.
+- **Select everything that matches**: filter the list (or pick a segment),
+  tick the header checkbox, then choose **Select all N matching**. This covers
+  every page, not only the one you see.
+
+Before deleting, SendLit shows how many contacts will go and how many of them
+are unsubscribed. Deleting all matching contacts, or more than 100, asks you
+to type the number to confirm. Up to 1000 contacts are deleted straight away; larger deletions
+run in the background and the page shows their progress. If the matching
+contacts change between the preview and your confirmation (for example a
+signup arrives), nothing is deleted and you see the new count. Contacts added
+while a background deletion runs are kept.
+
+What happens to a deleted contact:
+
+- Its tags, custom fields, sequence progress, events and per-contact delivery
+  history are deleted with it. Deleting doesn't trigger any sequence.
+- Suppressions are kept. If the contact had unsubscribed, its address is added
+  to the suppression list (reason **manual**, "Unsubscribed contact was
+  deleted"), because unsubscribe status lives on the contact. Re-importing or
+  re-adding the address can't mail it again. You can release a manual
+  suppression from **Suppressions** if the person asks to hear from you again.
+- Broadcast and sequence reports keep their totals.
+
+Deleting contacts is not a full privacy (GDPR) erasure: delivery logs and the
+suppression list still hold the address, so that SendLit never mails someone
+who opted out. Contacts have no uploaded media, so there are no files to
+delete.
+
+Over the API, `POST /contacts/bulk-delete/preview` returns the count and
+`POST /contacts/bulk-delete` deletes either up to 1000 `contactIds` or every
+contact that `match`es a search (`q`), `segmentId` and `filter`. With `match`,
+pass the preview's count as `expectedCount`; a different live count returns
+409 `count_changed`. A large deletion answers 202 with a `deletionId` to poll
+at `GET /contacts/bulk-delete/{deletionId}`. The MCP tools are
+`preview_delete_contacts`, `delete_contacts` and `get_contact_deletion`.
+
 ## Segments
 
 A segment is a saved, named contact filter — a combination of tag, email, subscription status, and signup date conditions joined with `and`/`or`. Build the filter once, save it as a segment, and reuse it instead of rebuilding it for every broadcast or sequence.

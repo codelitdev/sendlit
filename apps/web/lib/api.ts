@@ -1,6 +1,7 @@
 import {
   type BillingCatalogKey,
   type BillingPlan,
+  type ContactDeletion,
   type ContactEvent,
   type CustomFields,
   contactFilterSchema,
@@ -263,6 +264,37 @@ export function removeContactTag(contactId: string, tag: string) {
 
 export function deleteContact(contactId: string) {
   return unwrap<void>(client.contacts.remove({ params: { contactId } }));
+}
+
+/** Which contacts a bulk delete targets: explicit ids, or everything
+ * matching a filter (every page, not only the one shown). */
+export type ContactSelection =
+  | { contactIds: string[] }
+  | { match: { filter?: ContactFilterWithAggregator } };
+
+function toApiSelection(selection: ContactSelection) {
+  if ("contactIds" in selection) return { contactIds: selection.contactIds };
+  return { match: { filter: toApiContactFilter(selection.match.filter) } };
+}
+
+export function previewContactDeletion(selection: ContactSelection) {
+  return unwrap<{ count: number; unsubscribed: number }>(
+    client.contacts.previewBulkDelete({ body: toApiSelection(selection) as any }),
+  );
+}
+
+export function deleteContacts(selection: ContactSelection, expectedCount: number) {
+  return unwrap<ContactDeletion>(
+    client.contacts.bulkDelete({
+      body: { ...toApiSelection(selection), expectedCount } as any,
+    }),
+  );
+}
+
+export function getContactDeletion(deletionId: string) {
+  return unwrap<ContactDeletion>(
+    client.contacts.bulkDeleteStatus({ params: { deletionId } }),
+  );
 }
 
 export interface ContactDelivery {

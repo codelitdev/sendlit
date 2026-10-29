@@ -97,6 +97,9 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("contacts.deliveries", "get_contact_deliveries", "read"),
   required("contacts.events", "get_contact_events", "read"),
   required("contacts.remove", "delete_contact", "destructive"),
+  required("contacts.previewBulkDelete", "preview_delete_contacts", "read"),
+  required("contacts.bulkDelete", "delete_contacts", "destructive"),
+  required("contacts.bulkDeleteStatus", "get_contact_deletion", "read"),
 
   // Tags
   required("tags.list", "list_tags", "read"),
