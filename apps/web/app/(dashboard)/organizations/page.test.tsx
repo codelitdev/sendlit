@@ -29,6 +29,10 @@ const mocks = {
   resumeOrganizationSubscription: mock(),
   createOrganization: mock(),
   abandonPendingOrganization: mock(),
+  deleteOrganization: mock(),
+  clearOrganizationIdCookie: mock(),
+  clearTeamIdCookie: mock(),
+  navigateTo: mock(),
   createOrganizationKey: mock(),
   revokeOrganizationKey: mock(),
   getOrganizationIdFromCookie: mock(),
@@ -45,6 +49,8 @@ mock.module("@/lib/tokens", () => ({
   selectOrganizationContext: mocks.selectOrganizationContext,
   notifyTeamsChanged: mocks.notifyTeamsChanged,
   setTeamIdCookie: mocks.setTeamIdCookie,
+  clearOrganizationIdCookie: mocks.clearOrganizationIdCookie,
+  clearTeamIdCookie: mocks.clearTeamIdCookie,
 }));
 
 mock.module("@/lib/api", () => ({
@@ -79,6 +85,7 @@ mock.module("@/lib/api", () => ({
   cancelOrganizationSubscription: mocks.cancelOrganizationSubscription,
   resumeOrganizationSubscription: mocks.resumeOrganizationSubscription,
   abandonPendingOrganization: mocks.abandonPendingOrganization,
+  deleteOrganization: mocks.deleteOrganization,
   createOrganizationKey: mocks.createOrganizationKey,
   revokeOrganizationKey: mocks.revokeOrganizationKey,
   createOrganization: mocks.createOrganization,
@@ -131,6 +138,7 @@ mock.module("@/lib/api-client", () => ({
 
 mock.module("@/lib/navigation", () => ({
   reloadPage: mocks.reloadPage,
+  navigateTo: mocks.navigateTo,
 }));
 
 const { act, cleanup, fireEvent, render, screen, waitFor, within } = await import(
@@ -146,6 +154,7 @@ const organization = {
   organizationId: "org_1",
   name: "Acme",
   status: "active" as const,
+  role: "owner" as const,
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
 };
@@ -814,5 +823,76 @@ describe("transactional mail activity and enter team", () => {
     expect(mocks.notifyTeamsChanged).toHaveBeenCalled();
     expect(mocks.setTeamIdCookie).toHaveBeenCalledWith("tm_school");
     expect(mocks.routerPush).toHaveBeenCalledWith("/");
+  });
+});
+
+describe("organization danger zone", () => {
+  async function openDeleteDialog() {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Delete organization" }));
+    return screen.findByRole("alertdialog");
+  }
+
+  it("is hidden from organization admins", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      items: [{ ...organization, role: "admin" }],
+      ownsFreeOrganization: false,
+    });
+    renderPage();
+    await screen.findByLabelText("Name");
+    expect(screen.queryByText("Danger zone")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete organization" })).toBeNull();
+  });
+
+  it("deletes only after the owner types the organization name", async () => {
+    mocks.deleteOrganization.mockResolvedValue(undefined);
+    const dialog = await openDeleteDialog();
+    const confirm = within(dialog).getByRole("button", { name: "Delete organization" });
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: "acme" },
+    });
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: "Acme" },
+    });
+    expect(confirm.hasAttribute("disabled")).toBe(false);
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+
+    await waitFor(() =>
+      expect(mocks.navigateTo).toHaveBeenCalledWith("/team-selection"),
+    );
+    expect(mocks.deleteOrganization).toHaveBeenCalledWith("org_1");
+    expect(mocks.clearTeamIdCookie).toHaveBeenCalled();
+    expect(mocks.clearOrganizationIdCookie).toHaveBeenCalled();
+  });
+
+  it("points to billing while a subscription is active", async () => {
+    mocks.deleteOrganization.mockRejectedValue(
+      new ClientApiError(409, "active_subscription_exists"),
+    );
+    const dialog = await openDeleteDialog();
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: "Acme" },
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Delete organization" }),
+      );
+    });
+
+    expect(await within(dialog).findByText(/has an active subscription/)).toBeTruthy();
+    expect(mocks.navigateTo).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Manage billing" }));
+    });
+    expect(mocks.routerReplace).toHaveBeenCalledWith(
+      "/organizations?tab=plan",
+      expect.anything(),
+    );
   });
 });

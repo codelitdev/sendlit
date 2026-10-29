@@ -20,6 +20,7 @@ export function DeleteConfirmationDialog({
   description = "This action cannot be undone.",
   confirmLabel = "Delete",
   confirmDisabled = false,
+  errorMessage,
   children,
 }: {
   open: boolean;
@@ -30,12 +31,14 @@ export function DeleteConfirmationDialog({
   confirmLabel?: string;
   /** Holds the confirm button, e.g. while the details below load. */
   confirmDisabled?: boolean;
+  /** Explains a failed delete; defaults to a generic retry message. */
+  errorMessage?: (error: unknown) => ReactNode;
   /** Details shown between the description and the buttons. */
   children?: ReactNode;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReactNode>(null);
 
   return (
     <AlertDialog
@@ -59,9 +62,9 @@ export function DeleteConfirmationDialog({
         </AlertDialogHeader>
         {children}
         {error && (
-          <p className="text-sm text-destructive" role="alert">
+          <div className="text-sm text-destructive" role="alert">
             {error}
-          </p>
+          </div>
         )}
         <AlertDialogFooter>
           <AlertDialogCancel ref={cancelRef} disabled={isDeleting}>
@@ -77,8 +80,11 @@ export function DeleteConfirmationDialog({
               try {
                 await onConfirm();
                 onOpenChange(false);
-              } catch {
-                setError("Unable to delete this item. Please try again.");
+              } catch (failure) {
+                setError(
+                  errorMessage?.(failure) ??
+                    "Unable to delete this item. Please try again.",
+                );
               } finally {
                 setIsDeleting(false);
               }
