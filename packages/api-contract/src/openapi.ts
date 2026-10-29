@@ -152,6 +152,11 @@ export const openApiDocument = generateOpenApi(
           "Saved, named, reusable contact filters - build a filter once, reuse it across broadcasts and sequences.",
       },
       {
+        name: "Tags",
+        description:
+          "Team-wide tags: list them with contact counts, see where one is used, rename or delete it.",
+      },
+      {
         name: "Media",
         description:
           "Authenticated MediaLit upload signatures for dashboard-owned media.",

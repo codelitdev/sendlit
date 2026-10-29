@@ -5,15 +5,19 @@ import {
   type CustomFields,
   contactFilterSchema,
   contract,
+  type DeleteTagResult,
   type DomainAuthentication,
   type EspWarmup,
   type EventDefinitionDetail,
   type ImportContactRow,
   type ImportContactsResult,
   type PaidPlan,
+  type RenameTagResult,
   type Reputation,
   type SignupForm,
   type SignupFormInput,
+  type TagReferences,
+  type TagSummary,
   type TrackEventBody,
   type TrackingDomain,
   type TriggerTypeValue,
@@ -368,6 +372,26 @@ export function createSegment(input: {
 
 export function deleteSegment(segmentId: string) {
   return unwrap<void>(client.segments.remove({ params: { segmentId } }));
+}
+
+// ---- Tags ----------------------------------------------------------------
+
+export async function listTags() {
+  return (await unwrap<{ items: TagSummary[] }>(client.tags.list())).items;
+}
+
+export function getTagReferences(tag: string) {
+  return unwrap<TagReferences>(client.tags.references({ params: { tag } }));
+}
+
+export function renameTag(tag: string, name: string) {
+  return unwrap<RenameTagResult>(
+    client.tags.rename({ params: { tag }, body: { name } }),
+  );
+}
+
+export function deleteTag(tag: string) {
+  return unwrap<DeleteTagResult>(client.tags.remove({ params: { tag } }));
 }
 
 // ---- Media --------------------------------------------------------------

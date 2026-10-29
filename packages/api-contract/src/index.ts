@@ -22,6 +22,7 @@ export * from "./schemas/reputation";
 export * from "./schemas/sequences";
 export * from "./schemas/settings";
 export * from "./schemas/suppressions";
+export * from "./schemas/tags";
 export * from "./schemas/teams";
 export * from "./schemas/templates";
 export * from "./schemas/transactional";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +19,8 @@ export function DeleteConfirmationDialog({
   title = "Delete this item?",
   description = "This action cannot be undone.",
   confirmLabel = "Delete",
+  confirmDisabled = false,
+  children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -26,6 +28,10 @@ export function DeleteConfirmationDialog({
   title?: string;
   description?: string;
   confirmLabel?: string;
+  /** Holds the confirm button, e.g. while the details below load. */
+  confirmDisabled?: boolean;
+  /** Details shown between the description and the buttons. */
+  children?: ReactNode;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -51,6 +57,7 @@ export function DeleteConfirmationDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {children}
         {error && (
           <p className="text-sm text-destructive" role="alert">
             {error}
@@ -62,7 +69,7 @@ export function DeleteConfirmationDialog({
           </AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
-            disabled={isDeleting}
+            disabled={isDeleting || confirmDisabled}
             onClick={async (event) => {
               event.preventDefault();
               setIsDeleting(true);

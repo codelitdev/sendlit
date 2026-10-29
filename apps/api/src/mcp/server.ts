@@ -10,6 +10,7 @@ import { registerMediaTools } from "./tools/media";
 import { registerReputationTools } from "./tools/reputation";
 import { registerSegmentTools } from "./tools/segments";
 import { registerSequenceTools } from "./tools/sequences";
+import { registerTagTools } from "./tools/tags";
 import { registerTeamTools } from "./tools/teams";
 import { registerTemplateTools } from "./tools/templates";
 import { registerTrackingDomainTools } from "./tools/tracking-domain";
@@ -53,6 +54,7 @@ export function buildMcpServer(): McpServer {
   // caches receive deterministic tool lists.
   registerContactTools(tools);
   registerSegmentTools(tools);
+  registerTagTools(tools);
   registerFormTools(tools);
   registerWebTools(tools);
   registerReputationTools(tools);
