@@ -113,3 +113,30 @@ Broadcast delivery uses the same sequence state machine as automations:
 - `completed` means sent.
 
 The first email's `delayInMillis` stores the absolute send timestamp for broadcasts.
+
+## Delete or archive a broadcast
+
+Use the **⋯** menu on the Broadcasts list, or the buttons on the broadcast
+page.
+
+- **Drafts and scheduled broadcasts** can be deleted. Deleting a scheduled
+  broadcast cancels its send. Images only it used are deleted from the media
+  library. Deleting is permanent.
+- **A broadcast that is sending** can't be deleted or archived. Pause it first.
+- **A sent broadcast** can't be deleted, so its report is never lost (the API
+  answers `409 broadcast_sent`). Archive it instead. An archived broadcast:
+  - leaves the Broadcasts list. Pick **Archived** in the list's filter to see
+    it;
+  - keeps its report, delivery history and images, and the "view in browser"
+    links in the emails you sent keep working;
+  - leaves the [web archive](/email-marketing/web-archive), its RSS feed and
+    sitemap.
+
+  **Unarchive** puts it back in the list, and back on the web archive if it
+  was published there.
+
+With the API, `DELETE /sequences/{sequenceId}` deletes,
+`POST /sequences/{sequenceId}/archive` and `/unarchive` archive and restore,
+and `GET /sequences?type=broadcast&archived=only` lists archived broadcasts.
+MCP clients use `delete_sequence`, `archive_broadcast` and
+`unarchive_broadcast`.
