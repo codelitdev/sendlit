@@ -279,3 +279,16 @@ describe("mail render helpers", () => {
     );
   });
 });
+
+describe("decodeLiquidTags", () => {
+  it("decodes entities inside Liquid tags only", async () => {
+    const { decodeLiquidTags } = await import("./render");
+    expect(
+      decodeLiquidTags(
+        "<p>Tom &amp; Jerry {{ x | default: &quot;a&quot; }} {% if y == &#39;b&#39; %}ok{% endif %}</p>",
+      ),
+    ).toBe(
+      `<p>Tom &amp; Jerry {{ x | default: "a" }} {% if y == 'b' %}ok{% endif %}</p>`,
+    );
+  });
+});

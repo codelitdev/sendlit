@@ -21,6 +21,7 @@ import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
 import feedbackRoutes from "./delivery-feedback/feedback-routes";
 import suppressionsRoutes from "./delivery-feedback/suppressions-routes";
 import espWebhookRoutes from "./delivery-feedback/webhook-route";
+import eventsRoutes from "./events/routes";
 import signupFormPublicRoutes from "./forms/public-routes";
 import signupFormRoutes from "./forms/routes";
 import mcpRoutes from "./mcp/routes";
@@ -160,6 +161,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(templatesRoutes);
   app.use(sequencesRoutes);
   app.use(transactionalRoutes);
+  app.use(eventsRoutes);
   app.use(espRoutes);
   app.use(generalSettingsRoutes);
   app.use(trackingDomainRoutes);

@@ -3,6 +3,7 @@ import { HttpClient } from "./http";
 import { Contacts } from "./resources/contacts";
 import { DeliveryEvents } from "./resources/delivery-events";
 import { Emails } from "./resources/emails";
+import { Events } from "./resources/events";
 import { Provisioning } from "./resources/provisioning";
 import { Segments } from "./resources/segments";
 import { Sequences } from "./resources/sequences";
@@ -56,6 +57,8 @@ export class SendLit {
   readonly sequences: Sequences;
   /** Transactional emails. */
   readonly emails: Emails;
+  /** Custom events and the team's event definitions. */
+  readonly events: Events;
   readonly provisioning: Provisioning;
   readonly suppressions: Suppressions;
   readonly deliveryEvents: DeliveryEvents;
@@ -114,6 +117,7 @@ export class SendLit {
     this.templates = new Templates(http);
     this.sequences = new Sequences(http);
     this.emails = new Emails(http);
+    this.events = new Events(http);
     this.provisioning = new Provisioning(http);
     this.suppressions = new Suppressions(http);
     this.deliveryEvents = new DeliveryEvents(http);

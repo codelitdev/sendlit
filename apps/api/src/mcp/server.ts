@@ -3,6 +3,7 @@ import { createMcpToolRegistrar } from "./tool-registry";
 import { registerContactTools } from "./tools/contacts";
 import { registerDeliveryFeedbackTools } from "./tools/delivery-feedback";
 import { registerEspTools } from "./tools/esp";
+import { registerEventTools } from "./tools/events";
 import { registerFormTools } from "./tools/forms";
 import { registerGeneralSettingsTools } from "./tools/general-settings";
 import { registerMediaTools } from "./tools/media";
@@ -59,6 +60,7 @@ export function buildMcpServer(): McpServer {
   registerMediaTools(tools);
   registerSequenceTools(tools);
   registerTransactionalTools(tools);
+  registerEventTools(tools);
   registerGeneralSettingsTools(tools);
   registerTrackingDomainTools(tools);
   registerEspTools(tools);

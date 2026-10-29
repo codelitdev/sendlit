@@ -1,5 +1,12 @@
 # @sendlit/email-blocks
 
+## 0.3.0
+
+### Minor Changes
+
+- 902cd16: `TriggerPicker` adds the `event:custom` and `contact:property_changed` triggers: a combobox for the event name or custom field (`valueOptions`, `onCreateValue`), a property filter for events (`triggerFilter`, `eventProperties`) or from/to values for field changes, a `valueFooter` slot and `labels` overrides. `onChange` now also returns `triggerFilter`. Also exports `EventPropertyFilterEditor` and `ValueCombobox`, and the `EventDefinition`, `EventPropertyFilter`, `PropertyChangeFilter` and `ReentryMode` types.
+- db0c687: A broadcast or sequence has a `viewInBrowser` setting. It is on for broadcasts and off for sequences created from now on; existing sequences keep it on. Turning it off sends its emails without the "View in browser" link and takes down the hosted web versions behind links already sent. `@sendlit/email-blocks` adds `viewInBrowser` to its sequence type.
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,16 +1,13 @@
 import {
   contactFilterSchema,
+  sequenceEmailSchema as contractSequenceEmailSchema,
+  sequenceSchema as contractSequenceSchema,
   customFieldsSchema,
   emailContentSchema,
   espWarmupSchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
-import {
-  emailActionTypes,
-  feedbackCapableProviders,
-  mailTypes,
-  sequenceStatus,
-} from "../../config/constants";
+import { feedbackCapableProviders } from "../../config/constants";
 
 export { emailContentSchema };
 
@@ -116,46 +113,18 @@ export const systemTemplateSchema = z.object({
     .optional(),
 });
 
-export const sequenceEmailSchema = z.object({
-  emailId: z.string(),
-  // NOTE: intentionally no `sequenceId` here — the DB column of that name
-  // on `sequence_emails` holds the *parent* sequence's internal id (see
-  // `db/schema.ts`), not a public identifier, so it's never surfaced.
-  subject: z.string(),
-  content: emailContentSchema,
-  delayInMillis: z.number(),
-  published: z.boolean(),
-  templateId: z.string().min(1).nullable().optional(),
-  actionType: z.enum(emailActionTypes).nullable().optional(),
-  actionData: z.record(z.any()).nullable().optional(),
-  lastTestSentAt: z.string().nullable().optional(),
-});
-
-export const sequenceSchema = z.object({
-  sequenceId: z.string(),
-  type: z.enum(mailTypes),
-  title: z.string(),
-  status: z.enum(sequenceStatus),
-  espId: z.string().nullable(),
-  triggerType: z.string().nullable().optional(),
-  triggerData: z.string().nullable().optional(),
-  filter: z.record(z.any()).nullable().optional(),
-  excludeFilter: z.record(z.any()).nullable().optional(),
-  emailsOrder: z.array(z.string()),
-  entrants: z.number().optional(),
-  report: z.record(z.any()).nullable().optional(),
-  emails: z.array(sequenceEmailSchema),
-  pacing: z
-    .object({
-      reason: z.enum(["new_account"]),
-      hourlyLimit: z.number(),
-      dailyLimit: z.number(),
-      remaining: z.number(),
-      estimatedCompletionAt: z.string(),
-    })
-    .nullable()
-    .optional(),
-});
+/** What the sequence tools return (`toPublicSequence` in tools/sequences.ts).
+ * Built on the REST contract's schema, which is the source of truth, and
+ * open to extra fields: a hand-kept copy here had drifted (it required an
+ * `espId` the tools never return), so every sequence tool failed output
+ * validation. */
+export const sequenceSchema = contractSequenceSchema
+  .extend({
+    // MCP strips the source intent; REST callers get it.
+    deliverySource: contractSequenceSchema.shape.deliverySource.optional(),
+    emails: z.array(contractSequenceEmailSchema.passthrough()),
+  })
+  .passthrough();
 
 export const sequenceListSchema = z.object({
   items: z.array(sequenceSchema),

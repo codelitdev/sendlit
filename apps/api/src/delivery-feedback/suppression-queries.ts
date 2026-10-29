@@ -40,6 +40,8 @@ export async function isRecipientSuppressed(
 export async function getActiveSuppressionReasons(
   teamId: string,
   emails: string[],
+  /** Pass the caller's transaction when there is one. */
+  executor: Pick<typeof db, "select"> = db,
 ): Promise<Map<string, SuppressionReason>> {
   const byHash = new Map(
     emails.map((email) => {
@@ -49,7 +51,7 @@ export async function getActiveSuppressionReasons(
   );
   const reasons = new Map<string, SuppressionReason>();
   if (byHash.size === 0) return reasons;
-  const rows = await db
+  const rows = await executor
     .select({ hash: emailSuppressions.recipientHash, reason: emailSuppressions.reason })
     .from(emailSuppressions)
     .where(

@@ -32,19 +32,27 @@ export interface CampaignEmailIds {
  * sent before versions existed have none and show the current content. */
 export interface CampaignViewIds extends CampaignEmailIds {
   versionId?: string;
+  /** Public id of the custom event that started the sequence, so the web
+   * version can render `{{ event.* }}` (docs/custom_events.md). */
+  eventId?: string;
 }
 
 /** Web versions stay reachable for as long as an archive would. */
 const VIEW_TOKEN_TTL = "3650d";
 
 export function getCampaignViewUrl(
-  { versionId, ...ids }: CampaignViewIds,
+  { versionId, eventId, ...ids }: CampaignViewIds,
   /** The team's tracking domain origin, if verified. */
   origin?: string,
 ): string {
   return getViewInBrowserUrl(
     generatePixelToken(
-      { kind: "view", ...ids, ...(versionId && { v: versionId }) },
+      {
+        kind: "view",
+        ...ids,
+        ...(versionId && { v: versionId }),
+        ...(eventId && { evt: eventId }),
+      },
       VIEW_TOKEN_TTL,
     ),
     origin,
@@ -53,14 +61,15 @@ export function getCampaignViewUrl(
 
 export function verifyCampaignViewToken(token: string): CampaignViewIds | null {
   const payload = verifyPixelToken<
-    Partial<CampaignEmailIds> & { kind?: string; v?: unknown }
+    Partial<CampaignEmailIds> & { kind?: string; v?: unknown; evt?: unknown }
   >(token);
   if (
     payload?.kind !== "view" ||
     typeof payload.contactId !== "string" ||
     typeof payload.sequenceId !== "string" ||
     typeof payload.emailId !== "string" ||
-    (payload.v !== undefined && typeof payload.v !== "string")
+    (payload.v !== undefined && typeof payload.v !== "string") ||
+    (payload.evt !== undefined && typeof payload.evt !== "string")
   ) {
     return null;
   }
@@ -69,7 +78,34 @@ export function verifyCampaignViewToken(token: string): CampaignViewIds | null {
     sequenceId: payload.sequenceId,
     emailId: payload.emailId,
     ...(payload.v && { versionId: payload.v }),
+    ...(payload.evt && { eventId: payload.evt }),
   };
+}
+
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+/** HTML-escapes every string inside an event payload. The Liquid engine
+ * doesn't escape output, and event properties often carry end-user input.
+ * See docs/custom_events.md#merge-tags-event-prop. */
+export function escapeEventProperties(value: unknown): unknown {
+  if (typeof value === "string")
+    return value.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]!);
+  if (Array.isArray(value)) return value.map(escapeEventProperties);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [
+        key,
+        escapeEventProperties(nested),
+      ]),
+    );
+  }
+  return value;
 }
 
 /** Stands in for the unsubscribe link on public pages, which have no
@@ -89,8 +125,8 @@ function withoutUnsubscribeLink(html: string): string {
 /**
  * Renders a broadcast or sequence email for one recipient: liquid merge tags
  * and the managed footer. For a send (`web: false`) it also adds the open
- * pixel, click-tracked links and the "view in browser" link
- * (`{{view_in_browser_url}}`). The web version (`web: true`) has none of
+ * pixel, click-tracked links and, unless `viewInBrowser` is off, the "view
+ * in browser" link (`{{view_in_browser_url}}`). The web version (`web: true`) has none of
  * those. Real sends, test sends and the web version all go through here so
  * they look the same.
  */
@@ -103,6 +139,9 @@ export async function renderCampaignHtml({
   unsubscribeToken,
   web = false,
   publication,
+  viewInBrowser = true,
+  event,
+  eventId,
 }: {
   team: { id: string; organizationId: string };
   content: unknown;
@@ -117,6 +156,13 @@ export async function renderCampaignHtml({
   web?: boolean | "public";
   /** The broadcast's web publishing state, for `{{web_version_url}}`. */
   publication?: { webPublished: boolean; webSlug: string | null } | null;
+  /** The sequence's `viewInBrowser` setting: off leaves the link out. */
+  viewInBrowser?: boolean;
+  /** Properties of the custom event that started the sequence, rendered
+   * as `{{ event.* }}`. Escaped here. */
+  event?: Record<string, unknown> | null;
+  /** Its public id, carried in the "view in browser" link. */
+  eventId?: string | null;
 }): Promise<string> {
   const settings = await getTeamSettingsRow(team.id);
   // Tracking, unsubscribe and web-version links use the team's verified
@@ -125,10 +171,14 @@ export async function renderCampaignHtml({
   const publicUrl = publication ? issueUrl(settings, publication) : null;
   // The footer's "view in browser" link goes to the public page once the
   // issue is published, else to the reader's own web version.
-  const viewInBrowserUrl = web
-    ? undefined
-    : (publicUrl ??
-      getCampaignViewUrl({ ...ids, versionId: contentVersionId }, origin));
+  const viewInBrowserUrl =
+    web || !viewInBrowser
+      ? undefined
+      : (publicUrl ??
+        getCampaignViewUrl(
+          { ...ids, versionId: contentVersionId, eventId: eventId ?? undefined },
+          origin,
+        ));
   const isPublic = web === "public";
   const variables = {
     subscriber: isPublic ? { email: "", name: null, tags: [] } : subscriber,
@@ -138,6 +188,7 @@ export async function renderCampaignHtml({
       : getUnsubLink(unsubscribeToken, origin),
     view_in_browser_url: viewInBrowserUrl ?? "",
     web_version_url: publicUrl ?? viewInBrowserUrl ?? "",
+    event: isPublic ? {} : escapeEventProperties(event ?? {}),
   };
 
   const renderedContent = web

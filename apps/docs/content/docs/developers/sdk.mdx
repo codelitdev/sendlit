@@ -45,11 +45,12 @@ await sendlit.contacts.addTag(contact.contactId, "onboarding");
 
 | Resource                 | Covers                                                                  |
 | ------------------------ | ----------------------------------------------------------------------- |
-| `sendlit.contacts`       | Contacts, tags, and the emails delivered to a contact                   |
+| `sendlit.contacts`       | Contacts, tags, and the emails and events of a contact                  |
 | `sendlit.segments`       | Saved segments                                                          |
 | `sendlit.templates`      | Team templates and built-in starters                                    |
 | `sendlit.sequences`      | Broadcasts and sequences, their emails, and stats                       |
 | `sendlit.emails`         | [Transactional email](/developers/transactional)                        |
+| `sendlit.events`         | [Custom events](/developers/events) and the team's event definitions    |
 | `sendlit.provisioning`   | [Provisioned teams](/developers/provisioning), with an organization key |
 | `sendlit.suppressions`   | The team's do-not-send list                                             |
 | `sendlit.deliveryEvents` | Delivery, bounce, and complaint history                                 |
@@ -74,6 +75,25 @@ for await (const contact of sendlit.contacts.listAll()) {
   and fires no event. A repeat signup doesn't re-enroll the contact.
 - Tags passed to `create` don't fire `tag:added`.
 
+## Custom events
+
+`events.track` records an event for a contact and starts every active
+sequence triggered by it. An unknown email creates the contact unless you pass
+`createContact: false`.
+
+```ts
+await sendlit.events.track({
+    email: user.email,
+    eventName: "course purchased",
+    properties: { courseName: course.title, price: order.amount },
+    idempotencyKey: order.id,
+});
+```
+
+`events.definitions` has `list`, `get`, `create`, `update` and `delete` for
+the team's events, by name. `contacts.events(contactId)` lists the events a
+contact sent. See [Custom events](/developers/events).
+
 ## Errors
 
 Every failed call rejects with a `SendLitError`. It has these fields:
@@ -94,8 +114,8 @@ The SDK retries with exponential backoff and honors `Retry-After`.
   before doing any work.
 - A `5xx`, timeout, or network error is retried only when the call is safe to
   repeat. That covers reads, `PUT` and `DELETE` requests, `contacts.create`,
-  `contacts.addTag`, `provisioning.provisionTeam`, and `emails.send` with an
-  `idempotencyKey`.
+  `contacts.addTag`, `provisioning.provisionTeam`, and `emails.send` and
+  `events.track` with an `idempotencyKey`.
 
 ```ts
 await sendlit.emails.send({

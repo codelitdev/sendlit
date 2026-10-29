@@ -83,6 +83,14 @@ OAuth access is default-deny per tool. Read and write permissions are separate:
 
 Segments save reusable filters over contact fields, tags, subscription state, signup date, and custom fields.
 
+### Custom events
+
+- `track_event` records a [custom event](/developers/events) for a contact and starts the sequences it triggers. It takes the `POST /events` body, including `createContact`, `contact`, `idempotencyKey` and `backfill`.
+- `list_event_definitions`, `get_event_definition`, `create_event_definition`, `update_event_definition`, `delete_event_definition`
+- `get_contact_events` lists a contact's events, newest first, with the sequences each one started.
+
+Event tools use the contacts scopes: `contacts:read` for reads and `contacts:write` for `track_event` and definition changes. `track_event` is for agents and people trying things out; send production events through the REST API, which allows far more requests per minute.
+
 ### Templates and media
 
 - `list_system_templates`, `list_templates`, `get_template`, `create_template`, `update_template`, `duplicate_template`, `delete_template`
@@ -105,7 +113,7 @@ For AI-created content, start with `list_system_templates` and
 
 ### Broadcasts and sequences
 
-Broadcasts use the sequence resource with one email and an audience filter. `update_sequence` also takes an `excludeFilter`; contacts matching it are never sent the broadcast or enrolled in the sequence. Sequence tools include:
+Broadcasts use the sequence resource with one email and an audience filter. For sequences, `update_sequence` sets the trigger, including `event:custom` with a `triggerFilter`, and who can enter (`reentry`, `reentryPeriodDays`); see [Sequences](/email-marketing/sequences#custom-events). It also takes an `excludeFilter`; contacts matching it are never sent the broadcast or enrolled in the sequence. Set `viewInBrowser: false` to send without the "View in browser" link and take down the web versions already linked. Sequence tools include:
 
 - `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`
 - `add_sequence_email`, `update_sequence_email`, `delete_sequence_email`
@@ -177,4 +185,4 @@ Prefer the client’s secure secret-store or environment-variable mechanism. Do 
 
 ## Operational limits
 
-The MCP endpoint is rate limited to 60 requests per minute. High-impact tools such as sending email, activating sequences, testing ESPs, managing API keys, deleting teams, and releasing suppressions are limited to 20 requests per minute. A missing or invalid credential returns HTTP 401, a missing OAuth scope returns an `insufficient_scope` tool error, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.
+The MCP endpoint is rate limited to 60 requests per minute. High-impact tools such as sending email, tracking events (`track_event`), activating sequences, testing ESPs, managing API keys, deleting teams, and releasing suppressions are limited to 20 requests per minute. A missing or invalid credential returns HTTP 401, a missing OAuth scope returns an `insufficient_scope` tool error, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.

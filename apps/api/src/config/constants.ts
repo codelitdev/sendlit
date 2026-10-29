@@ -39,6 +39,8 @@ export const EventType = {
   TAG_REMOVED: "tag:removed",
   SUBSCRIBER_ADDED: "subscriber:added",
   DATE_OCCURRED: "date:occurred",
+  CUSTOM_EVENT: "event:custom",
+  CONTACT_PROPERTY_CHANGED: "contact:property_changed",
 } as const;
 export type Event = (typeof EventType)[keyof typeof EventType];
 

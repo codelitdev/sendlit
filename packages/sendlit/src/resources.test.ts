@@ -62,6 +62,91 @@ const cases: Case[] = [
     { method: "GET", path: "/contacts/con_1/deliveries" },
   ],
   [
+    "contacts.events",
+    (s) => s.contacts.events("con_1", { page: 2, limit: 5, name: "course purchased" }),
+    {
+      method: "GET",
+      path: "/contacts/con_1/events",
+      query: "?page=2&limit=5&name=course%20purchased",
+    },
+  ],
+  [
+    "events.track",
+    (s) =>
+      s.events.track({
+        email: "ada@example.com",
+        eventName: "course purchased",
+        properties: { courseName: "Rust 101", price: 49 },
+        idempotencyKey: "order_8812",
+        contact: { name: "Ada", customFields: { plan: "pro" } },
+      }),
+    {
+      method: "POST",
+      path: "/events",
+      body: {
+        email: "ada@example.com",
+        eventName: "course purchased",
+        properties: { courseName: "Rust 101", price: 49 },
+        idempotencyKey: "order_8812",
+        contact: { name: "Ada", customFields: { plan: "pro" } },
+      },
+    },
+  ],
+  [
+    "events.definitions.list",
+    (s) => s.events.definitions.list(),
+    { method: "GET", path: "/events/definitions" },
+  ],
+  [
+    "events.definitions.get (name with a space)",
+    (s) => s.events.definitions.get("course purchased"),
+    { method: "GET", path: "/events/definitions/course%20purchased" },
+  ],
+  [
+    "events.definitions.get (reserved characters)",
+    (s) => s.events.definitions.get("plan/upgraded?"),
+    { method: "GET", path: "/events/definitions/plan%2Fupgraded%3F" },
+  ],
+  [
+    "events.definitions.create",
+    (s) =>
+      s.events.definitions.create({
+        name: "course purchased",
+        description: "A paid enrollment",
+        properties: [{ key: "price", type: "number" }],
+      }),
+    {
+      method: "POST",
+      path: "/events/definitions",
+      body: {
+        name: "course purchased",
+        description: "A paid enrollment",
+        properties: [{ key: "price", type: "number" }],
+      },
+    },
+  ],
+  [
+    "events.definitions.update",
+    (s) =>
+      s.events.definitions.update("course purchased", {
+        description: null,
+        properties: [{ key: "courseName", type: "string" }],
+      }),
+    {
+      method: "PATCH",
+      path: "/events/definitions/course%20purchased",
+      body: {
+        description: null,
+        properties: [{ key: "courseName", type: "string" }],
+      },
+    },
+  ],
+  [
+    "events.definitions.delete",
+    (s) => s.events.definitions.delete("course purchased"),
+    { method: "DELETE", path: "/events/definitions/course%20purchased" },
+  ],
+  [
     "segments.create",
     (s) =>
       s.segments.create({

@@ -72,7 +72,31 @@ const mocks = {
   listTransactionalEmails: vi.fn(),
   countTransactionalEmails: vi.fn(),
   toPublicTransactionalEmail: vi.fn(),
+
+  trackEvent: vi.fn(),
+  listEventDefinitions: vi.fn(),
+  getEventDefinition: vi.fn(),
+  createEventDefinition: vi.fn(),
+  updateEventDefinition: vi.fn(),
+  deleteEventDefinition: vi.fn(),
+  listContactEvents: vi.fn(),
 };
+
+class FakeEventsError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+mock.module("../../events/queries", () => ({
+  EventsError: FakeEventsError,
+  trackEvent: mocks.trackEvent,
+  listEventDefinitions: mocks.listEventDefinitions,
+  getEventDefinition: mocks.getEventDefinition,
+  createEventDefinition: mocks.createEventDefinition,
+  updateEventDefinition: mocks.updateEventDefinition,
+  deleteEventDefinition: mocks.deleteEventDefinition,
+  listContactEvents: mocks.listContactEvents,
+}));
 
 mock.module("../../contacts/queries", () => ({
   countContacts: mocks.countContacts,
@@ -201,6 +225,8 @@ const { registerSequenceTools } = await import("./sequences");
 const { registerTeamTools } = await import("./teams");
 const { registerTemplateTools } = await import("./templates");
 const { registerTransactionalTools } = await import("./transactional");
+const { registerEventTools } = await import("./events");
+const { sequenceSchema: mcpSequenceSchema } = await import("./schemas");
 
 type Tool = {
   config: any;
@@ -1136,5 +1162,179 @@ describe("MCP transactional tools", () => {
     expect(mocks.toPublicTransactionalEmail).toHaveBeenCalledWith(row, {
       includeHtml: false,
     });
+  });
+});
+
+describe("MCP event tools", () => {
+  const eventTools = [
+    "track_event",
+    "list_event_definitions",
+    "get_event_definition",
+    "create_event_definition",
+    "update_event_definition",
+    "delete_event_definition",
+    "get_contact_events",
+  ];
+
+  it("requires auth for every event tool", async () => {
+    const tools = makeToolRegistry(registerEventTools);
+    expect([...tools.keys()].sort()).toEqual([...eventTools].sort());
+    for (const name of eventTools) {
+      await expect(
+        tools.get(name)!.handler({ name: "x", contactId: "cnt_1" }, {}),
+      ).resolves.toEqual(AUTH_ERROR);
+    }
+    expect(mocks.trackEvent).not.toHaveBeenCalled();
+  });
+
+  it("tracks an event for the resolved team with source mcp", async () => {
+    const tools = makeToolRegistry(registerEventTools);
+    mocks.trackEvent.mockResolvedValue({
+      eventId: "evt_1",
+      contactId: "cnt_1",
+      duplicate: false,
+      contactCreated: true,
+    });
+    await expect(
+      tools.get("track_event")!.handler(
+        {
+          email: "a@example.com",
+          eventName: " course purchased ",
+          properties: { price: 49 },
+          idempotencyKey: "order_1",
+        },
+        teamKeyAuth,
+      ),
+    ).resolves.toMatchObject({ structuredContent: { eventId: "evt_1" } });
+    expect(mocks.trackEvent).toHaveBeenCalledWith({
+      teamId: "team-1",
+      source: "mcp",
+      body: expect.objectContaining({
+        email: "a@example.com",
+        eventName: "course purchased",
+        idempotencyKey: "order_1",
+      }),
+    });
+  });
+
+  it("validates track_event with the REST rules and maps expected errors", async () => {
+    const tools = makeToolRegistry(registerEventTools);
+    const invalid = await tools
+      .get("track_event")!
+      .handler({ eventName: "course purchased" }, auth);
+    expect(invalid.isError).toBe(true);
+    expect(invalid.content[0].text).toContain("exactly one of email or contactId");
+    expect(mocks.trackEvent).not.toHaveBeenCalled();
+
+    mocks.trackEvent.mockRejectedValue(new FakeEventsError("contact_not_found"));
+    const missing = await tools
+      .get("track_event")!
+      .handler({ email: "a@example.com", eventName: "x", createContact: false }, auth);
+    expect(missing).toMatchObject({
+      isError: true,
+      content: [{ text: "contact_not_found" }],
+    });
+  });
+
+  it("scopes definitions to the team and maps conflicts", async () => {
+    const tools = makeToolRegistry(registerEventTools);
+    mocks.listEventDefinitions.mockResolvedValue([]);
+    await tools.get("list_event_definitions")!.handler({}, auth);
+    expect(mocks.listEventDefinitions).toHaveBeenCalledWith("team-1");
+
+    mocks.getEventDefinition.mockResolvedValue(null);
+    await expect(
+      tools.get("get_event_definition")!.handler({ name: "nope" }, auth),
+    ).resolves.toEqual(NOT_FOUND);
+
+    mocks.createEventDefinition.mockRejectedValue(
+      new FakeEventsError("event_definition_exists"),
+    );
+    await expect(
+      tools.get("create_event_definition")!.handler({ name: "x" }, auth),
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [{ text: "event_definition_exists" }],
+    });
+
+    mocks.deleteEventDefinition.mockRejectedValue(
+      new FakeEventsError("event_definition_in_use"),
+    );
+    await expect(
+      tools.get("delete_event_definition")!.handler({ name: "x" }, auth),
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [{ text: "event_definition_in_use" }],
+    });
+
+    mocks.updateEventDefinition.mockResolvedValue(null);
+    await expect(
+      tools
+        .get("update_event_definition")!
+        .handler({ name: "x", description: "d" }, auth),
+    ).resolves.toEqual(NOT_FOUND);
+    expect(mocks.updateEventDefinition).toHaveBeenCalledWith("team-1", "x", {
+      description: "d",
+    });
+  });
+
+  it("only lists events of a contact in the team", async () => {
+    const tools = makeToolRegistry(registerEventTools);
+    mocks.getContactByContactId.mockResolvedValue({ id: "c-1", teamId: "team-2" });
+    await expect(
+      tools.get("get_contact_events")!.handler({ contactId: "cnt_1" }, auth),
+    ).resolves.toEqual(NOT_FOUND);
+    expect(mocks.listContactEvents).not.toHaveBeenCalled();
+
+    mocks.getContactByContactId.mockResolvedValue({ id: "c-1", teamId: "team-1" });
+    mocks.listContactEvents.mockResolvedValue({ items: [], total: 0 });
+    await tools
+      .get("get_contact_events")!
+      .handler({ contactId: "cnt_1", limit: 5 }, auth);
+    expect(mocks.listContactEvents).toHaveBeenCalledWith("c-1", {
+      page: undefined,
+      limit: 5,
+      name: undefined,
+    });
+  });
+});
+
+describe("MCP sequence output schema", () => {
+  it("accepts what the sequence tools return", () => {
+    // Regression: the schema required an `espId` the tools never return,
+    // so every sequence tool failed MCP output validation.
+    const parsed = mcpSequenceSchema.safeParse({
+      sequenceId: "seq_1",
+      type: "sequence",
+      title: "Follow-up",
+      status: "active",
+      triggerType: "event:custom",
+      triggerData: "course purchased",
+      triggerFilter: { aggregator: "and", filters: [] },
+      reentry: "once",
+      reentryPeriodDays: null,
+      filter: null,
+      excludeFilter: null,
+      emailsOrder: ["email_1"],
+      entrants: [],
+      report: {},
+      viewInBrowser: false,
+      webPublished: false,
+      createdAt: "2026-10-28T00:00:00.000Z",
+      updatedAt: "2026-10-28T00:00:00.000Z",
+      emails: [
+        {
+          emailId: "email_1",
+          subject: "Hi",
+          content: { style: {}, meta: {}, content: [] },
+          delayInMillis: 0,
+          published: true,
+          contentScanVerdict: null,
+          createdAt: null,
+          updatedAt: null,
+        },
+      ],
+    });
+    expect(parsed.success).toBe(true);
   });
 });

@@ -66,7 +66,7 @@ async function broadcastTo(n: number) {
       .insert(schema.contacts)
       .values({
         teamId: team.id,
-        email: `r${i}.${crypto.randomUUID()}@example.com`,
+        email: `r${i}.${crypto.randomUUID()}@inbox.sendlit.app`,
         unsubscribeToken: crypto.randomUUID(),
       })
       .returning();

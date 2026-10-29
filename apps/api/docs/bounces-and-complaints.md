@@ -482,7 +482,7 @@ Each provider adapter converts a receipt into zero or more immutable events:
 ```text
 email_delivery_events
   id                       uuid primary key
-  event_id                 text unique, public evt_ identifier
+  event_id                 text unique, public dev_ identifier
   receipt_id               uuid not null -> webhook receipt
   connection_id            uuid not null -> feedback connection
   team_id                  uuid nullable -> teams on delete cascade
@@ -505,6 +505,8 @@ email_delivery_events
   metadata                 jsonb not null default {}
 ```
 
+- Public ids use the `dev_` prefix. They used `evt_` until custom events
+  (`docs/custom_events.md`) took that prefix.
 - Unique `(connection_id, provider_event_key)` guarantees event idempotency.
   If a single provider event contains multiple recipients, the derived key
   includes a stable recipient discriminator.
