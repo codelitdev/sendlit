@@ -129,6 +129,13 @@ import {
   suppressionSchema,
 } from "./schemas/suppressions";
 import {
+  deleteTagResultSchema,
+  renameTagBodySchema,
+  renameTagResultSchema,
+  tagReferencesSchema,
+  tagSummarySchema,
+} from "./schemas/tags";
+import {
   apiKeySchema,
   createApiKeyBodySchema,
   createdApiKeySchema,
@@ -290,6 +297,55 @@ const contactsContract = c.router(
     },
   },
   { metadata: { tag: "Contacts" } },
+);
+
+/**
+ * Team-wide tag management. Tags live on contacts, so a tag "exists" while at
+ * least one contact carries it; segments, broadcast/sequence filters and
+ * triggers, sequence email actions and signup forms only name it.
+ */
+const tagsContract = c.router(
+  {
+    list: {
+      method: "GET",
+      path: "/tags",
+      responses: { 200: itemsList(tagSummarySchema) },
+      summary: "List tags",
+      description:
+        "Returns every tag carried by at least one of the team's contacts, sorted by name, with the number of contacts that carry it.",
+    },
+    references: {
+      method: "GET",
+      path: "/tags/:tag/references",
+      responses: { 200: tagReferencesSchema },
+      summary: "List where a tag is used",
+      description:
+        "Returns how many contacts carry the tag and the segments, broadcasts, sequences (audience filters, tag triggers, email tag actions) and signup forms that name it. Call it before deleting a tag.",
+    },
+    rename: {
+      method: "PATCH",
+      path: "/tags/:tag",
+      body: renameTagBodySchema,
+      responses: {
+        200: renameTagResultSchema,
+        400: errorSchema,
+        404: errorSchema,
+      },
+      summary: "Rename a tag",
+      description:
+        "Renames the tag on every contact, and in segments, broadcast and sequence filters and tag triggers, sequence email tag actions and signup forms. Renaming to a tag that already exists merges the two. Sent broadcasts keep their original filters. Renaming doesn't trigger tag-added or tag-removed sequences. 404 `tag_not_found` when nothing uses the tag; 400 `tag_unchanged` when the new name is the same.",
+    },
+    remove: {
+      method: "DELETE",
+      path: "/tags/:tag",
+      body: c.noBody(),
+      responses: { 200: deleteTagResultSchema, 404: errorSchema },
+      summary: "Delete a tag from every contact",
+      description:
+        "Removes the tag from every contact of the team. Segments, filters, triggers, email actions and signup forms that name the tag are left as they are and returned in `references`: a filter on a deleted tag matches nobody, and a trigger or form can add it again. Check `GET /tags/:tag/references` first. Deleting doesn't trigger tag-removed sequences. 404 `tag_not_found` when nothing uses the tag.",
+    },
+  },
+  { metadata: { tag: "Tags" } },
 );
 
 /**
@@ -2125,6 +2181,7 @@ const billingContract = c.router(
 export const contract = c.router({
   contacts: contactsContract,
   segments: segmentsContract,
+  tags: tagsContract,
   media: mediaContract,
   templates: templatesContract,
   sequences: sequencesContract,
