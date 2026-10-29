@@ -987,6 +987,8 @@ export interface Organization {
   organizationId: string;
   name: string;
   status: "pending_payment" | "active" | "suspended" | "abandoned" | "closed";
+  /** The signed-in user's role; present when listing organizations. */
+  role?: "owner" | "admin" | "member";
   createdAt: string;
   updatedAt: string;
 }
@@ -1128,6 +1130,17 @@ export function abandonPendingOrganization(organizationId: string) {
     organizationId,
     `/organizations/${organizationId}/abandon`,
     { method: "POST" },
+  );
+}
+
+/** Deletes (closes) an organization. Owner only; fails with
+ * `active_subscription_exists` while a paid subscription is running. */
+export function deleteOrganization(organizationId: string) {
+  return billingActionRequest<void>(
+    "organization_close",
+    organizationId,
+    `/organizations/${organizationId}`,
+    { method: "DELETE" },
   );
 }
 

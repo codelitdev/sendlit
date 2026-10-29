@@ -72,6 +72,9 @@ const PROPERTY_ALLOWLIST = new Set([
   // Transactional email: already sent, were missing from the allowlist.
   "txe_id",
   "delivery_source",
+  // Organization deletion (organization/delete.ts): counts only.
+  "teams_count",
+  "media_failed_count",
 ]);
 
 /** Allowlisted keys that hold opaque record ids. They skip the package's

@@ -89,6 +89,7 @@ import {
   organizationAuditEventSchema,
   organizationEnterTeamBodySchema,
   organizationEnterTeamResponseSchema,
+  organizationListItemSchema,
   organizationMailActivityQuerySchema,
   organizationMailActivitySchema,
   organizationMemberSchema,
@@ -1285,7 +1286,7 @@ const organizationsContract = c.router(
       path: "/organizations",
       responses: {
         200: z.object({
-          items: z.array(organizationSchema),
+          items: z.array(organizationListItemSchema),
           ownsFreeOrganization: z.boolean(),
         }),
         403: errorSchema,
@@ -1335,7 +1336,9 @@ const organizationsContract = c.router(
         409: errorSchema,
         503: errorSchema,
       },
-      summary: "Close an organization",
+      summary: "Delete an organization",
+      description:
+        "Owner only, from a dashboard session. Fails with `409 active_subscription_exists` while a subscription is active or paid through a future date (cancel it in billing first), and with `409 billing_checkout_pending` while a checkout is open. Deleting closes the organization, archives its teams, revokes organization and team API keys and sending domains, retires every ESP config with its credentials wiped, and deletes its teams' MediaLit files. Billing history, audit events, delivery reporting and suppressions are kept.",
     },
     abandon: {
       method: "POST",

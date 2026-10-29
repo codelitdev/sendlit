@@ -76,7 +76,7 @@ Plan limits and billing mutations use the same stable codes on REST and MCP:
 | `409`  | `billing_checkout_pending`         | A checkout attempt is already open.                                     |
 | `409`  | `billing_catalog_changed`          | Prices changed; review the new catalog before retrying.                 |
 | `503`  | `billing_catalog_unavailable`      | Checkout is frozen until the catalog is verified.                       |
-| `409`  | `active_subscription_exists`       | Close is blocked while a subscription is live.                          |
+| `409`  | `active_subscription_exists`       | Deleting is blocked while a subscription is live.                       |
 | `401`  | `recent_authentication_required`   | Sign in again before a billing mutation.                                |
 | `403`  | `domain_verification_required`     | The From domain must be verified after test volume.                     |
 | `403`  | `sending_paused`                   | Payment grace expired or a fair-use control paused sending.             |
