@@ -1,5 +1,6 @@
 "use client";
 
+import type { ContactDeletion } from "@sendlit/api-contract";
 import {
   type Contact,
   ContactFilterBuilder,
@@ -9,9 +10,11 @@ import {
 import { Download, Plus, Tags, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
+import { DeleteContactsDialog } from "@/components/dashboard/delete-contacts-dialog";
 import { ImportContactsDialog } from "@/components/dashboard/import-contacts-dialog";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -19,6 +22,7 @@ import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/codelit/button";
+import { Checkbox } from "@/components/ui/codelit/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +34,15 @@ import {
 import { IconButton } from "@/components/ui/codelit/icon-button";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
-import { createContact, deleteContact, exportContacts, listContacts } from "@/lib/api";
+import { Progress } from "@/components/ui/progress";
+import {
+  type ContactSelection,
+  createContact,
+  deleteContact,
+  exportContacts,
+  getContactDeletion,
+  listContacts,
+} from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { useSegments } from "@/lib/use-segments";
 
@@ -49,6 +61,14 @@ export default function ContactsPage() {
     null,
   );
   const { segmentProps, clearSelection } = useSegments(setError);
+  /** Rows ticked on this page, by contact id. */
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  /** Every contact matching the filter, across pages. */
+  const [allMatching, setAllMatching] = useState(false);
+  const [bulkSelection, setBulkSelection] = useState<ContactSelection | null>(null);
+  const [backgroundDeletion, setBackgroundDeletion] = useState<ContactDeletion | null>(
+    null,
+  );
 
   const [exporting, setExporting] = useState(false);
 
@@ -85,10 +105,46 @@ export default function ContactsPage() {
     }
   }
 
+  function resetSelection() {
+    setSelectedIds(new Set());
+    setAllMatching(false);
+  }
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when the filter changes
   useEffect(() => {
+    resetSelection();
     load(filter);
   }, [filter]);
+
+  // Polls a background deletion until it finishes, then reloads the list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the deletion id; load is recreated every render
+  useEffect(() => {
+    const deletionId = backgroundDeletion?.deletionId;
+    if (!deletionId || ["completed", "failed"].includes(backgroundDeletion.status)) {
+      return;
+    }
+    const timer = setInterval(async () => {
+      try {
+        const latest = await getContactDeletion(deletionId);
+        setBackgroundDeletion(latest);
+        if (latest.status === "completed") {
+          toast.success(`Deleted ${latest.deleted.toLocaleString()} contacts`);
+          await load();
+        } else if (latest.status === "failed") {
+          setError("The background deletion stopped. Some contacts may remain.");
+          await load();
+        }
+      } catch {
+        // Try again on the next tick.
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [backgroundDeletion?.deletionId, backgroundDeletion?.status]);
+
+  const pageIds = contacts?.map((contact) => contact.contactId) ?? [];
+  const pageSelected =
+    pageIds.length > 0 && pageIds.every((contactId) => selectedIds.has(contactId));
+  const selectedCount = allMatching ? total : selectedIds.size;
 
   return (
     <ScrollablePage>
@@ -129,9 +185,47 @@ export default function ContactsPage() {
         onConfirm={async () => {
           if (!contactPendingDelete) return;
           await deleteContact(contactPendingDelete.contactId);
+          resetSelection();
           await load();
         }}
       />
+
+      <DeleteContactsDialog
+        selection={bulkSelection}
+        onOpenChange={(open) => {
+          if (!open) setBulkSelection(null);
+        }}
+        onDeleted={async (deletion) => {
+          resetSelection();
+          if (deletion.status === "completed") {
+            toast.success(`Deleted ${deletion.deleted.toLocaleString()} contacts`);
+            await load();
+          } else {
+            setBackgroundDeletion(deletion);
+          }
+        }}
+      />
+
+      {backgroundDeletion && backgroundDeletion.status !== "completed" && (
+        <Card className="mb-4">
+          <CardContent className="space-y-2 p-4 text-sm">
+            <p>
+              {backgroundDeletion.status === "failed"
+                ? "Deleting contacts stopped"
+                : "Deleting contacts in the background"}
+              : {backgroundDeletion.deleted.toLocaleString()} of{" "}
+              {backgroundDeletion.count.toLocaleString()} done.
+            </p>
+            <Progress
+              value={
+                backgroundDeletion.count
+                  ? (backgroundDeletion.deleted / backgroundDeletion.count) * 100
+                  : 0
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <ContactFilterBuilder
         className="mb-4"
@@ -145,6 +239,44 @@ export default function ContactsPage() {
         countLabel="contacts"
       />
 
+      {selectedCount > 0 && (
+        <div className="mb-2 flex flex-wrap items-center gap-3 rounded-md border bg-muted/40 px-4 py-2 text-sm">
+          <span className="font-medium">
+            {allMatching
+              ? `All ${total.toLocaleString()} matching contacts selected`
+              : `${selectedIds.size.toLocaleString()} selected`}
+          </span>
+          {!allMatching && pageSelected && total > pageIds.length && (
+            <Button variant="ghost" size="sm" onClick={() => setAllMatching(true)}>
+              Select all {total.toLocaleString()} matching
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={resetSelection}>
+            Clear selection
+          </Button>
+          <Button
+            className="ml-auto"
+            variant="destructive"
+            size="sm"
+            onClick={() =>
+              setBulkSelection(
+                allMatching
+                  ? {
+                      match: {
+                        filter: filter.filters.length > 0 ? filter : undefined,
+                      },
+                    }
+                  : { contactIds: [...selectedIds] },
+              )
+            }
+          >
+            <Trash2 className="size-4" />
+            Delete {selectedCount.toLocaleString()}{" "}
+            {selectedCount === 1 ? "contact" : "contacts"}
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           {contacts === null ? (
@@ -157,6 +289,22 @@ export default function ContactsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
+                  <th className="w-10 py-3 pl-4">
+                    <Checkbox
+                      aria-label="Select all contacts on this page"
+                      checked={
+                        allMatching || pageSelected
+                          ? true
+                          : selectedIds.size > 0
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={(checked) => {
+                        setAllMatching(false);
+                        setSelectedIds(checked === true ? new Set(pageIds) : new Set());
+                      }}
+                    />
+                  </th>
                   <th className="px-4 py-3 font-medium">Email</th>
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Tags</th>
@@ -167,6 +315,20 @@ export default function ContactsPage() {
               <tbody>
                 {contacts.map((contact) => (
                   <tr key={contact.contactId} className="border-b last:border-0">
+                    <td className="py-3 pl-4">
+                      <Checkbox
+                        aria-label={`Select ${contact.email}`}
+                        checked={allMatching || selectedIds.has(contact.contactId)}
+                        onCheckedChange={(checked) => {
+                          // Unticking one row leaves "all matching" for this page's ticks.
+                          const next = new Set(allMatching ? pageIds : selectedIds);
+                          if (checked === true) next.add(contact.contactId);
+                          else next.delete(contact.contactId);
+                          setAllMatching(false);
+                          setSelectedIds(next);
+                        }}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <Link
                         href={`/contacts/${contact.contactId}`}
