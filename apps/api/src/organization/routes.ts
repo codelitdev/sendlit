@@ -65,11 +65,11 @@ import {
   renameTeam,
 } from "../team/queries";
 import { listOrganizationAuditEvents, recordOrganizationAuditEvent } from "./audit";
+import { deleteOrganization } from "./delete";
 import { getOrganizationMailActivity } from "./mail-activity";
 import {
   abandonPendingOrganization,
   addOrganizationMemberByEmail,
-  closeOrganization,
   createOrganization,
   getOrganizationByPublicId,
   getOrganizationMembership,
@@ -355,7 +355,10 @@ const impl = s.router(contract.organizations, {
     return {
       status: 200,
       body: {
-        items: organizations.map(serializeOrganization),
+        items: organizations.map((organization) => ({
+          ...serializeOrganization(organization),
+          role: organization.role,
+        })),
         ownsFreeOrganization: await userOwnsFreeOrganization((req as any).userId),
       },
     };
@@ -473,7 +476,7 @@ const impl = s.router(contract.organizations, {
     );
     if (boundary) return boundary as any;
     try {
-      await closeOrganization(authorization.organization.id, {
+      await deleteOrganization(authorization.organization.id, {
         type: "user",
         id: (req as any).userId,
       });

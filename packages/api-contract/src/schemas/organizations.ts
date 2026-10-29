@@ -10,6 +10,11 @@ export const organizationSchema = z.object({
   updatedAt: z.string(),
 });
 
+/** An organization as listed for the signed-in user, with their role in it. */
+export const organizationListItemSchema = organizationSchema.extend({
+  role: organizationRoleSchema,
+});
+
 export const organizationMemberSchema = z.object({
   userId: z.string(),
   email: z.string().email(),

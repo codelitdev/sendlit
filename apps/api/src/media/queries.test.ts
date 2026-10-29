@@ -118,12 +118,18 @@ describe("media queries", () => {
     ]);
   });
 
-  it("cleans a team's MediaLit files without requiring physical team deletion", async () => {
+  it("deletes a team's MediaLit files and their media rows", async () => {
     const { team } = await seedTeamAndContact(tdb);
+    const { team: otherTeam } = await seedTeamAndContact(tdb);
     const row = await createUploadedMedia({
       teamId: team.id,
       mediaLitId: "media-lit-team",
       url: "https://cdn.test/p/media-lit-team/main.webp",
+    });
+    await createUploadedMedia({
+      teamId: otherTeam.id,
+      mediaLitId: "media-lit-other",
+      url: "https://cdn.test/p/media-lit-other/main.webp",
     });
     await replaceMediaReferencesForResource({
       teamId: team.id,
@@ -135,11 +141,45 @@ describe("media queries", () => {
       mediaRows: [row],
     });
 
-    await deleteTeamMediaFiles(team.id);
+    await expect(deleteTeamMediaFiles(team.id)).resolves.toEqual({
+      deleted: 1,
+      failed: 0,
+    });
 
-    expect(deleteMediaFile).toHaveBeenCalledWith("media-lit-team");
-    // Teams are archived in the organization model. Retention/purge is an
-    // explicit later workflow, so this helper must not assume a cascade.
-    expect(await tdb.select().from(mediaReferences)).toHaveLength(1);
+    expect((deleteMediaFile as ReturnType<typeof vi.fn>).mock.calls).toEqual([
+      ["media-lit-team"],
+    ]);
+    expect(await tdb.select().from(mediaReferences)).toHaveLength(0);
+    expect((await tdb.select().from(media)).map((item) => item.mediaLitId)).toEqual([
+      "media-lit-other",
+    ]);
+  });
+
+  it("keeps the media row of a file MediaLit fails to delete", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    await createUploadedMedia({
+      teamId: team.id,
+      mediaLitId: "media-lit-fails",
+      url: "https://cdn.test/p/media-lit-fails/main.webp",
+    });
+    await createUploadedMedia({
+      teamId: team.id,
+      mediaLitId: "media-lit-ok",
+      url: "https://cdn.test/p/media-lit-ok/main.webp",
+    });
+    (deleteMediaFile as ReturnType<typeof vi.fn>).mockImplementation(
+      async (id: string) => {
+        if (id === "media-lit-fails") throw new Error("medialit down");
+      },
+    );
+
+    await expect(deleteTeamMediaFiles(team.id)).resolves.toEqual({
+      deleted: 1,
+      failed: 1,
+    });
+    expect((await tdb.select().from(media)).map((item) => item.mediaLitId)).toEqual([
+      "media-lit-fails",
+    ]);
+    (deleteMediaFile as ReturnType<typeof vi.fn>).mockReset();
   });
 });

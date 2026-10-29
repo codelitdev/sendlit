@@ -1,6 +1,7 @@
 import { and, count, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { media, mediaReferences } from "../db/schema";
+import { captureError } from "../observability";
 import { deleteMedia as deleteMediaFile } from "./service";
 
 export type Media = typeof media.$inferSelect;
@@ -274,13 +275,34 @@ export async function deleteUnusedMedia(
   return "deleted";
 }
 
-export async function deleteTeamMediaFiles(teamId: string): Promise<void> {
+/** Deletes every MediaLit file of a team and its `media` rows (their
+ * references cascade). A file MediaLit fails to delete keeps its row so a
+ * later cleanup can retry it (#157); the error goes to `captureError`. */
+export async function deleteTeamMediaFiles(
+  teamId: string,
+): Promise<{ deleted: number; failed: number }> {
   const rows = await db
-    .select({ mediaLitId: media.mediaLitId })
+    .select({ id: media.id, mediaLitId: media.mediaLitId })
     .from(media)
     .where(eq(media.teamId, teamId));
 
+  let deleted = 0;
+  let failed = 0;
   for (const row of rows) {
-    await deleteMediaFile(row.mediaLitId);
+    try {
+      await deleteMediaFile(row.mediaLitId);
+    } catch (error) {
+      failed += 1;
+      captureError({
+        error,
+        source: "media.delete_team_files",
+        teamId,
+        context: { error_code: "medialit_delete_failed" },
+      });
+      continue;
+    }
+    await db.delete(media).where(and(eq(media.teamId, teamId), eq(media.id, row.id)));
+    deleted += 1;
   }
+  return { deleted, failed };
 }

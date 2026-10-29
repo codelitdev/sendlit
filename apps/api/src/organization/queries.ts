@@ -125,9 +125,9 @@ export async function getOrganizationMembership(
 
 export async function listOrganizationsForUser(
   userId: string,
-): Promise<Organization[]> {
+): Promise<Array<Organization & { role: OrganizationRole }>> {
   const rows = await db
-    .select({ organization: organizations })
+    .select({ organization: organizations, role: organizationMembers.role })
     .from(organizationMembers)
     .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
     .where(
@@ -136,7 +136,10 @@ export async function listOrganizationsForUser(
         inArray(organizations.status, ["pending_payment", "active", "suspended"]),
       ),
     );
-  return rows.map((row) => row.organization);
+  return rows.map((row) => ({
+    ...row.organization,
+    role: row.role as OrganizationRole,
+  }));
 }
 
 export async function createOrganization(
