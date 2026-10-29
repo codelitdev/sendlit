@@ -7,6 +7,22 @@ import { Button } from "@/components/ui/codelit/button";
 
 const percent = (value: unknown) => `${(Number(value) * 100).toFixed(2)}%`;
 
+/** Mirrors `renderErrorReason` in the API's automation/sending-health.ts. */
+function renderErrorReason(code: string): string {
+  switch (code) {
+    case "footer_render_context_required":
+      return "The workspace has no mailing address for the footer.";
+    case "footer_render_failed":
+      return "The footer with your mailing address couldn't be built.";
+    case "footer_required":
+    case "footer_not_allowed":
+    case "invalid_footer":
+      return "The email's footer block is missing or invalid.";
+    default:
+      return `The email's content couldn't be built (${code}).`;
+  }
+}
+
 /** Why SendLit paused a running broadcast or sequence (#25), with a way to
  * resume once the team has dealt with it. */
 export function AutoPauseBanner({
@@ -27,13 +43,18 @@ export function AutoPauseBanner({
         ? `${percent(pause.complaintRate)} of recipients marked it as spam (the limit is 0.08%).`
         : pause.reason === "consecutive_failures"
           ? "Several emails in a row failed to send."
-          : `Your email provider refused to send: ${pause.error ?? "unknown error"}.`;
+          : pause.reason === "render_error"
+            ? renderErrorReason(pause.error ?? "")
+            : `Your email provider refused to send: ${pause.error ?? "unknown error"}.`;
+  const next =
+    pause.reason === "render_error"
+      ? "Check your mailing address in Settings and the email's content"
+      : "Clean your list or fix your email provider";
   return (
     <Banner variant="warning" className="mb-4 flex items-center justify-between gap-3">
       <span>
-        Paused automatically {new Date(pause.at).toLocaleString()}: {why} Clean your
-        list or fix your email provider, then resume. Emails that haven&apos;t gone out
-        yet are still queued.
+        Paused automatically {new Date(pause.at).toLocaleString()}: {why} {next}, then
+        resume. Emails that haven&apos;t gone out yet are still queued.
       </span>
       <Button size="sm" onClick={onResume} disabled={resuming}>
         <Play className="size-4" />

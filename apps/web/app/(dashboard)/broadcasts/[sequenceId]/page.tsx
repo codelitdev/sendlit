@@ -291,6 +291,11 @@ export default function BroadcastEditorPage({
     sequence.status === "paused" && Boolean(sequence.report?.autoPause);
   const editable =
     (sequence.status === "draft" || sequence.status === "paused") && !autoPaused;
+  // Except its content when the pause was because the email couldn't be built:
+  // fixing it is how the broadcast gets going again. Its audience and schedule
+  // stay locked.
+  const contentEditable =
+    editable || (autoPaused && sequence.report?.autoPause?.reason === "render_error");
 
   return (
     <ScrollablePage>
@@ -495,7 +500,7 @@ export default function BroadcastEditorPage({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Content</CardTitle>
-              {editable && (
+              {contentEditable && (
                 <Button size="sm" variant="outline" asChild>
                   <Link href={`/editor/broadcasts/${sequenceId}`}>
                     <Pencil className="size-4" />

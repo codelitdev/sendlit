@@ -182,7 +182,7 @@ describe("processOngoingSequence", () => {
     expect(outbound.providerMessageId).toBe("0100018f-ses-id-000000");
   });
 
-  it("rejects corrupted marketing content without a final managed footer before transport", async () => {
+  it("pauses on corrupted marketing content without a final managed footer, before transport", async () => {
     const { team, contact } = await seedTeamAndContact(tdb);
     const { sequenceRow, emailRows } = await seedSequence(tdb, {
       teamId: team.id,
@@ -209,9 +209,18 @@ describe("processOngoingSequence", () => {
       contactId: contact.id,
     });
 
-    await expect(processOngoingSequence(row.id)).rejects.toThrow("footer_required");
+    await processOngoingSequence(row.id);
     expect(mockedSendMail).not.toHaveBeenCalled();
     expect(await tdb.select().from(emailDeliveries)).toHaveLength(0);
+    const [paused] = await tdb
+      .select()
+      .from(sequences)
+      .where(eq(sequences.id, sequenceRow.id));
+    expect(paused.status).toBe("paused");
+    expect((paused.report as any).autoPause).toMatchObject({
+      reason: "render_error",
+      error: "footer_required",
+    });
   });
 
   it("skips a suppressed recipient without sending or recording a delivery", async () => {

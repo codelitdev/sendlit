@@ -25,7 +25,8 @@ export type AutoPauseReason =
   | "bounce_rate"
   | "complaint_rate"
   | "consecutive_failures"
-  | "esp_error";
+  | "esp_error"
+  | "render_error";
 
 export type SequenceDeliveryRates = {
   sent: number;
@@ -97,6 +98,22 @@ const PERCENT = (value: number) => `${(value * 100).toFixed(2)}%`;
  * happens once) and tells the organization's owners why. Its remaining
  * deliveries stay queued and continue when it is resumed.
  */
+/** Why a `render_error` auto-pause happened, in words for the team. */
+export function renderErrorReason(code: string): string {
+  switch (code) {
+    case "footer_render_context_required":
+      return "the workspace has no mailing address for the footer";
+    case "footer_render_failed":
+      return "the footer with your mailing address couldn't be built";
+    case "footer_required":
+    case "footer_not_allowed":
+    case "invalid_footer":
+      return "the email's footer block is missing or invalid";
+    default:
+      return `the email's content couldn't be built (${code})`;
+  }
+}
+
 export async function autoPauseSequence(
   sequence: Pick<
     typeof sequences.$inferSelect,
@@ -141,11 +158,17 @@ export async function autoPauseSequence(
           ? `${PERCENT(Number(details.complaintRate))} of recipients marked it as spam`
           : reason === "consecutive_failures"
             ? "several emails in a row failed to send"
-            : `your email provider refused to send (${String(details.error ?? "")})`;
+            : reason === "render_error"
+              ? renderErrorReason(String(details.error ?? ""))
+              : `your email provider refused to send (${String(details.error ?? "")})`;
+    const next =
+      reason === "render_error"
+        ? "Check your mailing address in Settings and the email's content, then resume it from SendLit"
+        : "Sending more would hurt your sender reputation. Check your list and your email provider, then resume it from SendLit";
     await notifyOrganizationOwners(
       team.organizationId,
       `Paused: "${sequence.title}"`,
-      `SendLit paused the ${what} "${sequence.title}" in ${team.name} because ${why}. Sending more would hurt your sender reputation. Check your list and your email provider, then resume it from SendLit; emails that haven't gone out yet are still queued.`,
+      `SendLit paused the ${what} "${sequence.title}" in ${team.name} because ${why}. ${next}; emails that haven't gone out yet are still queued.`,
     ).catch(() => undefined);
   }
   return true;

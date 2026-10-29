@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { ParseError, RenderError, TokenizationError } from "liquidjs";
 import { recordPacedSend } from "../abuse/telemetry";
 import { commitSendReservation, releaseSendReservation } from "../billing/entitlements";
 import { sequenceBounceLimit } from "../config/constants";
@@ -25,6 +26,7 @@ import {
 import { isRecipientSuppressed } from "../delivery-feedback/suppression-queries";
 import { renderCampaignHtml } from "../mail/campaign";
 import { quotaExhaustionDeferral, SendDeferredError } from "../mail/rate-limit";
+import { EmailRenderError } from "../mail/render";
 import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
 import { getOrCreateContentVersion } from "../sequences/content-versions";
@@ -32,6 +34,7 @@ import logger from "../services/log";
 import { withoutProviderTracking } from "../settings/esp/provider-capabilities";
 import { trackingOriginForTeam } from "../settings/tracking-domain/queries";
 import { getTeam } from "../team/queries";
+import { TemplateValidationError } from "../templates/validation";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders, isTestAddress } from "../utils/mail";
 import {
@@ -293,26 +296,85 @@ async function attemptMailSending({
   // NOTE: these ids must stay **public** — they get embedded into the
   // outgoing email's tracking pixel/links. `ongoingSequence.sequenceId` is
   // the *internal* id; use `sequence.sequenceId` (public) instead.
-  const contentWithTrackedLinks = await renderCampaignHtml({
-    team,
-    content: email.content,
-    contentVersionId: contentVersion.versionId,
-    subscriber: {
-      email: contact.email,
-      name: contact.name,
-      tags: contact.tags,
-    },
-    ids: {
-      contactId: contact.contactId,
-      sequenceId: sequence.sequenceId,
-      emailId: email.emailId,
-    },
-    unsubscribeToken: contact.unsubscribeToken,
-    publication: sequence.type === "broadcast" ? sequence : null,
-    viewInBrowser: sequence.viewInBrowser,
-    event: ongoingSequence.triggerEvent?.properties,
-    eventId: ongoingSequence.triggerEvent?.eventId || undefined,
-  });
+  const ids = {
+    contactId: contact.contactId,
+    sequenceId: sequence.sequenceId,
+    emailId: email.emailId,
+  };
+  let contentWithTrackedLinks: string;
+  try {
+    contentWithTrackedLinks = await renderCampaignHtml({
+      team,
+      content: email.content,
+      contentVersionId: contentVersion.versionId,
+      subscriber: {
+        email: contact.email,
+        name: contact.name,
+        tags: contact.tags,
+      },
+      ids,
+      unsubscribeToken: contact.unsubscribeToken,
+      publication: sequence.type === "broadcast" ? sequence : null,
+      viewInBrowser: sequence.viewInBrowser,
+      event: ongoingSequence.triggerEvent?.properties,
+      eventId: ongoingSequence.triggerEvent?.eventId || undefined,
+    });
+  } catch (err: any) {
+    logger.error(
+      {
+        error: err.message,
+        sequence_id: sequence.sequenceId,
+        contactId: contact.contactId,
+      },
+      "attemptMailSending render failed",
+    );
+    // Content or footer-settings problems fail the same way for every
+    // recipient until the team fixes them, so retrying can't help and
+    // dropping recipients would lose them. Pause the whole send instead: the
+    // team is notified and everyone stays queued for when it is resumed. A
+    // Liquid runtime error can come from the content (e.g. `{% include %}`)
+    // or from this contact's data, so it counts as content-wide only if the
+    // email also fails to render without any contact data. Any other error
+    // (a database blip while rendering) is transient and is simply retried.
+    const contentWide =
+      isPermanentRenderError(err) ||
+      (err instanceof RenderError &&
+        !(await rendersWithoutContactData(team, email.content, ids)));
+    const pauseSend = async () => {
+      const paused = await autoPauseSequence(sequence, "render_error", {
+        error: String(err?.message ?? err).slice(0, 300),
+      });
+      if (paused || (await isSequencePaused(sequence.id))) {
+        throw new SequencePausedError();
+      }
+      throw err;
+    };
+    if (contentWide) await pauseSend();
+    // The email renders without contact data, so the Liquid error comes from
+    // this contact's data (for example a filter on their name) and only
+    // affects this recipient. Like a suppressed
+    // recipient, skip this email for them, record it, and move on rather
+    // than pausing everyone or retrying forever.
+    if (err instanceof RenderError) {
+      // The probe can't see content errors behind a condition on contact
+      // data (e.g. `{% if subscriber.name %}{% include x %}{% endif %}`), so
+      // a run of recipients failing in a row also counts as content-wide: it
+      // pauses, keeping this recipient and everyone after them queued.
+      const failures = await recordSendFailure(sequence.id);
+      if (failures >= readSendingHealthConfig().consecutiveFailures) {
+        await pauseSend();
+      }
+      await recordRecipientFailed(sequence.id, contact.contactId);
+      captureError({
+        error: err,
+        source: "automation.render_recipient",
+        teamId: team.id,
+        context: { sequence_id: sequence.sequenceId, contact_id: contact.contactId },
+      });
+      return;
+    }
+    throw err;
+  }
 
   let outboundForReservation: { id: string } | null = null;
   try {
@@ -464,6 +526,56 @@ async function attemptMailSending({
     );
     throw err;
   }
+}
+
+/** Whether a render error comes from the email's content or the team's footer
+ * settings, and so repeats for every recipient until the team changes them. */
+export function isPermanentRenderError(err: unknown): boolean {
+  return (
+    err instanceof EmailRenderError ||
+    err instanceof TemplateValidationError ||
+    // Liquid syntax errors break the email for everyone. Liquid errors while
+    // rendering one contact's data (`RenderError`) don't: see attemptMailSending.
+    err instanceof ParseError ||
+    err instanceof TokenizationError
+  );
+}
+
+/** Whether the email renders with a blank subscriber (the public web
+ * version's context). If it doesn't, a Liquid runtime error comes from the
+ * content, not from one contact's data. Transient errors propagate. */
+async function rendersWithoutContactData(
+  team: { id: string; organizationId: string },
+  content: unknown,
+  ids: { contactId: string; sequenceId: string; emailId: string },
+): Promise<boolean> {
+  try {
+    await renderCampaignHtml({
+      team,
+      content,
+      subscriber: { email: "", name: null, tags: [] },
+      ids,
+      unsubscribeToken: "",
+      web: "public",
+    });
+    return true;
+  } catch (probeErr) {
+    if (probeErr instanceof RenderError || isPermanentRenderError(probeErr)) {
+      return false;
+    }
+    throw probeErr;
+  }
+}
+
+/** Appends a contact to the sequence report's failed list in one statement,
+ * so concurrent workers don't overwrite each other's entries. */
+async function recordRecipientFailed(sequenceId: string, publicContactId: string) {
+  await db
+    .update(sequences)
+    .set({
+      report: sql`jsonb_set(coalesce(${sequences.report}, '{}'::jsonb), '{sequence}', coalesce(${sequences.report}->'sequence', '{}'::jsonb) || jsonb_build_object('failed', coalesce(${sequences.report}->'sequence'->'failed', '[]'::jsonb) || to_jsonb(${publicContactId}::text)))`,
+    })
+    .where(eq(sequences.id, sequenceId));
 }
 
 /** Applies the email's on-send action (`tag:add` / `tag:remove`). The mail is
