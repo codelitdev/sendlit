@@ -907,7 +907,7 @@ const espCollectionContract = c.router(
       },
       summary: "Remove a user-managed ESP configuration",
       description:
-        "Removes an ESP with no active or queued dependencies. Draft, paused, and completed sequences are detached first.",
+        "Deletes an ESP that has never carried delivery history; delivery history is never deleted. Draft, paused, and completed sequences are detached first. 409 explains a blocked delete: `esp_is_default` (the team's live default; pick another default or retire it first), `delivery_source_in_use` (a sending sequence or broadcast, or queued email, needs it), or `esp_has_delivery_history` (transactional email, delivery feedback, or grants point at it; retire it instead).",
     },
     domainAuthentication: {
       method: "GET",
@@ -1634,6 +1634,8 @@ const organizationsContract = c.router(
         409: errorSchema,
       },
       summary: "Delete an eligible never-activated organization ESP",
+      description:
+        "Only a never-activated draft with no history is deleted. 409 explains a blocked delete: `esp_retire_instead` (it has been activated; retire it instead), `esp_has_delivery_history`, or `delivery_source_in_use`.",
     },
     getEspFeedback: {
       method: "GET",

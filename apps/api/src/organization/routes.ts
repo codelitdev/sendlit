@@ -40,6 +40,8 @@ import {
   toPublicFeedbackConnection,
 } from "../delivery-feedback/feedback-connection-shape";
 import { warmupState } from "../mail/warmup";
+import { captureEvent } from "../observability";
+import { isEspDeleteBlocker } from "../settings/esp/delete-blockers";
 import {
   canActivateForOrganization,
   requiresFeedbackForOrganization,
@@ -1233,13 +1235,27 @@ const impl = s.router(contract.organizations, {
         "organization_esp.deleted",
         { metadata: { espId: config.espId } },
       );
+      captureEvent({
+        event: "organization_esp_deleted",
+        source: "organizations.esps.delete",
+        properties: {
+          esp_id: config.espId,
+          organization_id: authorization.organization.id,
+        },
+      });
       return { status: 204, body: undefined };
     } catch (error: any) {
-      if (error.message === "delivery_source_in_use") {
-        return {
-          status: 409,
-          body: { error: "delivery_source_in_use" },
-        };
+      if (isEspDeleteBlocker(error.message)) {
+        captureEvent({
+          event: "esp_config_delete_blocked",
+          source: "organizations.esps.delete",
+          properties: {
+            esp_id: config.espId,
+            organization_id: authorization.organization.id,
+            reason: error.message,
+          },
+        });
+        return { status: 409, body: { error: error.message } };
       }
       throw error;
     }

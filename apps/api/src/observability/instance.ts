@@ -79,6 +79,8 @@ const PROPERTY_ALLOWLIST = new Set([
   "media_deleted_count",
   // Bulk contact deletion (contacts/bulk-delete.ts): counts only.
   "suppressed_count",
+  // ESP deletion (settings/esp, organization ESPs): public esp_ id.
+  "esp_id",
 ]);
 
 /** Allowlisted keys that hold opaque record ids. They skip the package's
@@ -96,6 +98,7 @@ const IDENTIFIER_KEYS = new Set([
   "organization_id",
   "form_id",
   "txe_id",
+  "esp_id",
 ]);
 
 /**

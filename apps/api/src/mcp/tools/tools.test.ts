@@ -724,7 +724,37 @@ describe("MCP ESP tools", () => {
     const result = await tools.get("delete_esp")!.handler({ espId: "esp_2" }, auth);
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("in use");
+    expect(result.content[0].text).toContain("queued email");
+  });
+
+  it("explains a blocked delete of the team's default ESP", async () => {
+    const tools = makeToolRegistry(registerEspTools);
+    mocks.getEspConfigByEspId.mockResolvedValue({ id: "internal-2", espId: "esp_2" });
+    mocks.deleteEspConfig.mockRejectedValue(new Error("esp_is_default"));
+
+    const result = await tools.get("delete_esp")!.handler({ espId: "esp_2" }, auth);
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("default delivery source");
+    expect(mocks.invalidateEspTransport).not.toHaveBeenCalled();
+  });
+
+  it("retires a team ESP so it stops sending", async () => {
+    const tools = makeToolRegistry(registerEspTools);
+    const config = { id: "internal-2", espId: "esp_2", name: "Old", status: "active" };
+    mocks.getEspConfigByEspId.mockResolvedValue(config);
+    mocks.transitionEspConfig.mockResolvedValue({ ...config, status: "retired" });
+
+    const result = await tools.get("retire_esp")!.handler({ espId: "esp_2" }, auth);
+
+    expect(mocks.transitionEspConfig).toHaveBeenCalledWith(config, "retire", {
+      cancel: true,
+    });
+    expect(mocks.invalidateEspTransport).toHaveBeenCalledWith("team-1", "internal-2");
+    expect(result.structuredContent).toMatchObject({
+      espId: "esp_2",
+      status: "retired",
+    });
   });
 
   it("tests a specific ESP by espId", async () => {
