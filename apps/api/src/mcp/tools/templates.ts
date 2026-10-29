@@ -256,7 +256,8 @@ export function registerTemplateTools(server: McpToolRegistrar): void {
   server.registerTool(
     "delete_template",
     {
-      description: "Permanently deletes an email template.",
+      description:
+        "Permanently deletes an email template. Its images that no other template or email uses are deleted from the media library, unless a transactional email was sent with it.",
       inputSchema: { templateId: z.string().min(1) },
       outputSchema: successMessageSchema,
       annotations: {

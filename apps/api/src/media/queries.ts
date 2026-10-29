@@ -1,7 +1,8 @@
-import { and, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { media, mediaReferences } from "../db/schema";
+import { emailContentVersions, media, mediaReferences } from "../db/schema";
 import { captureError } from "../observability";
+import { queueMediaLitDeletion } from "./deletion-queue";
 import { deleteMedia as deleteMediaFile } from "./service";
 
 export type Media = typeof media.$inferSelect;
@@ -235,6 +236,9 @@ export async function replaceMediaReferencesForResource({
   );
 }
 
+/** Removes the media references of one or more resources of a type and
+ * returns the ids of the `media` rows they pointed at, so the caller can
+ * pass them to `deleteOrphanedMedia` once the resource itself is gone. */
 export async function deleteMediaReferencesForResource({
   teamId,
   resourceType,
@@ -242,17 +246,131 @@ export async function deleteMediaReferencesForResource({
 }: {
   teamId: string;
   resourceType: MediaReferenceResourceType;
-  resourceInternalId: string;
-}): Promise<void> {
-  await db
+  resourceInternalId: string | string[];
+}): Promise<string[]> {
+  const ids = Array.isArray(resourceInternalId)
+    ? resourceInternalId
+    : [resourceInternalId];
+  if (!ids.length) return [];
+  const removed = await db
     .delete(mediaReferences)
     .where(
       and(
         eq(mediaReferences.teamId, teamId),
         eq(mediaReferences.resourceType, resourceType),
-        eq(mediaReferences.resourceInternalId, resourceInternalId),
+        inArray(mediaReferences.resourceInternalId, ids),
       ),
+    )
+    .returning({ mediaId: mediaReferences.mediaId });
+  return Array.from(new Set(removed.map((row) => row.mediaId)));
+}
+
+export interface MediaPurgeResult {
+  /** Media rows deleted (their MediaLit file deleted or queued). */
+  deleted: number;
+  /** Of those, files MediaLit failed to delete now; queued for retry. */
+  failed: number;
+}
+
+/**
+ * Deletes a MediaLit file whose last `media` row is gone. Another team can
+ * hold a row for the same file (team isolation): then only the row went
+ * and the file stays. When MediaLit fails, the delete is queued for retry
+ * and the error goes to `captureError`; it never fails the caller.
+ */
+async function deleteMediaLitFile(
+  teamId: string,
+  mediaLitId: string,
+  source: string,
+): Promise<"deleted" | "shared" | "queued"> {
+  const [other] = await db
+    .select({ id: media.id })
+    .from(media)
+    .where(eq(media.mediaLitId, mediaLitId))
+    .limit(1);
+  if (other) return "shared";
+  try {
+    await deleteMediaFile(mediaLitId);
+    return "deleted";
+  } catch (error) {
+    captureError({
+      error,
+      source,
+      teamId,
+      context: { error_code: "medialit_delete_failed" },
+    });
+    try {
+      await queueMediaLitDeletion({ teamId, mediaLitId });
+    } catch (queueError) {
+      captureError({
+        error: queueError,
+        source,
+        teamId,
+        context: { error_code: "medialit_delete_queue_failed" },
+      });
+    }
+    return "queued";
+  }
+}
+
+/** Whether mail the team already sent shows this file. Sent content is
+ * kept in `email_content_versions` (what each recipient got and what the
+ * "view in browser" page shows), and inboxes load images by URL. */
+async function usedBySentMail(teamId: string, mediaLitId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: emailContentVersions.id })
+    .from(emailContentVersions)
+    .where(
+      and(
+        eq(emailContentVersions.teamId, teamId),
+        sql`strpos(${emailContentVersions.content}::text, ${`/${mediaLitId}/`}) > 0`,
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+/**
+ * The shared cleanup after a resource's media references are removed
+ * (#157): deletes each given `media` row of the team that now has no
+ * references and isn't shown by sent mail, along with its MediaLit file.
+ * Rows still referenced elsewhere, or used by sent mail, stay in the media
+ * library. Never touches another team's rows.
+ */
+export async function deleteOrphanedMedia(
+  teamId: string,
+  mediaIds: string[],
+): Promise<MediaPurgeResult> {
+  const result: MediaPurgeResult = { deleted: 0, failed: 0 };
+  if (!mediaIds.length) return result;
+
+  const rows = await db
+    .select({ id: media.id, mediaLitId: media.mediaLitId })
+    .from(media)
+    .where(and(eq(media.teamId, teamId), inArray(media.id, mediaIds)));
+  for (const row of rows) {
+    const [referenced] = await db
+      .select({ id: mediaReferences.id })
+      .from(mediaReferences)
+      .where(eq(mediaReferences.mediaId, row.id))
+      .limit(1);
+    if (referenced) continue;
+    if (await usedBySentMail(teamId, row.mediaLitId)) continue;
+
+    const [removed] = await db
+      .delete(media)
+      .where(and(eq(media.teamId, teamId), eq(media.id, row.id)))
+      .returning({ id: media.id });
+    if (!removed) continue;
+    result.deleted += 1;
+    const outcome = await deleteMediaLitFile(
+      teamId,
+      row.mediaLitId,
+      "media.delete_orphaned",
     );
+    if (outcome === "queued") result.failed += 1;
+  }
+  return result;
 }
 
 export async function deleteUnusedMedia(
@@ -275,34 +393,25 @@ export async function deleteUnusedMedia(
   return "deleted";
 }
 
-/** Deletes every MediaLit file of a team and its `media` rows (their
- * references cascade). A file MediaLit fails to delete keeps its row so a
- * later cleanup can retry it (#157); the error goes to `captureError`. */
-export async function deleteTeamMediaFiles(
-  teamId: string,
-): Promise<{ deleted: number; failed: number }> {
+/** Deletes every `media` row of a team (their references cascade) and
+ * its MediaLit files, for team purges (organization and account deletion).
+ * Files another team also uses are kept. A file MediaLit fails to delete is
+ * queued for retry (`failed` counts them) and the error goes to
+ * `captureError`, so the database never points at a missing file. */
+export async function deleteTeamMediaFiles(teamId: string): Promise<MediaPurgeResult> {
   const rows = await db
-    .select({ id: media.id, mediaLitId: media.mediaLitId })
-    .from(media)
-    .where(eq(media.teamId, teamId));
+    .delete(media)
+    .where(eq(media.teamId, teamId))
+    .returning({ mediaLitId: media.mediaLitId });
 
-  let deleted = 0;
-  let failed = 0;
+  const result: MediaPurgeResult = { deleted: rows.length, failed: 0 };
   for (const row of rows) {
-    try {
-      await deleteMediaFile(row.mediaLitId);
-    } catch (error) {
-      failed += 1;
-      captureError({
-        error,
-        source: "media.delete_team_files",
-        teamId,
-        context: { error_code: "medialit_delete_failed" },
-      });
-      continue;
-    }
-    await db.delete(media).where(and(eq(media.teamId, teamId), eq(media.id, row.id)));
-    deleted += 1;
+    const outcome = await deleteMediaLitFile(
+      teamId,
+      row.mediaLitId,
+      "media.delete_team_files",
+    );
+    if (outcome === "queued") result.failed += 1;
   }
-  return { deleted, failed };
+  return result;
 }

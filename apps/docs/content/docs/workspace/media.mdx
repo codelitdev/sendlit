@@ -6,3 +6,11 @@ description: Upload and reuse images in email content.
 The Media library stores images that can be reused by the email editor and templates. Upload an image from **Media**, then select it from the editor’s image controls when composing a broadcast, sequence email, or template.
 
 Media is scoped to the current team. Keep uploads optimized for email and use HTTPS-hosted assets in production. The dashboard applies a configurable maximum upload size; the default is 10 MB.
+
+## When images are deleted
+
+Deleting a template, broadcast, sequence or sequence email also deletes the images it used, unless another template or email still uses them. Images in mail that was already sent are kept, because recipients' inboxes and the "view in browser" page still load them. Those stay in the Media library, where you can delete them yourself.
+
+Removing an image from an email or template while editing does not delete it from the Media library.
+
+Archiving a team keeps its images, so a restored team has them back. Deleting the organization deletes every image of its teams.

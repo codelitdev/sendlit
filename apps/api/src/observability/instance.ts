@@ -75,6 +75,8 @@ const PROPERTY_ALLOWLIST = new Set([
   // Organization deletion (organization/delete.ts): counts only.
   "teams_count",
   "media_failed_count",
+  // Media cleanup on resource deletes (media/queries.ts deleteOrphanedMedia).
+  "media_deleted_count",
   // Bulk contact deletion (contacts/bulk-delete.ts): counts only.
   "suppressed_count",
 ]);

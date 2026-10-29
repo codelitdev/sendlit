@@ -569,6 +569,8 @@ const templatesContract = c.router(
       path: "/templates/:templateId",
       responses: { 204: c.noBody() },
       summary: "Delete an email template",
+      description:
+        "Permanently deletes the template. Its images that no other template or email uses are deleted from the media library and storage, unless a transactional email was sent with the template.",
     },
   },
   { metadata: { tag: "Templates" } },
@@ -620,6 +622,8 @@ const sequencesContract = c.router(
       path: "/sequences/:sequenceId",
       responses: { 204: c.noBody(), 404: errorSchema },
       summary: "Delete a broadcast or sequence",
+      description:
+        "Permanently deletes the broadcast or sequence. Images it uses that nothing else uses are deleted from the media library and storage; images used by sent mail are kept.",
     },
     addEmail: {
       method: "POST",
@@ -672,6 +676,8 @@ const sequencesContract = c.router(
         404: errorSchema,
       },
       summary: "Remove an email from a sequence",
+      description:
+        "Removes the email. Images it uses that nothing else uses are deleted from the media library and storage; images used by sent mail are kept.",
     },
     start: {
       method: "POST",
