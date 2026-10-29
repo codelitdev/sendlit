@@ -190,6 +190,37 @@ selected customers bring their own provider without moving their contacts,
 campaigns, sequences, or API integrations to a new team. Existing sends stay
 pinned to the delivery source selected when they were activated or queued.
 
+## Delete an organization
+
+Only an organization owner can delete an organization. Open **Organizations →
+General**, choose **Delete organization** in the **Danger zone**, type the
+organization's name, and confirm. You return to team selection afterwards.
+
+Cancel a paid plan first. While a subscription is active, or paid through a
+date that hasn't passed yet, deleting fails with `active_subscription_exists`
+and the dialog links to **Plan**. An open checkout blocks it too
+(`billing_checkout_pending`). SendLit doesn't cancel the plan for you, so you
+never lose a paid period by accident.
+
+Deleting an organization:
+
+- closes it, so it disappears for every member, and archives all of its teams;
+- revokes its organization API keys, every team API key, and its sending
+  domains;
+- retires every shared and team-owned mailbox, cancels mail still queued
+  through them, and wipes their stored credentials; and
+- deletes the uploaded media of all its teams from storage. Images in emails
+  that were already sent stop loading.
+
+Billing history, audit activity, delivery reports, and suppressions are kept.
+Suppressions are compliance records: keeping them means an address that
+unsubscribed or complained is never mailed again by mistake.
+
+Deleting can't be undone, and it's available only from a signed-in dashboard
+session (`DELETE /organizations/{organizationId}` with a single-use billing
+action token). Organization API keys, team keys and MCP can't delete an
+organization.
+
 ## Security checklist
 
 - Keep organization API keys on a server; never put them in a browser or a
