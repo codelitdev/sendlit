@@ -7,6 +7,7 @@ import { deleteMedia as deleteMediaFile } from "./service";
 
 export const MEDIA_DELETION_QUEUE = "media-deletion";
 const KEEP_FINISHED_SECONDS = 7 * 24 * 60 * 60;
+const RETRY_DELAY_MS = 60_000;
 
 export type MediaDeletionJobData = { teamId: string; mediaLitId: string };
 
@@ -24,17 +25,19 @@ function mediaDeletionQueue(): Queue<MediaDeletionJobData> {
       removeOnComplete: { age: KEEP_FINISHED_SECONDS },
       removeOnFail: { age: KEEP_FINISHED_SECONDS },
       attempts: 10,
-      backoff: { type: "exponential", delay: 60_000 },
+      backoff: { type: "exponential", delay: RETRY_DELAY_MS },
     },
   });
   return queue;
 }
 
-/** Queues a MediaLit file for deletion. One job per file: queueing the same
- * file twice is a no-op. */
+/** Queues a MediaLit file for deletion, first tried a minute from now (the
+ * inline attempt just failed). One job per file: queueing the same file
+ * twice is a no-op. */
 export async function queueMediaLitDeletion(data: MediaDeletionJobData): Promise<void> {
   await mediaDeletionQueue().add("delete-medialit-file", data, {
     jobId: `medialit-${data.mediaLitId}`,
+    delay: RETRY_DELAY_MS,
   });
 }
 

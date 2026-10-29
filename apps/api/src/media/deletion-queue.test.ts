@@ -42,7 +42,7 @@ describe("media deletion queue", () => {
     expect(mocks.queueAdd).toHaveBeenCalledWith(
       "delete-medialit-file",
       { teamId: "team-1", mediaLitId: "lit-1" },
-      { jobId: "medialit-lit-1" },
+      { jobId: "medialit-lit-1", delay: 60_000 },
     );
   });
 
