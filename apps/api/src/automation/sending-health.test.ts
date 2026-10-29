@@ -208,6 +208,24 @@ describe("auto-pause (#25)", () => {
     expect(await tdb.select().from(schema.ongoingSequences)).toHaveLength(1);
   });
 
+  it("pauses, instead of skipping everyone, on a Liquid runtime error from the content", async () => {
+    const { sequenceRow, rows } = await broadcastTo(2);
+    // Fails at render time for every recipient, whatever their data.
+    await tdb
+      .update(schema.sequenceEmails)
+      .set({ content: emailContent({ text: "Hi {% include header %}" }) as any })
+      .where(eq(schema.sequenceEmails.sequenceId, sequenceRow.id));
+
+    for (const row of rows) await processOngoingSequence(row.id);
+
+    expect(mockedSendMail).not.toHaveBeenCalled();
+    const paused = await sequenceById(sequenceRow.id);
+    expect(paused.status).toBe("paused");
+    expect((paused.report as any).autoPause.reason).toBe("render_error");
+    expect((paused.report as any).sequence?.failed ?? []).toEqual([]);
+    expect(await tdb.select().from(schema.ongoingSequences)).toHaveLength(2);
+  });
+
   it("skips only the recipient whose own data breaks the Liquid render", async () => {
     const { sequenceRow, rows } = await broadcastTo(2);
     await tdb

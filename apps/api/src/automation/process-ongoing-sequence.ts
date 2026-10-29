@@ -277,6 +277,11 @@ async function attemptMailSending({
   // NOTE: these ids must stay **public** — they get embedded into the
   // outgoing email's tracking pixel/links. `ongoingSequence.sequenceId` is
   // the *internal* id; use `sequence.sequenceId` (public) instead.
+  const ids = {
+    contactId: contact.contactId,
+    sequenceId: sequence.sequenceId,
+    emailId: email.emailId,
+  };
   let contentWithTrackedLinks: string;
   try {
     contentWithTrackedLinks = await renderCampaignHtml({
@@ -288,11 +293,7 @@ async function attemptMailSending({
         name: contact.name,
         tags: contact.tags,
       },
-      ids: {
-        contactId: contact.contactId,
-        sequenceId: sequence.sequenceId,
-        emailId: email.emailId,
-      },
+      ids,
       unsubscribeToken: contact.unsubscribeToken,
       publication: sequence.type === "broadcast" ? sequence : null,
     });
@@ -308,10 +309,16 @@ async function attemptMailSending({
     // Content or footer-settings problems fail the same way for every
     // recipient until the team fixes them, so retrying can't help and
     // dropping recipients would lose them. Pause the whole send instead: the
-    // team is notified and everyone stays queued for when it is resumed. Any
-    // other error (a database blip while rendering) is transient and is
-    // simply retried.
-    if (isPermanentRenderError(err)) {
+    // team is notified and everyone stays queued for when it is resumed. A
+    // Liquid runtime error can come from the content (e.g. `{% include %}`)
+    // or from this contact's data, so it counts as content-wide only if the
+    // email also fails to render without any contact data. Any other error
+    // (a database blip while rendering) is transient and is simply retried.
+    const contentWide =
+      isPermanentRenderError(err) ||
+      (err instanceof RenderError &&
+        !(await rendersWithoutContactData(team, email.content, ids)));
+    if (contentWide) {
       const paused = await autoPauseSequence(sequence, "render_error", {
         error: String(err?.message ?? err).slice(0, 300),
       });
@@ -320,8 +327,9 @@ async function attemptMailSending({
       }
       throw err;
     }
-    // A Liquid error while rendering this contact's data (for example a
-    // filter on their name) only affects this recipient. Like a suppressed
+    // The email renders without contact data, so the Liquid error comes from
+    // this contact's data (for example a filter on their name) and only
+    // affects this recipient. Like a suppressed
     // recipient, skip this email for them, record it, and move on rather
     // than pausing everyone or retrying forever.
     if (err instanceof RenderError) {
@@ -500,6 +508,32 @@ export function isPermanentRenderError(err: unknown): boolean {
     err instanceof ParseError ||
     err instanceof TokenizationError
   );
+}
+
+/** Whether the email renders with a blank subscriber (the public web
+ * version's context). If it doesn't, a Liquid runtime error comes from the
+ * content, not from one contact's data. Transient errors propagate. */
+async function rendersWithoutContactData(
+  team: { id: string; organizationId: string },
+  content: unknown,
+  ids: { contactId: string; sequenceId: string; emailId: string },
+): Promise<boolean> {
+  try {
+    await renderCampaignHtml({
+      team,
+      content,
+      subscriber: { email: "", name: null, tags: [] },
+      ids,
+      unsubscribeToken: "",
+      web: "public",
+    });
+    return true;
+  } catch (probeErr) {
+    if (probeErr instanceof RenderError || isPermanentRenderError(probeErr)) {
+      return false;
+    }
+    throw probeErr;
+  }
 }
 
 /** Appends a contact to the sequence report's failed list in one statement,
