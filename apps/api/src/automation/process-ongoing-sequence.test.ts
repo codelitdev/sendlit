@@ -214,6 +214,52 @@ describe("processOngoingSequence", () => {
     expect(await tdb.select().from(emailDeliveries)).toHaveLength(0);
   });
 
+  it("counts a render failure toward the bounce limit instead of retrying forever", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const { sequenceRow, emailRows } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1", subject: "Broken" }],
+    });
+    await tdb
+      .update(sequenceEmails)
+      .set({
+        content: {
+          style: {},
+          meta: {},
+          content: [{ blockType: "text", settings: { content: "No footer" } }],
+        },
+      })
+      .where(eq(sequenceEmails.id, emailRows[0].id));
+    const row = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+
+    await expect(processOngoingSequence(row.id)).rejects.toThrow("footer_required");
+    const [after] = await tdb
+      .select()
+      .from(ongoingSequences)
+      .where(eq(ongoingSequences.id, row.id));
+    expect(after.retryCount).toBe(1);
+
+    // sequenceBounceLimit defaults to 3: two more failures drop the row.
+    await tdb
+      .update(ongoingSequences)
+      .set({ retryCount: 2 })
+      .where(eq(ongoingSequences.id, row.id));
+    await expect(processOngoingSequence(row.id)).rejects.toThrow("footer_required");
+    expect(
+      await tdb.select().from(ongoingSequences).where(eq(ongoingSequences.id, row.id)),
+    ).toHaveLength(0);
+    const [seqAfter] = await tdb
+      .select()
+      .from(sequences)
+      .where(eq(sequences.id, sequenceRow.id));
+    expect((seqAfter.report as any).sequence.failed).toContain(contact.contactId);
+    expect(mockedSendMail).not.toHaveBeenCalled();
+  });
+
   it("skips a suppressed recipient without sending or recording a delivery", async () => {
     const { team, contact } = await seedTeamAndContact(tdb);
     const { sequenceRow } = await seedSequence(tdb, {

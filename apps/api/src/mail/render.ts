@@ -223,17 +223,21 @@ export function discoverRequiredTemplateVariables(source: string): string[] {
 
 /** True when every non-empty mailing-address line appears in rendered text.
  * HTML email pipelines collapse raw newlines and the footer emits `<br>`, so
- * a literal `\n`-preserving `includes` check is not reliable. */
+ * a literal `\n`-preserving `includes` check is not reliable. The renderer
+ * may also wrap a long line with a newline and indentation, so whitespace is
+ * collapsed on both sides before comparing. */
 export function mailingAddressAppearsInText(
   text: string,
   mailingAddress: string,
 ): boolean {
+  const collapse = (value: string) => value.replace(/\s+/g, " ").trim();
   const lines = mailingAddress
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map(collapse)
     .filter((line) => line.length > 0);
   if (lines.length === 0) return false;
-  return lines.every((line) => text.includes(line));
+  const normalizedText = collapse(text);
+  return lines.every((line) => normalizedText.includes(line));
 }
 
 /**

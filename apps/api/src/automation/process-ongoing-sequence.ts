@@ -274,23 +274,32 @@ async function attemptMailSending({
   // NOTE: these ids must stay **public** — they get embedded into the
   // outgoing email's tracking pixel/links. `ongoingSequence.sequenceId` is
   // the *internal* id; use `sequence.sequenceId` (public) instead.
-  const contentWithTrackedLinks = await renderCampaignHtml({
-    team,
-    content: email.content,
-    contentVersionId: contentVersion.versionId,
-    subscriber: {
-      email: contact.email,
-      name: contact.name,
-      tags: contact.tags,
-    },
-    ids: {
-      contactId: contact.contactId,
-      sequenceId: sequence.sequenceId,
-      emailId: email.emailId,
-    },
-    unsubscribeToken: contact.unsubscribeToken,
-    publication: sequence.type === "broadcast" ? sequence : null,
-  });
+  let contentWithTrackedLinks: string;
+  try {
+    contentWithTrackedLinks = await renderCampaignHtml({
+      team,
+      content: email.content,
+      contentVersionId: contentVersion.versionId,
+      subscriber: {
+        email: contact.email,
+        name: contact.name,
+        tags: contact.tags,
+      },
+      ids: {
+        contactId: contact.contactId,
+        sequenceId: sequence.sequenceId,
+        emailId: email.emailId,
+      },
+      unsubscribeToken: contact.unsubscribeToken,
+      publication: sequence.type === "broadcast" ? sequence : null,
+    });
+  } catch (err: any) {
+    // A render failure (e.g. the managed footer check) is permanent for this
+    // recipient until the content or settings change. Count it like any other
+    // failed attempt so it eventually stops instead of retrying forever.
+    await recordFailedAttempt({ sequence, contact, ongoingSequence });
+    throw err;
+  }
 
   let outboundForReservation: { id: string } | null = null;
   try {
@@ -402,36 +411,12 @@ async function attemptMailSending({
       });
       throw new SequencePausedError();
     }
-    const retryCount = ongoingSequence.retryCount + 1;
-    if (retryCount >= sequenceBounceLimit) {
-      if (outboundForReservation) {
-        await releaseSendReservation(outboundForReservation.id).catch(() => undefined);
-      }
-      await db
-        .update(sequences)
-        .set({
-          report: {
-            ...(sequence.report as any),
-            sequence: {
-              ...(sequence.report as any)?.sequence,
-              failed: [
-                ...((sequence.report as any)?.sequence?.failed || []),
-                contact.contactId,
-              ],
-            },
-          },
-        })
-        .where(eq(sequences.id, sequence.id));
-      await deleteOngoingSequence(ongoingSequence.id);
-    } else {
-      // Keep the reservation through a transient retry. It expires and
-      // is reopened atomically by reserveSend, preventing a retry from
-      // bypassing the monthly quota.
-      await db
-        .update(ongoingSequences)
-        .set({ retryCount })
-        .where(eq(ongoingSequences.id, ongoingSequence.id));
-    }
+    await recordFailedAttempt({
+      sequence,
+      contact,
+      ongoingSequence,
+      outboundId: outboundForReservation?.id,
+    });
     logger.error(
       {
         error: err.message,
@@ -441,6 +426,52 @@ async function attemptMailSending({
       "attemptMailSending failed",
     );
     throw err;
+  }
+}
+
+/** Counts one failed attempt for this recipient. At `sequenceBounceLimit` the
+ * recipient is recorded as failed and dropped; before that the row stays due
+ * for another try. */
+async function recordFailedAttempt({
+  sequence,
+  contact,
+  ongoingSequence,
+  outboundId,
+}: {
+  sequence: typeof sequences.$inferSelect;
+  contact: NonNullable<Awaited<ReturnType<typeof getContactById>>>;
+  ongoingSequence: OngoingSequenceRow;
+  outboundId?: string;
+}) {
+  const retryCount = ongoingSequence.retryCount + 1;
+  if (retryCount >= sequenceBounceLimit) {
+    if (outboundId) {
+      await releaseSendReservation(outboundId).catch(() => undefined);
+    }
+    await db
+      .update(sequences)
+      .set({
+        report: {
+          ...(sequence.report as any),
+          sequence: {
+            ...(sequence.report as any)?.sequence,
+            failed: [
+              ...((sequence.report as any)?.sequence?.failed || []),
+              contact.contactId,
+            ],
+          },
+        },
+      })
+      .where(eq(sequences.id, sequence.id));
+    await deleteOngoingSequence(ongoingSequence.id);
+  } else {
+    // Keep the reservation through a transient retry. It expires and
+    // is reopened atomically by reserveSend, preventing a retry from
+    // bypassing the monthly quota.
+    await db
+      .update(ongoingSequences)
+      .set({ retryCount })
+      .where(eq(ongoingSequences.id, ongoingSequence.id));
   }
 }
 

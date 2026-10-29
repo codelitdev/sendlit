@@ -65,6 +65,28 @@ describe("mail render helpers", () => {
     expect(html).toContain('href="https://sendlit.test/unsubscribe/token"');
   });
 
+  it("renders a long single-line mailing address that the footer wraps", async () => {
+    const content = {
+      ...defaultEmail,
+      content: [
+        { blockType: "text" as const, settings: { content: "Hello" } },
+        createFooterEmailBlock(),
+      ],
+    };
+    const address =
+      "CodeLitDev Pvt Ltd, F-102 SHANTIDHAM BLK-A, LIMBODI, Indore, Madhya Pradesh, India";
+
+    const html = await renderEmailContent({
+      content,
+      variables: {
+        address,
+        unsubscribe_link: "https://sendlit.test/unsubscribe/token",
+      },
+    });
+
+    expect(html).toContain("Madhya Pradesh, India");
+  });
+
   it("renders multi-line mailing addresses without footer_render_failed", async () => {
     const content = {
       ...defaultEmail,
