@@ -44,6 +44,7 @@ template or transactional delivery.
 | `422`  | `event_name_limit_reached`   | The event name is new and the team already has 500. Nothing was stored.                                     |
 | `409`  | `event_definition_exists`    | An event with that name is already registered.                                                              |
 | `409`  | `event_definition_in_use`    | The event can't be deleted while a sequence uses it as its trigger.                                         |
+| `409`  | `sequence_active`            | An active sequence, or a sending broadcast, can't be deleted. Pause it first.                               |
 | `404`  | `event_definition_not_found` | No event with that name is registered.                                                                      |
 | `400`  | `invalid_trigger_type`       | The trigger type isn't allowed for this broadcast or sequence.                                              |
 | `400`  | `invalid_trigger_data`       | The trigger value is invalid, for example an event name over 128 characters or starting with `$`.          |

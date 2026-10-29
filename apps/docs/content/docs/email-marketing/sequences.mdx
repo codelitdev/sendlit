@@ -119,3 +119,28 @@ paused or before it is first activated, including custom events, are not
 replayed when it is activated. Sequences pause themselves on high
 bounce or complaint rates like
 [broadcasts](/email-marketing/broadcasts#automatic-pause-on-bounces-and-complaints).
+
+## Delete a sequence
+
+Delete a sequence from the **⋯** menu on the Sequences list, or with
+**Delete** on the sequence page. An active sequence can't be deleted: pause it
+first, so no contact is dropped in the middle of a send. The API answers
+`409 sequence_active`.
+
+Deleting a sequence is permanent and can't be undone. The confirmation says
+what goes with it:
+
+- Contacts still enrolled leave the sequence and get no more of its emails.
+  The contacts themselves are kept.
+- Its stats go too: the delivery, open and click history of every email it
+  sent. The outbound message log and the suppression list are kept, so
+  bounces and unsubscribes still protect your sender reputation.
+- Images only this sequence used are deleted from the media library. Images in
+  emails it already sent are kept, because inboxes still load them.
+
+If you might want the numbers later, export or note them before you delete.
+To stop a sequence but keep its history, pause it instead.
+
+With the API, `GET /sequences/{sequenceId}/deletion-preview` returns the
+enrolled-contact and sent-email counts, then `DELETE /sequences/{sequenceId}`
+deletes it. MCP clients use `preview_sequence_deletion` and `delete_sequence`.
