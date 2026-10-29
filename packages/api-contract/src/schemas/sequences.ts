@@ -290,6 +290,24 @@ export const sequenceStatsSchema = z.object({
   complaintRate: z.number().optional(),
 });
 
+export const sequenceDeletionPreviewSchema = z.object({
+  status: z.string().describe("The broadcast or sequence's current status"),
+  blocker: z
+    .enum(["sequence_active"])
+    .nullable()
+    .describe(
+      "Why it can't be deleted right now (sequence_active: pause it first), or null when it can",
+    ),
+  enrolledCount: z
+    .number()
+    .int()
+    .describe("Contacts currently in the sequence; deleting it stops their emails"),
+  emailsSentCount: z
+    .number()
+    .int()
+    .describe("Emails it has sent; their delivery, open and click history is deleted"),
+});
+
 export const listSubscribersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).optional(),

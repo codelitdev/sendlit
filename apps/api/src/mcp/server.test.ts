@@ -67,11 +67,11 @@ describe("MCP server", () => {
     expect(client.getProtocolEra()).toBe("modern");
 
     const result = await client.listTools();
-    expect(result.tools).toHaveLength(109);
+    expect(result.tools).toHaveLength(111);
     expect(result.tools.map((tool) => tool.name).sort()).toEqual(
       Object.keys(listMcpToolPolicies()).sort(),
     );
-    expect(new Set(result.tools.map((tool) => tool.name)).size).toBe(109);
+    expect(new Set(result.tools.map((tool) => tool.name)).size).toBe(111);
     expect(result.ttlMs).toBe(300_000);
     expect(result.cacheScope).toBe("private");
     for (const tool of result.tools) {

@@ -17,6 +17,8 @@ const mocks = {
   countSelection: vi.fn(),
 
   createSequence: vi.fn(),
+  deleteSequence: vi.fn(),
+  getSequenceDeletionImpact: vi.fn(),
   getSequenceBySequenceId: vi.fn(),
   getEmailSentCount: vi.fn(),
   getSequenceOpenRate: vi.fn(),
@@ -147,6 +149,8 @@ mock.module("../../sequences/queries", () => ({
   addMailToSequence: mocks.addMailToSequence,
   updateMailInSequence: mocks.updateMailInSequence,
   deleteMailFromSequence: mocks.deleteMailFromSequence,
+  deleteSequence: mocks.deleteSequence,
+  getSequenceDeletionImpact: mocks.getSequenceDeletionImpact,
   startSequence: mocks.startSequence,
   pauseSequence: mocks.pauseSequence,
 }));
@@ -496,6 +500,54 @@ describe("MCP contact tools", () => {
 });
 
 describe("MCP sequence tools", () => {
+  it("explains why an active sequence can't be deleted", async () => {
+    const tools = makeToolRegistry(registerSequenceTools);
+    mocks.deleteSequence.mockRejectedValueOnce(new Error("sequence_active"));
+
+    const result = await tools
+      .get("delete_sequence")!
+      .handler({ sequenceId: "seq-1" }, auth);
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Pause it before deleting it");
+    expect(tools.get("delete_sequence")!.config.annotations.destructiveHint).toBe(true);
+  });
+
+  it("deletes a sequence of the caller's team", async () => {
+    const tools = makeToolRegistry(registerSequenceTools);
+    mocks.deleteSequence.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    const deleted = await tools
+      .get("delete_sequence")!
+      .handler({ sequenceId: "seq-1" }, auth);
+    expect(deleted.structuredContent).toEqual({ message: "Sequence deleted." });
+    expect(mocks.deleteSequence).toHaveBeenCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq-1",
+    });
+    await expect(
+      tools.get("delete_sequence")!.handler({ sequenceId: "seq-2" }, auth),
+    ).resolves.toEqual(NOT_FOUND);
+  });
+
+  it("previews a sequence deletion", async () => {
+    const tools = makeToolRegistry(registerSequenceTools);
+    const preview = {
+      status: "paused",
+      blocker: null,
+      enrolledCount: 2,
+      emailsSentCount: 5,
+    };
+    mocks.getSequenceDeletionImpact.mockResolvedValueOnce(preview);
+
+    const result = await tools
+      .get("preview_sequence_deletion")!
+      .handler({ sequenceId: "seq-1" }, auth);
+
+    expect(result.structuredContent).toEqual(preview);
+    expect(mocks.getSequenceDeletionImpact).toHaveBeenCalledWith("team-1", "seq-1");
+  });
+
   it("validates non-empty template IDs on sequence creation/add-email inputs", () => {
     const tools = makeToolRegistry(registerSequenceTools);
 
