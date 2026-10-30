@@ -4,7 +4,6 @@ import {
   asc,
   count,
   eq,
-  ilike,
   inArray,
   isNotNull,
   isNull,
@@ -35,6 +34,7 @@ import {
   sequenceDelayBetweenMailsInMillis,
 } from "../config/constants";
 import { responses } from "../config/strings";
+import { contactSearchCondition } from "../contacts/queries";
 import {
   type ContactFilterWithAggregator,
   sequenceAudience,
@@ -521,7 +521,10 @@ export async function addMailToSequence({
 
   const [row] = await db
     .update(sequences)
-    .set({ emailsOrder: [...sequence.emailsOrder, email.emailId] })
+    .set({
+      emailsOrder: [...sequence.emailsOrder, email.emailId],
+      updatedAt: new Date(),
+    })
     .where(eq(sequences.id, sequence.id))
     .returning();
 
@@ -736,6 +739,7 @@ export async function deleteMailFromSequence({
     .update(sequences)
     .set({
       emailsOrder: sequence.emailsOrder.filter((id) => id !== emailId),
+      updatedAt: new Date(),
     })
     .where(eq(sequences.id, sequence.id));
   const media = await deleteOrphanedMedia(teamId, mediaIds);
@@ -1303,11 +1307,7 @@ export async function getWaitingContacts(
     )!,
   ];
   const search = q?.trim();
-  if (search) {
-    conditions.push(
-      or(ilike(contacts.email, `%${search}%`), ilike(contacts.name, `%${search}%`))!,
-    );
-  }
+  if (search) conditions.push(contactSearchCondition(search));
 
   const [rows, total] = await Promise.all([
     db

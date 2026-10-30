@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/table";
 import { listWaitingContacts } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
-import { timeUntil } from "@/lib/time";
+import { formatDuration, timeUntil } from "@/lib/time";
 
 const PER_PAGE = 20;
 
@@ -67,14 +67,17 @@ export function WaitingContactsDialog({
     setWaiting(null);
   }, [emailId]);
 
-  // Search once typing pauses, from the first page.
+  // Search once typing pauses, from the first page. Only a changed search
+  // resets paging: opening the dialog must not undo an early Next.
   useEffect(() => {
+    const next = query.trim();
+    if (next === search) return;
     const timer = setTimeout(() => {
-      setSearch(query.trim());
+      setSearch(next);
       setCursors([]);
     }, 300);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, search]);
 
   useEffect(() => {
     if (!emailId) return;
@@ -108,7 +111,6 @@ export function WaitingContactsDialog({
     }
   }
 
-  const days = email ? email.delayInMillis / 86_400_000 : 0;
   const now = Date.now();
 
   return (
@@ -118,8 +120,8 @@ export function WaitingContactsDialog({
           <DialogTitle>Waiting for “{email?.subject || "Untitled email"}”</DialogTitle>
           <DialogDescription>
             These contacts get this email next.{" "}
-            {days > 0
-              ? `Each one gets it ${days % 1 === 0 ? days : days.toFixed(1)} day${days === 1 ? "" : "s"} after ${email?.first ? "they entered the sequence" : "their previous email"}, so their times differ.`
+            {email && email.delayInMillis > 0
+              ? `Each one gets it ${formatDuration(email.delayInMillis)} after ${email.first ? "they entered the sequence" : "their previous email"}, so their times differ.`
               : "It goes out as soon as they reach it."}
           </DialogDescription>
           {waiting !== null && waiting > 0 && (

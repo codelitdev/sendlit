@@ -57,21 +57,18 @@ import {
   recordSendSuccess,
 } from "./sending-health";
 
-export { getNextPublishedEmail };
-
-/** Reports (doesn't stop) a sequence email going out before its delays allow:
- * a scheduling bug, since everything else only makes sends later. */
+/** Reports (doesn't stop) a sequence's first email that went out before its
+ * delay: a scheduling bug, since everything else only makes sends later. */
 function reportEarlySend(
   ongoingSequence: OngoingSequenceRow,
-  sequenceRow: { sequenceId: string },
+  sequenceRow: { sequenceId: string; updatedAt: Date | null },
   email: SequenceEmailRow,
-  emails: SequenceEmailRow[],
 ) {
   const earlyByMs = sequenceSendEarlyByMs({
     enrolledAt: ongoingSequence.createdAt,
     sentEmailIds: ongoingSequence.sentEmailIds,
     email,
-    emails,
+    sequenceUpdatedAt: sequenceRow.updatedAt,
   });
   if (earlyByMs === null) return;
   logger.warn(
@@ -149,10 +146,6 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
       );
     }
 
-    if (sequenceRow.type === "sequence") {
-      reportEarlySend(ongoingSequence, sequenceRow, nextEmail, emails);
-    }
-
     await attemptMailSending({
       team,
       contact,
@@ -160,6 +153,9 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
       ongoingSequence,
       email: nextEmail,
     });
+    if (sequenceRow.type === "sequence") {
+      reportEarlySend(ongoingSequence, sequenceRow, nextEmail);
+    }
 
     const sentEmailIds = [...ongoingSequence.sentEmailIds, nextEmail.emailId];
     const followUpEmail = getNextPublishedEmail(sequenceRow.emailsOrder, emails, {

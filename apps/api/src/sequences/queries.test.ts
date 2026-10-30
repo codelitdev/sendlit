@@ -1293,6 +1293,11 @@ describe("getSequenceSchedule", () => {
       q: others[0].email.slice(0, 3).toUpperCase(),
     });
     expect(found).toMatchObject({ total: 1, items: [{ email: others[0].email }] });
+    // Wildcards are literal: "%" matches nobody here.
+    expect(await getWaitingContacts(sequence!, "email_1", { q: "%" })).toMatchObject({
+      total: 0,
+      items: [],
+    });
     await expect(
       getWaitingContacts(sequence!, "email_1", { after: "not-a-cursor" }),
     ).rejects.toThrow("invalid_cursor");

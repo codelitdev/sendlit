@@ -21,3 +21,16 @@ export function timeUntil(at: number, now: number = Date.now()): string {
   const days = Math.round(hours / 24);
   return `in ${days} day${days === 1 ? "" : "s"}`;
 }
+
+/** A delay in words: "30 minutes", "2 hours", "13 days", "1.5 days". */
+export function formatDuration(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = minutes / 60;
+  if (hours < 48) {
+    const h = Math.round(hours * 10) / 10;
+    return `${h} hour${h === 1 ? "" : "s"}`;
+  }
+  const days = Math.round((hours / 24) * 10) / 10;
+  return `${days} day${days === 1 ? "" : "s"}`;
+}

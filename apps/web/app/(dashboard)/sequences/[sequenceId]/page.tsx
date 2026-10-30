@@ -145,12 +145,7 @@ export default function SequenceEditorPage({
         s.emailsOrder[0];
       selectEmail(s, nextSelected);
       if (s.status !== "draft") {
-        const [nextStats, nextSchedule] = await Promise.all([
-          getSequenceStats(sequenceId),
-          getSequenceSchedule(sequenceId),
-        ]);
-        setStats(nextStats);
-        setSchedule(nextSchedule);
+        setStats(await getSequenceStats(sequenceId));
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load sequence");
@@ -173,6 +168,22 @@ export default function SequenceEditorPage({
         : null,
     );
   }
+
+  // Who waits for which email depends on the order and what's published, so
+  // refetch whenever the sequence changes (reorder, publish, add, delete).
+  useEffect(() => {
+    if (!sequence || sequence.status === "draft") {
+      setSchedule(null);
+      return;
+    }
+    let cancelled = false;
+    getSequenceSchedule(sequenceId)
+      .then((next) => !cancelled && setSchedule(next))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sequenceId, sequence]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when sequenceId changes
   useEffect(() => {

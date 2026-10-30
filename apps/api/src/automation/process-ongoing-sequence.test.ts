@@ -35,9 +35,8 @@ const { default: webViewRoutes } = await import("../tracking/web-view");
 const { requestApp } = await import("../test/http");
 const express = (await import("express")).default;
 const { getUnsubLink } = await import("../utils/mail");
-const { getNextPublishedEmail, processOngoingSequence } = await import(
-  "./process-ongoing-sequence"
-);
+const { processOngoingSequence } = await import("./process-ongoing-sequence");
+const { getNextPublishedEmail } = await import("./queries");
 
 const tdb = db as unknown as TestDb;
 const mockedSendMail = sendMail as unknown as Mock<typeof sendMail>;

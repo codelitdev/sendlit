@@ -2,45 +2,35 @@
 const TOLERANCE_MS = 60_000;
 
 /**
- * How far ahead of its schedule a sequence email is about to go out, or null
- * when it's on time (or late, which pauses and rate limits cause routinely).
+ * How far ahead of its delay a sequence's first email is about to go out, or
+ * null when it's on time (or late, which pauses and rate limits cause
+ * routinely).
  *
- * An email can't go out before the contact entered plus the delays of every
- * email sent so far and this one. When an email involved changed after the
- * contact entered (its delay lengthened, say, which correctly doesn't move
- * the stored schedule) or no longer exists, there is nothing reliable to
- * compare against, so it returns null.
+ * Only the first email is checked: its delay counts from entry, which is
+ * where scheduling went wrong before. Later emails are timed from the one
+ * before, and reordering or deleting emails legitimately changes which one
+ * comes next, so they have nothing reliable to compare against. For the same
+ * reason it returns null when the email or the sequence changed after the
+ * contact entered.
  */
 export function sequenceSendEarlyByMs({
   enrolledAt,
   sentEmailIds,
   email,
-  emails,
+  sequenceUpdatedAt,
   now = Date.now(),
 }: {
   enrolledAt: Date | null;
   sentEmailIds: string[];
-  email: SendTimingEmail;
-  emails: SendTimingEmail[];
+  email: { delayInMillis: number; updatedAt: Date | null };
+  sequenceUpdatedAt: Date | null;
   now?: number;
 }): number | null {
-  if (!enrolledAt) return null;
-  const steps = [
-    ...sentEmailIds.map((id) => emails.find((e) => e.emailId === id)),
-    email,
-  ];
-  let earliest = enrolledAt.getTime();
-  for (const step of steps) {
-    if (!step) return null;
-    if (step.updatedAt && step.updatedAt.getTime() > enrolledAt.getTime()) return null;
-    earliest += step.delayInMillis;
+  if (!enrolledAt || sentEmailIds.length > 0) return null;
+  const entered = enrolledAt.getTime();
+  for (const changedAt of [email.updatedAt, sequenceUpdatedAt]) {
+    if (changedAt && changedAt.getTime() > entered) return null;
   }
-  const earlyBy = earliest - now;
+  const earlyBy = entered + email.delayInMillis - now;
   return earlyBy > TOLERANCE_MS ? earlyBy : null;
 }
-
-type SendTimingEmail = {
-  emailId: string;
-  delayInMillis: number;
-  updatedAt: Date | null;
-};

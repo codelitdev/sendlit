@@ -5,6 +5,8 @@ import {
   customFieldsSchema,
   emailContentSchema,
   espWarmupSchema,
+  sequenceScheduleSchema,
+  waitingContactsPageSchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
 import { feedbackCapableProviders } from "../../config/constants";
@@ -140,29 +142,8 @@ export const sequenceStatsSchema = z.object({
   complaintRate: z.number().optional(),
 });
 
-export const sequenceScheduleSchema = z.object({
-  waiting: z.number(),
-  emails: z.array(
-    z.object({
-      emailId: z.string(),
-      waiting: z.number(),
-      nextSendAt: z.number().nullable(),
-    }),
-  ),
-});
-
-export const waitingContactsSchema = z.object({
-  items: z.array(
-    z.object({
-      contactId: z.string(),
-      email: z.string(),
-      name: z.string().nullable(),
-      nextSendAt: z.number(),
-    }),
-  ),
-  total: z.number(),
-  nextCursor: z.string().nullable(),
-});
+// The REST contract's shapes, so MCP output can't drift from REST.
+export { sequenceScheduleSchema, waitingContactsPageSchema as waitingContactsSchema };
 
 export const successMessageSchema = z.object({
   message: z.string(),
