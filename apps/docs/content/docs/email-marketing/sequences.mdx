@@ -104,6 +104,16 @@ The delay counts from the step before: the first email goes out its delay
 after the contact enters the sequence, and each later email its delay after
 the one before it. A first email with a delay of 0 goes out straight away.
 
+Once a sequence is running, its stats show **Waiting**: contacts who are in the
+sequence and haven't had their next email yet. Each email in the list shows how
+many contacts it goes to next, so a delayed email shows its contacts waiting
+rather than sent. Click the count to see who they are and when each one is due,
+soonest first, and search them by email or name: a delay counts from each
+contact's own entry (or previous email), so their times differ. `GET /sequences/{sequenceId}/schedule` (MCP `get_sequence_schedule`)
+returns the counts, and `GET /sequences/{sequenceId}/emails/{emailId}/waiting`
+(MCP `list_sequence_email_waiting_contacts`) lists the contacts, with `q` to
+search and `nextCursor` to page.
+
 Sequences are lifecycle mail, such as onboarding or end-of-trial emails, so a
 new sequence starts with **View in browser** off: its emails have no hosted web
 version. Turn it on to link one, like

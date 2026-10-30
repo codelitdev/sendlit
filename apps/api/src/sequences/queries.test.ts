@@ -50,7 +50,9 @@ const {
   getSequenceClickThroughRate,
   getSequenceDeletionImpact,
   getSequenceOpenRate,
+  getSequenceSchedule,
   getSubscribers,
+  getWaitingContacts,
   getSubscribersCount,
   listSequences,
   pauseSequence,
@@ -1212,5 +1214,94 @@ describe("broadcast delete and archive (#147)", () => {
         archived: "include",
       }),
     ).toHaveLength(0);
+  });
+});
+
+describe("getSequenceSchedule", () => {
+  it("counts each waiting contact against the next email they'll get", async () => {
+    const { seedOngoingSequence, seedSequence } = await import("../test/fixtures");
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const others = await tdb
+      .insert(contacts)
+      .values(
+        ["b", "c"].map((name) => ({
+          teamId: team.id,
+          email: `${name}@example.com`,
+          unsubscribeToken: crypto.randomUUID(),
+        })),
+      )
+      .returning();
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [
+        { emailId: "email_1" },
+        { emailId: "email_draft", published: false },
+        { emailId: "email_3" },
+      ],
+    });
+    const base = { teamId: team.id, sequenceId: sequenceRow.id };
+    await seedOngoingSequence(tdb, {
+      ...base,
+      contactId: contact.id,
+      nextEmailScheduledTime: 2_000,
+    });
+    await seedOngoingSequence(tdb, {
+      ...base,
+      contactId: others[0].id,
+      nextEmailScheduledTime: 1_000,
+    });
+    // Had email 1; the unpublished draft is skipped, so email 3 is next.
+    await seedOngoingSequence(tdb, {
+      ...base,
+      contactId: others[1].id,
+      sentEmailIds: ["email_1"],
+      nextEmailScheduledTime: 5_000,
+    });
+
+    const sequence = await getSequenceBySequenceId(team.id, sequenceRow.sequenceId);
+    expect(await getSequenceSchedule(sequence!)).toEqual({
+      waiting: 3,
+      emails: [
+        { emailId: "email_1", waiting: 2, nextSendAt: 1_000 },
+        { emailId: "email_draft", waiting: 0, nextSendAt: null },
+        { emailId: "email_3", waiting: 1, nextSendAt: 5_000 },
+      ],
+    });
+
+    // Each contact keeps their own due time, soonest first.
+    const first = await getWaitingContacts(sequence!, "email_1");
+    expect(first.total).toBe(2);
+    expect(first.items.map((c) => [c.email, c.nextSendAt])).toEqual([
+      [others[0].email, 1_000],
+      [contact.email, 2_000],
+    ]);
+    // Cursor paging: one contact per page, in due order, then the end.
+    const p1 = await getWaitingContacts(sequence!, "email_1", { limit: 1 });
+    expect(p1).toMatchObject({ total: 2, items: [{ email: others[0].email }] });
+    expect(p1.nextCursor).toEqual(expect.any(String));
+    const p2 = await getWaitingContacts(sequence!, "email_1", {
+      limit: 1,
+      after: p1.nextCursor!,
+    });
+    expect(p2).toMatchObject({
+      total: 2,
+      items: [{ email: contact.email }],
+      nextCursor: null,
+    });
+    // Search narrows both the list and the total.
+    const found = await getWaitingContacts(sequence!, "email_1", {
+      q: others[0].email.slice(0, 3).toUpperCase(),
+    });
+    expect(found).toMatchObject({ total: 1, items: [{ email: others[0].email }] });
+    await expect(
+      getWaitingContacts(sequence!, "email_1", { after: "not-a-cursor" }),
+    ).rejects.toThrow("invalid_cursor");
+    const third = await getWaitingContacts(sequence!, "email_3");
+    expect(third.items.map((c) => c.contactId)).toEqual([others[1].contactId]);
+    expect(await getWaitingContacts(sequence!, "email_draft")).toEqual({
+      items: [],
+      total: 0,
+      nextCursor: null,
+    });
   });
 });

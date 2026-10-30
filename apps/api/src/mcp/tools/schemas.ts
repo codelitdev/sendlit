@@ -140,6 +140,30 @@ export const sequenceStatsSchema = z.object({
   complaintRate: z.number().optional(),
 });
 
+export const sequenceScheduleSchema = z.object({
+  waiting: z.number(),
+  emails: z.array(
+    z.object({
+      emailId: z.string(),
+      waiting: z.number(),
+      nextSendAt: z.number().nullable(),
+    }),
+  ),
+});
+
+export const waitingContactsSchema = z.object({
+  items: z.array(
+    z.object({
+      contactId: z.string(),
+      email: z.string(),
+      name: z.string().nullable(),
+      nextSendAt: z.number(),
+    }),
+  ),
+  total: z.number(),
+  nextCursor: z.string().nullable(),
+});
+
 export const successMessageSchema = z.object({
   message: z.string(),
 });

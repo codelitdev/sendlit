@@ -18,6 +18,7 @@ import {
   type RenameTagResult,
   type Reputation,
   type SequenceDeletionPreview,
+  type SequenceSchedule,
   type SignupForm,
   type SignupFormInput,
   type TagReferences,
@@ -25,6 +26,7 @@ import {
   type TrackEventBody,
   type TrackingDomain,
   type TriggerTypeValue,
+  type WaitingContactsPage,
   type WebPublishing,
   type WebSettings,
 } from "@sendlit/api-contract";
@@ -742,6 +744,27 @@ export function getSequenceDeletionPreview(sequenceId: string) {
 
 export function getSequenceStats(sequenceId: string) {
   return unwrap<SequenceStats>(client.sequences.stats({ params: { sequenceId } }));
+}
+
+/** Contacts waiting for each email of a sequence, and when the next is due. */
+export function getSequenceSchedule(sequenceId: string) {
+  return unwrap<SequenceSchedule>(
+    client.sequences.schedule({ params: { sequenceId } }),
+  );
+}
+
+/** The contacts whose next email in a sequence is `emailId`, soonest first. */
+export function listWaitingContacts(
+  sequenceId: string,
+  emailId: string,
+  { after, limit = 20, q }: { after?: string; limit?: number; q?: string } = {},
+) {
+  return unwrap<WaitingContactsPage>(
+    client.sequences.waitingContacts({
+      params: { sequenceId, emailId },
+      query: { after, limit, q: q || undefined },
+    }),
+  );
 }
 
 export interface Overview {

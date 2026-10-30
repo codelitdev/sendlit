@@ -1,10 +1,23 @@
 import type { SequenceAnalyticsMetric, SequenceStats } from "@sendlit/email-blocks";
 
-/** Maps sequence/broadcast stats to `SequenceAnalytics` metrics. */
-export function sequenceStatsMetrics(stats: SequenceStats): SequenceAnalyticsMetric[] {
+/** Maps sequence/broadcast stats to `SequenceAnalytics` metrics. Pass
+ * `waiting` (from the schedule) to show contacts still waiting for an email. */
+export function sequenceStatsMetrics(
+  stats: SequenceStats,
+  waiting?: number,
+): SequenceAnalyticsMetric[] {
   return [
     { label: "Sent", value: stats.sent },
     { label: "Recipients", value: stats.subscribersCount },
+    ...(waiting !== undefined
+      ? [
+          {
+            label: "Waiting",
+            value: waiting,
+            helpText: "Contacts in the sequence waiting for their next email.",
+          },
+        ]
+      : []),
     {
       label: "Open rate",
       value: `${Math.round(stats.openRate * 100)}%`,
