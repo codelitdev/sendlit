@@ -100,6 +100,10 @@ enrolled again, and keeps the event that enrolled them first. Setting
 
 Each sequence email can have a delay, publish state, and optional tag action.
 
+The delay counts from the step before: the first email goes out its delay
+after the contact enters the sequence, and each later email its delay after
+the one before it. A first email with a delay of 0 goes out straight away.
+
 Sequences are lifecycle mail, such as onboarding or end-of-trial emails, so a
 new sequence starts with **View in browser** off: its emails have no hosted web
 version. Turn it on to link one, like

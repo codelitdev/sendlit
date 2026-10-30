@@ -306,7 +306,9 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
         delayInMillis: z
           .number()
           .optional()
-          .describe("Milliseconds after the previous email (sequences only)"),
+          .describe(
+            "Sequences: milliseconds after the previous email, or after the contact enters for the first email. Broadcasts: the send time (epoch millis)",
+          ),
         actionType: z.enum(emailActionTypes).optional(),
         actionData: z.record(z.any()).optional().describe('e.g. { "tag": "vip" }'),
         published: z

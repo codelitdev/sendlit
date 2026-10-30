@@ -12,6 +12,7 @@ import {
   contacts,
   ongoingSequences,
   rules,
+  sequenceEmails,
   sequenceEntries,
   sequences,
   type TriggerEventSnapshot,
@@ -33,6 +34,25 @@ export async function getDueDateRules() {
 
 export async function deleteRule(ruleId: string) {
   await db.delete(rules).where(eq(rules.ruleId, ruleId));
+}
+
+/** The first published email in `emailsOrder` that the contact hasn't been
+ * sent yet. */
+export function getNextPublishedEmail<
+  T extends { emailId: string; published: boolean },
+>(
+  emailsOrder: string[],
+  emails: T[],
+  ongoingSequence: { sentEmailIds: string[] },
+): T | null {
+  const sentEmailIdsSet = new Set(ongoingSequence.sentEmailIds);
+  for (const emailId of emailsOrder) {
+    const email = emails.find((e) => e.emailId === emailId && e.published);
+    if (email && !sentEmailIdsSet.has(email.emailId)) {
+      return email;
+    }
+  }
+  return null;
 }
 
 export async function getSequenceRowById(id: string) {
@@ -175,6 +195,7 @@ export async function enrollContactFromTrigger({
   sequence: {
     id: string;
     type: string;
+    emailsOrder: string[];
     reentry: string;
     reentryPeriodDays: number | null;
   };
@@ -189,6 +210,8 @@ export async function enrollContactFromTrigger({
     .limit(1);
   const now = Date.now();
   const priorities = await engagementPriorities(teamId, [contactId], now);
+  const firstEmailDelay =
+    sequence.type === "sequence" ? await firstEmailDelayInMillis(sequence) : 0;
   const contactEventId = triggerEvent?.contactEventId;
   try {
     return await db.transaction(async (tx) => {
@@ -207,7 +230,7 @@ export async function enrollContactFromTrigger({
           teamId,
           sequenceId: sequence.id,
           contactId,
-          nextEmailScheduledTime: now,
+          nextEmailScheduledTime: now + firstEmailDelay,
           priority: priorities.get(contactId) ?? 0,
           triggerEvent: triggerEvent?.snapshot ?? null,
         })
@@ -245,6 +268,27 @@ export async function enrollContactFromTrigger({
     }
     return "reentry_refused";
   }
+}
+
+/** A sequence's first email waits its own delay after entry, like every
+ * later email waits after the one before it. (A broadcast's first delay is
+ * its absolute send time instead; see `process-rules.ts`.) */
+async function firstEmailDelayInMillis(sequence: {
+  id: string;
+  emailsOrder: string[];
+}): Promise<number> {
+  const emails = await db
+    .select({
+      emailId: sequenceEmails.emailId,
+      published: sequenceEmails.published,
+      delayInMillis: sequenceEmails.delayInMillis,
+    })
+    .from(sequenceEmails)
+    .where(eq(sequenceEmails.sequenceId, sequence.id));
+  return (
+    getNextPublishedEmail(sequence.emailsOrder, emails, { sentEmailIds: [] })
+      ?.delayInMillis ?? 0
+  );
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];

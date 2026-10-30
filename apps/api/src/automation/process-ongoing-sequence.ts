@@ -41,6 +41,7 @@ import {
   claimOngoingSequence,
   countOngoingSequencesForSequence,
   deleteOngoingSequence,
+  getNextPublishedEmail,
   getSequenceRowById,
   markBroadcastSent,
   releaseOngoingSequenceClaim,
@@ -54,6 +55,8 @@ import {
   recordSendFailure,
   recordSendSuccess,
 } from "./sending-health";
+
+export { getNextPublishedEmail };
 
 /** The sequence was paused while sending this email; the delivery stays
  * queued for when it resumes. */
@@ -167,21 +170,6 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
     );
     throw err;
   }
-}
-
-export function getNextPublishedEmail(
-  emailsOrder: string[],
-  emails: SequenceEmailRow[],
-  ongoingSequence: Pick<OngoingSequenceRow, "sentEmailIds">,
-): SequenceEmailRow | null {
-  const sentEmailIdsSet = new Set(ongoingSequence.sentEmailIds);
-  for (const emailId of emailsOrder) {
-    const email = emails.find((e) => e.emailId === emailId && e.published);
-    if (email && !sentEmailIdsSet.has(email.emailId)) {
-      return email;
-    }
-  }
-  return null;
 }
 
 async function cleanUpResources(
