@@ -46,6 +46,7 @@ import {
   markBroadcastSent,
   releaseOngoingSequenceClaim,
 } from "./queries";
+import { sequenceSendEarlyByMs } from "./send-timing";
 import {
   autoPauseSequence,
   isFatalEspError,
@@ -57,6 +58,43 @@ import {
 } from "./sending-health";
 
 export { getNextPublishedEmail };
+
+/** Reports (doesn't stop) a sequence email going out before its delays allow:
+ * a scheduling bug, since everything else only makes sends later. */
+function reportEarlySend(
+  ongoingSequence: OngoingSequenceRow,
+  sequenceRow: { sequenceId: string },
+  email: SequenceEmailRow,
+  emails: SequenceEmailRow[],
+) {
+  const earlyByMs = sequenceSendEarlyByMs({
+    enrolledAt: ongoingSequence.createdAt,
+    sentEmailIds: ongoingSequence.sentEmailIds,
+    email,
+    emails,
+  });
+  if (earlyByMs === null) return;
+  logger.warn(
+    {
+      sequence_id: sequenceRow.sequenceId,
+      email_id: email.emailId,
+      ongoing_sequence_id: ongoingSequence.id,
+      early_by_ms: earlyByMs,
+    },
+    "sequence email sent before its delay",
+  );
+  captureEvent({
+    event: "sequence_email_sent_early",
+    source: "automation.process_ongoing_sequence",
+    teamId: ongoingSequence.teamId,
+    properties: {
+      sequence_id: sequenceRow.sequenceId,
+      email_id: email.emailId,
+      ongoing_sequence_id: ongoingSequence.id,
+      early_by_ms: earlyByMs,
+    },
+  });
+}
 
 /** The sequence was paused while sending this email; the delivery stays
  * queued for when it resumes. */
@@ -109,6 +147,10 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
         sequenceRow.type,
         sequenceRow.sequenceId,
       );
+    }
+
+    if (sequenceRow.type === "sequence") {
+      reportEarlySend(ongoingSequence, sequenceRow, nextEmail, emails);
     }
 
     await attemptMailSending({

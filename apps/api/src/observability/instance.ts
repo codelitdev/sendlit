@@ -50,6 +50,7 @@ const PROPERTY_ALLOWLIST = new Set([
   "alert_code",
   "billing_alert",
   "age_ms",
+  "early_by_ms",
   "count",
   // Hosted abuse controls (abuse/telemetry.ts): codes and internal ids only.
   "organization_id",

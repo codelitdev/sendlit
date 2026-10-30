@@ -231,6 +231,8 @@ export async function enrollContactFromTrigger({
           sequenceId: sequence.id,
           contactId,
           nextEmailScheduledTime: now + firstEmailDelay,
+          // The early-send check measures delays from here, on this clock.
+          createdAt: new Date(now),
           priority: priorities.get(contactId) ?? 0,
           triggerEvent: triggerEvent?.snapshot ?? null,
         })
