@@ -1,5 +1,6 @@
 "use client";
 
+import type { SequenceSchedule } from "@sendlit/api-contract";
 import {
   type Email,
   type EmailActionType,
@@ -30,7 +31,9 @@ import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { SequenceTrigger } from "@/components/dashboard/sequence-trigger";
 import { ViewInBrowserSetting } from "@/components/dashboard/view-in-browser-setting";
+import { WaitingContactsDialog } from "@/components/dashboard/waiting-contacts-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button as LinkButton } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/codelit/button";
 import { Input } from "@/components/ui/codelit/input";
@@ -48,6 +51,7 @@ import {
   type DeliverySourceSelection,
   deleteSequenceEmail,
   getSequence,
+  getSequenceSchedule,
   getSequenceStats,
   listSendingOptions,
   listSystemTemplates,
@@ -106,6 +110,8 @@ export default function SequenceEditorPage({
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
   const [stats, setStats] = useState<SequenceStats | null>(null);
+  const [schedule, setSchedule] = useState<SequenceSchedule | null>(null);
+  const [waitingEmailId, setWaitingEmailId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingMeta, setSavingMeta] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
@@ -162,6 +168,22 @@ export default function SequenceEditorPage({
         : null,
     );
   }
+
+  // Who waits for which email depends on the order and what's published, so
+  // refetch whenever the sequence changes (reorder, publish, add, delete).
+  useEffect(() => {
+    if (!sequence || sequence.status === "draft") {
+      setSchedule(null);
+      return;
+    }
+    let cancelled = false;
+    getSequenceSchedule(sequenceId)
+      .then((next) => !cancelled && setSchedule(next))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sequenceId, sequence]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when sequenceId changes
   useEffect(() => {
@@ -323,6 +345,24 @@ export default function SequenceEditorPage({
           </div>
         </div>
 
+        <WaitingContactsDialog
+          sequenceId={sequenceId}
+          email={(() => {
+            const email = sequence.emails.find((e) => e.emailId === waitingEmailId);
+            return email
+              ? {
+                  emailId: email.emailId,
+                  subject: email.subject,
+                  delayInMillis: email.delayInMillis,
+                  first:
+                    sequence.emailsOrder.find((id) =>
+                      sequence.emails.some((e) => e.emailId === id && e.published),
+                    ) === email.emailId,
+                }
+              : null;
+          })()}
+          onOpenChange={(open) => !open && setWaitingEmailId(null)}
+        />
         <DeleteSequenceDialog
           sequence={deleteOpen ? sequence : null}
           onOpenChange={setDeleteOpen}
@@ -340,7 +380,10 @@ export default function SequenceEditorPage({
         )}
 
         {stats && (
-          <SequenceAnalytics className="mb-6" metrics={sequenceStatsMetrics(stats)} />
+          <SequenceAnalytics
+            className="mb-6"
+            metrics={sequenceStatsMetrics(stats, schedule?.waiting)}
+          />
         )}
 
         <div className="mb-6">
@@ -417,6 +460,25 @@ export default function SequenceEditorPage({
               }}
               onDelete={handleDelete}
               onReorder={handleReorder}
+              renderEmailDetail={(email) => {
+                const waiting =
+                  schedule?.emails.find((e) => e.emailId === email.emailId)?.waiting ??
+                  0;
+                if (!waiting) return null;
+                return (
+                  <LinkButton
+                    variant="link"
+                    className="h-auto p-0 text-xs"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setWaitingEmailId(email.emailId);
+                    }}
+                  >
+                    {waiting.toLocaleString()} waiting
+                  </LinkButton>
+                );
+              }}
               systemTemplates={systemTemplates}
               templates={templates}
               templatesLoading={templatesLoading}

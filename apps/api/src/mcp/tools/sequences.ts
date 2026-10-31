@@ -26,8 +26,11 @@ import {
   getSequenceClickThroughRate,
   getSequenceDeletionImpact,
   getSequenceOpenRate,
+  getSequenceSchedule,
   getSubscribers,
   getSubscribersCount,
+  getWaitingContacts,
+  InvalidCursorError,
   listSequences,
   pauseSequence,
   setBroadcastArchived,
@@ -50,9 +53,11 @@ import {
 } from "./responses";
 import {
   sequenceListSchema,
+  sequenceScheduleSchema,
   sequenceSchema,
   sequenceStatsSchema,
   successMessageSchema,
+  waitingContactsSchema,
 } from "./schemas";
 
 // `sequenceEmails.sequenceId` stores its *parent* sequence's internal `id`
@@ -306,7 +311,9 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
         delayInMillis: z
           .number()
           .optional()
-          .describe("Milliseconds after the previous email (sequences only)"),
+          .describe(
+            "Sequences: milliseconds after the previous email, or after the contact enters for the first email. Broadcasts: the send time (epoch millis)",
+          ),
         actionType: z.enum(emailActionTypes).optional(),
         actionData: z.record(z.any()).optional().describe('e.g. { "tag": "vip" }'),
         published: z
@@ -587,6 +594,71 @@ export function registerSequenceTools(server: McpToolRegistrar): void {
           complaintRate: rates.complaintRate,
         });
       } catch {
+        return INTERNAL_ERROR;
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_sequence_schedule",
+    {
+      description:
+        "Returns, for each email of a broadcast/sequence in send order, how many contacts will get it next and when the first of them is due (epoch millis), plus the total waiting. Use it to check that delays work as intended: a sequence that has sent nothing yet can still have contacts waiting.",
+      inputSchema: { sequenceId: z.string() },
+      outputSchema: sequenceScheduleSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        const sequence = await getSequenceBySequenceId(teamId, args.sequenceId);
+        if (!sequence) return NOT_FOUND;
+        return jsonResult(await getSequenceSchedule(sequence));
+      } catch {
+        return INTERNAL_ERROR;
+      }
+    },
+  );
+
+  server.registerTool(
+    "list_sequence_email_waiting_contacts",
+    {
+      description:
+        "Lists the contacts whose next email in a sequence is this one, soonest due first, each with their own due time (epoch millis): each contact's delay counts from their own entry. q matches email or name. Returns up to limit (default 10, at most 100) with total and nextCursor; pass nextCursor as after for the next page.",
+      inputSchema: {
+        sequenceId: z.string(),
+        emailId: z.string(),
+        after: z.string().optional().describe("The previous page's nextCursor"),
+        limit: z.number().int().min(1).max(100).optional(),
+        q: z.string().optional().describe("Matches the contact's email or name"),
+      },
+      outputSchema: waitingContactsSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const teamId = getTeamId(extra);
+      if (!teamId) return AUTH_ERROR;
+      try {
+        const sequence = await getSequenceBySequenceId(teamId, args.sequenceId);
+        if (!sequence?.emailsOrder.includes(args.emailId)) return NOT_FOUND;
+        return jsonResult(
+          await getWaitingContacts(sequence, args.emailId, {
+            after: args.after,
+            limit: args.limit,
+            q: args.q,
+          }),
+        );
+      } catch (err) {
+        if (err instanceof InvalidCursorError) return errorResult("invalid_cursor");
         return INTERNAL_ERROR;
       }
     },

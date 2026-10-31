@@ -87,6 +87,8 @@ const toolPolicies = {
   list_sequences: MCP_SCOPES.sequencesRead,
   get_sequence: MCP_SCOPES.sequencesRead,
   get_sequence_stats: MCP_SCOPES.sequencesRead,
+  get_sequence_schedule: MCP_SCOPES.sequencesRead,
+  list_sequence_email_waiting_contacts: MCP_SCOPES.sequencesRead,
   get_sequence_subscribers: MCP_SCOPES.sequencesRead,
   create_sequence: MCP_SCOPES.sequencesWrite,
   update_sequence: MCP_SCOPES.sequencesWrite,

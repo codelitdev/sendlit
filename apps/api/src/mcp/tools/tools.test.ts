@@ -24,6 +24,8 @@ const mocks = {
   getEmailSentCount: vi.fn(),
   getSequenceOpenRate: vi.fn(),
   getSequenceClickThroughRate: vi.fn(),
+  getSequenceSchedule: vi.fn(),
+  getWaitingContacts: vi.fn(),
   getSubscribersCount: vi.fn(),
   getSubscribers: vi.fn(),
   listSequences: vi.fn(),
@@ -143,6 +145,9 @@ mock.module("../../sequences/queries", () => ({
   getSequenceOpenRate: mocks.getSequenceOpenRate,
   getSequenceClickThroughRate: mocks.getSequenceClickThroughRate,
   getSubscribersCount: mocks.getSubscribersCount,
+  getSequenceSchedule: mocks.getSequenceSchedule,
+  getWaitingContacts: mocks.getWaitingContacts,
+  InvalidCursorError: class InvalidCursorError extends Error {},
   getSubscribers: mocks.getSubscribers,
   listSequences: mocks.listSequences,
   countSequences: mocks.countSequences,
@@ -640,6 +645,66 @@ describe("MCP sequence tools", () => {
         clickThroughRate: 0.2,
         subscribersCount: 3,
       },
+    });
+  });
+
+  it("checks sequence ownership before returning the schedule", async () => {
+    const tools = makeToolRegistry(registerSequenceTools);
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(null);
+
+    await expect(
+      tools.get("get_sequence_schedule")!.handler({ sequenceId: "seq-1" }, auth),
+    ).resolves.toEqual(NOT_FOUND);
+    expect(mocks.getSequenceSchedule).not.toHaveBeenCalled();
+
+    const sequence = { sequenceId: "seq-1" };
+    const schedule = {
+      waiting: 3,
+      emails: [{ emailId: "email_1", waiting: 3, nextSendAt: 1_800_000_000_000 }],
+    };
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(sequence);
+    mocks.getSequenceSchedule.mockResolvedValueOnce(schedule);
+
+    await expect(
+      tools.get("get_sequence_schedule")!.handler({ sequenceId: "seq-1" }, auth),
+    ).resolves.toMatchObject({ structuredContent: schedule });
+    expect(mocks.getSequenceSchedule).toHaveBeenCalledWith(sequence);
+  });
+
+  it("lists waiting contacts only for an email of the caller's sequence", async () => {
+    const tools = makeToolRegistry(registerSequenceTools);
+    const tool = tools.get("list_sequence_email_waiting_contacts")!;
+    const sequence = { sequenceId: "seq-1", emailsOrder: ["email_1"] };
+
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(null);
+    await expect(
+      tool.handler({ sequenceId: "seq-1", emailId: "email_1" }, auth),
+    ).resolves.toEqual(NOT_FOUND);
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(sequence);
+    await expect(
+      tool.handler({ sequenceId: "seq-1", emailId: "email_other" }, auth),
+    ).resolves.toEqual(NOT_FOUND);
+    expect(mocks.getWaitingContacts).not.toHaveBeenCalled();
+
+    const page = {
+      items: [
+        { contactId: "cnt_1", email: "a@example.com", name: null, nextSendAt: 1_000 },
+      ],
+      total: 1,
+      nextCursor: null,
+    };
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(sequence);
+    mocks.getWaitingContacts.mockResolvedValueOnce(page);
+    await expect(
+      tool.handler(
+        { sequenceId: "seq-1", emailId: "email_1", after: "c1", q: "ana" },
+        auth,
+      ),
+    ).resolves.toMatchObject({ structuredContent: page });
+    expect(mocks.getWaitingContacts).toHaveBeenCalledWith(sequence, "email_1", {
+      after: "c1",
+      limit: undefined,
+      q: "ana",
     });
   });
 });

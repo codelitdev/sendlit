@@ -5,6 +5,8 @@ import {
   customFieldsSchema,
   emailContentSchema,
   espWarmupSchema,
+  sequenceScheduleSchema,
+  waitingContactsPageSchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
 import { feedbackCapableProviders } from "../../config/constants";
@@ -139,6 +141,9 @@ export const sequenceStatsSchema = z.object({
   bounceRate: z.number().optional(),
   complaintRate: z.number().optional(),
 });
+
+// The REST contract's shapes, so MCP output can't drift from REST.
+export { sequenceScheduleSchema, waitingContactsPageSchema as waitingContactsSchema };
 
 export const successMessageSchema = z.object({
   message: z.string(),

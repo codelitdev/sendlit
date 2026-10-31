@@ -184,6 +184,13 @@ interface ContactListQuery {
   excludeFilter?: ContactFilterWithAggregator;
 }
 
+/** Contacts whose email or name contains `searchText`, taken literally: `%`,
+ * `_` and `\\` aren't wildcards. */
+export function contactSearchCondition(searchText: string) {
+  const pattern = `%${searchText.replace(/[\\%_]/g, "\\$&")}%`;
+  return or(ilike(contacts.email, pattern), ilike(contacts.name, pattern))!;
+}
+
 export function listContactsConditions({
   teamId,
   searchText,
@@ -191,14 +198,7 @@ export function listContactsConditions({
   excludeFilter,
 }: ContactListQuery & { teamId: string }) {
   const conditions = [eq(contacts.teamId, teamId)];
-  if (searchText) {
-    conditions.push(
-      or(
-        ilike(contacts.email, `%${searchText}%`),
-        ilike(contacts.name, `%${searchText}%`),
-      )!,
-    );
-  }
+  if (searchText) conditions.push(contactSearchCondition(searchText));
   const filters = Array.isArray(filter) ? filter : filter ? [filter] : [];
   for (const contactFilter of filters) {
     const filterCondition = buildContactFilterCondition(contactFilter);

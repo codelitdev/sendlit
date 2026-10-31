@@ -27,9 +27,12 @@ import {
   getSequenceClickThroughRate,
   getSequenceDeletionImpact,
   getSequenceOpenRate,
+  getSequenceSchedule,
   getSubscribers,
   getSubscribersCount,
+  getWaitingContacts,
   type HydratedSequence,
+  InvalidCursorError,
   listSequences,
   pauseSequence,
   setBroadcastArchived,
@@ -350,6 +353,34 @@ const impl = s.router(contract.sequences, {
         complaintRate: rates.complaintRate,
       },
     };
+  },
+  schedule: async ({ params, req }) => {
+    const sequence = await getSequenceBySequenceId(
+      (req as any).teamId,
+      params.sequenceId,
+    );
+    if (!sequence) return { status: 404, body: { error: "Sequence not found" } };
+    return { status: 200, body: await getSequenceSchedule(sequence) };
+  },
+  waitingContacts: async ({ params, query, req }) => {
+    const sequence = await getSequenceBySequenceId(
+      (req as any).teamId,
+      params.sequenceId,
+    );
+    if (!sequence?.emailsOrder.includes(params.emailId)) {
+      return { status: 404, body: { error: "Sequence not found" } };
+    }
+    try {
+      return {
+        status: 200,
+        body: await getWaitingContacts(sequence, params.emailId, query),
+      };
+    } catch (error) {
+      if (error instanceof InvalidCursorError) {
+        return { status: 400, body: { error: "invalid_cursor" } };
+      }
+      throw error;
+    }
   },
   subscribers: async ({ params, query, req }) => {
     if (!(await getSequenceBySequenceId((req as any).teamId, params.sequenceId))) {

@@ -7,6 +7,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  min,
   or,
   type SQL,
   sql,
@@ -14,7 +15,7 @@ import {
 import { assertLargeBroadcastReviewed } from "../abuse/broadcast-review";
 import { assertEmailContentAllowed } from "../abuse/content-scan";
 import { assertNoImportUnderReview } from "../abuse/imports";
-import { getMatchingContactIds } from "../automation/queries";
+import { getMatchingContactIds, getNextPublishedEmail } from "../automation/queries";
 import {
   assertMarketingAllowedForContactUsage,
   assertSendAllowedForTeam,
@@ -33,6 +34,7 @@ import {
   sequenceDelayBetweenMailsInMillis,
 } from "../config/constants";
 import { responses } from "../config/strings";
+import { contactSearchCondition } from "../contacts/queries";
 import {
   type ContactFilterWithAggregator,
   sequenceAudience,
@@ -519,7 +521,10 @@ export async function addMailToSequence({
 
   const [row] = await db
     .update(sequences)
-    .set({ emailsOrder: [...sequence.emailsOrder, email.emailId] })
+    .set({
+      emailsOrder: [...sequence.emailsOrder, email.emailId],
+      updatedAt: new Date(),
+    })
     .where(eq(sequences.id, sequence.id))
     .returning();
 
@@ -734,6 +739,7 @@ export async function deleteMailFromSequence({
     .update(sequences)
     .set({
       emailsOrder: sequence.emailsOrder.filter((id) => id !== emailId),
+      updatedAt: new Date(),
     })
     .where(eq(sequences.id, sequence.id));
   const media = await deleteOrphanedMedia(teamId, mediaIds);
@@ -1175,6 +1181,178 @@ export async function getSubscribersCount(sequenceId: string): Promise<number> {
     .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
     .where(eq(sequences.sequenceId, sequenceId));
   return rows.length;
+}
+
+/** Enrollments grouped by what they've been sent (one group per step), each
+ * with the email it gets next. Small however many contacts are waiting. */
+async function waitingGroups(
+  sequence: Pick<HydratedSequence, "id" | "emailsOrder" | "emails">,
+) {
+  const groups = await db
+    .select({
+      sentEmailIds: ongoingSequences.sentEmailIds,
+      waiting: count(),
+      nextSendAt: min(ongoingSequences.nextEmailScheduledTime),
+    })
+    .from(ongoingSequences)
+    .where(eq(ongoingSequences.sequenceId, sequence.id))
+    .groupBy(ongoingSequences.sentEmailIds);
+  return groups.map((group) => ({
+    ...group,
+    nextSendAt: group.nextSendAt === null ? null : Number(group.nextSendAt),
+    emailId:
+      getNextPublishedEmail(sequence.emailsOrder, sequence.emails, group)?.emailId ??
+      null,
+  }));
+}
+
+/** Contacts waiting for each email, and when the first of them is due. */
+export async function getSequenceSchedule(
+  sequence: Pick<HydratedSequence, "id" | "emailsOrder" | "emails">,
+): Promise<{
+  waiting: number;
+  emails: Array<{ emailId: string; waiting: number; nextSendAt: number | null }>;
+}> {
+  const byEmail = new Map<string, { waiting: number; nextSendAt: number | null }>();
+  for (const group of await waitingGroups(sequence)) {
+    if (!group.emailId) continue;
+    const entry = byEmail.get(group.emailId) ?? { waiting: 0, nextSendAt: null };
+    entry.waiting += group.waiting;
+    if (
+      group.nextSendAt !== null &&
+      (entry.nextSendAt === null || group.nextSendAt < entry.nextSendAt)
+    ) {
+      entry.nextSendAt = group.nextSendAt;
+    }
+    byEmail.set(group.emailId, entry);
+  }
+
+  const emails = sequence.emailsOrder.map((emailId) => ({
+    emailId,
+    ...(byEmail.get(emailId) ?? { waiting: 0, nextSendAt: null }),
+  }));
+  return { waiting: emails.reduce((sum, e) => sum + e.waiting, 0), emails };
+}
+
+/** Where a page of waiting contacts ends; the next page starts after it. */
+type WaitingCursor = { nextSendAt: number; id: string };
+
+export class InvalidCursorError extends Error {
+  constructor() {
+    super("invalid_cursor");
+  }
+}
+
+function encodeWaitingCursor(cursor: WaitingCursor): string {
+  return Buffer.from(JSON.stringify([cursor.nextSendAt, cursor.id])).toString(
+    "base64url",
+  );
+}
+
+function decodeWaitingCursor(value: string): WaitingCursor {
+  try {
+    const [nextSendAt, id] = JSON.parse(Buffer.from(value, "base64url").toString());
+    if (Number.isSafeInteger(nextSendAt) && typeof id === "string" && isUuid(id)) {
+      return { nextSendAt, id };
+    }
+  } catch {}
+  throw new InvalidCursorError();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+/**
+ * The contacts whose next email is `emailId`, soonest due first. Pages by
+ * cursor (`after`, the previous page's `nextCursor`) so a late page costs the
+ * same as the first; `q` matches email or name. `total` counts every match.
+ */
+export async function getWaitingContacts(
+  sequence: Pick<HydratedSequence, "id" | "emailsOrder" | "emails">,
+  emailId: string,
+  {
+    after,
+    limit = itemsPerPage,
+    q,
+  }: { after?: string; limit?: number; q?: string } = {},
+): Promise<{
+  items: Array<{
+    contactId: string;
+    email: string;
+    name: string | null;
+    nextSendAt: number;
+  }>;
+  total: number;
+  nextCursor: string | null;
+}> {
+  const cursor = after ? decodeWaitingCursor(after) : null;
+  const groups = (await waitingGroups(sequence)).filter((g) => g.emailId === emailId);
+  if (groups.length === 0) return { items: [], total: 0, nextCursor: null };
+
+  const conditions: SQL[] = [
+    eq(ongoingSequences.sequenceId, sequence.id),
+    or(
+      ...groups.map(
+        (g) =>
+          sql`${ongoingSequences.sentEmailIds} = ${
+            g.sentEmailIds.length
+              ? sql`ARRAY[${sql.join(
+                  g.sentEmailIds.map((id) => sql`${id}`),
+                  sql`, `,
+                )}]::text[]`
+              : sql`'{}'::text[]`
+          }`,
+      ),
+    )!,
+  ];
+  const search = q?.trim();
+  if (search) conditions.push(contactSearchCondition(search));
+
+  const [rows, total] = await Promise.all([
+    db
+      .select({
+        id: ongoingSequences.id,
+        contactId: contacts.contactId,
+        email: contacts.email,
+        name: contacts.name,
+        nextSendAt: ongoingSequences.nextEmailScheduledTime,
+      })
+      .from(ongoingSequences)
+      .innerJoin(contacts, eq(contacts.id, ongoingSequences.contactId))
+      .where(
+        and(
+          ...conditions,
+          cursor
+            ? sql`(${ongoingSequences.nextEmailScheduledTime}, ${ongoingSequences.id}) > (${cursor.nextSendAt}, ${cursor.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(asc(ongoingSequences.nextEmailScheduledTime), asc(ongoingSequences.id))
+      .limit(limit + 1),
+    search
+      ? db
+          .select({ value: count() })
+          .from(ongoingSequences)
+          .innerJoin(contacts, eq(contacts.id, ongoingSequences.contactId))
+          .where(and(...conditions))
+          .then(([row]) => row?.value ?? 0)
+      : groups.reduce((sum, g) => sum + g.waiting, 0),
+  ]);
+
+  const page = rows.slice(0, limit);
+  const last = page[page.length - 1];
+  return {
+    items: page.map(({ id: _id, ...r }) => ({
+      ...r,
+      nextSendAt: Number(r.nextSendAt),
+    })),
+    total,
+    nextCursor:
+      rows.length > limit && last
+        ? encodeWaitingCursor({ nextSendAt: Number(last.nextSendAt), id: last.id })
+        : null,
+  };
 }
 
 async function countDistinctContactsWithEvent(

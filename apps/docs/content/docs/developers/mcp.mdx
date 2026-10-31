@@ -124,7 +124,7 @@ Broadcasts use the sequence resource with one email and an audience filter. For 
 - `preview_sequence_deletion`, `delete_sequence` (destructive: pause an active sequence first; its enrollments and stats are deleted). Draft and scheduled broadcasts can be deleted; sent ones can't (`broadcast_sent`)
 - `archive_broadcast`, `unarchive_broadcast` hide a sent broadcast from the list and the web archive, keeping its report. `list_sequences` takes `archived` (`exclude` by default, `only`, `include`)
 - `send_sequence_email_test` sends a `[Test]` copy of one email to you (or up to five addresses)
-- `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_subscribers`
+- `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_schedule`, `list_sequence_email_waiting_contacts`, `get_sequence_subscribers`
 - `get_broadcast_web_publishing`, `update_broadcast_web_publishing`, `list_web_issues`, `get_web_issue` ([web archive](/email-marketing/web-archive))
 
 Send a test with `send_sequence_email_test` and use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.

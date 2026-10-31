@@ -300,6 +300,51 @@ export const sequenceStatsSchema = z.object({
   complaintRate: z.number().optional(),
 });
 
+export const sequenceScheduleSchema = z.object({
+  waiting: z
+    .number()
+    .describe("Contacts in the sequence who are waiting for their next email"),
+  emails: z.array(
+    z.object({
+      emailId: z.string(),
+      waiting: z.number().describe("Contacts whose next email is this one"),
+      nextSendAt: z
+        .number()
+        .nullable()
+        .describe(
+          "The earliest due time among them (epoch millis), not a time they share: each contact's delay counts from their own entry. null when no one is waiting",
+        ),
+    }),
+  ),
+});
+
+export const waitingContactSchema = z.object({
+  contactId: z.string(),
+  email: z.string(),
+  name: z.string().nullable(),
+  nextSendAt: z
+    .number()
+    .describe("When this contact is due to get the email (epoch millis)"),
+});
+
+export const listWaitingContactsQuerySchema = z.object({
+  after: z
+    .string()
+    .optional()
+    .describe("The previous page's `nextCursor`; omit for the first page"),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  q: z.string().optional().describe("Matches the contact's email or name"),
+});
+
+export const waitingContactsPageSchema = z.object({
+  items: z.array(waitingContactSchema),
+  total: z.number().describe("Every waiting contact that matches, across all pages"),
+  nextCursor: z
+    .string()
+    .nullable()
+    .describe("Pass as `after` for the next page; null on the last page"),
+});
+
 export const sequenceDeletionPreviewSchema = z.object({
   status: z.string().describe("The broadcast or sequence's current status"),
   blocker: z
@@ -319,6 +364,9 @@ export const sequenceDeletionPreviewSchema = z.object({
 });
 
 export type SequenceDeletionPreview = z.infer<typeof sequenceDeletionPreviewSchema>;
+export type SequenceSchedule = z.infer<typeof sequenceScheduleSchema>;
+export type WaitingContact = z.infer<typeof waitingContactSchema>;
+export type WaitingContactsPage = z.infer<typeof waitingContactsPageSchema>;
 
 export const listSubscribersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),

@@ -1586,6 +1586,13 @@ export const ongoingSequences = pgTable(
     nextScheduledIdx: index("ongoing_sequences_next_email_scheduled_time_idx").on(
       table.nextEmailScheduledTime,
     ),
+    // One sequence's waiting contacts, soonest first (`getWaitingContacts`),
+    // without walking every other sequence's rows in the index above.
+    sequenceNextScheduledIdx: index("ongoing_sequences_sequence_id_next_email_idx").on(
+      table.sequenceId,
+      table.nextEmailScheduledTime,
+      table.id,
+    ),
   }),
 );
 

@@ -119,13 +119,16 @@ import {
   createSequenceBodySchema,
   listSequencesQuerySchema,
   listSubscribersQuerySchema,
+  listWaitingContactsQuerySchema,
   sendSequenceEmailTestBodySchema,
   sequenceDeletionPreviewSchema,
   sequenceEmailTestResultSchema,
+  sequenceScheduleSchema,
   sequenceSchema,
   sequenceStatsSchema,
   updateSequenceBodySchema,
   updateSequenceEmailBodySchema,
+  waitingContactsPageSchema,
 } from "./schemas/sequences";
 import {
   generalSettingsSchema,
@@ -758,6 +761,27 @@ const sequencesContract = c.router(
       path: "/sequences/:sequenceId/stats",
       responses: { 200: sequenceStatsSchema, 404: errorSchema },
       summary: "Delivery / open-rate / click-through-rate stats for a sequence",
+    },
+    schedule: {
+      method: "GET",
+      path: "/sequences/:sequenceId/schedule",
+      responses: { 200: sequenceScheduleSchema, 404: errorSchema },
+      summary: "Contacts waiting for each email of a sequence",
+      description:
+        "For each email, in send order: how many contacts in the sequence will get it next and the earliest of their due times. A contact counts once, against the email they're waiting for, so emails they've had or will get later don't count them. Each contact's delay counts from their own entry, so their due times differ; list them with `GET /sequences/{sequenceId}/emails/{emailId}/waiting`. Due times are the earliest a contact can get the email; pauses and sending limits can make it later.",
+    },
+    waitingContacts: {
+      method: "GET",
+      path: "/sequences/:sequenceId/emails/:emailId/waiting",
+      query: listWaitingContactsQuerySchema,
+      responses: {
+        200: waitingContactsPageSchema,
+        400: errorSchema,
+        404: errorSchema,
+      },
+      summary: "Contacts waiting for a sequence email",
+      description:
+        "The contacts whose next email in the sequence is this one, soonest due first, each with their own due time. `q` matches email or name. Pages hold `limit` contacts (default 10, at most 100); pass `nextCursor` as `after` for the next page. `total` counts every match. A cursor that can't be read returns 400 `invalid_cursor`.",
     },
     subscribers: {
       method: "GET",

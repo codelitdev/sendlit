@@ -41,10 +41,12 @@ import {
   claimOngoingSequence,
   countOngoingSequencesForSequence,
   deleteOngoingSequence,
+  getNextPublishedEmail,
   getSequenceRowById,
   markBroadcastSent,
   releaseOngoingSequenceClaim,
 } from "./queries";
+import { sequenceSendEarlyByMs } from "./send-timing";
 import {
   autoPauseSequence,
   isFatalEspError,
@@ -54,6 +56,42 @@ import {
   recordSendFailure,
   recordSendSuccess,
 } from "./sending-health";
+
+/** Reports (doesn't stop) a sequence's first email that went out before its
+ * delay: a scheduling bug, since everything else only makes sends later. */
+function reportEarlySend(
+  ongoingSequence: OngoingSequenceRow,
+  sequenceRow: { sequenceId: string; updatedAt: Date | null },
+  email: SequenceEmailRow,
+) {
+  const earlyByMs = sequenceSendEarlyByMs({
+    enrolledAt: ongoingSequence.createdAt,
+    sentEmailIds: ongoingSequence.sentEmailIds,
+    email,
+    sequenceUpdatedAt: sequenceRow.updatedAt,
+  });
+  if (earlyByMs === null) return;
+  logger.warn(
+    {
+      sequence_id: sequenceRow.sequenceId,
+      email_id: email.emailId,
+      ongoing_sequence_id: ongoingSequence.id,
+      early_by_ms: earlyByMs,
+    },
+    "sequence email sent before its delay",
+  );
+  captureEvent({
+    event: "sequence_email_sent_early",
+    source: "automation.process_ongoing_sequence",
+    teamId: ongoingSequence.teamId,
+    properties: {
+      sequence_id: sequenceRow.sequenceId,
+      email_id: email.emailId,
+      ongoing_sequence_id: ongoingSequence.id,
+      early_by_ms: earlyByMs,
+    },
+  });
+}
 
 /** The sequence was paused while sending this email; the delivery stays
  * queued for when it resumes. */
@@ -115,6 +153,9 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
       ongoingSequence,
       email: nextEmail,
     });
+    if (sequenceRow.type === "sequence") {
+      reportEarlySend(ongoingSequence, sequenceRow, nextEmail);
+    }
 
     const sentEmailIds = [...ongoingSequence.sentEmailIds, nextEmail.emailId];
     const followUpEmail = getNextPublishedEmail(sequenceRow.emailsOrder, emails, {
@@ -167,21 +208,6 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
     );
     throw err;
   }
-}
-
-export function getNextPublishedEmail(
-  emailsOrder: string[],
-  emails: SequenceEmailRow[],
-  ongoingSequence: Pick<OngoingSequenceRow, "sentEmailIds">,
-): SequenceEmailRow | null {
-  const sentEmailIdsSet = new Set(ongoingSequence.sentEmailIds);
-  for (const emailId of emailsOrder) {
-    const email = emails.find((e) => e.emailId === emailId && e.published);
-    if (email && !sentEmailIdsSet.has(email.emailId)) {
-      return email;
-    }
-  }
-  return null;
 }
 
 async function cleanUpResources(

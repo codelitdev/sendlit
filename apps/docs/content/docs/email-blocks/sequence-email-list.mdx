@@ -20,6 +20,10 @@ only fires once the user confirms.
 Every visible string is a prop with a sensible English default — labels,
 empty/delay/status text, and the delete confirmation copy all included.
 
+`renderEmailDetail` adds a line under an email's delay and status, for anything
+the host knows about that email, such as how many contacts are waiting for it.
+Return nothing to leave the line out.
+
 <EmailBlockDemo demo="sequence-email-list" />
 
 ## Usage
