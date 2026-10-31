@@ -1,5 +1,11 @@
 # @sendlit/email-blocks
 
+## 0.4.0
+
+### Minor Changes
+
+- 449174b: `SequenceReport.autoPause.reason` can now be `render_error`: SendLit paused a broadcast or sequence because its email couldn't be built (for example the managed footer or the mailing address), keeping its recipients queued until it is resumed.
+
 ## 0.3.0
 
 ### Minor Changes
