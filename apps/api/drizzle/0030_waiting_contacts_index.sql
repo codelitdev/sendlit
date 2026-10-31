@@ -1,1 +1,1 @@
-CREATE INDEX "ongoing_sequences_sequence_id_next_email_idx" ON "ongoing_sequences" USING btree ("sequence_id","next_email_scheduled_time","id");
+CREATE INDEX IF NOT EXISTS "ongoing_sequences_sequence_id_next_email_idx" ON "ongoing_sequences" USING btree ("sequence_id","next_email_scheduled_time","id");
