@@ -16,6 +16,7 @@ export function ConditionalQuickEdit({
           <button
             type="button"
             className={has ? "on" : undefined}
+            aria-pressed={has}
             onClick={() => set("has", true)}
           >
             Tagged
@@ -23,6 +24,7 @@ export function ConditionalQuickEdit({
           <button
             type="button"
             className={has ? undefined : "on"}
+            aria-pressed={!has}
             onClick={() => set("has", false)}
           >
             Not tagged

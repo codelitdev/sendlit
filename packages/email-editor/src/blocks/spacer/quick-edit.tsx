@@ -20,6 +20,7 @@ export function SpacerQuickEdit({
           key={value}
           type="button"
           className={height === value ? "on" : undefined}
+          aria-pressed={height === value}
           onClick={() =>
             updateBlock(block.id, {
               settings: { ...block.settings, height: value },

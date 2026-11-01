@@ -18,6 +18,7 @@ export function SocialQuickEdit({
           <label key={network.value}>
             <input
               type="checkbox"
+              aria-label={`Show ${network.label}`}
               checked={Boolean(link)}
               onChange={(event) =>
                 setLinks(

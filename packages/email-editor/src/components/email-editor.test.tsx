@@ -11,7 +11,7 @@ const { act, cleanup, fireEvent, render, screen, within } = await import(
 );
 const { EmailEditor } = await import("../email-editor");
 const { defaultEmail } = await import("../lib/default-email");
-const { Image, Link, Separator, Text } = await import("../blocks");
+const { Image, Link, Separator, Spacer, Text } = await import("../blocks");
 
 afterEach(() => cleanup());
 // Leave no DOM behind: the email renderer's tests need the real stream globals.
@@ -341,5 +341,48 @@ describe("block settings from the keyboard", () => {
     expect(
       (screen.getByRole("textbox", { name: /^Text/ }) as HTMLTextAreaElement).value,
     ).toBe("After");
+  });
+
+  it("moves focus to the text above when a block is deleted", async () => {
+    start();
+    fireEvent.click(selectButton());
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await settle();
+    const editor = document.activeElement as HTMLTextAreaElement;
+    expect(editor.tagName).toBe("TEXTAREA");
+    expect(editor.value).toBe("Before");
+  });
+
+  it("starts on the first control of blocks without a text field", async () => {
+    mount({
+      email: email([{ blockType: "spacer", settings: { height: "20px" } }]),
+      blocks: [Text, Spacer],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Select: Spacer" }));
+    await settle();
+    expect(document.activeElement?.textContent).toBe("Small");
+    const medium = screen.getByRole("button", { name: "Medium" });
+    expect(medium.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("drives the insert menu with the keyboard", async () => {
+    start();
+    fireEvent.click(screen.getAllByRole("button", { name: "Insert below" })[0]);
+    await settle();
+    const menu = screen.getByRole("menu", { name: "Insert" });
+    const items = within(menu).getAllByRole("menuitem");
+    expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(items[0], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(items[1], { key: "ArrowUp" });
+    fireEvent.keyDown(items[0], { key: "ArrowUp" });
+    expect(document.activeElement).toBe(items[items.length - 1]);
+
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Insert" })).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getAllByRole("button", { name: "Insert below" })[0],
+    );
   });
 });

@@ -103,6 +103,10 @@ function labelOf(block: EmailBlock, blockRegistry: BlockRegistry) {
   return blockRegistry[block.blockType]?.metadata.displayName ?? "Block";
 }
 
+/** Dialogs and popovers a host's quick edit may open outside the editor. */
+const DIALOGS =
+  '[role="dialog"], [role="alertdialog"], [data-radix-popper-content-wrapper]';
+
 const isItem = (block: EmailBlock | undefined): boolean =>
   block?.blockType === "text" && Boolean(block.group);
 
@@ -434,17 +438,37 @@ export function EmailEditor({
 
   // ---- whole-row actions --------------------------------------------------
 
+  /** Keyboard focus on a block itself, after the next render. */
+  const focusRow = useCallback((id: string) => {
+    setTimeout(() =>
+      rootRef.current
+        ?.querySelector<HTMLElement>(`[data-block-id="${id}"] > .sle-hit`)
+        ?.focus(),
+    );
+  }, []);
+
   const deleteBlock = useCallback(
     (id: string) => {
       const content = emailRef.current.content;
       const row = rowsOf(content, mode).find((r) => r.id === id);
       if (!row || !canDeleteBlock(row.block, blockRegistry)) return;
-      commitContent([...content.slice(0, row.start), ...content.slice(row.end)]);
+      const next = [...content.slice(0, row.start), ...content.slice(row.end)];
+      commitContent(next);
       setActiveId((current) => (current === id ? null : current));
       setSelectedId((current) => (current === id ? null : current));
       flash(`${labelOf(row.block, blockRegistry)} deleted. Undo brings it back.`);
+      // Keep focus in the email, on what was above (or else below) it.
+      const neighbour = next[row.start - 1] ?? next[row.start];
+      if (!neighbour) return;
+      if (mode === "write" && isItem(neighbour)) activate(neighbour.id!, "end");
+      else {
+        const target = rowsOf(next, mode).find(
+          (r) => r.start <= next.indexOf(neighbour) && next.indexOf(neighbour) < r.end,
+        );
+        if (target) focusRow(target.id);
+      }
     },
-    [blockRegistry, commitContent, flash, mode, rowsOf],
+    [activate, blockRegistry, commitContent, flash, focusRow, mode, rowsOf],
   );
 
   const duplicateBlock = useCallback(
@@ -595,15 +619,6 @@ export function EmailEditor({
     [activate, blockRegistry, commitContent, select],
   );
 
-  /** Keyboard focus on a block itself, after the next render. */
-  const focusRow = useCallback((id: string) => {
-    setTimeout(() =>
-      rootRef.current
-        ?.querySelector<HTMLElement>(`[data-block-id="${id}"] > .sle-hit`)
-        ?.focus(),
-    );
-  }, []);
-
   const navigate = useCallback(
     (id: string, direction: "prev" | "next") => {
       const content = emailRef.current.content;
@@ -733,9 +748,8 @@ export function EmailEditor({
   );
 
   // While writing, a block's quick settings close on Escape wherever focus
-  // is, and when focus moves on to another row (Tab out of the popover).
-  // Dialogs a quick edit opens, such as an image picker, render outside the
-  // editor and keep it open.
+  // is, and when focus moves on, to another row or out of the editor (Tab out
+  // of the popover).
   useEffect(() => {
     if (mode !== "write" || !selectedId) return;
     const row = () => rootRef.current?.querySelector(`[data-block-id="${selectedId}"]`);
@@ -748,9 +762,11 @@ export function EmailEditor({
       closePopover(selectedId);
     };
     const onFocus = (event: FocusEvent) => {
-      const target = event.target as Node;
-      if (rootRef.current?.contains(target) && !row()?.contains(target))
-        setSelectedId(null);
+      const target = event.target as Element;
+      if (row()?.contains(target)) return;
+      // A dialog the quick edit opened, such as an image picker, keeps it.
+      if (!rootRef.current?.contains(target) && target.closest?.(DIALOGS)) return;
+      setSelectedId(null);
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("focusin", onFocus);
@@ -789,13 +805,19 @@ export function EmailEditor({
     const timer = setTimeout(() => {
       const popover = rootRef.current?.querySelector<HTMLElement>(".sle-pop");
       popover?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      // Ready to type into the first field, so Escape and Tab work too. Its
-      // text is selected, so typing replaces a placeholder like "Click here".
-      const field = popover?.querySelector<HTMLInputElement>(
-        "input:not([type=checkbox]), textarea",
+      // Start on the block's first control, so Escape and Tab work too. A
+      // field's text is selected, so typing replaces a placeholder like
+      // "Click here" (a textarea's isn't: typing would wipe its code). Blocks
+      // without quick settings focus the popover itself.
+      const control = Array.from(
+        popover?.querySelectorAll<HTMLElement>("input, textarea, select, button") ?? [],
+      ).find(
+        (element) =>
+          !element.closest(".acts") && !(element as HTMLInputElement).disabled,
       );
-      (field ?? popover)?.focus({ preventScroll: true });
-      field?.select();
+      (control ?? popover)?.focus({ preventScroll: true });
+      if (control instanceof HTMLInputElement && control.type === "text")
+        control.select();
     }, 60);
     return () => clearTimeout(timer);
   }, [selectedId, mode]);
@@ -950,6 +972,14 @@ export function EmailEditor({
           index={-1}
           placement={insertPlacement}
           header="Insert"
+          onClose={() => {
+            setInsertAfterId(null);
+            rootRef.current
+              ?.querySelector<HTMLElement>(
+                `[data-block-id="${row.id}"] [aria-label="Insert below"]`,
+              )
+              ?.focus();
+          }}
           onPick={(choice) => {
             setInsertAfterId(null);
             insertChoice(choice, row.end);
@@ -981,6 +1011,9 @@ export function EmailEditor({
         style={{ maxHeight: popoverMax }}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
+          // Keys from a dialog the quick edit opened (it renders elsewhere but
+          // bubbles through here) belong to that dialog.
+          if (!event.currentTarget.contains(event.target as Node)) return;
           event.stopPropagation();
           if (event.key === "Escape") {
             event.preventDefault();

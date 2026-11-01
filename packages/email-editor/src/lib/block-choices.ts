@@ -83,7 +83,7 @@ const BLOCK_KEYWORDS: Record<string, string> = {
   columns: "two side",
   social: "links profiles",
   html: "code custom",
-  conditional: "tag section segment if",
+  conditional: "conditional tag section segment if personalise personalize",
   spacer: "space gap",
   link: "url",
 };
