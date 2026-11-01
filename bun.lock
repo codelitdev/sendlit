@@ -82,7 +82,7 @@
         "fumadocs-openapi": "10.4.1",
         "fumadocs-ui": "16.7.1",
         "lucide-react": "^0.577.0",
-        "next": "16.3.6",
+        "next": "16.4.1",
         "react": "19.2.8",
         "react-dom": "19.2.8",
         "shiki": "^4.3.1",
@@ -117,7 +117,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "lucide-react": "^0.577.0",
-        "next": "16.3.6",
+        "next": "16.4.1",
         "next-themes": "^0.4.6",
         "papaparse": "^5.7.0",
         "posthog-js": "^1.425.1",
@@ -160,7 +160,7 @@
     },
     "packages/email-blocks": {
       "name": "@sendlit/email-blocks",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@radix-ui/react-alert-dialog": "^1.1.18",
         "@radix-ui/react-avatar": "^1.2.1",
@@ -219,6 +219,8 @@
         "uuid": "^11.1.1",
       },
       "devDependencies": {
+        "@happy-dom/global-registrator": "21.0.3",
+        "@testing-library/react": "^16.3.2",
         "@types/node": "^22.20.0",
         "@types/react": "^19.2.17",
         "autoprefixer": "^10.5.2",
@@ -235,7 +237,7 @@
     },
     "packages/sendlit": {
       "name": "sendlit",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@ts-rest/core": "3.52.1",
         "zod": "3.25.76",

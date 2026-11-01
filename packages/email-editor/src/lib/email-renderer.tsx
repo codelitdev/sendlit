@@ -1,7 +1,17 @@
 import { Body, Container, Head, Html, Preview } from "@react-email/components";
 import { pretty, render } from "@react-email/render";
 import React from "react";
-import { Image, Link as LinkBlock, Separator, Text } from "@/blocks";
+import {
+  Columns,
+  Conditional,
+  HtmlSnippet,
+  Image,
+  Link as LinkBlock,
+  Separator,
+  Social,
+  Spacer,
+  Text,
+} from "@/blocks";
 import type { LinkBlockSettings } from "@/blocks/link/types";
 import type { BlockComponent, BlockRegistry } from "../types/block-registry";
 import type { Email, EmailBlock } from "../types/email-editor";
@@ -47,11 +57,13 @@ export function EmailTemplate({
   utmParams,
   blockRegistry,
   renderContext,
+  showConditionals,
 }: {
   email: Email;
   utmParams?: UtmParams;
   blockRegistry: BlockRegistry;
   renderContext?: unknown;
+  showConditionals?: boolean;
 }) {
   // Function to render a block based on its type
   const renderBlock = (block: EmailBlock) => {
@@ -84,6 +96,7 @@ export function EmailTemplate({
         block={modifiedBlock}
         style={email.style}
         renderContext={renderContext}
+        showConditionals={showConditionals}
       />
     );
   };
@@ -129,16 +142,31 @@ export async function renderEmailToHtml({
   utmParams,
   blocks,
   renderContext,
+  showConditionals,
 }: {
   email: Email;
   utmParams?: UtmParams;
   blocks?: BlockComponent<any, any>[];
   renderContext?: unknown;
+  /** Previews show conditional sections to everyone. Leave unset when
+   * rendering mail to send, so they are wrapped in Liquid conditions. */
+  showConditionals?: boolean;
 }): Promise<string> {
   try {
     // Create block registry from blocks or use defaults
     const blockRegistry: BlockRegistry = {};
-    const defaultBlocks = [Text, LinkBlock, Separator, Image, ...(blocks ?? [])];
+    const defaultBlocks = [
+      Text,
+      LinkBlock,
+      Separator,
+      Image,
+      Spacer,
+      Columns,
+      Social,
+      HtmlSnippet,
+      Conditional,
+      ...(blocks ?? []),
+    ];
 
     for (const block of defaultBlocks) {
       blockRegistry[block.metadata.name] = block;
@@ -150,6 +178,7 @@ export async function renderEmailToHtml({
         utmParams={utmParams}
         blockRegistry={blockRegistry}
         renderContext={renderContext}
+        showConditionals={showConditionals}
       />
     );
     const renderedHtml = await render(template);

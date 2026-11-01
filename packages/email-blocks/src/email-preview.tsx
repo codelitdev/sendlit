@@ -70,6 +70,8 @@ export function EmailPreview({
         email: normalizedEmail,
         blocks,
         renderContext,
+        // A preview has no subscriber, so show conditional sections as written.
+        showConditionals: true,
       })
         .then((html) => {
           startTransition(() => {
