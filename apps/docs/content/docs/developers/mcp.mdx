@@ -109,7 +109,7 @@ sendable templates. Use `duplicate_template` to copy or safely convert one.
 Template and sequence-email content is validated as a complete SendLit email
 document on every write. The `style` must include `colors`,
 `typography.header`, `typography.text`, `typography.link`, `interactives`, and
-`structure`; blocks must be one of text, link, image, separator, or footer.
+`structure`; blocks must be one of text, link, image, separator, spacer, columns, social, html, conditional, or footer. A conditional section shows its content only to contacts with (or without) a tag, so it is marketing-only (`conditional_not_allowed` on transactional content).
 Metadata supports only optional `previewText` and an optional `utm` object with
 `source`, `medium`, and `campaign` strings.
 For AI-created content, start with `list_system_templates` and
