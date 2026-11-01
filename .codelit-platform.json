@@ -4,7 +4,7 @@
         "name": "SendLit",
         "slug": "sendlit"
     },
-    "cliVersion": "0.4.2",
+    "cliVersion": "0.6.0",
     "capabilities": [
         "auth",
         "mcp",
@@ -12,7 +12,7 @@
         "billing"
     ],
     "managedFiles": {
-        ".github/workflows/platform-conformance.yml": "939bf5686a4433b93153ca2b919ba77251c7bf70b17b269cde02606be41535f4"
+        ".github/workflows/platform-conformance.yml": "2f7ededb9ad4a18228873bf23e5607aaa3822fc236762af2eda1a18a82d35d8f"
     },
     "productOwnedGlobs": [
         "apps/**",
