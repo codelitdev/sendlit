@@ -1,64 +1,39 @@
-import { serializeDates } from "../../utils/serialize";
+import {
+  createPlatformError,
+  type PlatformError,
+  type PlatformErrorCode,
+  type PlatformSafeDetails,
+} from "@codelitdev/platform";
+import { PlanGateError } from "../../billing/errors";
 
-export const AUTH_ERROR = {
-  content: [
-    {
-      type: "text" as const,
-      text: "Authentication required: valid API credentials were not provided.",
-    },
-  ],
-  isError: true,
-};
+/** A tool's failure: the kit returns it as an `isError` result carrying the
+ * platform `code`, plus `details` (a stable `reason`, and a `message` for the
+ * model when the reason alone is not enough). */
+export type ToolError = { error: PlatformError };
 
-export const INTERNAL_ERROR = {
-  content: [
-    {
-      type: "text" as const,
-      text: "An error occurred while processing your request.",
-    },
-  ],
-  isError: true,
-};
-
-export const NOT_FOUND = {
-  content: [{ type: "text" as const, text: "Not found." }],
-  isError: true,
-};
-
-export function errorResult(message: string) {
-  return {
-    content: [{ type: "text" as const, text: message }],
-    isError: true,
-  };
+export function toolError(
+  code: PlatformErrorCode,
+  details?: PlatformSafeDetails,
+): ToolError {
+  return { error: createPlatformError(code, details ? { safeDetails: details } : {}) };
 }
 
-export function jsonResult(data: unknown) {
-  const serialized = serializeDates(data ?? {}) as Record<string, unknown>;
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(serialized) }],
-    structuredContent: serialized,
+export const notFound = (): ToolError => toolError("not_found");
+
+/** A plan limit, keeping the REST error code as the `reason` and the
+ * primitive details (limit, usage, upgrade URL) that REST also returns. */
+export function planGateError(error: PlanGateError): ToolError {
+  const details: Record<string, string | number | boolean | null> = {
+    reason: error.code,
   };
+  for (const [key, value] of Object.entries(error.details)) {
+    if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
+      details[key] = value as string | number | boolean | null;
+    }
+  }
+  return toolError("forbidden", details);
 }
 
-export function planGateResult(error: {
-  code: string;
-  details?: Record<string, unknown>;
-  status?: number;
-}) {
-  const details = { error: error.code, ...(error.details ?? {}) };
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(details) }],
-    structuredContent: details,
-    isError: true,
-  };
-}
-
-export function isPlanGateError(error: unknown): error is {
-  code: string;
-  details?: Record<string, unknown>;
-  status?: number;
-} {
-  return Boolean(
-    error && typeof error === "object" && (error as any).name === "PlanGateError",
-  );
+export function isPlanGateError(error: unknown): error is PlanGateError {
+  return error instanceof PlanGateError;
 }

@@ -85,10 +85,24 @@ const ESP_LIFECYCLE =
   "ESP suspend and resume are operational lifecycle controls kept REST/dashboard-only; MCP exposes create, activate, test, retire and delete.";
 const DELIVERY_SELECTION =
   "Team delivery-source selection (shared organization delivery vs user ESPs) is REST/dashboard-only; MCP manages user ESP configurations directly.";
-const DEFAULT_ESP_ALIAS =
-  "MCP-only convenience alias over the team's default user ESP; REST exposes the same capability through the per-ESP settings.esps.* operations.";
+const API_DISCOVERY =
+  "MCP-only discovery for the generic api.* tools: it lists and describes the REST operations themselves, so it has no REST operation of its own.";
+
+/**
+ * The generic MCP tools (ADR 0010). Common flows have dedicated tools; every
+ * other MCP-reachable REST operation runs through the api.* tool for its risk,
+ * after api.list_operations and api.describe_operation.
+ */
+export const MCP_API_TOOLS = {
+  read: "api.read",
+  write: "api.write",
+  destructive: "api.delete",
+} as const;
 
 export const mcpParityManifest: readonly McpParityManifestEntry[] = [
+  mcpOnly("api.list_operations", API_DISCOVERY),
+  mcpOnly("api.describe_operation", API_DISCOVERY),
+
   // Contacts
   required("contacts.create", "create_contact", "write"),
   required("contacts.list", "list_contacts", "read"),
@@ -96,87 +110,83 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("contacts.update", "update_contact", "write"),
   required("contacts.addTag", "add_contact_tag", "write"),
   required("contacts.removeTag", "remove_contact_tag", "write"),
-  required("contacts.deliveries", "get_contact_deliveries", "read"),
-  required("contacts.events", "get_contact_events", "read"),
-  required("contacts.remove", "delete_contact", "destructive"),
-  required("contacts.previewBulkDelete", "preview_delete_contacts", "read"),
-  required("contacts.bulkDelete", "delete_contacts", "destructive"),
-  required("contacts.bulkDeleteStatus", "get_contact_deletion", "read"),
+  required("contacts.deliveries", MCP_API_TOOLS.read, "read"),
+  required("contacts.events", MCP_API_TOOLS.read, "read"),
+  required("contacts.remove", MCP_API_TOOLS.destructive, "destructive"),
+  required("contacts.previewBulkDelete", MCP_API_TOOLS.read, "read"),
+  required("contacts.bulkDelete", MCP_API_TOOLS.destructive, "destructive"),
+  required("contacts.bulkDeleteStatus", MCP_API_TOOLS.read, "read"),
 
   // Tags
-  required("tags.list", "list_tags", "read"),
-  required("tags.references", "get_tag_references", "read"),
-  required("tags.rename", "rename_tag", "write"),
-  required("tags.remove", "delete_tag", "destructive"),
+  required("tags.list", MCP_API_TOOLS.read, "read"),
+  required("tags.references", MCP_API_TOOLS.read, "read"),
+  required("tags.rename", MCP_API_TOOLS.write, "write"),
+  required("tags.remove", MCP_API_TOOLS.destructive, "destructive"),
 
   // Segments
   required("segments.create", "create_segment", "write"),
   required("segments.list", "list_segments", "read"),
-  required("segments.get", "get_segment", "read"),
-  required("segments.update", "update_segment", "write"),
-  required("segments.remove", "delete_segment", "destructive"),
+  required("segments.get", MCP_API_TOOLS.read, "read"),
+  required("segments.update", MCP_API_TOOLS.write, "write"),
+  required("segments.remove", MCP_API_TOOLS.destructive, "destructive"),
 
   // Media
-  required("media.list", "list_media", "read"),
+  required("media.list", MCP_API_TOOLS.read, "read"),
   restOnly(
     "media.presigned",
     "REST-only upload helper: issues a MediaLit browser upload signature for the dashboard's direct file upload, which has no MCP transport.",
   ),
-  required("media.get", "get_media", "read"),
-  required("media.update", "update_media", "write"),
-  required("media.remove", "delete_media", "destructive"),
-  required("media.references", "list_media_references", "read"),
+  required("media.get", MCP_API_TOOLS.read, "read"),
+  required("media.update", MCP_API_TOOLS.write, "write"),
+  required("media.remove", MCP_API_TOOLS.destructive, "destructive"),
+  required("media.references", MCP_API_TOOLS.read, "read"),
 
   // Templates
-  required("templates.listSystem", "list_system_templates", "read"),
+  required("templates.listSystem", MCP_API_TOOLS.read, "read"),
   required("templates.create", "create_template", "write"),
   required("templates.list", "list_templates", "read"),
   required("templates.get", "get_template", "read"),
   required("templates.update", "update_template", "write"),
-  required("templates.duplicate", "duplicate_template", "write"),
-  required("templates.remove", "delete_template", "destructive"),
+  required("templates.duplicate", MCP_API_TOOLS.write, "write"),
+  required("templates.remove", MCP_API_TOOLS.destructive, "destructive"),
 
   // Broadcasts and sequences
   required("sequences.create", "create_sequence", "write"),
   required("sequences.list", "list_sequences", "read"),
   required("sequences.get", "get_sequence", "read"),
   required("sequences.update", "update_sequence", "write"),
-  required("sequences.remove", "delete_sequence", "destructive"),
-  required("sequences.deletionPreview", "preview_sequence_deletion", "read"),
-  required("sequences.archive", "archive_broadcast", "write"),
-  required("sequences.unarchive", "unarchive_broadcast", "write"),
+  required("sequences.remove", MCP_API_TOOLS.destructive, "destructive"),
+  required("sequences.deletionPreview", MCP_API_TOOLS.read, "read"),
+  required("sequences.archive", MCP_API_TOOLS.write, "write"),
+  required("sequences.unarchive", MCP_API_TOOLS.write, "write"),
   required("sequences.addEmail", "add_sequence_email", "write"),
   required("sequences.updateEmail", "update_sequence_email", "write"),
   required("contacts.import", "import_contacts", "write"),
-  required("suppressions.create", "add_suppression", "write"),
-  required("forms.list", "list_signup_forms", "read"),
-  required("forms.create", "create_signup_form", "write"),
-  required("forms.get", "get_signup_form", "read"),
-  required("forms.update", "update_signup_form", "write"),
-  required("forms.remove", "delete_signup_form", "destructive"),
-  required("contacts.export", "export_contacts", "read"),
+  required("suppressions.create", MCP_API_TOOLS.write, "write"),
+  required("forms.list", MCP_API_TOOLS.read, "read"),
+  required("forms.create", MCP_API_TOOLS.write, "write"),
+  required("forms.get", MCP_API_TOOLS.read, "read"),
+  required("forms.update", MCP_API_TOOLS.write, "write"),
+  required("forms.remove", MCP_API_TOOLS.destructive, "destructive"),
+  required("contacts.export", MCP_API_TOOLS.read, "read"),
   required("sequences.sendEmailTest", "send_sequence_email_test", "write"),
-  required("sequences.removeEmail", "delete_sequence_email", "destructive"),
+  required("sequences.removeEmail", MCP_API_TOOLS.destructive, "destructive"),
   required("sequences.start", "start_sequence", "write"),
   required("sequences.pause", "pause_sequence", "write"),
   required("sequences.stats", "get_sequence_stats", "read"),
-  required("sequences.schedule", "get_sequence_schedule", "read"),
-  required("sequences.waitingContacts", "list_sequence_email_waiting_contacts", "read"),
-  required("sequences.getWeb", "get_broadcast_web_publishing", "read"),
-  required("sequences.updateWeb", "update_broadcast_web_publishing", "write"),
-  required("web.list", "list_web_issues", "read"),
-  required("web.get", "get_web_issue", "read"),
-  required("reputation.get", "get_reputation", "read"),
-  required("reputation.connectGoogle", "connect_google_postmaster", "write"),
-  required(
-    "reputation.disconnectGoogle",
-    "disconnect_google_postmaster",
-    "destructive",
-  ),
-  required("reputation.connectSnds", "connect_snds", "write"),
-  required("reputation.disconnectSnds", "disconnect_snds", "destructive"),
-  required("reputation.sync", "sync_reputation", "write"),
-  required("sequences.subscribers", "get_sequence_subscribers", "read"),
+  required("sequences.schedule", MCP_API_TOOLS.read, "read"),
+  required("sequences.waitingContacts", MCP_API_TOOLS.read, "read"),
+  required("sequences.getWeb", MCP_API_TOOLS.read, "read"),
+  required("sequences.updateWeb", MCP_API_TOOLS.write, "write"),
+  required("web.list", MCP_API_TOOLS.read, "read"),
+  required("web.get", MCP_API_TOOLS.read, "read"),
+  required("reputation.get", MCP_API_TOOLS.read, "read"),
+  required("reputation.connectGoogle", MCP_API_TOOLS.write, "write"),
+  required("reputation.disconnectGoogle", MCP_API_TOOLS.destructive, "destructive"),
+  required("reputation.connectSnds", MCP_API_TOOLS.write, "write"),
+  required("reputation.disconnectSnds", MCP_API_TOOLS.destructive, "destructive"),
+  required("reputation.sync", MCP_API_TOOLS.write, "write"),
+  required("sequences.subscribers", MCP_API_TOOLS.read, "read"),
 
   // Transactional email
   required("transactional.send", "send_email", "write"),
@@ -185,50 +195,42 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
 
   // Custom events
   required("events.track", "track_event", "write"),
-  required("events.definitions", "list_event_definitions", "read"),
-  required("events.definition", "get_event_definition", "read"),
-  required("events.createDefinition", "create_event_definition", "write"),
-  required("events.updateDefinition", "update_event_definition", "write"),
-  required("events.deleteDefinition", "delete_event_definition", "destructive"),
+  required("events.definitions", MCP_API_TOOLS.read, "read"),
+  required("events.definition", MCP_API_TOOLS.read, "read"),
+  required("events.createDefinition", MCP_API_TOOLS.write, "write"),
+  required("events.updateDefinition", MCP_API_TOOLS.write, "write"),
+  required("events.deleteDefinition", MCP_API_TOOLS.destructive, "destructive"),
 
   // User-managed ESPs
-  required("settings.esps.list", "list_esps", "read"),
-  required("settings.esps.create", "create_esp", "write"),
-  required("settings.esps.get", "get_esp", "read"),
-  required("settings.esps.update", "update_esp", "write"),
-  required("settings.esps.remove", "delete_esp", "destructive"),
-  required("settings.esps.test", "test_esp", "write"),
-  required(
-    "settings.esps.domainAuthentication",
-    "check_esp_domain_authentication",
-    "read",
-  ),
-  required("settings.esps.activate", "activate_esp", "write"),
+  required("settings.esps.list", MCP_API_TOOLS.read, "read"),
+  required("settings.esps.create", MCP_API_TOOLS.write, "write"),
+  required("settings.esps.get", MCP_API_TOOLS.read, "read"),
+  required("settings.esps.update", MCP_API_TOOLS.write, "write"),
+  required("settings.esps.remove", MCP_API_TOOLS.destructive, "destructive"),
+  required("settings.esps.test", MCP_API_TOOLS.write, "write"),
+  required("settings.esps.domainAuthentication", MCP_API_TOOLS.read, "read"),
+  required("settings.esps.activate", MCP_API_TOOLS.write, "write"),
   restOnly("settings.esps.suspend", ESP_LIFECYCLE),
   restOnly("settings.esps.resume", ESP_LIFECYCLE),
-  required("settings.esps.retire", "retire_esp", "destructive"),
-  mcpOnly("get_esp_config", DEFAULT_ESP_ALIAS),
-  mcpOnly("update_esp_config", DEFAULT_ESP_ALIAS),
-  mcpOnly("delete_esp_config", DEFAULT_ESP_ALIAS),
-  mcpOnly("send_test_email", DEFAULT_ESP_ALIAS),
+  required("settings.esps.retire", MCP_API_TOOLS.destructive, "destructive"),
 
   // General settings
-  required("settings.general.get", "get_general_settings", "read"),
-  required("settings.general.update", "update_general_settings", "write"),
-  required("settings.trackingDomain.get", "get_tracking_domain", "read"),
-  required("settings.trackingDomain.update", "set_tracking_domain", "write"),
-  required("settings.trackingDomain.verify", "verify_tracking_domain", "write"),
-  required("settings.web.get", "get_web_settings", "read"),
-  required("settings.web.update", "update_web_settings", "write"),
+  required("settings.general.get", MCP_API_TOOLS.read, "read"),
+  required("settings.general.update", MCP_API_TOOLS.write, "write"),
+  required("settings.trackingDomain.get", MCP_API_TOOLS.read, "read"),
+  required("settings.trackingDomain.update", MCP_API_TOOLS.write, "write"),
+  required("settings.trackingDomain.verify", MCP_API_TOOLS.write, "write"),
+  required("settings.web.get", MCP_API_TOOLS.read, "read"),
+  required("settings.web.update", MCP_API_TOOLS.write, "write"),
 
   // Teams and team API keys
-  required("teams.list", "list_teams", "read"),
-  required("teams.create", "create_team", "write"),
-  required("teams.rename", "rename_team", "write"),
-  required("teams.remove", "delete_team", "destructive"),
-  required("teams.listKeys", "list_api_keys", "read"),
-  required("teams.createKey", "create_api_key", "write"),
-  required("teams.removeKey", "delete_api_key", "destructive"),
+  required("teams.list", MCP_API_TOOLS.read, "read"),
+  required("teams.create", MCP_API_TOOLS.write, "write"),
+  required("teams.rename", MCP_API_TOOLS.write, "write"),
+  required("teams.remove", MCP_API_TOOLS.destructive, "destructive"),
+  required("teams.listKeys", MCP_API_TOOLS.read, "read"),
+  required("teams.createKey", MCP_API_TOOLS.write, "write"),
+  required("teams.removeKey", MCP_API_TOOLS.destructive, "destructive"),
 
   // Organization administration
   restOnly("account.getDeletion", ACCOUNT_DELETION),
@@ -304,21 +306,21 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   ),
 
   // User ESP delivery feedback
-  required("feedback.get", "get_esp_feedback_connection", "read"),
-  required("feedback.upsert", "upsert_esp_feedback_connection", "write"),
+  required("feedback.get", MCP_API_TOOLS.read, "read"),
+  required("feedback.upsert", MCP_API_TOOLS.write, "write"),
   restOnly(
     "feedback.rotate",
     "REST-only rotate endpoint; over MCP, calling upsert_esp_feedback_connection on an existing connection rotates its credential.",
   ),
-  required("feedback.test", "test_esp_feedback_connection", "write"),
-  required("feedback.remove", "delete_esp_feedback_connection", "destructive"),
+  required("feedback.test", MCP_API_TOOLS.write, "write"),
+  required("feedback.remove", MCP_API_TOOLS.destructive, "destructive"),
 
   // Delivery events and suppressions
   required("deliveryEvents.list", "list_delivery_events", "read"),
-  required("deliveryEvents.get", "get_delivery_event", "read"),
-  required("suppressions.list", "list_suppressions", "read"),
-  required("suppressions.get", "get_suppression", "read"),
-  required("suppressions.release", "release_suppression", "write"),
+  required("deliveryEvents.get", MCP_API_TOOLS.read, "read"),
+  required("suppressions.list", MCP_API_TOOLS.read, "read"),
+  required("suppressions.get", MCP_API_TOOLS.read, "read"),
+  required("suppressions.release", MCP_API_TOOLS.write, "write"),
 
   // Billing
   required("billing.organizationPlanUsage", "get_plan_usage", "read"),

@@ -39,7 +39,7 @@ API keys look like `sl_live_...` followed by a random secret, and are sent via t
 
 Keys are stored hashed (SHA-256), which means:
 
-- The full key is shown **exactly once**, in the response that creates it (`POST /teams/:teamId/keys`, the `create_api_key` MCP tool, or the provisioning call that first creates a team). Store it securely at that moment — it cannot be retrieved later.
+- The full key is shown **exactly once**, in the response that creates it (`POST /teams/:teamId/keys`, the `teams.createKey` operation through the MCP `api.write` tool, or the provisioning call that first creates a team). Store it securely at that moment — it cannot be retrieved later.
 - Key listings only include each key's `keyPrefix` (the first few characters, e.g. `sl_live_a1b2`) so you can tell keys apart.
 - Keys are revoked by their `id` (`DELETE /teams/:teamId/keys/:keyId`), not by the secret.
 

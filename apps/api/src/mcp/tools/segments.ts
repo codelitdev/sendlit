@@ -1,164 +1,57 @@
 import { contactFilterSchema } from "@sendlit/api-contract";
 import { z } from "zod";
-import {
-  createSegment,
-  deleteSegment,
-  getSegment,
-  listSegments,
-  updateSegment,
-} from "../../contacts/segments-queries";
+import { createSegment, listSegments } from "../../contacts/segments-queries";
 import { omitInternal } from "../../utils/public";
-import type { McpToolRegistrar } from "../tool-registry";
-import { getTeamId } from "./auth";
-import { AUTH_ERROR, INTERNAL_ERROR, jsonResult, NOT_FOUND } from "./responses";
+import type { SendLitMcpTool } from "../context";
+import { dedicatedTool } from "../tool";
+import { toolError } from "./responses";
 import { segmentListSchema, segmentSchema } from "./schemas";
 
-export function registerSegmentTools(server: McpToolRegistrar): void {
-  server.registerTool(
-    "list_segments",
-    {
-      description:
-        "Returns all saved segments (named, reusable contact filters) for the team.",
-      outputSchema: segmentListSchema,
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
+export const segmentTools = (): SendLitMcpTool[] => [
+  dedicatedTool({
+    name: "list_segments",
+    operationId: "segments.list",
+    risk: "read",
+    description:
+      "Returns all saved segments (named, reusable contact filters) for the team.",
+    inputSchema: z.object({}),
+    outputSchema: segmentListSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context }) {
+      const items = await listSegments(context.teamId);
+      return { items: items.map((item) => omitInternal(item)) };
     },
-    async (extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      try {
-        const items = await listSegments(teamId);
-        return jsonResult({
-          items: items.map((item) => omitInternal(item)),
-        });
-      } catch {
-        return INTERNAL_ERROR;
-      }
-    },
-  );
+  }),
 
-  server.registerTool(
-    "get_segment",
-    {
-      description: "Returns a single saved segment by its segment ID.",
-      inputSchema: { segmentId: z.string().describe("Segment ID") },
-      outputSchema: segmentSchema,
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      try {
-        const segment = await getSegment(args.segmentId);
-        if (!segment || segment.teamId !== teamId) return NOT_FOUND;
-        return jsonResult(omitInternal(segment));
-      } catch {
-        return INTERNAL_ERROR;
-      }
-    },
-  );
-
-  server.registerTool(
-    "create_segment",
-    {
-      description:
-        "Creates a saved segment: a named, reusable contact filter that can be applied to broadcasts/sequences or listed on demand.",
-      inputSchema: {
-        name: z.string().describe("Segment name (must be unique)"),
-        filter: contactFilterSchema.describe("The filter to save"),
-      },
-      outputSchema: segmentSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
+  dedicatedTool({
+    name: "create_segment",
+    operationId: "segments.create",
+    risk: "write",
+    description:
+      "Creates a saved segment: a named, reusable contact filter that can be applied to broadcasts/sequences or listed on demand.",
+    inputSchema: z.object({
+      name: z.string().describe("Segment name (must be unique)"),
+      filter: contactFilterSchema.describe("The filter to save"),
+    }),
+    outputSchema: segmentSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
       try {
         const segment = await createSegment({
-          teamId,
+          teamId: context.teamId,
           name: args.name,
           filter: args.filter,
         });
-        return jsonResult(omitInternal(segment));
+        return omitInternal(segment);
       } catch (err: any) {
-        return {
-          content: [{ type: "text" as const, text: err.message }],
-          isError: true,
-        };
+        if (err?.message === "duplicate_name") {
+          return toolError("conflict", {
+            reason: "duplicate_name",
+            message: "A segment with this name already exists",
+          });
+        }
+        throw err;
       }
     },
-  );
-
-  server.registerTool(
-    "update_segment",
-    {
-      description: "Updates a saved segment's name and/or filter.",
-      inputSchema: {
-        segmentId: z.string().describe("Segment ID"),
-        name: z.string().optional(),
-        filter: contactFilterSchema.optional(),
-      },
-      outputSchema: segmentSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      const { segmentId, ...patch } = args;
-      try {
-        const segment = await updateSegment({
-          teamId,
-          segmentId,
-          ...patch,
-        });
-        if (!segment) return NOT_FOUND;
-        return jsonResult(omitInternal(segment));
-      } catch (err: any) {
-        return {
-          content: [{ type: "text" as const, text: err.message }],
-          isError: true,
-        };
-      }
-    },
-  );
-
-  server.registerTool(
-    "delete_segment",
-    {
-      description:
-        "Permanently deletes a saved segment. This action cannot be undone; it does not delete the contacts themselves.",
-      inputSchema: { segmentId: z.string() },
-      outputSchema: z.object({ message: z.string() }),
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      try {
-        await deleteSegment(teamId, args.segmentId);
-        return jsonResult({ message: "Segment deleted." });
-      } catch {
-        return INTERNAL_ERROR;
-      }
-    },
-  );
-}
+  }),
+];

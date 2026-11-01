@@ -1,43 +1,40 @@
 import { createMcpOAuthDiscoveryRoutes } from "@codelitdev/oauth-server-kit/mcp";
-import { toNodeHandler } from "@modelcontextprotocol/node";
-import { createMcpHandler } from "@modelcontextprotocol/server";
-import { type NextFunction, type Request, type Response, Router } from "express";
+import { createPlatformError, toPublicHttpError } from "@codelitdev/platform";
+import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+  Router,
+} from "express";
 import rateLimit from "express-rate-limit";
-import { auth, mcpResourceUrl, oauthResourceClient } from "../auth/better-auth";
-import { mcpAuth } from "../auth/middleware";
-import { requireTeam } from "../auth/require-team";
+import { CLIENT_IP_HEADER } from "../abuse/signup";
+import {
+  auth,
+  mcpProtectedResourceMetadataUrl,
+  mcpResourceUrl,
+  oauthResourceClient,
+} from "../auth/better-auth";
 import logger from "../services/log";
-import { createSendLitMcpAuthInfo } from "./auth-context";
+import type { ApiToolDeps } from "./api-tools";
+import { runMcpRequest } from "./context";
 import { MCP_SCOPES_SUPPORTED } from "./policy";
-import { buildMcpServer } from "./server";
+import { createSendLitMcp } from "./server";
 
-const router = Router();
-
-router.use(
-  createMcpOAuthDiscoveryRoutes({
-    auth,
-    resourceUrl: mcpResourceUrl,
-    oauthResourceClient,
-    scopesSupported: [...MCP_SCOPES_SUPPORTED],
-    allowedOrigins: "*",
-  }),
-);
+/** SendLit's own headers, allowed on top of the kit's CORS list. */
+const SENDLIT_CORS_HEADERS = "x-sendlit-apikey, X-Sendlit-Team-Id";
 
 const highImpactTools = new Set([
   "send_email",
-  "send_test_email",
+  "send_sequence_email_test",
   "track_event",
-  "test_esp",
   "start_sequence",
-  "create_api_key",
-  "delete_api_key",
-  "delete_team",
-  "delete_contacts",
-  "release_suppression",
+  "api.write",
+  "api.delete",
 ]);
 
 const mcpLimiter = rateLimit({
   windowMs: 60_000,
+  skip: (req) => req.method === "OPTIONS",
   max: (req) => (highImpactTools.has(String(req.headers["mcp-name"] || "")) ? 20 : 60),
   standardHeaders: true,
   legacyHeaders: false,
@@ -47,108 +44,124 @@ const mcpLimiter = rateLimit({
   },
   handler(req, res, _next, options) {
     logger.warn(
-      {
-        method: req.headers["mcp-method"],
-        tool: req.headers["mcp-name"],
-        authKind: (req as any).authKind,
-      },
+      { method: req.headers["mcp-method"], tool: req.headers["mcp-name"] },
       "MCP rate limit exceeded",
     );
     res.status(options.statusCode).json(options.message);
   },
 });
 
-function mcpCors(req: Request, res: Response, next: NextFunction) {
-  const origin = req.headers.origin || "*";
-  res.header("Access-Control-Allow-Origin", origin);
-  res.header("Vary", "Origin");
-  res.header("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Accept, MCP-Protocol-Version, Mcp-Method, Mcp-Name, x-sendlit-apikey, Authorization",
-  );
-  if (req.method === "OPTIONS") {
-    res.status(204).end();
-    return;
-  }
-  next();
-}
-
-function attachMcpAuthInfo(req: Request, res: Response, next: NextFunction) {
-  const authInfo = createSendLitMcpAuthInfo(req);
-  if (!authInfo) {
-    res.status(401).json({
-      error: "unauthorized",
-      error_description: "MCP authentication context is incomplete.",
+/** The kit owns protocol parsing errors as JSON-RPC, not Express HTML. */
+const jsonBody = (req: Request, res: Response, next: NextFunction) => {
+  if (req.method !== "POST") return next();
+  if (!req.is("application/json")) {
+    res.status(415).json({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Content-Type must be application/json" },
+      id: null,
     });
     return;
   }
-  (req as any).auth = authInfo;
-  next();
-}
-
-function observeMcpRequest(req: Request, res: Response, next: NextFunction) {
-  const startedAt = performance.now();
-  res.once("finish", () => {
-    // Deliberately exclude arguments, credentials, message content, and
-    // results. These low-cardinality fields are safe to aggregate into
-    // latency/error dashboards at the logging layer.
-    logger.info(
-      {
-        method: req.headers["mcp-method"],
-        tool: req.headers["mcp-name"],
-        statusCode: res.statusCode,
-        durationMs: Math.round(performance.now() - startedAt),
-        authKind: (req as any).authKind,
-      },
-      "MCP request completed",
-    );
-  });
-  next();
-}
-
-export const mcpHandler = createMcpHandler(
-  // One request-local server instance works for both supported eras. Modern
-  // clients use stateless 2026 request envelopes; existing MCP clients such
-  // as VS Code still begin with the 2025 `initialize` handshake.
-  () => buildMcpServer(),
-  {
-    // Keep 2025 traffic stateless too: no session IDs or retained
-    // transports are introduced, while clients that have not upgraded to
-    // the 2026 wire revision can complete their Streamable HTTP handshake.
-    legacy: "stateless",
-    onerror(error) {
-      logger.error({ errorType: error.name }, "MCP protocol error");
-    },
-  },
-);
-
-const nodeMcpHandler = toNodeHandler(mcpHandler, {
-  onerror(error) {
-    logger.error({ errorType: error.name }, "MCP Node adapter error");
-  },
-});
-
-router.post(
-  "/mcp",
-  mcpCors,
-  mcpLimiter,
-  mcpAuth,
-  requireTeam,
-  attachMcpAuthInfo,
-  observeMcpRequest,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      // This router is mounted before Express body parsing. The official
-      // adapter owns JSON parsing/content-type validation so protocol
-      // parse errors and 415 responses remain MCP-compliant.
-      await nodeMcpHandler(req as any, res);
-    } catch (error) {
-      next(error);
+  express.json({ limit: "4mb" })(req, res, (error?: unknown) => {
+    if (error) {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32700, message: "Parse error" },
+        id: null,
+      });
+      return;
     }
-  },
-);
+    next();
+  });
+};
 
-router.options("/mcp", mcpCors);
+export function createMcpRoutes(deps: ApiToolDeps): Router {
+  const router = Router();
+  const mcp = createSendLitMcp(deps);
 
-export default router;
+  router.use(
+    createMcpOAuthDiscoveryRoutes({
+      auth,
+      resourceUrl: mcpResourceUrl,
+      oauthResourceClient,
+      scopesSupported: [...MCP_SCOPES_SUPPORTED],
+      allowedOrigins: "*",
+    }),
+  );
+
+  router.all(
+    "/mcp",
+    mcpLimiter,
+    jsonBody,
+    async (req: Request, res: Response, next) => {
+      const startedAt = performance.now();
+      try {
+        const headers: Record<string, string | string[] | undefined> = {
+          ...req.headers,
+        };
+        // Existing SendLit clients send their team key as `x-sendlit-apikey`;
+        // the kit reads `X-API-Key`. Both at once stay ambiguous.
+        const sendlitKey = headers["x-sendlit-apikey"];
+        delete headers["x-sendlit-apikey"];
+        if (sendlitKey && headers["x-api-key"]) {
+          const ambiguous = toPublicHttpError(
+            createPlatformError("credential_ambiguous"),
+          );
+          res.status(ambiguous.status).json(ambiguous.body);
+          return;
+        }
+        if (sendlitKey) headers["x-api-key"] = sendlitKey;
+        headers[CLIENT_IP_HEADER] = req.ip ?? "";
+        headers["x-request-id"] = String(res.locals.requestId ?? "");
+
+        const controller = new AbortController();
+        res.once("close", () => {
+          if (!res.writableFinished) controller.abort();
+        });
+        const result = await runMcpRequest(() =>
+          mcp.handle({
+            method: req.method,
+            headers,
+            body: req.body,
+            signal: controller.signal,
+          }),
+        );
+
+        for (const [name, value] of Object.entries(result.headers))
+          res.setHeader(name, value);
+        const allowed = res.getHeader("Access-Control-Allow-Headers");
+        if (allowed) {
+          res.setHeader(
+            "Access-Control-Allow-Headers",
+            `${allowed}, ${SENDLIT_CORS_HEADERS}`,
+          );
+        }
+        if (result.status === 401) {
+          // Spec-compliant MCP clients discover OAuth from this challenge.
+          res.setHeader(
+            "WWW-Authenticate",
+            `Bearer resource_metadata="${mcpProtectedResourceMetadataUrl}"`,
+          );
+        }
+        res.status(result.status);
+        if (result.body === null) res.end();
+        else res.json(result.body);
+
+        // Arguments, credentials, message content and results stay out of logs.
+        logger.info(
+          {
+            method: req.headers["mcp-method"],
+            tool: req.headers["mcp-name"],
+            statusCode: result.status,
+            durationMs: Math.round(performance.now() - startedAt),
+          },
+          "MCP request completed",
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  return router;
+}

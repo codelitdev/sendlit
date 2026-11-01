@@ -34,7 +34,6 @@ const schema = await import("../db/schema");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 const { requestApp } = await import("../test/http");
 const { default: tagRoutes } = await import("./tags-routes");
-const { registerTagTools } = await import("../mcp/tools/tags");
 type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
@@ -337,52 +336,5 @@ describe("tag routes", () => {
 
     expect(response.status).toBe(200);
     expect(response.json().contactsUpdated).toBe(1);
-  });
-});
-
-describe("MCP tag tools", () => {
-  function tools() {
-    const registered = new Map<string, { config: any; handler: any }>();
-    registerTagTools({
-      registerTool: (name: string, config: any, handler: any) => {
-        registered.set(name, { config, handler });
-      },
-    } as any);
-    return registered;
-  }
-  const authFor = (teamId: string) => ({
-    http: { authInfo: { extra: { authKind: "team_key", teamId, user: null } } },
-  });
-
-  it("requires auth", async () => {
-    const result = await tools().get("list_tags")!.handler({});
-    expect(result.isError).toBe(true);
-  });
-
-  it("lists, inspects, renames and deletes tags with valid output", async () => {
-    const { team } = await seedReferences();
-    const registered = tools();
-    const auth = authFor(team.id);
-    const call = async (name: string, args?: unknown) => {
-      const tool = registered.get(name)!;
-      const result =
-        args === undefined ? await tool.handler(auth) : await tool.handler(args, auth);
-      expect(result.isError).toBeUndefined();
-      expect(tool.config.outputSchema.safeParse(result.structuredContent).success).toBe(
-        true,
-      );
-      return result.structuredContent;
-    };
-
-    expect((await call("list_tags")).items).toHaveLength(2);
-    expect((await call("get_tag_references", { tag: "vip" })).segments).toHaveLength(1);
-    expect((await call("rename_tag", { tag: "vip", name: "gold" })).tag).toBe("gold");
-    expect((await call("delete_tag", { tag: "gold" })).contactsUpdated).toBe(2);
-
-    const missing = await registered
-      .get("delete_tag")!
-      .handler({ tag: "nope" }, authFor(team.id));
-    expect(missing.isError).toBe(true);
-    expect(registered.get("delete_tag")!.config.annotations.destructiveHint).toBe(true);
   });
 });

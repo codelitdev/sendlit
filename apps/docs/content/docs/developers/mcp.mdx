@@ -25,7 +25,7 @@ Authenticate with one of these headers:
 Authorization: Bearer <oauth-access-token>
 ```
 
-or:
+or a team API key in `x-sendlit-apikey` (or the standard `X-API-Key`; send only one):
 
 ```http
 x-sendlit-apikey: sl_live_...
@@ -44,9 +44,9 @@ OAuth authorization, consent, token, introspection, revocation, and userinfo end
 
 Use Authorization Code with S256 PKCE, request only the scopes your client needs, and keep any refresh token in the client's secure credential store. The authorization request must include an explicit, non-empty `scope`; SendLit does not turn a missing value into a full-access grant. Every authorization requires a SendLit user to sign in, select a team when necessary, and approve consent.
 
-Team API keys always select one fixed team and currently grant the complete
-MCP tool set for that team, except the API key management tools
-(`list_api_keys`, `create_api_key`, `delete_api_key`), which require OAuth.
+Team API keys always select one fixed team and can run every MCP tool and
+operation for that team, except API key management (`teams.listKeys`,
+`teams.createKey`, `teams.removeKey`), which requires OAuth.
 Organization API keys, dashboard session cookies, and `X-Sendlit-Team-Id` are
 not accepted as MCP authentication. Use the REST API for organization
 discovery, shared-delivery setup, and team provisioning; see
@@ -58,7 +58,7 @@ OAuth clients (including MCP clients like Claude) have no way to send a custom h
 
 ### OAuth scopes
 
-OAuth access is default-deny per tool. Read and write permissions are separate:
+OAuth access is default-deny per REST operation: a dedicated tool and an `api.*` call to the same operation need the same scope, and `api.list_operations` shows which scope each operation needs and whether your token has it. Read and write permissions are separate:
 
 - `contacts:read`, `contacts:write`
 - `templates:read`, `templates:write`
@@ -75,100 +75,40 @@ OAuth access is default-deny per tool. Read and write permissions are separate:
 
 ## Available tools
 
-### Contacts and segments
+SendLit follows the CodeLit pattern: dedicated tools for the everyday flows, and five generic tools that reach every other team operation of the [REST API](/developers/api). A client loads a short catalog (34 tools), and nothing the REST API offers a team is out of reach.
 
-- `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`
-- `preview_delete_contacts`, `delete_contacts` (bulk, by ids or by search/segment/filter; requires the previewed `expectedCount` for a match) and `get_contact_deletion` (progress of a large background deletion). See [Delete contacts](/email-marketing/contacts#delete-contacts).
-- `add_contact_tag`, `remove_contact_tag`, `get_contact_deliveries`
-- `import_contacts` (up to 1000 rows per call, statuses only get stricter) and `export_contacts` (CSV)
-- `list_segments`, `get_segment`, `create_segment`, `update_segment`, `delete_segment`
-- `list_tags` (with contact counts), `get_tag_references`, `rename_tag`, `delete_tag` (team-wide; contacts scopes)
-- `list_signup_forms`, `get_signup_form`, `create_signup_form`, `update_signup_form`, `delete_signup_form` (public [signup forms](/email-marketing/signup-forms); contacts scopes)
+### Dedicated tools
 
-Segments save reusable filters over contact fields, tags, subscription state, signup date, and custom fields.
+- **Contacts:** `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `add_contact_tag`, `remove_contact_tag`, `import_contacts` (up to 1000 rows per call; statuses only get stricter)
+- **Segments:** `list_segments`, `create_segment`. Segments save reusable filters over contact fields, tags, subscription state, signup date and custom fields.
+- **Templates:** `list_templates`, `get_template`, `create_template`, `update_template`
+- **Broadcasts and sequences:** `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`, `add_sequence_email`, `update_sequence_email`, `send_sequence_email_test`, `start_sequence`, `pause_sequence`, `get_sequence_stats`
+- **Transactional email:** `send_email`, `get_email`, `list_emails`
+- **Events and delivery:** `track_event`, `list_delivery_events`, `get_plan_usage`
 
-### Custom events
+Broadcasts use the sequence resource with one email and an audience filter. `update_sequence` sets a sequence's trigger, including `event:custom` with a `triggerFilter`, who can enter (`reentry`, `reentryPeriodDays`), and an `excludeFilter` whose contacts are never sent the broadcast or enrolled; see [Sequences](/email-marketing/sequences#custom-events). Send a test with `send_sequence_email_test` (a `[Test]` copy to you, or up to five addresses) and use `start_sequence` only after the audience, trigger, content, delays and tag actions are correct.
 
-- `track_event` records a [custom event](/developers/events) for a contact and starts the sequences it triggers. It takes the `POST /events` body, including `createContact`, `contact`, `idempotencyKey` and `backfill`.
-- `list_event_definitions`, `get_event_definition`, `create_event_definition`, `update_event_definition`, `delete_event_definition`
-- `get_contact_events` lists a contact's events, newest first, with the sequences each one started.
+Template and sequence-email content is validated as a complete SendLit email document on every write. The `style` must include `colors`, `typography.header`, `typography.text`, `typography.link`, `interactives` and `structure`; blocks must be one of text, link, image, separator or footer. Metadata supports only optional `previewText` and an optional `utm` object with `source`, `medium` and `campaign` strings. For AI-created content, start from a system template (`templates.listSystem`, then `templates.duplicate` through the `api.*` tools) rather than constructing a document from scratch.
 
-Event tools use the contacts scopes: `contacts:read` for reads and `contacts:write` for `track_event` and definition changes. `track_event` is for agents and people trying things out; send production events through the REST API, which allows far more requests per minute.
+`send_email` sends one API-triggered email, accepts only team-owned transactional templates, and reports `template_not_transactional` or the missing variable paths without creating a send. Broadcast and sequence tools accept only marketing templates. `track_event` records a [custom event](/developers/events) and starts the sequences it triggers; send production events through the REST API, which allows far more requests per minute.
 
-### Templates and media
+### Generic API tools
 
-- `list_system_templates`, `list_templates`, `get_template`, `create_template`, `update_template`, `duplicate_template`, `delete_template`
-- `list_media`, `get_media`, `update_media`, `delete_media`, `list_media_references`
+Everything else a team can do over REST runs through these tools: sending providers (ESPs) and their delivery feedback, suppressions, [sender reputation](/email-marketing/reputation), the [tracking domain](/email-marketing/tracking-domain), general and [web archive](/email-marketing/web-archive) settings, [signup forms](/email-marketing/signup-forms), media, tags, segment and template management, sequence schedules, subscribers and archiving, event definitions, contact exports and deliveries, teams and API keys, and every delete.
 
-Templates and media are scoped to the selected team. Template list tools accept
-an optional `purpose` filter; `create_template` requires a purpose and returns
-the computed `requiredVariables`. System templates expose transactional
-variable descriptions and examples, but are starters rather than team-owned
-sendable templates. Use `duplicate_template` to copy or safely convert one.
+1. `api.list_operations` lists the operations, filtered by `search` or `group`. Each item has its `operationId`, method and path, the tool that runs it, the OAuth scope it needs, and whether this connection may run it.
+2. `api.describe_operation` returns an operation's path and query parameters, the JSON Schema of its request body, and the schema of a successful response (from [`/openapi.json`](/developers/api)).
+3. `api.read` runs a read operation, `api.write` an operation that creates or changes data or has an external effect (such as testing an ESP), and `api.delete` one that deletes or permanently disables something. Each takes `operationId`, `pathParams`, `query` and, for writes, `body`. `api.delete` also needs `confirm: true`: confirm the target with the person first.
 
-Template and sequence-email content is validated as a complete SendLit email
-document on every write. The `style` must include `colors`,
-`typography.header`, `typography.text`, `typography.link`, `interactives`, and
-`structure`; blocks must be one of text, link, image, separator, or footer.
-Metadata supports only optional `previewText` and an optional `utm` object with
-`source`, `medium`, and `campaign` strings.
-For AI-created content, start with `list_system_templates` and
-`duplicate_template` rather than constructing a document shape from scratch.
+A call runs exactly as the REST request would, for the connected team, with the same validation, plan limits and errors. For example, to retire an ESP: find `settings.esps.retire` with `api.list_operations`, check its parameters with `api.describe_operation`, then call `api.delete` with `{ "operationId": "settings.esps.retire", "pathParams": { "espId": "esp_…" }, "confirm": true }`.
 
-### Broadcasts and sequences
+Billing, account deletion, organization administration and team provisioning are not reachable over MCP; use the REST API with a dashboard session or an organization key.
 
-Broadcasts use the sequence resource with one email and an audience filter. For sequences, `update_sequence` sets the trigger, including `event:custom` with a `triggerFilter`, and who can enter (`reentry`, `reentryPeriodDays`); see [Sequences](/email-marketing/sequences#custom-events). It also takes an `excludeFilter`; contacts matching it are never sent the broadcast or enrolled in the sequence. Set `viewInBrowser: false` to send without the "View in browser" link and take down the web versions already linked. Sequence tools include:
+### Errors
 
-- `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`
-- `add_sequence_email`, `update_sequence_email`, `delete_sequence_email`
-- `preview_sequence_deletion`, `delete_sequence` (destructive: pause an active sequence first; its enrollments and stats are deleted). Draft and scheduled broadcasts can be deleted; sent ones can't (`broadcast_sent`)
-- `archive_broadcast`, `unarchive_broadcast` hide a sent broadcast from the list and the web archive, keeping its report. `list_sequences` takes `archived` (`exclude` by default, `only`, `include`)
-- `send_sequence_email_test` sends a `[Test]` copy of one email to you (or up to five addresses)
-- `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_schedule`, `list_sequence_email_waiting_contacts`, `get_sequence_subscribers`
-- `get_broadcast_web_publishing`, `update_broadcast_web_publishing`, `list_web_issues`, `get_web_issue` ([web archive](/email-marketing/web-archive))
+A failed tool call is a tool result with `isError: true` and `structuredContent` of `{ code, message, details }`. `code` is one of `validation_failed`, `not_found`, `conflict`, `forbidden`, `rate_limited`, `unauthenticated` or `internal_error`. `details.reason` carries SendLit's own error code (for example `plan_limit_reached`, `sending_paused`, `template_not_transactional`, `insufficient_scope` or `broadcast_sent`), `details.message` explains it, and plan limits keep the limit, usage and upgrade link REST returns.
 
-Send a test with `send_sequence_email_test` and use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.
-
-### Transactional email
-
-- `send_email` sends one API-triggered email.
-- `get_email` retrieves one delivery record.
-- `list_emails` lists transactional delivery records.
-
-Transactional sends are separate from broadcasts and sequences; they do not enroll a contact or use a campaign audience.
-`send_email` accepts only team-owned transactional templates and reports
-`template_not_transactional` or the missing variable paths without creating a
-send. Broadcast and sequence tools accept only marketing templates and report
-`template_not_marketing`.
-
-### Sending configuration
-
-- `get_general_settings`, `update_general_settings`, `get_web_settings`, `update_web_settings`
-- `get_tracking_domain`, `set_tracking_domain`, `verify_tracking_domain` ([tracking domain](/email-marketing/tracking-domain))
-- `get_reputation`, `sync_reputation`, `connect_google_postmaster` (returns a sign-in URL for a person to open), `disconnect_google_postmaster`, `connect_snds`, `disconnect_snds` ([sender reputation](/email-marketing/reputation))
-- `get_esp_config`, `update_esp_config`, `delete_esp_config`, `send_test_email`
-- `list_esps`, `create_esp`, `get_esp`, `update_esp`, `delete_esp`, `test_esp`
-- `check_esp_domain_authentication` (live SPF, DKIM and DMARC check of the From domain, with the records to add)
-
-The ESP tools manage the team’s sending providers and default provider. Secrets are accepted for writes but are not returned in read responses.
-
-### Teams and API keys
-
-- `list_teams`, `create_team`, `rename_team`, `delete_team`
-- `get_plan_usage` returns the current team's parent-organization plan, usage, and limits. It never returns provider IDs or portal links.
-- `list_api_keys`, `create_api_key`, `delete_api_key`
-
-Mutating tools such as `create_team`, `create_contact`, `update_contact`, `send_email`, and `start_sequence` return the same plan-gate error object as REST (`plan_limit_reached`, `plan_feature_unavailable`, `sending_paused`) in `structuredContent`. Checkout, portal, and invoice tools are not exposed through MCP.
-
-API key management tools are refused when the caller authenticates with an API key; connect with OAuth to use them. The full API key secret is returned only by `create_api_key`. Store it immediately; it cannot be recovered from a later listing.
-
-### Delivery feedback and suppressions
-
-- `get_esp_feedback_connection`, `upsert_esp_feedback_connection`, `test_esp_feedback_connection`, `delete_esp_feedback_connection`
-- `list_delivery_events`, `get_delivery_event`
-- `list_suppressions`, `get_suppression`, `add_suppression`, `release_suppression`
-
-Delivery-feedback connections are supported only for providers with a reviewed asynchronous feedback adapter: Resend, Postmark, SendGrid, Mailgun, and Amazon SES. For SES, pass `expectedTopicArn` (the SNS topic subscribed to the webhook URL) to `upsert_esp_feedback_connection` instead of `credential`; see [Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback). Releasing a SendLit suppression does not remove a provider-native suppression, and complaint suppressions are not releasable through the owner API.
+API key management is refused when the caller authenticates with an API key; connect with OAuth to use it. The full API key secret is returned only when the key is created. Store it immediately; it cannot be recovered from a later listing. Delivery-feedback connections are supported for Resend, Postmark, SendGrid, Mailgun and Amazon SES; see [Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback). Releasing a SendLit suppression does not remove a provider-native suppression.
 
 ## Example client configuration
 
@@ -191,4 +131,4 @@ Prefer the client’s secure secret-store or environment-variable mechanism. Do 
 
 ## Operational limits
 
-The MCP endpoint is rate limited to 60 requests per minute. High-impact tools such as sending email, tracking events (`track_event`), activating sequences, testing ESPs, managing API keys, deleting teams, deleting contacts in bulk (`delete_contacts`), and releasing suppressions are limited to 20 requests per minute. A missing or invalid credential returns HTTP 401, a missing OAuth scope returns an `insufficient_scope` tool error, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.
+The MCP endpoint is rate limited to 60 requests per minute. High-impact tools (`send_email`, `send_sequence_email_test`, `track_event`, `start_sequence`, `api.write` and `api.delete`) are limited to 20 requests per minute, and the REST API's own limits apply to `api.*` calls as well. A missing or invalid credential returns HTTP 401 with a `WWW-Authenticate` challenge, a missing OAuth scope returns a `forbidden` tool error with reason `insufficient_scope`, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.

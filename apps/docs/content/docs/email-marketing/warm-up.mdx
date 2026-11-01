@@ -70,8 +70,8 @@ Transactional email is never held back.
 
 If you also set a daily send limit, the lower of the two applies. Changing
 the target keeps the warm-up's progress; turning it off removes the cap. Over
-the API, set `warmupTargetDailyVolume` with `PATCH /settings/esps/{espId}` or
-the MCP `update_esp` tool (`null` turns it off); the ESP's `warmup` field
+the API, set `warmupTargetDailyVolume` with `PATCH /settings/esps/{espId}` (over MCP, `settings.esps.update`
+through `api.write`; `null` turns it off); the ESP's `warmup` field
 shows the day and today's limit.
 
 ## Set a daily send limit
@@ -85,8 +85,8 @@ never held back. The ESP list shows today's count against the limit.
 
 Raise the limit every day or two as long as bounces and complaints stay low,
 and clear it once you're sending your full volume. You can also set it with
-`PATCH /settings/esps/{espId}` (`dailySendLimit`, or `null` to remove it) or
-the MCP `update_esp` tool.
+`PATCH /settings/esps/{espId}` (`dailySendLimit`, or `null` to remove it) (over MCP,
+`settings.esps.update` through `api.write`).
 
 ## A sample manual ramp
 
