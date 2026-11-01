@@ -100,8 +100,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(oauthPagesRoutes);
   // The MCP handler owns JSON parsing and protocol content-type errors, so it
   // must be mounted before the API's global Express body parser.
-  // Generic api.* tools run REST operations by injecting into this app.
-  app.use(createMcpRoutes({ app: () => app }));
+  app.use(createMcpRoutes());
   // Mounted before global body parsing: this route needs the unmodified raw
   // request bytes for provider signature verification and has no
   // session/API-key concept at all — see delivery-feedback/webhook-route.ts.

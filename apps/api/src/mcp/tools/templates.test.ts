@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 
 const mocks = {
   createTemplate: vi.fn(),
+  deleteTemplate: vi.fn(),
+  duplicateTemplate: vi.fn(),
   getTemplate: vi.fn(),
   listTemplates: vi.fn(),
   updateTemplate: vi.fn(),
@@ -9,6 +11,8 @@ const mocks = {
 
 mock.module("../../templates/queries", () => ({
   createTemplate: mocks.createTemplate,
+  deleteTemplate: mocks.deleteTemplate,
+  duplicateTemplate: mocks.duplicateTemplate,
   getTemplate: mocks.getTemplate,
   listTemplates: mocks.listTemplates,
   updateTemplate: mocks.updateTemplate,
@@ -23,8 +27,6 @@ const teamKey = {
   user: null,
   scopes: [],
   requestId: "",
-  clientIp: "",
-  replayHeaders: {},
 };
 
 const tools = new Map(templateTools().map((tool) => [tool.name, tool]));
@@ -52,13 +54,68 @@ beforeEach(() => {
 });
 
 describe("MCP template tools", () => {
-  it("keeps only the dedicated template tools", () => {
+  it("has one titled tool per template operation", () => {
     expect([...tools.keys()]).toEqual([
+      "list_system_templates",
       "list_templates",
       "get_template",
       "create_template",
       "update_template",
+      "duplicate_template",
+      "delete_template",
     ]);
+    for (const tool of tools.values()) expect(tool.title).toBeTruthy();
+    const remove = tools.get("delete_template")!;
+    expect(remove.risk).toBe("destructive");
+    expect((remove.inputSchema as any).shape.confirm).toBeDefined();
+    expect(String(tools.get("create_template")!.description)).not.toContain("api.");
+  });
+
+  it("lists system starters, optionally by purpose", async () => {
+    const all: any = await call("list_system_templates", {});
+    expect(all.items.length).toBeGreaterThan(0);
+    const transactional: any = await call("list_system_templates", {
+      purpose: "transactional",
+    });
+    expect(transactional.items.length).toBeGreaterThan(0);
+    expect(
+      transactional.items.every((item: any) => item.purpose === "transactional"),
+    ).toBe(true);
+  });
+
+  it("duplicates and deletes templates of the caller's team", async () => {
+    mocks.duplicateTemplate.mockResolvedValueOnce({ ...template, templateId: "tpl_2" });
+    await expect(
+      call("duplicate_template", { templateId: "tpl_1" }),
+    ).resolves.toMatchObject({ templateId: "tpl_2", purpose: "transactional" });
+    expect(mocks.duplicateTemplate).toHaveBeenCalledWith({
+      teamId: "team-1",
+      templateId: "tpl_1",
+      title: undefined,
+    });
+
+    mocks.duplicateTemplate.mockResolvedValueOnce(null);
+    await expect(
+      call("duplicate_template", { templateId: "tpl_x" }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
+
+    mocks.duplicateTemplate.mockRejectedValueOnce(
+      new TemplateValidationError("marketing_variables_not_allowed", ["contact.email"]),
+    );
+    await expect(
+      call("duplicate_template", { templateId: "tpl_1" }),
+    ).resolves.toMatchObject({
+      error: {
+        code: "validation_failed",
+        safeDetails: { reason: "marketing_variables_not_allowed" },
+      },
+    });
+
+    mocks.deleteTemplate.mockResolvedValueOnce(undefined);
+    await expect(
+      call("delete_template", { templateId: "tpl_1", confirm: true }),
+    ).resolves.toEqual({ message: "Template deleted." });
+    expect(mocks.deleteTemplate).toHaveBeenCalledWith("team-1", "tpl_1");
   });
 
   it("keeps template ID inputs non-empty", () => {

@@ -57,6 +57,7 @@ const SEND_ERRORS: Record<string, [Parameters<typeof toolError>[0], string]> = {
 export const transactionalTools = (): SendLitMcpTool[] => [
   dedicatedTool({
     name: "send_email",
+    title: "Send Email",
     operationId: "transactional.send",
     risk: "write",
     description:
@@ -146,6 +147,7 @@ export const transactionalTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "get_email",
+    title: "Get Email",
     operationId: "transactional.get",
     risk: "read",
     description:
@@ -162,6 +164,7 @@ export const transactionalTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "list_emails",
+    title: "List Emails",
     operationId: "transactional.list",
     risk: "read",
     description:

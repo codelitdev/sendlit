@@ -4,8 +4,12 @@ import {
   sequenceSchema as contractSequenceSchema,
   customFieldsSchema,
   emailContentSchema,
+  espWarmupSchema,
+  sequenceScheduleSchema,
+  waitingContactsPageSchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
+import { feedbackCapableProviders } from "../../config/constants";
 
 export { emailContentSchema };
 
@@ -24,6 +28,18 @@ export const contactSchema = z.object({
 export const contactListSchema = z.object({
   items: z.array(contactSchema),
   total: z.number(),
+});
+
+const contactDeliverySchema = z.object({
+  sequenceId: z.string(),
+  sequenceTitle: z.string(),
+  sequenceType: z.string(),
+  emailId: z.string(),
+  createdAt: z.string().nullable(),
+});
+
+export const contactDeliveryListSchema = z.object({
+  items: z.array(contactDeliverySchema),
 });
 
 export const segmentSchema = z.object({
@@ -46,6 +62,57 @@ export const templateSchema = z.object({
   requiredVariables: z.array(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
+});
+
+export const mediaSchema = z.object({
+  mediaId: z.string(),
+  url: z.string(),
+  thumbnailUrl: z.string().nullable().optional(),
+  mediaLitId: z.string(),
+  fileName: z.string().nullable().optional(),
+  mimeType: z.string().nullable().optional(),
+  size: z.number().nullable().optional(),
+  width: z.number().nullable().optional(),
+  height: z.number().nullable().optional(),
+  alt: z.string().nullable().optional(),
+  caption: z.string().nullable().optional(),
+  createdAt: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+});
+
+export const mediaListSchema = z.object({
+  items: z.array(mediaSchema),
+  total: z.number(),
+});
+
+const mediaReferenceSchema = z.object({
+  resourceType: z.enum(["TEMPLATE", "SEQUENCE_EMAIL"]),
+  resourcePublicId: z.string(),
+  parentResourcePublicId: z.string().nullable().optional(),
+  createdAt: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+});
+
+export const mediaReferenceListSchema = z.object({
+  items: z.array(mediaReferenceSchema),
+});
+
+export const systemTemplateSchema = z.object({
+  templateId: z.string().min(1),
+  title: z.string(),
+  description: z.string(),
+  purpose: z.enum(["marketing", "transactional"]),
+  content: emailContentSchema,
+  requiredVariables: z.array(z.string()),
+  variableDefinitions: z
+    .array(
+      z.object({
+        path: z.string(),
+        description: z.string(),
+        example: z.any(),
+      }),
+    )
+    .optional(),
 });
 
 /** What the sequence tools return (`toPublicSequence` in tools/sequences.ts).
@@ -75,9 +142,110 @@ export const sequenceStatsSchema = z.object({
   complaintRate: z.number().optional(),
 });
 
+// The REST contract's shapes, so MCP output can't drift from REST.
+export { sequenceScheduleSchema, waitingContactsPageSchema as waitingContactsSchema };
+
+export const successMessageSchema = z.object({
+  message: z.string(),
+});
+
+export const testEspResultSchema = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
+});
+
+export const teamSchema = z.object({
+  teamId: z.string(),
+  name: z.string(),
+  organizationId: z.string().optional(),
+  organizationName: z.string().optional(),
+});
+
+/** The secret is stored hashed; listings only expose `keyPrefix`. Only
+ * `create_api_key` returns the full secret (see `createdApiKeySchema`). */
+export const apiKeySchema = z.object({
+  id: z.string(),
+  keyPrefix: z.string(),
+  name: z.string().nullable(),
+  createdAt: z.string().nullable(),
+});
+
+export const createdApiKeySchema = apiKeySchema.extend({
+  key: z.string(),
+});
+
+export const espProviders = [
+  "smtp",
+  "sendgrid",
+  "mailgun",
+  "postmark",
+  "ses",
+  "resend",
+] as const;
+
+export const espConfigSchema = z.object({
+  espId: z.string(),
+  name: z.string(),
+  provider: z.enum(espProviders),
+  host: z.string(),
+  port: z.number(),
+  secure: z.boolean(),
+  username: z.string().nullable().optional(),
+  hasPassword: z.boolean(),
+  fromName: z.string().nullable().optional(),
+  fromEmail: z.string().nullable().optional(),
+  replyTo: z.string().nullable().optional(),
+  maxSendRate: z.number().nullable().optional(),
+  dailySendLimit: z.number().int().nullable().optional(),
+  warmup: espWarmupSchema.nullable().optional(),
+  status: z.string(),
+  secretVersion: z.number(),
+  lastTestedAt: z.string().nullable().optional(),
+  lastTestStatus: z.string().nullable().optional(),
+  lastTestError: z.string().nullable().optional(),
+});
+
+export const espConfigListSchema = z.object({
+  items: z.array(espConfigSchema),
+});
+
+/** General (non-ESP) per-team settings singleton — see settings/general. */
+export const generalSettingsSchema = z.object({
+  mailingAddress: z.string().nullable(),
+  updatedAt: z.string().nullable().optional(),
+});
+
+/** Custom tracking domain singleton — see settings/tracking-domain. */
+export const trackingDomainSchema = z.object({
+  domain: z.string().nullable(),
+  status: z.enum(["pending", "verified", "failed"]).nullable(),
+  cnameTarget: z.string(),
+  error: z.string().nullable(),
+  verifiedAt: z.string().nullable(),
+  checkedAt: z.string().nullable(),
+});
+
 // ---- Bounce and complaint processing (docs/bounces-and-complaints.md) -----
 
-const deliveryEventSchema = z.object({
+// Re-exported from the single source of truth so the MCP surface can never
+// drift from the registered adapters (see `config/constants.ts`).
+export { feedbackCapableProviders };
+
+export const feedbackConnectionSchema = z.object({
+  connectionId: z.string(),
+  espId: z.string(),
+  provider: z.string(),
+  webhookUrl: z.string(),
+  hasCredential: z.boolean(),
+  expectedTopicArn: z.string().nullable().optional(),
+  subscriptionConfirmedAt: z.string().nullable().optional(),
+  status: z.enum(["pending", "healthy", "stale", "error", "retiring", "disabled"]),
+  lastReceivedAt: z.string().nullable().optional(),
+  lastVerifiedAt: z.string().nullable().optional(),
+  lastErrorCode: z.string().nullable().optional(),
+});
+
+export const deliveryEventSchema = z.object({
   eventId: z.string(),
   provider: z.string(),
   espId: z.string().nullable(),
@@ -93,5 +261,27 @@ const deliveryEventSchema = z.object({
 
 export const deliveryEventListSchema = z.object({
   items: z.array(deliveryEventSchema),
+  total: z.number(),
+});
+
+export const suppressionSchema = z.object({
+  suppressionId: z.string(),
+  recipientEmail: z.string().nullable(),
+  reason: z.enum([
+    "hard_bounce",
+    "complaint",
+    "repeated_soft_bounce",
+    "provider_suppression",
+    "manual",
+  ]),
+  active: z.boolean(),
+  firstSuppressedAt: z.string(),
+  lastSuppressedAt: z.string(),
+  releasedAt: z.string().nullable().optional(),
+  releaseReason: z.string().nullable().optional(),
+});
+
+export const suppressionListSchema = z.object({
+  items: z.array(suppressionSchema),
   total: z.number(),
 });

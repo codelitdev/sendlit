@@ -1,10 +1,10 @@
 import { describe, expect, it, mock } from "bun:test";
 import { mcpParityManifest } from "@sendlit/api-contract";
-import express from "express";
+import { z } from "zod";
 
 mock.module("../db/client", () => ({ db: {}, pool: {} }));
 
-const { createSendLitMcp, dedicatedTools } = await import("./server");
+const { sendLitMcpTools } = await import("./server");
 const { authorizeMcpOperation, listMcpOperationScopes, MCP_SCOPES } = await import(
   "./policy"
 );
@@ -15,29 +15,39 @@ const context = {
   user: null,
   scopes: [] as string[],
   requestId: "",
-  clientIp: "",
-  replayHeaders: {},
 };
 
 describe("SendLit MCP catalog and policy", () => {
-  it("serves the dedicated tools then the generic api.* tools, in a stable order", () => {
-    const names = createSendLitMcp({ app: () => express() })
-      .listTools()
-      .map((tool) => tool.name);
-    expect(names.slice(-5)).toEqual([
-      "api.list_operations",
-      "api.describe_operation",
-      "api.read",
-      "api.write",
-      "api.delete",
-    ]);
-    expect(names).toHaveLength(34);
+  it("serves one uniquely named tool per manifest tool, in a stable order", () => {
+    const names = sendLitMcpTools().map((tool) => tool.name);
+    const manifestTools = mcpParityManifest.flatMap((entry) =>
+      entry.mcp ? [entry.mcp.tool] : [],
+    );
     expect(new Set(names).size).toBe(names.length);
-    expect(names.slice(0, 3)).toEqual([
-      "list_contacts",
-      "get_contact",
-      "create_contact",
-    ]);
+    expect([...names].sort()).toEqual([...new Set(manifestTools)].sort());
+    expect(sendLitMcpTools().map((tool) => tool.name)).toEqual(names);
+  });
+
+  // What the Claude and ChatGPT directories review (see ADR 0010).
+  it("gives every tool a title, short name, description and explicit open-world hint", () => {
+    for (const tool of sendLitMcpTools()) {
+      expect(tool.title?.length, tool.name).toBeGreaterThan(0);
+      expect(tool.name.length, tool.name).toBeLessThanOrEqual(64);
+      expect(tool.description.length, tool.name).toBeGreaterThan(20);
+      expect(typeof tool.annotations?.openWorldHint, tool.name).toBe("boolean");
+    }
+  });
+
+  it("advertises confirm on every destructive tool", () => {
+    const destructive = sendLitMcpTools().filter((tool) => tool.risk === "destructive");
+    expect(destructive.length).toBeGreaterThan(0);
+    for (const tool of destructive) {
+      expect(tool.inputSchema, tool.name).toBeInstanceOf(z.ZodObject);
+      expect(
+        Object.keys((tool.inputSchema as z.AnyZodObject).shape),
+        tool.name,
+      ).toContain("confirm");
+    }
   });
 
   it("gives every MCP-reachable operation a scope, and no other operation one", () => {
@@ -45,19 +55,6 @@ describe("SendLit MCP catalog and policy", () => {
       .flatMap((entry) => (entry.parity === "required" ? [entry.rest.operationId] : []))
       .sort();
     expect(Object.keys(listMcpOperationScopes()).sort()).toEqual(reachable);
-  });
-
-  it("maps each dedicated tool to the operation its manifest entry names", () => {
-    const toolOperation = new Map(
-      mcpParityManifest.flatMap((entry) =>
-        entry.parity === "required"
-          ? [[entry.mcp.tool, entry.rest.operationId] as const]
-          : [],
-      ),
-    );
-    for (const tool of dedicatedTools()) {
-      expect(toolOperation.has(tool.name)).toBe(true);
-    }
   });
 
   it("lets team keys run everything but key management", () => {

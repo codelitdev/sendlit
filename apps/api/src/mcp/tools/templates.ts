@@ -2,16 +2,19 @@ import { emailContentInputSchema, templatePurposeSchema } from "@sendlit/api-con
 import { z } from "zod";
 import {
   createTemplate,
+  deleteTemplate,
+  duplicateTemplate,
   getTemplate,
   listTemplates,
   updateTemplate,
 } from "../../templates/queries";
+import { SYSTEM_TEMPLATES } from "../../templates/system-templates";
 import { TemplateValidationError } from "../../templates/validation";
 import { omitInternal } from "../../utils/public";
 import type { SendLitMcpTool } from "../context";
 import { dedicatedTool } from "../tool";
 import { notFound, type ToolError, toolError } from "./responses";
-import { templateSchema } from "./schemas";
+import { successMessageSchema, systemTemplateSchema, templateSchema } from "./schemas";
 
 /** Template content the purpose's rules reject, with the variables at fault
  * (comma-separated, as safe details are flat). */
@@ -24,7 +27,27 @@ function templateValidationError(error: TemplateValidationError): ToolError {
 
 export const templateTools = (): SendLitMcpTool[] => [
   dedicatedTool({
+    name: "list_system_templates",
+    title: "List System Templates",
+    operationId: "templates.listSystem",
+    risk: "read",
+    description:
+      "Returns built-in marketing and transactional starting templates. System templates are starters and must be copied into a team-owned template before transactional sending.",
+    inputSchema: z.object({ purpose: templatePurposeSchema.optional() }),
+    outputSchema: z.object({ items: z.array(systemTemplateSchema) }),
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ args }) {
+      return {
+        items: args.purpose
+          ? SYSTEM_TEMPLATES.filter((template) => template.purpose === args.purpose)
+          : SYSTEM_TEMPLATES,
+      };
+    },
+  }),
+
+  dedicatedTool({
     name: "list_templates",
+    title: "List Templates",
     operationId: "templates.list",
     risk: "read",
     description:
@@ -40,6 +63,7 @@ export const templateTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "get_template",
+    title: "Get Template",
     operationId: "templates.get",
     risk: "read",
     description: "Returns a single email template by its template ID.",
@@ -55,6 +79,7 @@ export const templateTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "create_template",
+    title: "Create Template",
     operationId: "templates.create",
     risk: "write",
     description:
@@ -63,7 +88,7 @@ export const templateTools = (): SendLitMcpTool[] => [
       title: z.string().min(1),
       purpose: templatePurposeSchema,
       content: emailContentInputSchema.describe(
-        "A complete SendLit email document. Include all style sections (colors, typography.header/text/link, interactives, and structure) and only text, link, image, separator, or footer blocks. The safest valid starting point is a system template: list them with api.read (operation templates.listSystem) and copy one with api.write (templates.duplicate).",
+        "A complete SendLit email document. Include all style sections (colors, typography.header/text/link, interactives, and structure) and only text, link, image, separator, or footer blocks. Use list_system_templates and duplicate_template as the safest valid starting point.",
       ),
     }),
     outputSchema: templateSchema,
@@ -88,6 +113,7 @@ export const templateTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "update_template",
+    title: "Update Template",
     operationId: "templates.update",
     risk: "write",
     description: "Updates a template's title and/or content.",
@@ -120,6 +146,53 @@ export const templateTools = (): SendLitMcpTool[] => [
         }
         throw error;
       }
+    },
+  }),
+
+  dedicatedTool({
+    name: "duplicate_template",
+    title: "Duplicate Template",
+    operationId: "templates.duplicate",
+    risk: "write",
+    description:
+      "Copies a system or team template into a new team-owned template with the same purpose as the source.",
+    inputSchema: z.object({
+      templateId: z.string().min(1),
+      title: z.string().min(1).optional(),
+    }),
+    outputSchema: templateSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      try {
+        const template = await duplicateTemplate({
+          teamId: context.teamId,
+          templateId: args.templateId,
+          title: args.title,
+        });
+        if (!template) return notFound();
+        return omitInternal(template);
+      } catch (error) {
+        if (error instanceof TemplateValidationError) {
+          return templateValidationError(error);
+        }
+        throw error;
+      }
+    },
+  }),
+
+  dedicatedTool({
+    name: "delete_template",
+    title: "Delete Template",
+    operationId: "templates.remove",
+    risk: "destructive",
+    description:
+      "Permanently deletes an email template. Its images that no other template or email uses are deleted from the media library, unless a transactional email was sent with it.",
+    inputSchema: z.object({ templateId: z.string().min(1) }),
+    outputSchema: successMessageSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      await deleteTemplate(context.teamId, args.templateId);
+      return { message: "Template deleted." };
     },
   }),
 ];

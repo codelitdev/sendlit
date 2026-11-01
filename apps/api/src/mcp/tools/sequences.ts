@@ -2,6 +2,7 @@ import {
   archivedFilters,
   contactFilterSchema,
   emailContentInputSchema,
+  sequenceDeletionPreviewSchema,
   sequenceEmailTestResultSchema,
   updateSequenceBodySchema,
 } from "@sendlit/api-contract";
@@ -10,18 +11,30 @@ import { broadcastPacing } from "../../abuse/pacing-status";
 import { sequenceDeliveryRates } from "../../automation/sending-health";
 import { emailActionTypes, mailTypes } from "../../config/constants";
 import { responses } from "../../config/strings";
+import {
+  broadcastArchiveErrors,
+  sequenceDeleteBlockerMessages,
+} from "../../sequences/delete-blockers";
 import type { HydratedSequence } from "../../sequences/queries";
 import {
   addMailToSequence,
   countSequences,
   createSequence,
+  deleteMailFromSequence,
+  deleteSequence,
   getEmailSentCount,
   getSequenceBySequenceId,
   getSequenceClickThroughRate,
+  getSequenceDeletionImpact,
   getSequenceOpenRate,
+  getSequenceSchedule,
+  getSubscribers,
   getSubscribersCount,
+  getWaitingContacts,
+  InvalidCursorError,
   listSequences,
   pauseSequence,
+  setBroadcastArchived,
   startSequence,
   updateMailInSequence,
   updateSequence,
@@ -38,7 +51,14 @@ import {
   type ToolError,
   toolError,
 } from "./responses";
-import { sequenceListSchema, sequenceSchema, sequenceStatsSchema } from "./schemas";
+import {
+  sequenceListSchema,
+  sequenceScheduleSchema,
+  sequenceSchema,
+  sequenceStatsSchema,
+  successMessageSchema,
+  waitingContactsSchema,
+} from "./schemas";
 
 // `sequenceEmails.sequenceId` stores its *parent* sequence's internal `id`
 // (see the file-level doc comment in `db/schema.ts`) — dropped here rather
@@ -107,6 +127,13 @@ function sequenceError(err: unknown): ToolError {
     message = match[2];
   }
   const details: Record<string, string> = message ? { reason, message } : { reason };
+  // Delete and archive blockers say what to do instead (pause, archive or
+  // delete), so the model gets the same explanation as REST and the dashboard.
+  const blocker =
+    sequenceDeleteBlockerMessages[
+      reason as keyof typeof sequenceDeleteBlockerMessages
+    ] ?? broadcastArchiveErrors[reason as keyof typeof broadcastArchiveErrors];
+  if (blocker) return toolError("conflict", { reason, message: blocker });
   if (reason === "action_not_allowed") return toolError("forbidden", details);
   if (NOT_FOUND_REASONS.has(reason)) return toolError("not_found", details);
   if (RATE_LIMITED_REASONS.has(reason)) return toolError("rate_limited", details);
@@ -131,6 +158,7 @@ const deliverySourceSchema = z.discriminatedUnion("type", [
 export const sequenceTools = (): SendLitMcpTool[] => [
   dedicatedTool({
     name: "list_sequences",
+    title: "List Sequences",
     operationId: "sequences.list",
     risk: "read",
     description:
@@ -163,6 +191,7 @@ export const sequenceTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "get_sequence",
+    title: "Get Sequence",
     operationId: "sequences.get",
     risk: "read",
     description:
@@ -179,6 +208,7 @@ export const sequenceTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "create_sequence",
+    title: "Create Sequence",
     operationId: "sequences.create",
     risk: "write",
     description:
@@ -207,6 +237,7 @@ export const sequenceTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "update_sequence",
+    title: "Update Sequence",
     operationId: "sequences.update",
     risk: "write",
     description:
@@ -263,6 +294,7 @@ export const sequenceTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "add_sequence_email",
+    title: "Add Sequence Email",
     operationId: "sequences.addEmail",
     risk: "write",
     description:
@@ -290,6 +322,7 @@ export const sequenceTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "update_sequence_email",
+    title: "Update Sequence Email",
     operationId: "sequences.updateEmail",
     risk: "write",
     description:
@@ -333,6 +366,7 @@ export const sequenceTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "send_sequence_email_test",
+    title: "Send Sequence Email Test",
     operationId: "sequences.sendEmailTest",
     risk: "write",
     description:
@@ -363,7 +397,102 @@ export const sequenceTools = (): SendLitMcpTool[] => [
   }),
 
   dedicatedTool({
+    name: "delete_sequence_email",
+    title: "Delete Sequence Email",
+    operationId: "sequences.removeEmail",
+    risk: "destructive",
+    description:
+      "Removes an email from a sequence. Broadcasts cannot have their only email removed. Images only this email used are deleted from the media library, unless it was already sent.",
+    inputSchema: z.object({ sequenceId: z.string(), emailId: z.string() }),
+    outputSchema: sequenceSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      try {
+        const sequence = await deleteMailFromSequence({
+          teamId: context.teamId,
+          sequenceId: args.sequenceId,
+          emailId: args.emailId,
+        });
+        if (!sequence) return notFound();
+        return toPublicSequence(sequence);
+      } catch (err) {
+        return sequenceError(err);
+      }
+    },
+  }),
+
+  dedicatedTool({
+    name: "preview_sequence_deletion",
+    title: "Preview Sequence Deletion",
+    operationId: "sequences.deletionPreview",
+    risk: "read",
+    description:
+      "Shows what delete_sequence would remove without changing anything: how many contacts are enrolled, how many emails it has sent, and whether it can be deleted now (blocker sequence_active means pause it first; broadcast_sent means archive the broadcast with archive_broadcast instead).",
+    inputSchema: z.object({ sequenceId: z.string() }),
+    outputSchema: sequenceDeletionPreviewSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      const preview = await getSequenceDeletionImpact(context.teamId, args.sequenceId);
+      if (!preview) return notFound();
+      return preview;
+    },
+  }),
+
+  dedicatedTool({
+    name: "delete_sequence",
+    title: "Delete Sequence",
+    operationId: "sequences.remove",
+    risk: "destructive",
+    description:
+      "Permanently deletes a broadcast or sequence with its emails and triggers. An active sequence or sending broadcast must be paused first (pause_sequence). A draft or scheduled broadcast can be deleted; a broadcast that has started sending can't (broadcast_sent): use archive_broadcast. Contacts still enrolled leave it, and its delivery, open and click history (its stats) is deleted and can't be recovered; call preview_sequence_deletion first and confirm with the user. Images only it used are deleted; images in sent mail are kept.",
+    inputSchema: z.object({ sequenceId: z.string() }),
+    outputSchema: successMessageSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      try {
+        const deleted = await deleteSequence({
+          teamId: context.teamId,
+          sequenceId: args.sequenceId,
+        });
+        if (!deleted) return notFound();
+        return { message: "Sequence deleted." };
+      } catch (err) {
+        return sequenceError(err);
+      }
+    },
+  }),
+
+  ...[true, false].map((archived) =>
+    dedicatedTool({
+      name: archived ? "archive_broadcast" : "unarchive_broadcast",
+      title: archived ? "Archive Broadcast" : "Unarchive Broadcast",
+      operationId: archived ? "sequences.archive" : "sequences.unarchive",
+      risk: "write",
+      description: archived
+        ? "Archives a sent broadcast: it leaves the broadcasts list (list_sequences with archived=only shows it) and the public web archive, feed and sitemap. Its report, delivery history and images are kept. Drafts and scheduled broadcasts can't be archived; delete them with delete_sequence."
+        : "Restores an archived broadcast to the broadcasts list, and to the web archive when it is published there.",
+      inputSchema: z.object({ sequenceId: z.string() }),
+      outputSchema: sequenceSchema,
+      annotations: { idempotentHint: true, openWorldHint: false },
+      async handler({ context, args }) {
+        try {
+          const sequence = await setBroadcastArchived({
+            teamId: context.teamId,
+            sequenceId: args.sequenceId,
+            archived,
+          });
+          if (!sequence) return notFound();
+          return toPublicSequence(sequence);
+        } catch (err) {
+          return sequenceError(err);
+        }
+      },
+    }),
+  ),
+
+  dedicatedTool({
     name: "start_sequence",
+    title: "Start Sequence",
     operationId: "sequences.start",
     risk: "write",
     description:
@@ -386,6 +515,7 @@ export const sequenceTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "pause_sequence",
+    title: "Pause Sequence",
     operationId: "sequences.pause",
     risk: "write",
     description:
@@ -408,6 +538,7 @@ export const sequenceTools = (): SendLitMcpTool[] => [
 
   dedicatedTool({
     name: "get_sequence_stats",
+    title: "Get Sequence Stats",
     operationId: "sequences.stats",
     risk: "read",
     description:
@@ -434,6 +565,94 @@ export const sequenceTools = (): SendLitMcpTool[] => [
         bounceRate: rates.bounceRate,
         complaintRate: rates.complaintRate,
       };
+    },
+  }),
+  dedicatedTool({
+    name: "get_sequence_schedule",
+    title: "Get Sequence Schedule",
+    operationId: "sequences.schedule",
+    risk: "read",
+    description:
+      "Returns, for each email of a broadcast/sequence in send order, how many contacts will get it next and when the first of them is due (epoch millis), plus the total waiting. Use it to check that delays work as intended: a sequence that has sent nothing yet can still have contacts waiting.",
+    inputSchema: z.object({ sequenceId: z.string() }),
+    outputSchema: sequenceScheduleSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const sequence = await getSequenceBySequenceId(context.teamId, args.sequenceId);
+      if (!sequence) return notFound();
+      return getSequenceSchedule(sequence);
+    },
+  }),
+
+  dedicatedTool({
+    name: "list_sequence_email_waiting_contacts",
+    title: "List Waiting Contacts for a Sequence Email",
+    operationId: "sequences.waitingContacts",
+    risk: "read",
+    description:
+      "Lists the contacts whose next email in a sequence is this one, soonest due first, each with their own due time (epoch millis): each contact's delay counts from their own entry. q matches email or name. Returns up to limit (default 10, at most 100) with total and nextCursor; pass nextCursor as after for the next page.",
+    inputSchema: z.object({
+      sequenceId: z.string(),
+      emailId: z.string(),
+      after: z.string().optional().describe("The previous page's nextCursor"),
+      limit: z.number().int().min(1).max(100).optional(),
+      q: z.string().optional().describe("Matches the contact's email or name"),
+    }),
+    outputSchema: waitingContactsSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const sequence = await getSequenceBySequenceId(context.teamId, args.sequenceId);
+      if (!sequence?.emailsOrder.includes(args.emailId)) return notFound();
+      try {
+        return await getWaitingContacts(sequence, args.emailId, {
+          after: args.after,
+          limit: args.limit,
+          q: args.q,
+        });
+      } catch (err) {
+        if (err instanceof InvalidCursorError) {
+          return toolError("validation_failed", {
+            reason: "invalid_cursor",
+            message: "Pass the nextCursor from the previous page as after.",
+          });
+        }
+        throw err;
+      }
+    },
+  }),
+
+  dedicatedTool({
+    name: "get_sequence_subscribers",
+    title: "Get Sequence Subscribers",
+    operationId: "sequences.subscribers",
+    risk: "read",
+    description:
+      "Returns a paginated list of contact IDs that have received at least one email in this sequence or broadcast.",
+    inputSchema: z.object({
+      sequenceId: z.string().describe("Sequence or broadcast ID"),
+      page: z.number().int().min(1).optional().describe("Page number (default: 1)"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe("Results per page (default: 50)"),
+    }),
+    outputSchema: z.object({ items: z.array(z.string()), total: z.number() }),
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const sequence = await getSequenceBySequenceId(context.teamId, args.sequenceId);
+      if (!sequence) return notFound();
+      const [items, total] = await Promise.all([
+        getSubscribers({
+          sequenceId: args.sequenceId,
+          page: args.page,
+          limit: args.limit,
+        }),
+        getSubscribersCount(args.sequenceId),
+      ]);
+      return { items, total };
     },
   }),
 ];

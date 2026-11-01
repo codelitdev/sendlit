@@ -1,7 +1,6 @@
 export * from "./contact-import";
 export { type Contract, contract } from "./contract";
 export {
-  MCP_API_TOOLS,
   type McpParityExemption,
   type McpParityManifestEntry,
   type McpParityRisk,

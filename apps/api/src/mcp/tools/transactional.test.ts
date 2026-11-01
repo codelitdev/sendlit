@@ -26,8 +26,6 @@ const context = {
   user: null,
   scopes: [] as string[],
   requestId: "",
-  clientIp: "",
-  replayHeaders: {},
 };
 const tools = new Map(transactionalTools().map((tool) => [tool.name, tool]));
 const call = (name: string, args: Record<string, unknown>, ctx: any = context) =>

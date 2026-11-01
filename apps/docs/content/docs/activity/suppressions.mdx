@@ -21,5 +21,5 @@ address later creates an unsubscribed contact.
 Use **Suppressions → Add suppression** to block an address, for example a role
 account, a known spam trap, or someone who asked by email not to be contacted.
 Over the API, `POST /suppressions` with `{ "email": "...", "note": "..." }`; the
-MCP clients run `suppressions.create` with `api.write`. A manual suppression can be released later; a
+MCP tool is `add_suppression`. A manual suppression can be released later; a
 stronger suppression already on the address (such as a complaint) is kept.

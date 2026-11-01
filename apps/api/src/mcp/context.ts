@@ -6,15 +6,9 @@ import {
   type HeaderMap,
   type PlatformError,
 } from "@codelitdev/platform";
-import { CLIENT_IP_HEADER } from "../abuse/signup";
 import { resolveUserTeam } from "../auth/require-team";
 import { type AuthResult, resolveAuth } from "../auth/resolve-auth";
 import type { User } from "../user/queries";
-
-/** Headers a generic `api.*` tool replays on the REST request it makes for
- * the caller, so REST authenticates and picks the team exactly as it would
- * for the caller's own request. */
-const REPLAYED_HEADERS = ["authorization", "x-sendlit-apikey", "x-sendlit-team-id"];
 
 /** What every SendLit MCP tool runs with. */
 export type SendLitMcpContext = {
@@ -26,9 +20,6 @@ export type SendLitMcpContext = {
   /** OAuth scopes granted to the token; empty for a team API key. */
   scopes: readonly string[];
   requestId: string;
-  clientIp: string;
-  /** The caller's credential and team headers. Never logged. */
-  replayHeaders: Record<string, string>;
 };
 
 export type SendLitMcpTool = McpToolDefinition<SendLitMcpContext>;
@@ -142,17 +133,6 @@ export async function resolveMcpContext({
     return { ok: false, error: createPlatformError("unauthenticated") };
   }
 
-  const replayHeaders: Record<string, string> = {};
-  for (const name of REPLAYED_HEADERS) {
-    const value = headerValue(headers, name);
-    if (value) replayHeaders[name] = value;
-  }
-  // The route aliases `x-sendlit-apikey` to `X-API-Key` for the kit; REST
-  // reads the SendLit header.
-  const apiKey = headerValue(headers, "x-api-key");
-  if (apiKey && !replayHeaders.authorization)
-    replayHeaders["x-sendlit-apikey"] = apiKey;
-
   return {
     ok: true,
     context: {
@@ -161,8 +141,6 @@ export async function resolveMcpContext({
       user: auth.user,
       scopes: auth.kind === "oauth" ? auth.scopes : [],
       requestId: headerValue(headers, "x-request-id") ?? "",
-      clientIp: headerValue(headers, CLIENT_IP_HEADER) ?? "",
-      replayHeaders,
     },
   };
 }

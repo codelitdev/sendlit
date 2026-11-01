@@ -57,7 +57,7 @@ each row's source `status` as it appears in the export; the MCP tool is
 CSV: email, name, status (subscribed, unsubscribed, bounced or complained),
 tags, created_at, suppression_reason and one column per custom field. Over
 the API use `GET /contacts/export` (optionally with `segmentId` or `filter`);
-MCP clients run `contacts.export` with `api.read`. The file can be imported again as is.
+the MCP tool is `export_contacts`. The file can be imported again as is.
 
 ## Manage tags
 
@@ -76,7 +76,8 @@ contacts have each one. From there you can:
 
 Renaming or deleting a tag doesn't start tag-added or tag-removed sequences.
 The API endpoints are under `/tags` (the Tags section in the API reference);
-MCP clients run the `tags.*` operations through the generic `api.*` tools.
+the MCP tools are `list_tags`, `get_tag_references`, `rename_tag` and
+`delete_tag`.
 
 ## Delete contacts
 
@@ -116,9 +117,8 @@ Over the API, `POST /contacts/bulk-delete/preview` returns the count and
 contact that `match`es a search (`q`), `segmentId` and `filter`. With `match`,
 pass the preview's count as `expectedCount`; a different live count returns
 409 `count_changed`. A large deletion answers 202 with a `deletionId` to poll
-at `GET /contacts/bulk-delete/{deletionId}`. MCP clients run
-`contacts.previewBulkDelete`, `contacts.bulkDelete` and `contacts.bulkDeleteStatus`
-through the generic `api.*` tools.
+at `GET /contacts/bulk-delete/{deletionId}`. The MCP tools are
+`preview_delete_contacts`, `delete_contacts` and `get_contact_deletion`.
 
 ## Segments
 

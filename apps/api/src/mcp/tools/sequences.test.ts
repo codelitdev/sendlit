@@ -14,8 +14,17 @@ const mocks = {
   startSequence: vi.fn(),
   updateMailInSequence: vi.fn(),
   updateSequence: vi.fn(),
+  deleteMailFromSequence: vi.fn(),
+  deleteSequence: vi.fn(),
+  getSequenceDeletionImpact: vi.fn(),
+  getSequenceSchedule: vi.fn(),
+  getSubscribers: vi.fn(),
+  getWaitingContacts: vi.fn(),
+  setBroadcastArchived: vi.fn(),
   sendSequenceEmailTest: vi.fn(),
 };
+
+class InvalidCursorError extends Error {}
 
 mock.module("../../sequences/queries", () => ({
   addMailToSequence: mocks.addMailToSequence,
@@ -31,6 +40,14 @@ mock.module("../../sequences/queries", () => ({
   startSequence: mocks.startSequence,
   updateMailInSequence: mocks.updateMailInSequence,
   updateSequence: mocks.updateSequence,
+  deleteMailFromSequence: mocks.deleteMailFromSequence,
+  deleteSequence: mocks.deleteSequence,
+  getSequenceDeletionImpact: mocks.getSequenceDeletionImpact,
+  getSequenceSchedule: mocks.getSequenceSchedule,
+  getSubscribers: mocks.getSubscribers,
+  getWaitingContacts: mocks.getWaitingContacts,
+  setBroadcastArchived: mocks.setBroadcastArchived,
+  InvalidCursorError,
 }));
 mock.module("../../sequences/test-send", () => ({
   sendSequenceEmailTest: mocks.sendSequenceEmailTest,
@@ -51,8 +68,6 @@ const teamKey = {
   user: null,
   scopes: [],
   requestId: "",
-  clientIp: "",
-  replayHeaders: {},
 };
 const oauth = {
   ...teamKey,
@@ -74,7 +89,7 @@ beforeEach(() => {
 });
 
 describe("MCP sequence tools", () => {
-  it("keeps only the dedicated sequence tools", () => {
+  it("has one titled tool per sequence operation, in a stable order", () => {
     expect([...tools.keys()]).toEqual([
       "list_sequences",
       "get_sequence",
@@ -83,10 +98,25 @@ describe("MCP sequence tools", () => {
       "add_sequence_email",
       "update_sequence_email",
       "send_sequence_email_test",
+      "delete_sequence_email",
+      "preview_sequence_deletion",
+      "delete_sequence",
+      "archive_broadcast",
+      "unarchive_broadcast",
       "start_sequence",
       "pause_sequence",
       "get_sequence_stats",
+      "get_sequence_schedule",
+      "list_sequence_email_waiting_contacts",
+      "get_sequence_subscribers",
     ]);
+    for (const tool of tools.values()) expect(tool.title).toBeTruthy();
+    // Destructive tools advertise `confirm`, which the kit requires.
+    for (const name of ["delete_sequence", "delete_sequence_email"]) {
+      const tool = tools.get(name)!;
+      expect(tool.risk).toBe("destructive");
+      expect((tool.inputSchema as any).shape.confirm).toBeDefined();
+    }
   });
 
   it("refuses an OAuth token without the sequences scope", async () => {
@@ -301,6 +331,217 @@ describe("MCP sequence tools", () => {
       sequenceId: "seq-x",
       title: "New",
     });
+  });
+});
+
+describe("MCP sequence deletion and archive tools", () => {
+  it("explains why an active sequence or a sent broadcast can't be deleted", async () => {
+    mocks.deleteSequence.mockRejectedValueOnce(new Error("sequence_active"));
+    const active: any = await call("delete_sequence", { sequenceId: "seq-1" });
+    expect(active.error).toMatchObject({
+      code: "conflict",
+      safeDetails: { reason: "sequence_active" },
+    });
+    expect(active.error.safeDetails.message).toContain("Pause it before deleting it");
+
+    mocks.deleteSequence.mockRejectedValueOnce(new Error("broadcast_sent"));
+    const sent: any = await call("delete_sequence", { sequenceId: "seq-1" });
+    expect(sent.error.safeDetails).toMatchObject({ reason: "broadcast_sent" });
+    expect(sent.error.safeDetails.message).toContain("Archive it instead");
+  });
+
+  it("deletes a sequence of the caller's team", async () => {
+    mocks.deleteSequence.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await expect(call("delete_sequence", { sequenceId: "seq-1" })).resolves.toEqual({
+      message: "Sequence deleted.",
+    });
+    expect(mocks.deleteSequence).toHaveBeenCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq-1",
+    });
+    await expect(
+      call("delete_sequence", { sequenceId: "seq-2" }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
+  });
+
+  it("deletes one email and maps its failures", async () => {
+    mocks.deleteMailFromSequence.mockResolvedValueOnce({
+      sequenceId: "seq-1",
+      emails: [],
+    });
+    await expect(
+      call("delete_sequence_email", { sequenceId: "seq-1", emailId: "email_1" }),
+    ).resolves.toMatchObject({ sequenceId: "seq-1" });
+    expect(mocks.deleteMailFromSequence).toHaveBeenCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq-1",
+      emailId: "email_1",
+    });
+    mocks.deleteMailFromSequence.mockResolvedValueOnce(null);
+    await expect(
+      call("delete_sequence_email", { sequenceId: "seq-1", emailId: "email_x" }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
+  });
+
+  it("archives and restores a broadcast of the caller's team", async () => {
+    const archivedAt = new Date("2026-10-29T00:00:00Z");
+    mocks.setBroadcastArchived
+      .mockResolvedValueOnce({ sequenceId: "seq-1", archivedAt, emails: [] })
+      .mockResolvedValueOnce({ sequenceId: "seq-1", archivedAt: null, emails: [] })
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error("broadcast_not_sent"));
+
+    await expect(
+      call("archive_broadcast", { sequenceId: "seq-1" }),
+    ).resolves.toMatchObject({ archivedAt: archivedAt.toISOString() });
+    expect(mocks.setBroadcastArchived).toHaveBeenLastCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq-1",
+      archived: true,
+    });
+    await expect(
+      call("unarchive_broadcast", { sequenceId: "seq-1" }),
+    ).resolves.toMatchObject({ archivedAt: null });
+    expect(mocks.setBroadcastArchived).toHaveBeenLastCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq-1",
+      archived: false,
+    });
+    await expect(
+      call("archive_broadcast", { sequenceId: "seq-2" }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
+    const draft: any = await call("archive_broadcast", { sequenceId: "seq-3" });
+    expect(draft.error).toMatchObject({
+      code: "conflict",
+      safeDetails: { reason: "broadcast_not_sent" },
+    });
+    expect(draft.error.safeDetails.message).toContain(
+      "Only a sent broadcast can be archived",
+    );
+  });
+
+  it("previews a sequence deletion", async () => {
+    const preview = {
+      status: "paused",
+      blocker: null,
+      enrolledCount: 2,
+      emailsSentCount: 5,
+    };
+    mocks.getSequenceDeletionImpact.mockResolvedValueOnce(preview);
+    await expect(
+      call("preview_sequence_deletion", { sequenceId: "seq-1" }),
+    ).resolves.toEqual(preview);
+    expect(mocks.getSequenceDeletionImpact).toHaveBeenCalledWith("team-1", "seq-1");
+  });
+
+  it("refuses a delete to an OAuth token without sequences:write", async () => {
+    await expect(
+      call(
+        "delete_sequence",
+        { sequenceId: "seq-1" },
+        { ...oauth, scopes: ["sequences:read"] },
+      ),
+    ).resolves.toMatchObject({
+      error: {
+        code: "forbidden",
+        safeDetails: { reason: "insufficient_scope", requiredScope: "sequences:write" },
+      },
+    });
+    expect(mocks.deleteSequence).not.toHaveBeenCalled();
+  });
+});
+
+describe("MCP sequence schedule tools", () => {
+  it("checks sequence ownership before returning the schedule", async () => {
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(null);
+    await expect(
+      call("get_sequence_schedule", { sequenceId: "seq-1" }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
+    expect(mocks.getSequenceSchedule).not.toHaveBeenCalled();
+
+    const sequence = { sequenceId: "seq-1" };
+    const schedule = {
+      waiting: 3,
+      emails: [{ emailId: "email_1", waiting: 3, nextSendAt: 1_800_000_000_000 }],
+    };
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(sequence);
+    mocks.getSequenceSchedule.mockResolvedValueOnce(schedule);
+    await expect(
+      call("get_sequence_schedule", { sequenceId: "seq-1" }),
+    ).resolves.toEqual(schedule);
+    expect(mocks.getSequenceSchedule).toHaveBeenCalledWith(sequence);
+  });
+
+  it("lists waiting contacts only for an email of the caller's sequence", async () => {
+    const sequence = { sequenceId: "seq-1", emailsOrder: ["email_1"] };
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(null);
+    await expect(
+      call("list_sequence_email_waiting_contacts", {
+        sequenceId: "seq-1",
+        emailId: "email_1",
+      }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(sequence);
+    await expect(
+      call("list_sequence_email_waiting_contacts", {
+        sequenceId: "seq-1",
+        emailId: "email_other",
+      }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
+    expect(mocks.getWaitingContacts).not.toHaveBeenCalled();
+
+    const page = {
+      items: [
+        { contactId: "cnt_1", email: "a@example.com", name: null, nextSendAt: 1_000 },
+      ],
+      total: 1,
+      nextCursor: null,
+    };
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(sequence);
+    mocks.getWaitingContacts.mockResolvedValueOnce(page);
+    await expect(
+      call("list_sequence_email_waiting_contacts", {
+        sequenceId: "seq-1",
+        emailId: "email_1",
+        after: "c1",
+        q: "ana",
+      }),
+    ).resolves.toEqual(page);
+    expect(mocks.getWaitingContacts).toHaveBeenCalledWith(sequence, "email_1", {
+      after: "c1",
+      limit: undefined,
+      q: "ana",
+    });
+
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(sequence);
+    mocks.getWaitingContacts.mockRejectedValueOnce(new InvalidCursorError("bad"));
+    await expect(
+      call("list_sequence_email_waiting_contacts", {
+        sequenceId: "seq-1",
+        emailId: "email_1",
+        after: "garbage",
+      }),
+    ).resolves.toMatchObject({
+      error: { code: "validation_failed", safeDetails: { reason: "invalid_cursor" } },
+    });
+  });
+
+  it("pages the contacts a sequence has sent to", async () => {
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce({ sequenceId: "seq-1" });
+    mocks.getSubscribers.mockResolvedValueOnce(["cnt_1", "cnt_2"]);
+    mocks.getSubscribersCount.mockResolvedValueOnce(7);
+    await expect(
+      call("get_sequence_subscribers", { sequenceId: "seq-1", page: 2, limit: 2 }),
+    ).resolves.toEqual({ items: ["cnt_1", "cnt_2"], total: 7 });
+    expect(mocks.getSubscribers).toHaveBeenCalledWith({
+      sequenceId: "seq-1",
+      page: 2,
+      limit: 2,
+    });
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(null);
+    await expect(
+      call("get_sequence_subscribers", { sequenceId: "seq-x" }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
   });
 });
 

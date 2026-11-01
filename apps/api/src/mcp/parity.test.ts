@@ -1,7 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { validateParityManifest } from "@codelitdev/mcp-server-kit";
 import { contract, mcpParityManifest } from "@sendlit/api-contract";
-import express from "express";
 
 mock.module("../db/client", () => ({ db: {}, pool: {} }));
 
@@ -23,7 +22,7 @@ function collectRestOperationIds(router: object, prefix: string[] = []): string[
 describe("platform conformance: MCP parity manifest", () => {
   it("documents every REST operation and MCP tool with matching risk", () => {
     const restOperationIds = new Set(collectRestOperationIds(contract));
-    const tools = createSendLitMcp({ app: () => express() }).listTools();
+    const tools = createSendLitMcp().listTools();
     const mcpToolNames = new Set(tools.map((tool) => tool.name));
     const mcpToolRisks = new Map(tools.map((tool) => [tool.name, tool.risk] as const));
 

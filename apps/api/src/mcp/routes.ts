@@ -7,7 +7,6 @@ import express, {
   Router,
 } from "express";
 import rateLimit from "express-rate-limit";
-import { CLIENT_IP_HEADER } from "../abuse/signup";
 import {
   auth,
   mcpProtectedResourceMetadataUrl,
@@ -15,7 +14,6 @@ import {
   oauthResourceClient,
 } from "../auth/better-auth";
 import logger from "../services/log";
-import type { ApiToolDeps } from "./api-tools";
 import { runMcpRequest } from "./context";
 import { MCP_SCOPES_SUPPORTED } from "./policy";
 import { createSendLitMcp } from "./server";
@@ -25,11 +23,15 @@ const SENDLIT_CORS_HEADERS = "x-sendlit-apikey, X-Sendlit-Team-Id";
 
 const highImpactTools = new Set([
   "send_email",
-  "send_sequence_email_test",
+  "send_test_email",
   "track_event",
+  "test_esp",
   "start_sequence",
-  "api.write",
-  "api.delete",
+  "create_api_key",
+  "delete_api_key",
+  "delete_team",
+  "delete_contacts",
+  "release_suppression",
 ]);
 
 const mcpLimiter = rateLimit({
@@ -75,9 +77,9 @@ const jsonBody = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
-export function createMcpRoutes(deps: ApiToolDeps): Router {
+export function createMcpRoutes(): Router {
   const router = Router();
-  const mcp = createSendLitMcp(deps);
+  const mcp = createSendLitMcp();
 
   router.use(
     createMcpOAuthDiscoveryRoutes({
@@ -111,7 +113,6 @@ export function createMcpRoutes(deps: ApiToolDeps): Router {
           return;
         }
         if (sendlitKey) headers["x-api-key"] = sendlitKey;
-        headers[CLIENT_IP_HEADER] = req.ip ?? "";
         headers["x-request-id"] = String(res.locals.requestId ?? "");
 
         const controller = new AbortController();

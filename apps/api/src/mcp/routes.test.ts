@@ -77,7 +77,7 @@ beforeAll(async () => {
     return router;
   });
   const { createMcpRoutes } = await import("./routes");
-  routes = createMcpRoutes({ app: () => express() });
+  routes = createMcpRoutes();
 });
 
 afterEach(async () => {
@@ -156,11 +156,7 @@ describe("MCP route", () => {
     expect(authInput.headers["x-api-key"]).toBe("sl_live_key");
     expect(authInput.headers["x-sendlit-apikey"]).toBeUndefined();
     expect(authInput.apiKeyHeader).toBeUndefined();
-    expect(contexts[0]).toMatchObject({
-      requestId: "req-1",
-      clientIp: "127.0.0.1",
-      replayHeaders: { "x-sendlit-apikey": "sl_live_key" },
-    });
+    expect(contexts[0]).toMatchObject({ requestId: "req-1", scopes: [], user: null });
   });
 
   it("challenges a request without credentials so OAuth clients can discover the server", async () => {
@@ -206,10 +202,7 @@ describe("MCP route", () => {
     expect(mocks.resolveUserTeam).toHaveBeenCalledWith("user-1", "team_public");
     expect(contexts[0]).toMatchObject({
       scopes: ["contacts:read"],
-      replayHeaders: {
-        authorization: "Bearer tok",
-        "x-sendlit-team-id": "team_public",
-      },
+      user: { id: "user-1" },
     });
 
     mocks.resolveUserTeam.mockResolvedValue({

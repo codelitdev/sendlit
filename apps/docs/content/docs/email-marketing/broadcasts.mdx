@@ -138,5 +138,5 @@ page.
 With the API, `DELETE /sequences/{sequenceId}` deletes,
 `POST /sequences/{sequenceId}/archive` and `/unarchive` archive and restore,
 and `GET /sequences?type=broadcast&archived=only` lists archived broadcasts.
-MCP clients run these operations (`sequences.remove`, `sequences.archive`,
-`sequences.unarchive`) through the generic `api.*` tools.
+MCP clients use `delete_sequence`, `archive_broadcast` and
+`unarchive_broadcast`.

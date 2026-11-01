@@ -109,9 +109,9 @@ sequence and haven't had their next email yet. Each email in the list shows how
 many contacts it goes to next, so a delayed email shows its contacts waiting
 rather than sent. Click the count to see who they are and when each one is due,
 soonest first, and search them by email or name: a delay counts from each
-contact's own entry (or previous email), so their times differ. `GET /sequences/{sequenceId}/schedule` (`sequences.schedule` over MCP `api.read`)
+contact's own entry (or previous email), so their times differ. `GET /sequences/{sequenceId}/schedule` (MCP `get_sequence_schedule`)
 returns the counts, and `GET /sequences/{sequenceId}/emails/{emailId}/waiting`
-(`sequences.waitingContacts` over MCP `api.read`) lists the contacts, with `q` to
+(MCP `list_sequence_email_waiting_contacts`) lists the contacts, with `q` to
 search and `nextCursor` to page.
 
 Sequences are lifecycle mail, such as onboarding or end-of-trial emails, so a
@@ -157,4 +157,4 @@ To stop a sequence but keep its history, pause it instead.
 
 With the API, `GET /sequences/{sequenceId}/deletion-preview` returns the
 enrolled-contact and sent-email counts, then `DELETE /sequences/{sequenceId}`
-deletes it. MCP clients run these operations through the generic `api.*` tools.
+deletes it. MCP clients use `preview_sequence_deletion` and `delete_sequence`.
