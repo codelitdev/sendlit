@@ -30,7 +30,7 @@ export const contactListSchema = z.object({
   total: z.number(),
 });
 
-export const contactDeliverySchema = z.object({
+const contactDeliverySchema = z.object({
   sequenceId: z.string(),
   sequenceTitle: z.string(),
   sequenceType: z.string(),
@@ -85,7 +85,7 @@ export const mediaListSchema = z.object({
   total: z.number(),
 });
 
-export const mediaReferenceSchema = z.object({
+const mediaReferenceSchema = z.object({
   resourceType: z.enum(["TEMPLATE", "SEQUENCE_EMAIL"]),
   resourcePublicId: z.string(),
   parentResourcePublicId: z.string().nullable().optional(),
