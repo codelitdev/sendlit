@@ -7,7 +7,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import type { CSSProperties, DragEvent, ReactNode } from "react";
+import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode } from "react";
 import type { BlockRegistry } from "../types/block-registry";
 import type { EmailBlock, EmailStyle } from "../types/email-editor";
 
@@ -15,8 +15,8 @@ export interface RowEvents {
   onOpenInsert: (id: string) => void;
   onGripClick: (id: string) => void;
   onMove: (id: string, direction: "up" | "down") => void;
-  /** Arrow keys on a selected block move the caret into the text around it. */
-  onNavigate: (id: string, direction: "prev" | "next") => void;
+  /** Keys on a block itself: the arrows, Escape and Alt+Shift+arrows. */
+  onRowKey: (id: string, event: KeyboardEvent<HTMLElement>) => void;
   onDragStart: (id: string) => void;
   onDragOver: (id: string, edge: "before" | "after") => void;
   onDrop: () => void;
@@ -39,8 +39,10 @@ function Gutter({
     // biome-ignore lint/a11y/noStaticElementInteractions: keeps gutter clicks off the canvas
     <div className="sle-gut" onClick={(event) => event.stopPropagation()}>
       {canAddBelow && (
+        // Pointer only: the keyboard inserts with / and moves with Alt+Shift+arrows.
         <button
           type="button"
+          tabIndex={-1}
           aria-label="Insert below"
           title="Insert below"
           onClick={() => events.onOpenInsert(id)}
@@ -52,8 +54,9 @@ function Gutter({
         <button
           type="button"
           className="grip"
-          aria-label="Drag to move, or use the arrow keys"
-          title="Drag to move. Click to select."
+          tabIndex={-1}
+          aria-label="Drag to move"
+          title="Drag to move, or press Alt+Shift+↑/↓. Click to select."
           draggable
           onClick={() => events.onGripClick(id)}
           onKeyDown={(event) => {
@@ -144,6 +147,8 @@ export function ItemRow({
 
 export interface BlockRowProps {
   block: Required<EmailBlock>;
+  /** What the block is, for screen readers: "Button: Get started". */
+  label: string;
   style: EmailStyle;
   blockRegistry: BlockRegistry;
   renderContext?: unknown;
@@ -162,7 +167,8 @@ export interface BlockRowProps {
   /** Rendered under the row: the insert menu or the block's quick settings. */
   floating?: ReactNode;
   events: RowEvents;
-  onSelect: (id: string) => void;
+  /** `keyboard` when chosen with Enter or Space rather than a click. */
+  onSelect: (id: string, keyboard: boolean) => void;
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
 }
@@ -181,7 +187,7 @@ export function BlockRow(props: BlockRowProps) {
     events,
   } = props;
   const component = blockRegistry[block.blockType];
-  const label = component?.metadata.displayName ?? block.blockType;
+  const label = props.label;
   const Block = component?.block;
 
   return (
@@ -205,32 +211,32 @@ export function BlockRow(props: BlockRowProps) {
           events={events}
         />
       )}
-      {Block ? (
-        <Block
-          block={block}
-          style={style}
-          selectedBlockId={selected ? block.id : null}
-          renderContext={renderContext}
-          showConditionals
-        />
-      ) : (
-        <div>Unknown block type: {block.blockType}</div>
-      )}
+      {/* A preview: its links and buttons can't be focused or followed, so
+          Enter can't leave the editor. The button below selects the block. */}
+      <div className="sle-render" inert>
+        {Block ? (
+          <Block
+            block={block}
+            style={style}
+            selectedBlockId={selected ? block.id : null}
+            renderContext={renderContext}
+            showConditionals
+          />
+        ) : (
+          <div>Unknown block type: {block.blockType}</div>
+        )}
+      </div>
       <button
         type="button"
         className="sle-hit"
-        aria-label={`Select: ${label}`}
+        aria-label={label}
+        aria-keyshortcuts="Alt+Shift+ArrowUp Alt+Shift+ArrowDown"
         onClick={(event) => {
           event.stopPropagation();
-          props.onSelect(block.id);
+          // A click from the keyboard (Enter or Space) has no pointer detail.
+          props.onSelect(block.id, event.detail === 0);
         }}
-        onKeyDown={(event) => {
-          if (mode !== "write") return;
-          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-            event.preventDefault();
-            events.onNavigate(block.id, event.key === "ArrowUp" ? "prev" : "next");
-          }
-        }}
+        onKeyDown={(event) => events.onRowKey(block.id, event)}
       />
 
       {/* While writing, the gutter's grip moves blocks and the popover holds

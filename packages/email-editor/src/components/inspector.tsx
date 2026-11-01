@@ -1,5 +1,5 @@
 import { Check, Copy, PenLine, Search } from "lucide-react";
-import { useState } from "react";
+import { type KeyboardEvent, useId, useState } from "react";
 import { activePalette, PALETTES, paletteStyle } from "../lib/palettes";
 import type { BlockRegistry } from "../types/block-registry";
 import type {
@@ -26,6 +26,7 @@ export function Inspector({
   updateBlock,
   onEditInWrite,
   onCopied,
+  onEscape,
 }: {
   email: Email;
   selectedId: string | null;
@@ -39,6 +40,8 @@ export function Inspector({
   /** Back to writing, at the selected block. */
   onEditInWrite: (id: string) => void;
   onCopied: (tag: string) => void;
+  /** Escape in the panel: back to the selected block on the canvas. */
+  onEscape?: () => void;
 }) {
   const block = selectedId
     ? (email.content.find((candidate) => candidate.id === selectedId) as
@@ -52,17 +55,56 @@ export function Inspector({
     ["block", "Block"],
     ["variables", "Tags"],
   ];
+  const ids = useId();
+
+  // Arrow keys, Home and End move between the tabs, as in any tab list.
+  function onTabKey(event: KeyboardEvent<HTMLDivElement>) {
+    const at = tabs.findIndex(([id]) => id === tab);
+    const next =
+      event.key === "ArrowRight"
+        ? (at + 1) % tabs.length
+        : event.key === "ArrowLeft"
+          ? (at - 1 + tabs.length) % tabs.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? tabs.length - 1
+              : -1;
+    if (next === -1) return;
+    event.preventDefault();
+    onTab(tabs[next][0]);
+    event.currentTarget.querySelectorAll<HTMLElement>("[role=tab]")[next]?.focus();
+  }
 
   return (
-    <aside className="sle-panel" aria-label="Style">
+    <aside
+      className="sle-panel"
+      aria-label="Style"
+      onKeyDown={(event) => {
+        // Not keys from a dropdown that renders elsewhere and bubbles here.
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        if (!event.currentTarget.contains(event.target as Node)) return;
+        event.preventDefault();
+        onEscape?.();
+      }}
+    >
       <div className="sle-ph">
-        <div className="sle-tabs" role="tablist">
+        <div
+          className="sle-tabs"
+          role="tablist"
+          aria-label="Style panel"
+          tabIndex={-1}
+          onKeyDown={onTabKey}
+        >
           {tabs.map(([id, label]) => (
             <button
               key={id}
+              id={`${ids}-${id}`}
               type="button"
               role="tab"
               aria-selected={tab === id}
+              aria-controls={`${ids}-panel`}
+              tabIndex={tab === id ? 0 : -1}
               className={`sle-tab${tab === id ? " on" : ""}`}
               onClick={() => onTab(id)}
             >
@@ -71,7 +113,12 @@ export function Inspector({
           ))}
         </div>
       </div>
-      <div className="sle-scroll">
+      <div
+        className="sle-scroll"
+        id={`${ids}-panel`}
+        role="tabpanel"
+        aria-labelledby={`${ids}-${tab}`}
+      >
         {tab === "email" && (
           <>
             <div className="sle-sec">
@@ -82,6 +129,7 @@ export function Inspector({
                     key={palette.name}
                     type="button"
                     className={`sle-preset${activePalette(email) === palette.name ? " on" : ""}`}
+                    aria-pressed={activePalette(email) === palette.name}
                     onClick={() => updateEmailStyle(paletteStyle(palette))}
                   >
                     <span className="sw" style={{ background: palette.canvas }}>

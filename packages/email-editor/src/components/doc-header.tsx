@@ -86,7 +86,9 @@ export function DocHeader({
               onSubjectChange(event.target.value.replace(/\n/g, " "))
             }
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              const textarea = event.currentTarget;
+              const atEnd = textarea.selectionStart === textarea.value.length;
+              if (event.key === "Enter" || (event.key === "ArrowDown" && atEnd)) {
                 event.preventDefault();
                 document
                   .querySelector<HTMLInputElement>("[data-sle-field=preview]")
@@ -110,6 +112,14 @@ export function DocHeader({
             if (event.key === "Enter" || event.key === "ArrowDown") {
               event.preventDefault();
               onEnter();
+            } else if (event.key === "ArrowUp") {
+              const subject = document.querySelector<HTMLTextAreaElement>(
+                "[data-sle-field=subject]",
+              );
+              if (!subject) return;
+              event.preventDefault();
+              subject.focus();
+              subject.setSelectionRange(subject.value.length, subject.value.length);
             }
           }}
         />

@@ -68,6 +68,25 @@ of `--sle-*` CSS variables on the `.sle` element (colours, radii, fonts), so it
 can be re-skinned without touching the components. Import
 `@sendlit/email-editor/styles.css` for the styles.
 
+### Keyboard
+
+The editor works without a mouse. Each row is one Tab stop, named after what
+it holds ("Paragraph: Thanks for joining", "Button block: Get started").
+
+| Key                       | Does                                                              |
+| ------------------------- | ----------------------------------------------------------------- |
+| Enter on a row            | Edits a paragraph, or opens a block's settings                    |
+| Escape                    | Stops editing or closes the settings, staying on the row          |
+| ↑ / ↓                     | Moves between paragraphs and blocks, and up to the preview text   |
+| Alt+Shift+↑ / ↓           | Moves the row up or down                                          |
+| `/`, `{{`                 | Opens the block menu or the merge tag menu                        |
+| Ctrl/⌘+B, I, K            | Bold, italic, link                                                |
+| Alt+F10                   | Moves to the format toolbar while text is selected                |
+| Ctrl/⌘+Z, Shift+Ctrl/⌘+Z  | Undo, redo                                                        |
+
+In Style mode, Enter on a block moves to its settings and Escape returns to the
+block; the arrow keys move between blocks.
+
 ### Choosing blocks
 
 `blocks` replaces the default list, so a host can add its own blocks and leave

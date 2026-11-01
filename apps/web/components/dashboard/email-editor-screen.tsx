@@ -32,6 +32,16 @@ import {
   useState,
 } from "react";
 import { Banner } from "@/components/dashboard/banner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EmailImageUploadDialog } from "@/components/dashboard/email-image-upload-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/codelit/button";
@@ -162,6 +172,7 @@ export function EmailEditorScreen({
   subject,
   onSubjectChange,
   senderName,
+  otherChangesUnsaved = false,
 }: {
   /** Where exit lands when there's no history to go back to (deep link). */
   exitFallbackHref: string;
@@ -187,6 +198,9 @@ export function EmailEditorScreen({
   onSubjectChange?: (subject: string) => void;
   /** The sender shown in the inbox preview. */
   senderName?: string;
+  /** Edits the caller saves along with the content, such as the subject or a
+   * template's name, that haven't been saved yet. */
+  otherChangesUnsaved?: boolean;
 }) {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
@@ -202,6 +216,13 @@ export function EmailEditorScreen({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Edited since the last save. The editor only reports edits, never its
+  // first render, so any change means there's something to lose.
+  const contentChanged = useRef(false);
+  const [leaving, setLeaving] = useState(false);
+  const unsaved = () => contentChanged.current || otherChangesUnsaved;
+  const unsavedRef = useRef(unsaved);
+  unsavedRef.current = unsaved;
   const [mailingAddress, setMailingAddress] = useState(
     "Set your mailing address in Settings",
   );
@@ -243,9 +264,38 @@ export function EmailEditorScreen({
 
   const handleContentChange = useCallback((nextContent: Email) => {
     contentRef.current = nextContent;
+    contentChanged.current = true;
+  }, []);
+
+  // Closing the tab or reloading with unsaved edits asks first.
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (unsavedRef.current()) event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  // Ctrl or Cmd+S saves, as in any editor, instead of saving the page.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void saveRef.current();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
 
   function exit() {
+    if (unsaved()) setLeaving(true);
+    else leave();
+  }
+
+  function leave() {
     if (window.history.length > 1) {
       router.back();
     } else {
@@ -253,15 +303,21 @@ export function EmailEditorScreen({
     }
   }
 
-  async function save() {
+  /** Saves, returning whether it worked. */
+  async function save(): Promise<boolean> {
+    if (saving) return false;
     setSaving(true);
     setError(null);
     try {
+      contentChanged.current = false;
       await onSave(contentRef.current);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      return true;
     } catch (err) {
+      contentChanged.current = true;
       setError(err instanceof ApiError ? err.message : "Failed to save email");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -282,7 +338,7 @@ export function EmailEditorScreen({
         </div>
         <div className="flex items-center gap-2">
           {actions?.(() => onSave(contentRef.current))}
-          <Button onClick={save} disabled={saving}>
+          <Button onClick={() => void save()} disabled={saving}>
             {saving ? (
               <Loader size={16} />
             ) : saved ? (
@@ -297,6 +353,31 @@ export function EmailEditorScreen({
       </header>
 
       {error && <Banner className="mx-4 mt-4 shrink-0">{error}</Banner>}
+
+      <AlertDialog open={leaving} onOpenChange={setLeaving}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Save your changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You've edited this email since it was last saved. Leaving now discards
+              those edits.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={leave}>
+              Discard changes
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={async () => {
+                if (await save()) leave();
+              }}
+            >
+              Save and exit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="flex min-h-0 flex-1">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">

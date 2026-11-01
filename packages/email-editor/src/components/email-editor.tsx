@@ -40,7 +40,7 @@ import { Checklist } from "./checklist";
 import { ControlsBar } from "./controls-bar";
 import { DocHeader, InboxRow } from "./doc-header";
 import { Inspector } from "./inspector";
-import { TextItem } from "./text-item";
+import { plainText, TextItem } from "./text-item";
 import "../index.css";
 import "../editor.css";
 
@@ -100,7 +100,23 @@ const MOBILE_WIDTH = 375;
 function labelOf(block: EmailBlock, blockRegistry: BlockRegistry) {
   if (block.blockType === "text" && block.group) return "Text";
   if (block.blockType === "link" && block.settings?.isButton) return "Button";
+  if (block.blockType === "separator") return "Divider";
   return blockRegistry[block.blockType]?.metadata.displayName ?? "Block";
+}
+
+/** A block's accessible name: what it is and the start of its words, such as
+ * "Button block: Get started", so a screen reader can tell rows apart. */
+function describeBlock(block: EmailBlock, blockRegistry: BlockRegistry) {
+  const words =
+    block.blockType === "text"
+      ? plainText(String(block.settings.content ?? ""))
+      : block.blockType === "link"
+        ? String(block.settings.text ?? "")
+        : block.blockType === "image"
+          ? String(block.settings.alt ?? "")
+          : "";
+  const short = words.length > 60 ? `${words.slice(0, 60)}…` : words;
+  return `${labelOf(block, blockRegistry)} block${short ? `: ${short}` : ""}`;
 }
 
 /** Dialogs and popovers a host's quick edit may open outside the editor. */
@@ -231,11 +247,22 @@ export function EmailEditor({
 
   const choices = useMemo(() => getBlockChoices(blockRegistry), [blockRegistry]);
 
-  const flash = useCallback((message: string) => {
-    setToast(message);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2600);
+  // What a screen reader hears: a live region that is always there, so each
+  // message is read out. The toast shows the same message on screen.
+  const [announcement, setAnnouncement] = useState("");
+  const announce = useCallback((message: string) => {
+    // A repeated message ("Moved down" twice) still has to change to be read.
+    setAnnouncement((current) => (current === message ? `${message}\u00a0` : message));
   }, []);
+  const flash = useCallback(
+    (message: string) => {
+      setToast(message);
+      announce(message);
+      clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 2600);
+    },
+    [announce],
+  );
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   // Keep the parent informed in the same event that changes editor state.
@@ -478,7 +505,7 @@ export function EmailEditor({
   const focusRow = useCallback((id: string) => {
     setTimeout(() =>
       rootRef.current
-        ?.querySelector<HTMLElement>(`[data-block-id="${id}"] > .sle-hit`)
+        ?.querySelector<HTMLElement>(`[data-block-id="${id}"] .sle-hit`)
         ?.focus(),
     );
   }, []);
@@ -657,12 +684,47 @@ export function EmailEditor({
     [activate, blockRegistry, commitContent, select],
   );
 
+  /** Moves a row from the keyboard, keeping focus on it and saying where it
+   * went. */
+  const moveRow = useCallback(
+    (id: string, direction: "up" | "down") => {
+      const rows = rowsOf(emailRef.current.content, mode);
+      if (!canMoveRow(rows, id, direction)) {
+        announce(`Can't move ${direction === "up" ? "higher" : "lower"}`);
+        return;
+      }
+      const focused = document.activeElement as HTMLElement | null;
+      const caret =
+        focused instanceof HTMLTextAreaElement ? focused.selectionStart : null;
+      moveBlock(id, direction);
+      announce(`Moved ${direction}`);
+      // Reordering can take focus off the row; put it back.
+      setTimeout(() => {
+        const row = rootRef.current?.querySelector(`[data-block-id="${id}"]`);
+        if (!row || row.contains(document.activeElement)) return;
+        const field = row.querySelector<HTMLTextAreaElement>("textarea.sle-ed");
+        if (field && caret !== null) {
+          field.focus();
+          field.setSelectionRange(caret, caret);
+        } else row.querySelector<HTMLElement>(".sle-hit")?.focus();
+      });
+    },
+    [announce, canMoveRow, mode, moveBlock, rowsOf],
+  );
+
   const navigate = useCallback(
     (id: string, direction: "prev" | "next") => {
       const content = emailRef.current.content;
       const index = content.findIndex((block) => block.id === id);
       const next = content[index + (direction === "prev" ? -1 : 1)];
-      if (!next) return;
+      if (!next) {
+        // Up from the top of the email: back to the preview text.
+        if (direction === "prev")
+          rootRef.current
+            ?.querySelector<HTMLElement>("[data-sle-field=preview]")
+            ?.focus();
+        return;
+      }
       if (isItem(next)) {
         activate(next.id!, direction === "prev" ? "end" : 0);
         return;
@@ -914,6 +976,20 @@ export function EmailEditor({
     setTimeout(() => focusBlock(id), 0);
   }
 
+  /** Focus the first control of the Style panel's open tab. */
+  function focusPanel() {
+    setTimeout(() => {
+      const panel = rootRef.current?.querySelector("[role=tabpanel]");
+      Array.from(
+        panel?.querySelectorAll<HTMLElement>(
+          "button, input, select, textarea, [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      )
+        .find((element) => !(element as HTMLButtonElement).disabled)
+        ?.focus();
+    }, 30);
+  }
+
   function deselect() {
     setActiveId(null);
     setSelectedId(null);
@@ -977,7 +1053,12 @@ export function EmailEditor({
       : -1;
   const writeMore =
     mode === "write" && canWrite ? (
-      <button type="button" className="sle-trail" onClick={writeAtEnd}>
+      <button
+        type="button"
+        className="sle-trail"
+        aria-label="Keep writing at the end"
+        onClick={writeAtEnd}
+      >
         {activeId ? "" : "Keep writing, or press / for blocks"}
       </button>
     ) : null;
@@ -985,8 +1066,26 @@ export function EmailEditor({
   const rowEvents: RowEvents = {
     onOpenInsert: openInsert,
     onGripClick: (id) => focusBlock(id),
-    onMove: moveBlock,
-    onNavigate: navigate,
+    onMove: moveRow,
+    onRowKey: (id, event) => {
+      const key = event.key;
+      if (key !== "ArrowUp" && key !== "ArrowDown" && key !== "Escape") return;
+      event.preventDefault();
+      const up = key === "ArrowUp";
+      if (key === "Escape") {
+        // Style: Escape lets go of the selected block.
+        if (mode === "style")
+          setSelectedId((current) => (current === id ? null : current));
+      } else if (event.altKey && event.shiftKey) {
+        moveRow(id, up ? "up" : "down");
+      } else if (mode === "write") {
+        navigate(id, up ? "prev" : "next");
+      } else {
+        const ids = rows.map((row) => row.id);
+        const next = ids[ids.indexOf(id) + (up ? -1 : 1)];
+        if (next) focusRow(next);
+      }
+    },
     onDragStart: (id) => {
       setDragId(id);
       setActiveId(null);
@@ -1045,7 +1144,7 @@ export function EmailEditor({
         className={`sle-pop${column ? " col" : ""}`}
         role="toolbar"
         tabIndex={-1}
-        aria-label={`${component.metadata.displayName} settings`}
+        aria-label={`${labelOf(block, blockRegistry)} settings`}
         style={{ maxHeight: popoverMax }}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
@@ -1119,7 +1218,7 @@ export function EmailEditor({
   }
 
   /** One paragraph, heading, list item or quote while writing. */
-  function renderItem(row: Row, index: number) {
+  function renderItem(row: Row) {
     const item = row.block;
     const content = email.content;
     const before = content[row.start - 1];
@@ -1174,7 +1273,6 @@ export function EmailEditor({
           caret={activeCaret}
           number={number}
           listEnd={listKind(after) !== parsed.kind}
-          label={`Text ${index + 1}`}
           variables={variables}
           choices={choices}
           onActivate={(caret) => activate(row.id, caret ?? "end")}
@@ -1186,14 +1284,19 @@ export function EmailEditor({
           onPasteParagraphs={(parts, a, b) => pasteParagraphs(row.id, parts, a, b)}
           onUndo={undo}
           onRedo={redo}
-          onExit={() => setActiveId(null)}
+          onMove={(direction) => moveRow(row.id, direction)}
+          onExit={() => {
+            // Leave editing but stay here, on the paragraph.
+            setActiveId(null);
+            focusRow(row.id);
+          }}
         />
       </ItemRow>
     );
   }
 
-  function renderRow(row: Row, index: number) {
-    if (mode === "write" && isItem(row.block)) return renderItem(row, index);
+  function renderRow(row: Row) {
+    if (mode === "write" && isItem(row.block)) return renderItem(row);
     const shown = (
       sample && inStyle ? withSamples(row.block, samples) : row.block
     ) as Required<EmailBlock>;
@@ -1201,6 +1304,7 @@ export function EmailEditor({
     return (
       <BlockRow
         block={{ ...shown, id: row.id }}
+        label={describeBlock(row.block, blockRegistry)}
         style={shownStyle}
         blockRegistry={blockRegistry}
         renderContext={renderContext}
@@ -1218,7 +1322,11 @@ export function EmailEditor({
         }}
         floating={floatingFor(row)}
         events={rowEvents}
-        onSelect={select}
+        onSelect={(id, keyboard) => {
+          select(id);
+          // In Style, Enter on a block goes on to its settings.
+          if (keyboard && mode === "style") focusPanel();
+        }}
         onDelete={deleteBlock}
         onDuplicate={duplicateBlock}
       />
@@ -1259,7 +1367,7 @@ export function EmailEditor({
           </div>
 
           {/* biome-ignore lint/a11y/noStaticElementInteractions: clicking the canvas background clears the selection */}
-          <main className="sle-stage" aria-label="Email canvas" onClick={deselect}>
+          <section className="sle-stage" aria-label="Email canvas" onClick={deselect}>
             {inStyle && (
               <>
                 <ControlsBar
@@ -1347,7 +1455,7 @@ export function EmailEditor({
                 {rows.map((row, index) => (
                   <Fragment key={row.id}>
                     {index === pinnedIndex && writeMore}
-                    {renderRow(row, index)}
+                    {renderRow(row)}
                   </Fragment>
                 ))}
                 {pinnedIndex === -1 && writeMore}
@@ -1356,7 +1464,7 @@ export function EmailEditor({
             {mode === "write" && (
               <p className="sle-cap">Switch to Style to see it as readers will.</p>
             )}
-          </main>
+          </section>
         </div>
 
         {inStyle && (
@@ -1372,14 +1480,18 @@ export function EmailEditor({
             updateBlock={updateBlock}
             onEditInWrite={editInWrite}
             onCopied={(tag) => flash(`Copied ${tag}`)}
+            onEscape={() => selectedId && focusRow(selectedId)}
           />
         )}
       </div>
       {toast && (
-        <div className="sle-toast" role="status">
+        <div className="sle-toast" aria-hidden="true">
           {toast}
         </div>
       )}
+      <div className="sle-sr" role="status">
+        {announcement}
+      </div>
     </div>
   );
 }

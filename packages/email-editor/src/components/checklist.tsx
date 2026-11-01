@@ -18,6 +18,7 @@ export function Checklist({
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const ref = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
   const must = items.filter((item) => item.level === "must").length;
   const state = must > 0 ? "bad" : items.length > 0 ? "warn" : "ok";
 
@@ -34,8 +35,24 @@ export function Checklist({
     state === "bad" ? XCircle : state === "warn" ? AlertTriangle : CheckCircle2;
 
   return (
-    <div className="sle-chkwrap" ref={ref}>
+    <div
+      className="sle-chkwrap"
+      ref={ref}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || !open) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        button.current?.focus();
+      }}
+      onBlur={(event) => {
+        // Tabbing away closes it; clicks outside are handled above.
+        const next = event.relatedTarget as Node | null;
+        if (next && !ref.current?.contains(next)) setOpen(false);
+      }}
+    >
       <button
+        ref={button}
         type="button"
         className={`sle-chkbtn ${state}`}
         aria-expanded={open}
@@ -110,6 +127,7 @@ export function Checklist({
                     <button
                       type="button"
                       className="sle-btn t"
+                      aria-label={`${item.fixLabel}: ${item.title}`}
                       onClick={() => {
                         setOpen(false);
                         onJump(item.target);

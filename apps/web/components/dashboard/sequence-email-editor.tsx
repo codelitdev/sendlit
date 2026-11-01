@@ -109,6 +109,7 @@ export function SequenceEmailEditor({
         sendingOptionFor(sendingOptions, deliverySource)?.fromName ?? undefined
       }
       initialContent={email.content}
+      otherChangesUnsaved={email.subject !== savedSubject}
       onSave={async (content) => {
         if (isBroadcast && email.subject !== savedSubject) {
           await updateSequence(sequenceId, { title: email.subject });

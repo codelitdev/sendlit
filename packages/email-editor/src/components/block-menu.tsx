@@ -13,7 +13,10 @@ export function BlockMenu({
   placement,
   header,
   onClose,
+  id,
 }: {
+  /** Set while typing `/`: the text field points at the highlighted entry. */
+  id?: string;
   choices: BlockChoice[];
   /** Highlighted entry; choices first, then variables. */
   index: number;
@@ -30,6 +33,11 @@ export function BlockMenu({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const focusable = Boolean(onClose);
+  // Driven from the text field it's a list box of options; opened with the
+  // + button it's a menu with focus of its own.
+  const itemRole = focusable ? "menuitem" : "option";
+  const option = (i: number) =>
+    focusable ? {} : { id: `${id}-${i}`, "aria-selected": i === index, tabIndex: -1 };
 
   useEffect(() => {
     if (focusable) ref.current?.querySelector<HTMLElement>("button")?.focus();
@@ -64,8 +72,10 @@ export function BlockMenu({
       ref={ref}
       className={`sle-menu grid${placement?.up ? " up" : ""}`}
       style={placement && { maxHeight: placement.maxHeight }}
-      role="menu"
-      aria-label="Insert"
+      id={id}
+      {...(focusable
+        ? { role: "menu", "aria-label": "Insert" }
+        : { role: "listbox", "aria-label": "Insert" })}
       onMouseDown={(event) => event.preventDefault()}
       onKeyDown={onKeyDown}
     >
@@ -78,7 +88,8 @@ export function BlockMenu({
             <button
               key={choice.id}
               type="button"
-              role="menuitem"
+              role={itemRole}
+              {...option(i)}
               className={i === index ? "first" : undefined}
               onMouseEnter={() => onHover?.(i)}
               onClick={() => onPick(choice)}
@@ -99,7 +110,8 @@ export function BlockMenu({
               <button
                 key={variable.tag}
                 type="button"
-                role="menuitem"
+                role={itemRole}
+                {...option(choices.length + i)}
                 className={`sle-chip${choices.length + i === index ? " first" : ""}`}
                 onClick={() => onPickVariable(variable)}
               >
@@ -120,7 +132,9 @@ export function VariableMenu({
   onPick,
   onHover,
   placement,
+  id,
 }: {
+  id?: string;
   variables: EditorVariable[];
   index: number;
   onPick: (variable: EditorVariable) => void;
@@ -131,7 +145,8 @@ export function VariableMenu({
     <div
       className={`sle-menu${placement?.up ? " up" : ""}`}
       style={placement && { maxHeight: placement.maxHeight }}
-      role="menu"
+      id={id}
+      role="listbox"
       aria-label="Merge tags"
       onMouseDown={(event) => event.preventDefault()}
     >
@@ -140,7 +155,10 @@ export function VariableMenu({
         <button
           key={variable.tag}
           type="button"
-          role="menuitem"
+          role="option"
+          id={`${id}-${i}`}
+          aria-selected={i === index}
+          tabIndex={-1}
           className={i === index ? "first" : undefined}
           onMouseEnter={() => onHover?.(i)}
           onClick={() => onPick(variable)}

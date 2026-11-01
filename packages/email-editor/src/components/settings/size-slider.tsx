@@ -80,6 +80,7 @@ export function SizeSlider({
         </div>
       </div>
       <Slider
+        aria-label={label}
         id={`slider-${label.replace(/\s+/g, "-").toLowerCase()}`}
         value={[Number.parseInt(localValue, 10) || 0]}
         min={min}

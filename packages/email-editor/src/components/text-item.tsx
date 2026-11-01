@@ -11,6 +11,8 @@ import {
   type ClipboardEvent,
   type CSSProperties,
   type KeyboardEvent,
+  useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -33,6 +35,32 @@ import { BlockMenu, VariableMenu } from "./block-menu";
 type Menu = { kind: "slash"; query: string } | { kind: "variable" } | null;
 
 const SLASH = /^\/([a-z0-9 ]{0,14})$/i;
+
+const KIND_NAMES: Record<ItemKind, string> = {
+  p: "Paragraph",
+  h1: "Heading 1",
+  h2: "Heading 2",
+  h3: "Heading 3",
+  li: "Bullet",
+  ol: "Numbered item",
+  quote: "Quote",
+};
+
+/** The words of an item without its markdown, for its accessible name. */
+export function plainText(markdown: string): string {
+  return markdown
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\{\{\s*([\w.]+)[^}]*\}\}/g, "$1")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function snippet(text: string) {
+  const plain = plainText(text);
+  if (!plain) return "empty";
+  return plain.length > 60 ? `${plain.slice(0, 60)}…` : plain;
+}
 
 /** How an item looks, following the email's typography and the markdown
  * renderer's spacing, so writing looks like the email that is sent. */
@@ -87,7 +115,6 @@ export interface TextItemProps {
   number?: number;
   /** The last item of a list gets the list's bottom margin. */
   listEnd: boolean;
-  label: string;
   variables: EditorVariable[];
   choices: BlockChoice[];
   /** `caret` is where the click landed in the markdown, when known. */
@@ -98,6 +125,8 @@ export interface TextItemProps {
   /** Backspace at the start of a paragraph: join the previous item. */
   onMergeBack: () => void;
   onNavigate: (direction: "prev" | "next") => void;
+  /** Alt+Shift+arrows: move this item up or down. */
+  onMove: (direction: "up" | "down") => void;
   /** A block picked from the `/` menu replaces this item. */
   onInsertChoice: (choice: BlockChoice) => void;
   /** Several paragraphs pasted at once, around the caret. */
@@ -119,6 +148,8 @@ export function TextItem(props: TextItemProps) {
   const [menu, setMenu] = useState<Menu>(null);
   const [menuIndex, setMenuIndex] = useState(0);
   const [placement, setPlacement] = useState<MenuPlacement>();
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
 
   const slashChoices = menu?.kind === "slash" ? filterChoices(choices, menu.query) : [];
   const listLength = menu?.kind === "variable" ? variables.length : slashChoices.length;
@@ -153,6 +184,21 @@ export function TextItem(props: TextItemProps) {
       setSelection(pending);
     }
   }, [content, active]);
+
+  // Grow or shrink when the canvas changes width, as text rewraps.
+  useEffect(() => {
+    const el = ref.current;
+    if (!active || !el?.parentElement || typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    });
+    observer.observe(el.parentElement);
+    return () => observer.disconnect();
+  }, [active]);
 
   const setBody = (edit: TextEdit, nextPrefix = prefix) => {
     pendingSelection.current = { start: edit.start, end: edit.end };
@@ -250,6 +296,17 @@ export function TextItem(props: TextItemProps) {
       event.preventDefault();
       if (menu) setMenu(null);
       else props.onExit();
+      return;
+    }
+    if (event.altKey && event.shiftKey && (key === "ArrowUp" || key === "ArrowDown")) {
+      event.preventDefault();
+      props.onMove(key === "ArrowUp" ? "up" : "down");
+      return;
+    }
+    // Alt+F10 reaches the format toolbar, as in other editors.
+    if (event.altKey && key === "F10") {
+      event.preventDefault();
+      toolbarRef.current?.querySelector<HTMLElement>("button")?.focus();
       return;
     }
     if (mod && key.toLowerCase() === "z") {
@@ -353,10 +410,28 @@ export function TextItem(props: TextItemProps) {
     >
       {hasSelection && (
         <div
+          ref={toolbarRef}
           className="sle-fmt"
           role="toolbar"
           aria-label="Format"
           onMouseDown={(event) => event.preventDefault()}
+          // Every button acts on the text, so focus goes back to it.
+          onClick={() => ref.current?.focus()}
+          onKeyDown={(event) => {
+            const buttons = Array.from(
+              toolbarRef.current?.querySelectorAll<HTMLElement>("button") ?? [],
+            );
+            const at = buttons.indexOf(document.activeElement as HTMLElement);
+            const step =
+              event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+            if (step) {
+              event.preventDefault();
+              buttons[(at + step + buttons.length) % buttons.length]?.focus();
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              ref.current?.focus();
+            }
+          }}
         >
           <button
             type="button"
@@ -439,7 +514,13 @@ export function TextItem(props: TextItemProps) {
         <textarea
           ref={ref}
           className="sle-ed"
-          aria-label={props.label}
+          aria-label={KIND_NAMES[kind]}
+          aria-keyshortcuts="Alt+F10 Alt+Shift+ArrowUp Alt+Shift+ArrowDown"
+          aria-autocomplete="list"
+          aria-controls={menu ? menuId : undefined}
+          aria-activedescendant={
+            menu && listLength > 0 ? `${menuId}-${menuIndex}` : undefined
+          }
           placeholder={
             kind === "p"
               ? "Write something, or type / for blocks"
@@ -482,7 +563,7 @@ export function TextItem(props: TextItemProps) {
           <button
             type="button"
             className="sle-hit"
-            aria-label={`Edit: ${props.label}`}
+            aria-label={`${KIND_NAMES[kind]}: ${snippet(body)}`}
             onClick={(event) => {
               event.stopPropagation();
               props.onActivate();
@@ -492,6 +573,7 @@ export function TextItem(props: TextItemProps) {
       )}
       {active && menu?.kind === "slash" && (
         <BlockMenu
+          id={menuId}
           choices={slashChoices}
           index={menuIndex}
           onHover={setMenuIndex}
@@ -501,6 +583,7 @@ export function TextItem(props: TextItemProps) {
       )}
       {active && menu?.kind === "variable" && (
         <VariableMenu
+          id={menuId}
           variables={variables}
           index={menuIndex}
           onHover={setMenuIndex}

@@ -2002,3 +2002,16 @@ fieldset.sle-seg {
 .sle-body.style .sle-stage {
   padding-top: 12px;
 }
+/* A block's rendered preview: inert, and invisible to layout. */
+.sle-render {
+  display: contents;
+}
+/* Announcements for screen readers, such as a block moved by keyboard. */
+.sle-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

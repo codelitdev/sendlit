@@ -17,6 +17,7 @@ export default function TemplateEditorPage({
 }) {
   const { templateId } = use(params);
   const [title, setTitle] = useState<string | null>(null);
+  const [savedTitle, setSavedTitle] = useState<string | null>(null);
   const [content, setContent] = useState<Email | null>(null);
   const [purpose, setPurpose] = useState<TemplatePurpose | null>(null);
   const [requiredVariables, setRequiredVariables] = useState<string[]>([]);
@@ -26,6 +27,7 @@ export default function TemplateEditorPage({
     getTemplate(templateId)
       .then((template) => {
         setTitle(template.title);
+        setSavedTitle(template.title);
         setContent(template.content);
         setPurpose(template.purpose);
         setRequiredVariables(template.requiredVariables);
@@ -45,12 +47,14 @@ export default function TemplateEditorPage({
       initialContent={content}
       purpose={purpose}
       requiredVariables={requiredVariables}
+      otherChangesUnsaved={title !== savedTitle}
       onSave={async (nextContent) => {
         const updated = await updateTemplate(templateId, {
           title,
           content: nextContent,
         });
         setRequiredVariables(updated.requiredVariables);
+        setSavedTitle(title);
       }}
       title={
         <Input
