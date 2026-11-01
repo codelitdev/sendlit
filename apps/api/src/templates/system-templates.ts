@@ -98,18 +98,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
       },
       content: [
         {
-          blockType: "text",
-          settings: {
-            content: "JUST ANNOUNCED",
-            alignment: "center",
-            fontFamily: "Helvetica, sans-serif",
-            fontSize: "12px",
-            foregroundColor: "#db2777",
-            paddingTop: "6px",
-            paddingBottom: "4px",
-          },
-        },
-        {
           blockType: "image",
           settings: {
             src: "https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?auto=compress&cs=tinysrgb&dpr=2&w=1200",
@@ -277,18 +265,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
         {
           blockType: "text",
           settings: {
-            content: "WELCOME",
-            alignment: "center",
-            fontFamily: "Helvetica, sans-serif",
-            fontSize: "12px",
-            foregroundColor: "#2563eb",
-            paddingTop: "8px",
-            paddingBottom: "0px",
-          },
-        },
-        {
-          blockType: "text",
-          settings: {
             content: "# Welcome aboard",
             alignment: "left",
             fontFamily: "Helvetica, sans-serif",
@@ -433,19 +409,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
         {
           blockType: "text",
           settings: {
-            content: "RECOMMENDED FOR YOU",
-            alignment: "center",
-            fontFamily: "Helvetica, sans-serif",
-            fontSize: "12px",
-            foregroundColor: "#7c3aed",
-            backgroundColor: "#f5f3ff",
-            paddingTop: "8px",
-            paddingBottom: "8px",
-          },
-        },
-        {
-          blockType: "text",
-          settings: {
             content: "# Products your customers are ready to buy next",
             alignment: "left",
             fontFamily: "Helvetica, sans-serif",
@@ -583,18 +546,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           "A clean, editorial newsletter for recurring updates and curated stories.",
       },
       content: [
-        {
-          blockType: "text",
-          settings: {
-            content: "WEEKLY NEWSLETTER",
-            alignment: "left",
-            fontFamily: "Arial, sans-serif",
-            fontSize: "12px",
-            foregroundColor: "#0f766e",
-            paddingTop: "6px",
-            paddingBottom: "0px",
-          },
-        },
         {
           blockType: "text",
           settings: {
