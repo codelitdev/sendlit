@@ -2,10 +2,14 @@ import { cimd } from "@better-auth/cimd";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import { createOAuthProviderOptions } from "@codelitdev/oauth-server-kit/better-auth";
-import type { HostedLoginMethod } from "@codelitdev/oauth-server-kit/express";
+import type {
+  HostedLoginCaptcha,
+  HostedLoginMethod,
+} from "@codelitdev/oauth-server-kit/express";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import { captcha } from "better-auth/plugins";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
 import { createTransport } from "nodemailer";
@@ -112,6 +116,17 @@ export const mcpProtectedResourceMetadataUrl = `${authBaseUrl}/.well-known/oauth
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+const turnstileSiteKey = process.env.TURNSTILE_SITE_KEY;
+const turnstileSecretKey = process.env.TURNSTILE_SECRET_KEY;
+/** Cloudflare Turnstile on the hosted sign-in form, on only when both keys
+ * are set: the page sends the widget's token and the `captcha` plugin below
+ * verifies it, so one without the other would refuse every email sign-in.
+ * Only asking for a code is checked; signing in still needs that code. */
+export const hostedLoginCaptcha: HostedLoginCaptcha | undefined =
+  turnstileSiteKey && turnstileSecretKey
+    ? { provider: "cloudflare-turnstile", siteKey: turnstileSiteKey }
+    : undefined;
 
 /** Codes of type `email-verification` only confirm deleting an account
  * (`POST /account/deletion/code`); every other code signs in. */
@@ -294,6 +309,15 @@ export const auth = betterAuth({
         max: 3,
       },
     }),
+    ...(hostedLoginCaptcha && turnstileSecretKey
+      ? [
+          captcha({
+            provider: "cloudflare-turnstile",
+            secretKey: turnstileSecretKey,
+            endpoints: ["/email-otp/send-verification-otp"],
+          }),
+        ]
+      : []),
     jwt(),
     oauthProvider({
       ...createOAuthProviderOptions({
