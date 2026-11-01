@@ -1,21 +1,10 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { validateParityManifest } from "@codelitdev/mcp-server-kit";
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { type AuthInfo, createMcpHandler } from "@modelcontextprotocol/server";
 import { contract, mcpParityManifest } from "@sendlit/api-contract";
 
 mock.module("../db/client", () => ({ db: {}, pool: {} }));
 
-const { buildMcpServer } = await import("./server");
-
-type Risk = "read" | "write" | "destructive";
-
-const teamKeyAuth: AuthInfo = {
-  token: "tak_test",
-  clientId: "team-key:tak_test",
-  scopes: [],
-  extra: { authKind: "team_key", teamId: "team-1", user: null },
-};
+const { createSendLitMcp } = await import("./server");
 
 /** Dotted router-key paths for every ts-rest route, e.g. `settings.esps.list`. */
 function collectRestOperationIds(router: object, prefix: string[] = []): string[] {
@@ -30,45 +19,12 @@ function collectRestOperationIds(router: object, prefix: string[] = []): string[
   });
 }
 
-function riskFromAnnotations(annotations?: {
-  readOnlyHint?: boolean;
-  destructiveHint?: boolean;
-}): Risk {
-  if (annotations?.readOnlyHint) return "read";
-  if (annotations?.destructiveHint) return "destructive";
-  return "write";
-}
-
-async function listRegisteredTools() {
-  const handler = createMcpHandler(() => buildMcpServer(), { legacy: "stateless" });
-  const client = new Client(
-    { name: "sendlit-parity-test", version: "1.0.0" },
-    { versionNegotiation: { mode: { pin: "2026-07-28" } } },
-  );
-  closeables.push(client, handler);
-  await client.connect(
-    new StreamableHTTPClientTransport(new URL("http://sendlit.test/mcp"), {
-      fetch: (input, init) =>
-        handler.fetch(new Request(input, init), { authInfo: teamKeyAuth }),
-    }),
-  );
-  return (await client.listTools()).tools;
-}
-
-const closeables: Array<{ close(): Promise<void> }> = [];
-
-afterEach(async () => {
-  await Promise.allSettled(closeables.splice(0).map((item) => item.close()));
-});
-
 describe("platform conformance: MCP parity manifest", () => {
-  it("documents every REST operation and MCP tool with matching risk", async () => {
+  it("documents every REST operation and MCP tool with matching risk", () => {
     const restOperationIds = new Set(collectRestOperationIds(contract));
-    const tools = await listRegisteredTools();
+    const tools = createSendLitMcp().listTools();
     const mcpToolNames = new Set(tools.map((tool) => tool.name));
-    const mcpToolRisks = new Map(
-      tools.map((tool) => [tool.name, riskFromAnnotations(tool.annotations)] as const),
-    );
+    const mcpToolRisks = new Map(tools.map((tool) => [tool.name, tool.risk] as const));
 
     expect(
       validateParityManifest(mcpParityManifest, {
@@ -90,5 +46,6 @@ describe("platform conformance: MCP parity manifest", () => {
       mcpParityManifest.flatMap((entry) => (entry.mcp ? [entry.mcp.tool] : [])),
     );
     expect([...mcpToolNames].filter((name) => !documentedTools.has(name))).toEqual([]);
+    expect([...documentedTools].filter((name) => !mcpToolNames.has(name))).toEqual([]);
   });
 });

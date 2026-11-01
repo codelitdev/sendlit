@@ -1,73 +1,69 @@
-import { McpServer } from "@modelcontextprotocol/server";
-import { createMcpToolRegistrar } from "./tool-registry";
-import { registerContactTools } from "./tools/contacts";
-import { registerDeliveryFeedbackTools } from "./tools/delivery-feedback";
-import { registerEspTools } from "./tools/esp";
-import { registerEventTools } from "./tools/events";
-import { registerFormTools } from "./tools/forms";
-import { registerGeneralSettingsTools } from "./tools/general-settings";
-import { registerMediaTools } from "./tools/media";
-import { registerReputationTools } from "./tools/reputation";
-import { registerSegmentTools } from "./tools/segments";
-import { registerSequenceTools } from "./tools/sequences";
-import { registerTagTools } from "./tools/tags";
-import { registerTeamTools } from "./tools/teams";
-import { registerTemplateTools } from "./tools/templates";
-import { registerTrackingDomainTools } from "./tools/tracking-domain";
-import { registerTransactionalTools } from "./tools/transactional";
-import { registerWebTools } from "./tools/web";
+import { createMcpServerKit, type McpServerKit } from "@codelitdev/mcp-server-kit";
+import { captureError } from "../observability";
+import {
+  authenticateMcpRequest,
+  resolveMcpContext,
+  type SendLitMcpContext,
+  type SendLitMcpTool,
+} from "./context";
+import { contactTools } from "./tools/contacts";
+import { deliveryFeedbackTools } from "./tools/delivery-feedback";
+import { espTools } from "./tools/esp";
+import { eventTools } from "./tools/events";
+import { formTools } from "./tools/forms";
+import { generalSettingsTools } from "./tools/general-settings";
+import { mediaTools } from "./tools/media";
+import { reputationTools } from "./tools/reputation";
+import { segmentTools } from "./tools/segments";
+import { sequenceTools } from "./tools/sequences";
+import { tagTools } from "./tools/tags";
+import { teamTools } from "./tools/teams";
+import { templateTools } from "./tools/templates";
+import { trackingDomainTools } from "./tools/tracking-domain";
+import { transactionalTools } from "./tools/transactional";
+import { webTools } from "./tools/web";
 
-export const SENDLIT_MCP_VERSION = "2.0.0";
+export const SENDLIT_MCP_VERSION = "3.0.0";
+
+/** Every SendLit MCP tool, one per operation, in a stable order so catalog
+ * caches and upstream prompt caches see a deterministic tool list. */
+export function sendLitMcpTools(): SendLitMcpTool[] {
+  return [
+    ...contactTools(),
+    ...segmentTools(),
+    ...tagTools(),
+    ...formTools(),
+    ...webTools(),
+    ...reputationTools(),
+    ...templateTools(),
+    ...mediaTools(),
+    ...sequenceTools(),
+    ...transactionalTools(),
+    ...eventTools(),
+    ...generalSettingsTools(),
+    ...trackingDomainTools(),
+    ...espTools(),
+    ...teamTools(),
+    ...deliveryFeedbackTools(),
+  ];
+}
 
 /**
- * Build one request-local MCP server for both the existing 2025 and modern
- * 2026 protocol eras. This factory is deliberately pure: tenant/principal
- * state arrives through the SDK request context and all durable state lives in
- * SendLit's existing database/queue services.
+ * SendLit's MCP endpoint on the CodeLit Platform kit (ADR 0010): stateless,
+ * protocol 2026-07-28 plus 2025-era Streamable HTTP, with SendLit's own
+ * credential and team resolution and one dedicated tool per operation.
  */
-export function buildMcpServer(): McpServer {
-  const server = new McpServer(
-    {
-      name: "SendLit",
-      version: SENDLIT_MCP_VERSION,
-      description:
-        "SendLit MCP server — compose, send and automate email for a SendLit team. Manage contacts and segments, templates and media, broadcasts and sequences, transactional email, sending providers, settings, team API keys, and delivery feedback. Organization bootstrap, shared-delivery policy, and team provisioning use the REST API, not MCP.",
-    },
-    {
-      instructions:
-        "Use read tools to inspect existing state before mutations. Sending, activation, deletion, key management, and suppression-release tools have external or destructive effects; confirm the requested target and inputs before calling them. MCP is team-scoped and does not accept organization API keys. Use the REST API and /openapi.json for organization discovery, headless shared-delivery setup, and team provisioning.",
-      cacheHints: {
-        "server/discover": {
-          ttlMs: 300_000,
-          cacheScope: "private",
-        },
-        "tools/list": {
-          ttlMs: 300_000,
-          cacheScope: "private",
-        },
-      },
-    },
-  );
-  const tools = createMcpToolRegistrar(server);
-
-  // Registration order is stable so catalog caching and upstream prompt
-  // caches receive deterministic tool lists.
-  registerContactTools(tools);
-  registerSegmentTools(tools);
-  registerTagTools(tools);
-  registerFormTools(tools);
-  registerWebTools(tools);
-  registerReputationTools(tools);
-  registerTemplateTools(tools);
-  registerMediaTools(tools);
-  registerSequenceTools(tools);
-  registerTransactionalTools(tools);
-  registerEventTools(tools);
-  registerGeneralSettingsTools(tools);
-  registerTrackingDomainTools(tools);
-  registerEspTools(tools);
-  registerTeamTools(tools);
-  registerDeliveryFeedbackTools(tools);
-
-  return server;
+export function createSendLitMcp(): McpServerKit<SendLitMcpContext> {
+  return createMcpServerKit<SendLitMcpContext>({
+    name: "SendLit",
+    version: SENDLIT_MCP_VERSION,
+    description:
+      "SendLit MCP server — compose, send and automate email for a SendLit team. Manage contacts and segments, templates and media, broadcasts and sequences, transactional email, sending providers, settings, team API keys, and delivery feedback. Organization bootstrap, shared-delivery policy, and team provisioning use the REST API, not MCP.",
+    instructions:
+      "Use read tools to inspect existing state before mutations. Sending, activation, deletion, key management, and suppression-release tools have external or destructive effects; confirm the requested target and inputs with the user before calling them, and pass confirm: true to destructive tools. MCP is team-scoped and does not accept organization API keys. Use the REST API and /openapi.json for organization discovery, headless shared-delivery setup, and team provisioning.",
+    authenticate: authenticateMcpRequest,
+    resolveContext: resolveMcpContext,
+    onError: ({ error, source }) => captureError({ error, source }),
+    tools: sendLitMcpTools(),
+  });
 }

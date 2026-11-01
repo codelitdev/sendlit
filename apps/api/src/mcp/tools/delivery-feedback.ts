@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { feedbackCapableProviders as feedbackCapableProvidersConst } from "../../config/constants";
+import { feedbackCapableProviders } from "../../config/constants";
 import {
   countDeliveryEvents,
   type DeliveryEvent,
@@ -27,9 +27,9 @@ import {
   type Suppression,
 } from "../../delivery-feedback/suppression-queries";
 import { getEspConfigByEspId, listEspConfigs } from "../../settings/esp/queries";
-import type { McpToolRegistrar } from "../tool-registry";
-import { getAuthUser, getTeamId } from "./auth";
-import { AUTH_ERROR, errorResult, jsonResult, NOT_FOUND } from "./responses";
+import type { SendLitMcpTool } from "../context";
+import { dedicatedTool } from "../tool";
+import { notFound, toolError } from "./responses";
 import {
   deliveryEventListSchema,
   deliveryEventSchema,
@@ -39,6 +39,8 @@ import {
   suppressionSchema,
   testEspResultSchema,
 } from "./schemas";
+
+type FeedbackProvider = (typeof feedbackCapableProviders)[number];
 
 function toPublicSuppression(suppression: Suppression) {
   return {
@@ -97,199 +99,168 @@ async function toPublicEvents(teamId: string, events: DeliveryEvent[]) {
  * behavior. Only providers with a reviewed adapter
  * (`feedbackCapableProviders`) can be configured.
  */
-export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
-  server.registerTool(
-    "get_esp_feedback_connection",
-    {
-      description:
-        "Returns a user ESP's bounce/complaint webhook connection (URL, status, health), or null if not configured yet. Never returns the credential.",
-      inputSchema: { espId: z.string().min(1) },
-      outputSchema: z.object({
-        connection: feedbackConnectionSchema.nullable(),
-      }),
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      const esp = await getEspConfigByEspId(teamId, args.espId);
-      if (!esp) return NOT_FOUND;
-      const connection = await getFeedbackConnectionForTeamEsp(teamId, esp.id);
-      return jsonResult({
+export const deliveryFeedbackTools = (): SendLitMcpTool[] => [
+  dedicatedTool({
+    name: "get_esp_feedback_connection",
+    operationId: "feedback.get",
+    title: "Get ESP Feedback Connection",
+    risk: "read",
+    description:
+      "Returns a user ESP's bounce/complaint webhook connection (URL, status, health), or null if not configured yet. Never returns the credential.",
+    inputSchema: z.object({ espId: z.string().min(1) }),
+    outputSchema: z.object({ connection: feedbackConnectionSchema.nullable() }),
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const esp = await getEspConfigByEspId(context.teamId, args.espId);
+      if (!esp) return notFound();
+      const connection = await getFeedbackConnectionForTeamEsp(context.teamId, esp.id);
+      return {
         connection: connection
           ? toPublicFeedbackConnection(esp.espId, connection)
           : null,
-      });
+      };
     },
-  );
+  }),
 
-  server.registerTool(
-    "upsert_esp_feedback_connection",
-    {
-      description:
-        "Creates a user ESP's feedback connection (first call) or rotates its credential (later calls) — the webhook URL stays stable across rotation. The provider is always the ESP's current provider (must be one of: " +
-        feedbackCapableProvidersConst.join(", ") +
-        "). Amazon SES takes `expectedTopicArn` (the SNS topic subscribed to the returned webhook URL) instead of a credential; every other provider requires `credential`.",
-      inputSchema: {
-        espId: z.string().min(1),
-        credential: z
-          .string()
-          .min(1)
-          .optional()
-          .describe(
-            "The provider's webhook signing secret / shared header value. Required for every provider except SES.",
-          ),
-        expectedTopicArn: z
-          .string()
-          .optional()
-          .describe(
-            "SES only, required: the ARN of the SNS topic SES publishes bounce/complaint events to",
-          ),
-      },
-      outputSchema: feedbackConnectionSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      const esp = await getEspConfigByEspId(teamId, args.espId);
-      if (!esp) return NOT_FOUND;
-      if (
-        !feedbackCapableProvidersConst.includes(
-          esp.provider as (typeof feedbackCapableProvidersConst)[number],
-        )
-      ) {
-        return errorResult(
-          `Provider "${esp.provider}" does not have a reviewed feedback adapter yet.`,
-        );
+  dedicatedTool({
+    name: "upsert_esp_feedback_connection",
+    operationId: "feedback.upsert",
+    title: "Set Up ESP Feedback Connection",
+    risk: "write",
+    description:
+      "Creates a user ESP's feedback connection (first call) or rotates its credential (later calls) — the webhook URL stays stable across rotation. The provider is always the ESP's current provider (must be one of: " +
+      feedbackCapableProviders.join(", ") +
+      "). Amazon SES takes `expectedTopicArn` (the SNS topic subscribed to the returned webhook URL) instead of a credential; every other provider requires `credential`.",
+    inputSchema: z.object({
+      espId: z.string().min(1),
+      credential: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "The provider's webhook signing secret / shared header value. Required for every provider except SES.",
+        ),
+      expectedTopicArn: z
+        .string()
+        .optional()
+        .describe(
+          "SES only, required: the ARN of the SNS topic SES publishes bounce/complaint events to",
+        ),
+    }),
+    outputSchema: feedbackConnectionSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      const esp = await getEspConfigByEspId(context.teamId, args.espId);
+      if (!esp) return notFound();
+      if (!feedbackCapableProviders.includes(esp.provider as FeedbackProvider)) {
+        return toolError("validation_failed", {
+          reason: "feedback_provider_unsupported",
+          message: `Provider "${esp.provider}" does not have a reviewed feedback adapter yet.`,
+        });
       }
       const inputError = feedbackConnectionInputError(esp.provider, args);
-      if (inputError) return errorResult(inputError);
+      if (inputError) {
+        return toolError("validation_failed", {
+          reason: "invalid_feedback_connection",
+          message: inputError,
+        });
+      }
       const connection = await upsertFeedbackConnection({
-        teamId,
+        teamId: context.teamId,
         espConfigId: esp.id,
-        provider: esp.provider as (typeof feedbackCapableProvidersConst)[number],
+        provider: esp.provider as FeedbackProvider,
         credential: args.credential,
         expectedTopicArn: args.expectedTopicArn,
       });
-      return jsonResult(toPublicFeedbackConnection(esp.espId, connection));
+      return toPublicFeedbackConnection(esp.espId, connection);
     },
-  );
+  }),
 
-  server.registerTool(
-    "test_esp_feedback_connection",
-    {
-      description:
-        "Checks a feedback connection is fully armed (a smoke test — it does not call the provider): the stored credential decrypts, or for SES, the SNS subscription has been confirmed.",
-      inputSchema: { espId: z.string().min(1) },
-      outputSchema: testEspResultSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      const esp = await getEspConfigByEspId(teamId, args.espId);
-      if (!esp) return NOT_FOUND;
-      const connection = await getFeedbackConnectionForTeamEsp(teamId, esp.id);
-      if (!connection) {
-        return jsonResult({
-          success: false,
-          error: "feedback_not_configured",
-        });
-      }
+  dedicatedTool({
+    name: "test_esp_feedback_connection",
+    operationId: "feedback.test",
+    title: "Test ESP Feedback Connection",
+    risk: "write",
+    description:
+      "Checks a feedback connection is fully armed (a smoke test — it does not call the provider): the stored credential decrypts, or for SES, the SNS subscription has been confirmed.",
+    inputSchema: z.object({ espId: z.string().min(1) }),
+    outputSchema: testEspResultSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      const esp = await getEspConfigByEspId(context.teamId, args.espId);
+      if (!esp) return notFound();
+      const connection = await getFeedbackConnectionForTeamEsp(context.teamId, esp.id);
+      if (!connection) return { success: false, error: "feedback_not_configured" };
       const readinessError = feedbackConnectionReadinessError(connection);
-      if (readinessError) {
-        return jsonResult({ success: false, error: readinessError });
-      }
+      if (readinessError) return { success: false, error: readinessError };
       await recordFeedbackConnectionVerified(connection.id);
-      return jsonResult({ success: true });
+      return { success: true };
     },
-  );
+  }),
 
-  server.registerTool(
-    "delete_esp_feedback_connection",
-    {
-      description: "Disables a user ESP's feedback connection.",
-      inputSchema: { espId: z.string().min(1) },
-      outputSchema: successMessageSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        openWorldHint: false,
-      },
+  dedicatedTool({
+    name: "delete_esp_feedback_connection",
+    operationId: "feedback.remove",
+    title: "Delete ESP Feedback Connection",
+    risk: "destructive",
+    description: "Disables a user ESP's feedback connection.",
+    inputSchema: z.object({ espId: z.string().min(1) }),
+    outputSchema: successMessageSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      const esp = await getEspConfigByEspId(context.teamId, args.espId);
+      if (!esp) return notFound();
+      const disabled = await disableFeedbackConnection(context.teamId, esp.id);
+      if (!disabled) return notFound();
+      return { message: "Feedback connection disabled." };
     },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      const esp = await getEspConfigByEspId(teamId, args.espId);
-      if (!esp) return NOT_FOUND;
-      const disabled = await disableFeedbackConnection(teamId, esp.id);
-      if (!disabled) return NOT_FOUND;
-      return jsonResult({ message: "Feedback connection disabled." });
-    },
-  );
+  }),
 
-  server.registerTool(
-    "list_delivery_events",
-    {
-      description:
-        "Returns a paginated list of normalized bounce/complaint/delivery events for the team, most recent first.",
-      inputSchema: {
-        espId: z.string().min(1).optional(),
-        deliverySourceType: z.enum(["organization", "team"]).optional(),
-        eventType: z
-          .enum([
-            "accepted",
-            "delivered",
-            "delayed",
-            "soft_bounce",
-            "hard_bounce",
-            "failed",
-            "complaint",
-            "suppressed",
-            "rejected",
-            "unknown",
-          ])
-          .optional(),
-        createdAfter: z
-          .number()
-          .int()
-          .optional()
-          .describe("Millisecond timestamp lower bound (inclusive)"),
-        createdBefore: z
-          .number()
-          .int()
-          .optional()
-          .describe("Millisecond timestamp upper bound (exclusive)"),
-        offset: z.number().int().min(1).optional(),
-        itemsPerPage: z.number().int().min(1).optional(),
-      },
-      outputSchema: deliveryEventListSchema,
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
+  dedicatedTool({
+    name: "list_delivery_events",
+    operationId: "deliveryEvents.list",
+    title: "List Delivery Events",
+    risk: "read",
+    description:
+      "Returns a paginated list of normalized bounce/complaint/delivery events for the team, most recent first.",
+    inputSchema: z.object({
+      espId: z.string().min(1).optional(),
+      deliverySourceType: z.enum(["organization", "team"]).optional(),
+      eventType: z
+        .enum([
+          "accepted",
+          "delivered",
+          "delayed",
+          "soft_bounce",
+          "hard_bounce",
+          "failed",
+          "complaint",
+          "suppressed",
+          "rejected",
+          "unknown",
+        ])
+        .optional(),
+      createdAfter: z
+        .number()
+        .int()
+        .optional()
+        .describe("Millisecond timestamp lower bound (inclusive)"),
+      createdBefore: z
+        .number()
+        .int()
+        .optional()
+        .describe("Millisecond timestamp upper bound (exclusive)"),
+      offset: z.number().int().min(1).optional(),
+      itemsPerPage: z.number().int().min(1).optional(),
+    }),
+    outputSchema: deliveryEventListSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const teamId = context.teamId;
       let espConfigId: string | undefined;
       if (args.espId) {
         const esp = await getEspConfigByEspId(teamId, args.espId);
-        if (!esp) return jsonResult({ items: [], total: 0 });
+        if (!esp) return { items: [], total: 0 };
         espConfigId = esp.id;
       }
       const filters = {
@@ -308,66 +279,53 @@ export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
         }),
         countDeliveryEvents(filters),
       ]);
-      return jsonResult({
-        items: await toPublicEvents(teamId, events),
-        total,
-      });
+      return { items: await toPublicEvents(teamId, events), total };
     },
-  );
+  }),
 
-  server.registerTool(
-    "get_delivery_event",
-    {
-      description: "Returns a single normalized delivery event by its ID.",
-      inputSchema: { eventId: z.string() },
-      outputSchema: deliveryEventSchema,
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
+  dedicatedTool({
+    name: "get_delivery_event",
+    operationId: "deliveryEvents.get",
+    title: "Get Delivery Event",
+    risk: "read",
+    description: "Returns a single normalized delivery event by its ID.",
+    inputSchema: z.object({ eventId: z.string() }),
+    outputSchema: deliveryEventSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const event = await getDeliveryEventByEventId(context.teamId, args.eventId);
+      if (!event) return notFound();
+      const [publicEvent] = await toPublicEvents(context.teamId, [event]);
+      return publicEvent;
     },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      const event = await getDeliveryEventByEventId(teamId, args.eventId);
-      if (!event) return NOT_FOUND;
-      const [publicEvent] = await toPublicEvents(teamId, [event]);
-      return jsonResult(publicEvent);
-    },
-  );
+  }),
 
-  server.registerTool(
-    "list_suppressions",
-    {
-      description:
-        "Returns a paginated list of the team's suppressed (do-not-send) recipients.",
-      inputSchema: {
-        active: z.boolean().optional(),
-        reason: z
-          .enum([
-            "hard_bounce",
-            "complaint",
-            "repeated_soft_bounce",
-            "provider_suppression",
-            "manual",
-          ])
-          .optional(),
-        offset: z.number().int().min(1).optional(),
-        itemsPerPage: z.number().int().min(1).optional(),
-      },
-      outputSchema: suppressionListSchema,
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
+  dedicatedTool({
+    name: "list_suppressions",
+    operationId: "suppressions.list",
+    title: "List Suppressions",
+    risk: "read",
+    description:
+      "Returns a paginated list of the team's suppressed (do-not-send) recipients.",
+    inputSchema: z.object({
+      active: z.boolean().optional(),
+      reason: z
+        .enum([
+          "hard_bounce",
+          "complaint",
+          "repeated_soft_bounce",
+          "provider_suppression",
+          "manual",
+        ])
+        .optional(),
+      offset: z.number().int().min(1).optional(),
+      itemsPerPage: z.number().int().min(1).optional(),
+    }),
+    outputSchema: suppressionListSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
       const filters = {
-        teamId,
+        teamId: context.teamId,
         active: args.active,
         reason: args.reason,
       };
@@ -379,106 +337,89 @@ export function registerDeliveryFeedbackTools(server: McpToolRegistrar): void {
         }),
         countSuppressions(filters),
       ]);
-      return jsonResult({
-        items: items.map(toPublicSuppression),
-        total,
-      });
+      return { items: items.map(toPublicSuppression), total };
     },
-  );
+  }),
 
-  server.registerTool(
-    "get_suppression",
-    {
-      description: "Returns a single suppression by its ID.",
-      inputSchema: { suppressionId: z.string() },
-      outputSchema: suppressionSchema,
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
+  dedicatedTool({
+    name: "get_suppression",
+    operationId: "suppressions.get",
+    title: "Get Suppression",
+    risk: "read",
+    description: "Returns a single suppression by its ID.",
+    inputSchema: z.object({ suppressionId: z.string() }),
+    outputSchema: suppressionSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
       const suppression = await getSuppressionBySuppressionId(
-        teamId,
+        context.teamId,
         args.suppressionId,
       );
-      if (!suppression) return NOT_FOUND;
-      return jsonResult(toPublicSuppression(suppression));
+      if (!suppression) return notFound();
+      return toPublicSuppression(suppression);
     },
-  );
+  }),
 
-  server.registerTool(
-    "release_suppression",
-    {
-      description:
-        "Releases an active suppression. Only hard_bounce, repeated_soft_bounce, and manual suppressions can be released this way — complaint suppressions require a SendLit operator and are never releasable through this tool.",
-      inputSchema: {
-        suppressionId: z.string(),
-        explanation: z.string().min(1).max(2000).optional(),
-      },
-      outputSchema: suppressionSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
+  dedicatedTool({
+    name: "release_suppression",
+    operationId: "suppressions.release",
+    title: "Release Suppression",
+    risk: "write",
+    description:
+      "Releases an active suppression. Only hard_bounce, repeated_soft_bounce, and manual suppressions can be released this way — complaint suppressions require a SendLit operator and are never releasable through this tool.",
+    inputSchema: z.object({
+      suppressionId: z.string(),
+      explanation: z.string().min(1).max(2000).optional(),
+    }),
+    outputSchema: suppressionSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
       try {
         const suppression = await releaseSuppression({
-          teamId,
+          teamId: context.teamId,
           suppressionId: args.suppressionId,
           actorType: "workspace_user",
-          actorUserId: getAuthUser(extra)?.id ?? null,
+          actorUserId: context.user?.id ?? null,
           explanation: args.explanation,
         });
-        return jsonResult(toPublicSuppression(suppression));
+        return toPublicSuppression(suppression);
       } catch (err: any) {
-        if (err.message === "suppression_not_found") return NOT_FOUND;
-        if (err.message === "suppression_not_releasable") {
-          return errorResult(
-            "This suppression cannot be released by a workspace user (e.g. a complaint suppression) — it requires a SendLit operator.",
-          );
+        if (err?.message === "suppression_not_found") return notFound();
+        if (err?.message === "suppression_not_releasable") {
+          return toolError("forbidden", {
+            reason: "suppression_not_releasable",
+            message:
+              "This suppression cannot be released by a workspace user (e.g. a complaint suppression) — it requires a SendLit operator.",
+          });
         }
         throw err;
       }
     },
-  );
+  }),
 
-  server.registerTool(
-    "add_suppression",
-    {
-      description:
-        "Suppresses an address for the team (reason `manual`): SendLit never mails it again (broadcasts, sequences or transactional) until released. For role accounts, legal requests or known spam traps.",
-      inputSchema: {
-        email: z.string().email(),
-        note: z.string().max(2000).optional().describe("Why; kept in the audit trail"),
-      },
-      outputSchema: suppressionSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
+  dedicatedTool({
+    name: "add_suppression",
+    operationId: "suppressions.create",
+    title: "Add Suppression",
+    risk: "write",
+    description:
+      "Suppresses an address for the team (reason `manual`): SendLit never mails it again (broadcasts, sequences or transactional) until released. For role accounts, legal requests or known spam traps.",
+    inputSchema: z.object({
+      email: z.string().email(),
+      note: z.string().max(2000).optional().describe("Why; kept in the audit trail"),
+    }),
+    outputSchema: suppressionSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
       const suppression = await addOrStrengthenSuppression({
-        teamId,
+        teamId: context.teamId,
         recipientEmail: args.email,
         reason: "manual",
         actorType: "workspace_user",
-        actorUserId: getAuthUser(extra)?.id ?? null,
+        actorUserId: context.user?.id ?? null,
         explanation: args.note ?? null,
       });
-      return jsonResult(toPublicSuppression(suppression));
+      return toPublicSuppression(suppression);
     },
-  );
-}
+  }),
+];
