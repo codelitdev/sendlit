@@ -122,6 +122,11 @@ export function validateTemplateContent(
     if (footerIndexes.length > 0) {
       throw new TemplateValidationError("footer_not_allowed");
     }
+    // Conditional sections read the subscriber's tags; transactional sends have
+    // no subscriber.
+    if (contentBlocks.some((block) => block.blockType === "conditional")) {
+      throw new TemplateValidationError("conditional_not_allowed");
+    }
     const reservedVariables = findReservedMarketingVariables(content);
     if (reservedVariables.length > 0) {
       throw new TemplateValidationError(
