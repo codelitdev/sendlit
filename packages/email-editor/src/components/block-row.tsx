@@ -224,7 +224,9 @@ export function BlockRow(props: BlockRowProps) {
         }}
       />
 
-      {selected && (
+      {/* While writing, the gutter's grip moves blocks and the popover holds
+          the rest, so the side bar is only for Style mode. */}
+      {selected && mode === "style" && (
         // biome-ignore lint/a11y/noStaticElementInteractions: keeps toolbar clicks off the canvas
         <div className="sle-bar" onClick={(event) => event.stopPropagation()}>
           {capabilities.canMoveUp && (
@@ -247,7 +249,7 @@ export function BlockRow(props: BlockRowProps) {
               <ArrowDown className="size-3.5" />
             </button>
           )}
-          {mode === "style" && capabilities.canDuplicate && (
+          {capabilities.canDuplicate && (
             <button
               type="button"
               aria-label="Duplicate"
@@ -257,7 +259,7 @@ export function BlockRow(props: BlockRowProps) {
               <Copy className="size-3.5" />
             </button>
           )}
-          {mode === "style" && capabilities.canDelete && (
+          {capabilities.canDelete && (
             <button
               type="button"
               className="del"
