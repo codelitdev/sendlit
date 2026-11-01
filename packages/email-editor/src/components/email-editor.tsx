@@ -595,19 +595,32 @@ export function EmailEditor({
     [activate, blockRegistry, commitContent, select],
   );
 
+  /** Keyboard focus on a block itself, after the next render. */
+  const focusRow = useCallback((id: string) => {
+    setTimeout(() =>
+      rootRef.current
+        ?.querySelector<HTMLElement>(`[data-block-id="${id}"] > .sle-hit`)
+        ?.focus(),
+    );
+  }, []);
+
   const navigate = useCallback(
     (id: string, direction: "prev" | "next") => {
       const content = emailRef.current.content;
       const index = content.findIndex((block) => block.id === id);
-      const step = direction === "prev" ? -1 : 1;
-      for (let i = index + step; i >= 0 && i < content.length; i += step) {
-        if (isItem(content[i])) {
-          activate(content[i].id!, direction === "prev" ? "end" : 0);
-          return;
-        }
+      const next = content[index + (direction === "prev" ? -1 : 1)];
+      if (!next) return;
+      if (isItem(next)) {
+        activate(next.id!, direction === "prev" ? "end" : 0);
+        return;
       }
+      // A button, image or other block: focus it without opening its
+      // settings. Enter opens them; the arrows carry on past it.
+      setActiveId(null);
+      setSelectedId(null);
+      focusRow(next.id!);
     },
-    [activate],
+    [activate, focusRow],
   );
 
   const pasteParagraphs = useCallback(
@@ -694,6 +707,59 @@ export function EmailEditor({
     return () => document.removeEventListener("keydown", onKey);
   }, [insertAfterId]);
 
+  /** Closes a block's quick settings and hands focus back to the block, so
+   * Enter opens them again and the arrow keys carry on through the text. */
+  const closePopover = useCallback(
+    (id: string) => {
+      setSelectedId(null);
+      focusRow(id);
+    },
+    [focusRow],
+  );
+
+  /** Done with a block's quick settings: write on in the paragraph after it,
+   * starting one if the next thing isn't text. */
+  const continueAfter = useCallback(
+    (id: string) => {
+      const content = emailRef.current.content;
+      const index = content.findIndex((block) => block.id === id);
+      const next = content[index + 1];
+      if (isItem(next)) return activate(next!.id!, 0);
+      const created = canWrite ? insertText(index + 1, "") : null;
+      if (created) activate(created, 0);
+      else closePopover(id);
+    },
+    [activate, canWrite, closePopover, insertText],
+  );
+
+  // While writing, a block's quick settings close on Escape wherever focus
+  // is, and when focus moves on to another row (Tab out of the popover).
+  // Dialogs a quick edit opens, such as an image picker, render outside the
+  // editor and keep it open.
+  useEffect(() => {
+    if (mode !== "write" || !selectedId) return;
+    const row = () => rootRef.current?.querySelector(`[data-block-id="${selectedId}"]`);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as Node | null;
+      if (target && target !== document.body && !rootRef.current?.contains(target))
+        return;
+      event.preventDefault();
+      closePopover(selectedId);
+    };
+    const onFocus = (event: FocusEvent) => {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) && !row()?.contains(target))
+        setSelectedId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("focusin", onFocus);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("focusin", onFocus);
+    };
+  }, [closePopover, mode, selectedId]);
+
   // Undo and redo work wherever focus is, unless a field of its own (the
   // subject, a settings input, the host's own inputs) should undo instead.
   // Deleting a block from its popover leaves focus on the page, not in here.
@@ -723,11 +789,13 @@ export function EmailEditor({
     const timer = setTimeout(() => {
       const popover = rootRef.current?.querySelector<HTMLElement>(".sle-pop");
       popover?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      // Ready to type into the first field, so Escape and Tab work too.
-      const field = popover?.querySelector<HTMLElement>(
+      // Ready to type into the first field, so Escape and Tab work too. Its
+      // text is selected, so typing replaces a placeholder like "Click here".
+      const field = popover?.querySelector<HTMLInputElement>(
         "input:not([type=checkbox]), textarea",
       );
       (field ?? popover)?.focus({ preventScroll: true });
+      field?.select();
     }, 60);
     return () => clearTimeout(timer);
   }, [selectedId, mode]);
@@ -858,6 +926,7 @@ export function EmailEditor({
     onOpenInsert: openInsert,
     onGripClick: (id) => focusBlock(id),
     onMove: moveBlock,
+    onNavigate: navigate,
     onDragStart: (id) => {
       setDragId(id);
       setActiveId(null);
@@ -915,7 +984,18 @@ export function EmailEditor({
           event.stopPropagation();
           if (event.key === "Escape") {
             event.preventDefault();
-            setSelectedId(null);
+            closePopover(row.id);
+          }
+          // Enter in a one-line field means done: carry on writing below.
+          const field = event.target as HTMLElement;
+          if (
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            field.tagName === "INPUT" &&
+            !["checkbox", "radio", "file"].includes((field as HTMLInputElement).type)
+          ) {
+            event.preventDefault();
+            continueAfter(row.id);
           }
         }}
       >

@@ -15,6 +15,8 @@ export interface RowEvents {
   onOpenInsert: (id: string) => void;
   onGripClick: (id: string) => void;
   onMove: (id: string, direction: "up" | "down") => void;
+  /** Arrow keys on a selected block move the caret into the text around it. */
+  onNavigate: (id: string, direction: "prev" | "next") => void;
   onDragStart: (id: string) => void;
   onDragOver: (id: string, edge: "before" | "after") => void;
   onDrop: () => void;
@@ -221,6 +223,13 @@ export function BlockRow(props: BlockRowProps) {
         onClick={(event) => {
           event.stopPropagation();
           props.onSelect(block.id);
+        }}
+        onKeyDown={(event) => {
+          if (mode !== "write") return;
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+            event.preventDefault();
+            events.onNavigate(block.id, event.key === "ArrowUp" ? "prev" : "next");
+          }
         }}
       />
 

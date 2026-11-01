@@ -272,3 +272,74 @@ describe("writing paragraph by paragraph", () => {
     expect(screen.getByRole("status").textContent).toBe("Pasted 3 paragraphs");
   });
 });
+
+describe("block settings from the keyboard", () => {
+  const start = () =>
+    mount({
+      email: email([
+        { blockType: "text", settings: { content: "Before" } },
+        {
+          blockType: "link",
+          settings: { text: "Go", url: "https://x.co", isButton: true },
+        },
+        { blockType: "text", settings: { content: "After" } },
+      ]),
+      blocks: [Text, Link],
+    });
+  const settle = () => act(() => new Promise((done) => setTimeout(done, 80)));
+  const popover = () => screen.queryByRole("toolbar", { name: "Link settings" });
+  const selectButton = () => screen.getByRole("button", { name: "Select: Link" });
+
+  it("closes on Escape and hands focus back to the block", async () => {
+    start();
+    fireEvent.click(selectButton());
+    await settle();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Button text");
+
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await settle();
+    expect(popover()).toBeNull();
+    expect(document.activeElement).toBe(selectButton());
+
+    // Enter on the block opens its settings again.
+    fireEvent.click(document.activeElement!);
+    expect(popover()).toBeTruthy();
+  });
+
+  it("closes when focus tabs on to another row", async () => {
+    start();
+    fireEvent.click(selectButton());
+    await settle();
+    act(() => screen.getByRole("button", { name: "Edit: Text 3" }).focus());
+    expect(popover()).toBeNull();
+  });
+
+  it("carries on writing below the block after Enter in a field", async () => {
+    start();
+    fireEvent.click(selectButton());
+    await settle();
+    fireEvent.keyDown(screen.getByLabelText("Button link"), { key: "Enter" });
+    await settle();
+    expect(popover()).toBeNull();
+    expect(
+      (screen.getByRole("textbox", { name: /^Text/ }) as HTMLTextAreaElement).value,
+    ).toBe("After");
+  });
+
+  it("stops on the block when arrowing through the text", async () => {
+    start();
+    fireEvent.click(screen.getByRole("button", { name: "Edit: Text 1" }));
+    const first = screen.getByRole("textbox", { name: /^Text/ }) as HTMLTextAreaElement;
+    first.setSelectionRange(6, 6);
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    await settle();
+    expect(document.activeElement).toBe(selectButton());
+    expect(popover()).toBeNull();
+
+    fireEvent.keyDown(selectButton(), { key: "ArrowDown" });
+    await settle();
+    expect(
+      (screen.getByRole("textbox", { name: /^Text/ }) as HTMLTextAreaElement).value,
+    ).toBe("After");
+  });
+});
