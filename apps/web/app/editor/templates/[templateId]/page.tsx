@@ -7,7 +7,6 @@ import { Banner } from "@/components/dashboard/banner";
 import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
 import { Input } from "@/components/ui/codelit/input";
-import { Label } from "@/components/ui/codelit/label";
 import { getTemplate, updateTemplate } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 
@@ -42,7 +41,6 @@ export default function TemplateEditorPage({
   return (
     <EmailEditorScreen
       exitFallbackHref="/templates"
-      screenTitle="Editing template"
       saveLabel="Save template"
       initialContent={content}
       purpose={purpose}
@@ -54,18 +52,14 @@ export default function TemplateEditorPage({
         });
         setRequiredVariables(updated.requiredVariables);
       }}
-      header={
-        <div className="flex max-w-md items-center gap-3">
-          <Label htmlFor="template-title" className="shrink-0 text-muted-foreground">
-            Title
-          </Label>
-          <Input
-            id="template-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Welcome email"
-          />
-        </div>
+      title={
+        <Input
+          aria-label="Template title"
+          className="max-w-sm"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Welcome email"
+        />
       }
     />
   );

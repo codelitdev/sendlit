@@ -10,6 +10,7 @@ import {
   type DeliverySourceSelection,
   getEventDefinition,
   getSequence,
+  updateSequence,
   listSendingOptions,
   type SendingOption,
   updateSequenceEmail,
@@ -42,6 +43,9 @@ export function SequenceEmailEditor({
     null,
   );
   const [viewInBrowser, setViewInBrowser] = useState(true);
+  // A broadcast's subject is its title; the API keeps the two in step.
+  const [isBroadcast, setIsBroadcast] = useState(false);
+  const [savedSubject, setSavedSubject] = useState("");
   const [eventVariables, setEventVariables] = useState<
     { tag: string; description: string }[]
   >([]);
@@ -55,6 +59,7 @@ export function SequenceEmailEditor({
       .then((sequence) => {
         setDeliverySource(sequence.deliverySource ?? null);
         setViewInBrowser(sequence.viewInBrowser);
+        setIsBroadcast(sequence.type === "broadcast");
         // `{{ event.* }}`: the properties of the event that starts it.
         if (sequence.triggerType === "event:custom" && sequence.triggerData) {
           const name = sequence.triggerData;
@@ -76,6 +81,7 @@ export function SequenceEmailEditor({
           setError("Email not found");
           return;
         }
+        setSavedSubject(found.subject);
         setEmail({
           emailId: found.emailId,
           subject: found.subject,
@@ -97,16 +103,21 @@ export function SequenceEmailEditor({
       purpose="marketing"
       viewInBrowser={viewInBrowser}
       extraVariables={eventVariables}
-      header={
-        <h1 className="truncate text-base font-semibold">
-          {email.subject || "Untitled email"}
-        </h1>
+      subject={email.subject}
+      onSubjectChange={(subject) => setEmail({ ...email, subject })}
+      senderName={
+        sendingOptionFor(sendingOptions, deliverySource)?.fromName ?? undefined
       }
       initialContent={email.content}
       onSave={async (content) => {
+        if (isBroadcast && email.subject !== savedSubject) {
+          await updateSequence(sequenceId, { title: email.subject });
+        }
         await updateSequenceEmail(sequenceId, email.emailId, {
           content,
+          ...(isBroadcast ? {} : { subject: email.subject }),
         });
+        setSavedSubject(email.subject);
       }}
       actions={(saveContent) => (
         <SendTestDialog
