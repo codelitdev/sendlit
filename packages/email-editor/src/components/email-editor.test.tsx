@@ -214,6 +214,48 @@ describe("writing paragraph by paragraph", () => {
     expect(last().content[0].settings.content).toBe("Hello world");
   });
 
+  it("writes body text, not more heading, after a title block", () => {
+    const { last } = mount({
+      email: email([
+        { blockType: "text", settings: { content: "# Welcome", fontSize: "26px" } },
+        { blockType: "separator", settings: {} },
+        { blockType: "text", settings: { content: "Thanks", fontSize: "17px" } },
+      ]),
+      blocks: [Text, Separator],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit: Text 1" }));
+    editor().setSelectionRange(7, 7);
+    fireEvent.keyDown(editor(), { key: "Enter" });
+    fireEvent.change(editor(), { target: { value: "So nice" } });
+    expect(last().content).toEqual([
+      { blockType: "text", settings: { content: "# Welcome", fontSize: "26px" } },
+      { blockType: "text", settings: { content: "So nice", fontSize: "17px" } },
+      { blockType: "separator", settings: {} },
+      { blockType: "text", settings: { content: "Thanks", fontSize: "17px" } },
+    ]);
+  });
+
+  it("joins the body text straight after a title block", () => {
+    const { last } = mount({
+      email: email([
+        { blockType: "text", settings: { content: "# Welcome", fontSize: "26px" } },
+        { blockType: "text", settings: { content: "Thanks", fontSize: "17px" } },
+      ]),
+      blocks: [Text],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit: Text 1" }));
+    editor().setSelectionRange(7, 7);
+    fireEvent.keyDown(editor(), { key: "Enter" });
+    fireEvent.change(editor(), { target: { value: "So nice" } });
+    expect(last().content).toEqual([
+      { blockType: "text", settings: { content: "# Welcome", fontSize: "26px" } },
+      {
+        blockType: "text",
+        settings: { content: "So nice\n\nThanks", fontSize: "17px" },
+      },
+    ]);
+  });
+
   it("continues a list on Enter and ends it on an empty item", () => {
     const { last } = mount({
       email: email([{ blockType: "text", settings: { content: "- one" } }]),

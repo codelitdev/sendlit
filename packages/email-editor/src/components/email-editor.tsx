@@ -110,6 +110,42 @@ const DIALOGS =
 const isItem = (block: EmailBlock | undefined): boolean =>
   block?.blockType === "text" && Boolean(block.group);
 
+const isHeading = (block: EmailBlock) =>
+  parseItem(String(block.settings.content ?? "")).kind.startsWith("h");
+
+const withoutContent = ({ content: _drop, ...settings }: EmailBlock["settings"]) =>
+  settings;
+
+/** Where a new item written after `previous` belongs: its text block, so
+ * writing on stays one block. A paragraph after a block of only headings (a
+ * title set in its own size) takes the style of the nearest body text
+ * instead, joining it when it comes straight after. */
+function homeFor(
+  content: EmailBlock[],
+  previous: EmailBlock,
+  markdown: string,
+): Pick<EmailBlock, "group" | "settings"> {
+  const own = { group: previous.group, settings: withoutContent(previous.settings) };
+  if (parseItem(markdown).kind !== "p") return own;
+  const at = content.indexOf(previous);
+  const heading = content.filter(
+    (block) => isItem(block) && block.group === previous.group,
+  );
+  if (!heading.every(isHeading)) return own;
+  const body = (block: EmailBlock | undefined) =>
+    isItem(block) && block!.group !== previous.group && !isHeading(block!);
+  const next = content[at + 1];
+  if (body(next))
+    return { group: next!.group, settings: withoutContent(next!.settings) };
+  const nearest = [...content.slice(at + 1), ...content.slice(0, at).reverse()].find(
+    body,
+  );
+  return {
+    group: generateId(),
+    settings: nearest ? withoutContent(nearest.settings) : {},
+  };
+}
+
 interface EmailEditorProps {
   initialEmail?: Email;
   onChange?: (email: Email) => void;
@@ -404,14 +440,14 @@ export function EmailEditor({
       const at = resolveInsertionIndex("text", index, content, blockRegistry);
       if (at === null) return null;
       const previous = content[at - 1];
-      const { content: _drop, ...settings } = isItem(previous)
-        ? previous!.settings
-        : {};
+      const home = isItem(previous)
+        ? homeFor(content, previous!, markdown)
+        : { group: generateId(), settings: {} };
       const item: EmailBlock = {
         id: generateId(),
         blockType: "text",
-        group: isItem(previous) ? previous!.group : generateId(),
-        settings: { ...settings, content: markdown },
+        group: home.group,
+        settings: { ...home.settings, content: markdown },
       };
       commitContent([...content.slice(0, at), item, ...content.slice(at)]);
       return item.id!;
@@ -569,10 +605,12 @@ export function EmailEditor({
       const index = content.findIndex((block) => block.id === id);
       const item = content[index];
       if (!item) return;
+      const home = homeFor(content, item, after);
       const created: EmailBlock = {
         ...item,
         id: generateId(),
-        settings: { ...item.settings, content: after },
+        group: home.group,
+        settings: { ...home.settings, content: after },
       };
       commitContent([
         ...content.slice(0, index),
