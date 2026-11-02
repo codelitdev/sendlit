@@ -57,7 +57,11 @@
 :where(.sle) * {
   box-sizing: border-box;
 }
-:where(.sle) button {
+/* shadcn/ui controls (they carry data-slot) style themselves with Tailwind
+   utilities in a cascade layer, which this unlayered reset would beat. The
+   whole selector stays in :where() so it adds no specificity over the
+   editor's own one-class rules. */
+:where(.sle button:not([data-slot])) {
   font: inherit;
   color: inherit;
   cursor: pointer;
@@ -65,9 +69,9 @@
   border: 0;
   padding: 0;
 }
-:where(.sle) input,
+:where(.sle input:not([data-slot])),
 :where(.sle) select,
-:where(.sle) textarea {
+:where(.sle textarea:not([data-slot])) {
   font: inherit;
   color: inherit;
 }
