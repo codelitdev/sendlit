@@ -10,9 +10,9 @@ import {
   type DeliverySourceSelection,
   getEventDefinition,
   getSequence,
-  updateSequence,
   listSendingOptions,
   type SendingOption,
+  updateSequence,
   updateSequenceEmail,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";

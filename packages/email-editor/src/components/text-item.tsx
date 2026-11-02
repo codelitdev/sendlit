@@ -28,8 +28,8 @@ import {
 } from "../lib/markdown-edit";
 import { type MenuPlacement, placeMenu } from "../lib/menu-placement";
 import { type ItemKind, itemMarkdown, parseItem, SHORTCUTS } from "../lib/text-items";
-import type { EmailStyle } from "../types/email-editor";
 import type { BlockChoice, EditorVariable } from "../types/editor-ui";
+import type { EmailStyle } from "../types/email-editor";
 import { BlockMenu, VariableMenu } from "./block-menu";
 
 type Menu = { kind: "slash"; query: string } | { kind: "variable" } | null;

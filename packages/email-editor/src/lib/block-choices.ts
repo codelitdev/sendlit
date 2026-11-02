@@ -7,8 +7,8 @@ import {
   Pilcrow,
   TextQuote,
 } from "lucide-react";
-import type { BlockChoice } from "../types/editor-ui";
 import type { BlockRegistry } from "../types/block-registry";
+import type { BlockChoice } from "../types/editor-ui";
 import { getInsertableBlocks } from "./block-policy";
 
 const TEXT_CHOICES: BlockChoice[] = [

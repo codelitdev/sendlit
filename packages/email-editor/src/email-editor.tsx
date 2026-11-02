@@ -10,8 +10,8 @@ import {
   Text,
 } from "@/blocks";
 import type { BlockComponent, BlockRegistry } from "@/types/block-registry";
-import type { Email } from "@/types/email-editor";
 import type { EditorTheme, EditorVariable } from "@/types/editor-ui";
+import type { Email } from "@/types/email-editor";
 import { EmailEditor as EmailEditorComponent } from "./components/email-editor";
 
 interface EmailEditorProps<TRenderContext = any> {

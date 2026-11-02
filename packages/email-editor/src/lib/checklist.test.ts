@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import type { Email } from "../types/email-editor";
 import { checklistLabel, computeChecklist } from "./checklist";
 import { defaultEmail } from "./default-email";
-import type { Email } from "../types/email-editor";
 
 function email(content: Email["content"], previewText = "A preview"): Email {
   return {

@@ -5,7 +5,6 @@ export type {
   UploaderProps,
 } from "./blocks/image/types";
 export { EmailEditor } from "./email-editor";
-export type { EditorTheme, EditorVariable } from "./types/editor-ui";
 export { defaultEmail } from "./lib/default-email";
 export { renderEmailToHtml } from "./lib/email-renderer";
 export { normalizeEmail } from "./lib/normalize-email";
@@ -16,6 +15,7 @@ export type {
   BlockPlacement,
   BlockRegistry,
 } from "./types/block-registry";
+export type { EditorTheme, EditorVariable } from "./types/editor-ui";
 export type {
   BlockRenderProps,
   BlockSettingsProps,

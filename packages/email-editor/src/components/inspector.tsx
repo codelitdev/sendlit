@@ -1,14 +1,14 @@
 import { Check, Copy, PenLine, Search } from "lucide-react";
 import { type KeyboardEvent, useId, useState } from "react";
-import { activePalette, type Palette, PALETTES } from "../lib/palettes";
+import { activePalette, PALETTES, type Palette } from "../lib/palettes";
 import type { BlockRegistry } from "../types/block-registry";
+import type { EditorVariable } from "../types/editor-ui";
 import type {
   Email,
   EmailBlock,
   EmailStyle,
   RuntimeEmailBlock,
 } from "../types/email-editor";
-import type { EditorVariable } from "../types/editor-ui";
 import { EmailSettings } from "./email-settings";
 
 type Tab = "email" | "block" | "variables";

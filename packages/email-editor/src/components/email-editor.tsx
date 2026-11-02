@@ -38,8 +38,8 @@ import {
   toRows,
 } from "../lib/text-items";
 import type { BlockRegistry } from "../types/block-registry";
-import type { Email, EmailBlock, EmailStyle } from "../types/email-editor";
 import type { BlockChoice, EditorTheme, EditorVariable } from "../types/editor-ui";
+import type { Email, EmailBlock, EmailStyle } from "../types/email-editor";
 import { BlockMenu } from "./block-menu";
 import { BlockRow, ItemRow, type RowEvents } from "./block-row";
 import { Checklist } from "./checklist";

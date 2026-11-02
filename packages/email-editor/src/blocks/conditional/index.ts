@@ -1,8 +1,8 @@
 import type { BlockComponent } from "@/types/block-registry";
 import { ConditionalBlock as block } from "./block";
 import { metadata } from "./metadata";
-import { ConditionalSettings as settings } from "./settings";
 import { ConditionalQuickEdit as quickEdit } from "./quick-edit";
+import { ConditionalSettings as settings } from "./settings";
 import type { ConditionalBlockSettings } from "./types";
 
 export { isValidConditionTag } from "./types";

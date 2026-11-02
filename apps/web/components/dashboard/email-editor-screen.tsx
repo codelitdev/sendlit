@@ -21,8 +21,8 @@ import {
   type UploaderProps,
 } from "@sendlit/email-editor/blocks";
 import { Check, LogOut } from "lucide-react";
-import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import {
   type ReactNode,
   useCallback,
@@ -32,6 +32,7 @@ import {
   useState,
 } from "react";
 import { Banner } from "@/components/dashboard/banner";
+import { EmailImageUploadDialog } from "@/components/dashboard/email-image-upload-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +43,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { EmailImageUploadDialog } from "@/components/dashboard/email-image-upload-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/codelit/button";
 import { IconButton } from "@/components/ui/codelit/icon-button";

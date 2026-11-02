@@ -1,8 +1,8 @@
 import type { BlockComponent } from "@/types/block-registry";
 import { ColumnsBlock as block } from "./block";
 import { metadata } from "./metadata";
-import { ColumnsSettings as settings } from "./settings";
 import { ColumnsQuickEdit as quickEdit } from "./quick-edit";
+import { ColumnsSettings as settings } from "./settings";
 import type { ColumnsBlockSettings } from "./types";
 
 export const ColumnsBlock: BlockComponent<ColumnsBlockSettings> = {
