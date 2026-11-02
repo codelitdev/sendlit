@@ -198,3 +198,64 @@ export function darkBlock<T extends EmailBlock>(block: T): T {
   }
   return changed ? { ...block, settings } : block;
 }
+
+function toHex(rgb: Rgb) {
+  return `#${rgb
+    .map((channel) =>
+      Math.round(Math.min(1, Math.max(0, channel)) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}` as `#${string}`;
+}
+
+/** Where a colour sits between the page (0) and the text colour (1). */
+function tone(color: Rgb, page: Rgb, text: Rgb) {
+  const axis = text.map((channel, at) => channel - page[at]);
+  const length = axis.reduce((sum, part) => sum + part * part, 0);
+  if (length === 0) return 1;
+  return (
+    color.reduce((sum, channel, at) => sum + (channel - page[at]) * axis[at], 0) /
+    length
+  );
+}
+
+const mix = (from: Rgb, to: Rgb, amount: number) =>
+  from.map((channel, at) => channel + (to[at] - channel) * amount) as Rgb;
+
+/** The email's blocks recoloured for a palette. Without this, blocks that set
+ * their own colours stay as they were, dark on dark in a dark palette: text and
+ * backgrounds keep their tone between page and text (muted body text stays
+ * muted), buttons take the accent, and dividers and links follow the palette. */
+export function paletteContent(email: Email, palette: Palette): EmailBlock[] {
+  const oldPage = toRgb(email.style.structure.page.background ?? "#ffffff");
+  const oldText = toRgb(
+    email.style.structure.page.foreground ?? email.style.colors.foreground,
+  );
+  const newPage = toRgb(palette.page) as Rgb;
+  const newText = toRgb(palette.text) as Rgb;
+  const retone = (value: unknown, min: number) => {
+    const rgb = typeof value === "string" ? toRgb(value) : null;
+    if (!rgb || !oldPage || !oldText) return value;
+    const at = Math.min(1, Math.max(min, tone(rgb, oldPage, oldText)));
+    return toHex(mix(newPage, newText, at));
+  };
+  return email.content.map((block) => {
+    const settings = { ...(block.settings as Record<string, unknown>) };
+    if ("foregroundColor" in settings) {
+      // Never fainter than readable.
+      settings.foregroundColor = retone(settings.foregroundColor, 0.6);
+    }
+    if ("backgroundColor" in settings) {
+      settings.backgroundColor = retone(settings.backgroundColor, 0);
+    }
+    if (block.blockType === "link") {
+      delete settings.textColor;
+      if ("buttonColor" in settings) settings.buttonColor = palette.accent;
+      if ("buttonBorderColor" in settings) settings.buttonBorderColor = palette.accent;
+      if ("buttonTextColor" in settings) settings.buttonTextColor = palette.accentText;
+    }
+    if (block.blockType === "separator") delete settings.color;
+    return { ...block, settings } as typeof block;
+  });
+}

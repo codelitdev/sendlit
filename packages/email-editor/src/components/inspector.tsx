@@ -1,6 +1,6 @@
 import { Check, Copy, PenLine, Search } from "lucide-react";
 import { type KeyboardEvent, useId, useState } from "react";
-import { activePalette, PALETTES, paletteStyle } from "../lib/palettes";
+import { activePalette, type Palette, PALETTES } from "../lib/palettes";
 import type { BlockRegistry } from "../types/block-registry";
 import type {
   Email,
@@ -23,6 +23,7 @@ export function Inspector({
   onTab,
   updateEmail,
   updateEmailStyle,
+  onPalette,
   updateBlock,
   onEditInWrite,
   onCopied,
@@ -36,6 +37,8 @@ export function Inspector({
   onTab: (tab: Tab) => void;
   updateEmail: (email: Email) => void;
   updateEmailStyle: (style: Partial<EmailStyle>) => void;
+  /** The palette for the whole email, its blocks included. */
+  onPalette: (palette: Palette) => void;
   updateBlock: (id: string, content: Partial<EmailBlock>) => void;
   /** Back to writing, at the selected block. */
   onEditInWrite: (id: string) => void;
@@ -130,7 +133,7 @@ export function Inspector({
                     type="button"
                     className={`sle-preset${activePalette(email) === palette.name ? " on" : ""}`}
                     aria-pressed={activePalette(email) === palette.name}
-                    onClick={() => updateEmailStyle(paletteStyle(palette))}
+                    onClick={() => onPalette(palette)}
                   >
                     <span className="sw" style={{ background: palette.canvas }}>
                       <span

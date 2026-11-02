@@ -21,7 +21,13 @@ import { setFallback } from "../lib/inline-markdown";
 import { countWords } from "../lib/markdown-edit";
 import { type MenuPlacement, placeMenu } from "../lib/menu-placement";
 import { normalizeEmail } from "../lib/normalize-email";
-import { darkBlock, darkStyle } from "../lib/palettes";
+import {
+  darkBlock,
+  darkStyle,
+  type Palette,
+  paletteContent,
+  paletteStyle,
+} from "../lib/palettes";
 import {
   explodeTextBlocks,
   itemMarkdown,
@@ -341,6 +347,21 @@ export function EmailEditor({
         { ...emailRef.current, style: deepMerge(emailRef.current.style, styleUpdate) },
         "style",
       ),
+    [commitEmail],
+  );
+
+  const applyPalette = useCallback(
+    (palette: Palette) => {
+      const email = emailRef.current;
+      commitEmail(
+        {
+          ...email,
+          content: paletteContent(email, palette),
+          style: deepMerge(email.style, paletteStyle(palette)),
+        },
+        "style",
+      );
+    },
     [commitEmail],
   );
 
@@ -1478,6 +1499,7 @@ export function EmailEditor({
             onTab={setInspectorTab}
             updateEmail={updateEmail}
             updateEmailStyle={updateEmailStyle}
+            onPalette={applyPalette}
             updateBlock={updateBlock}
             onEditInWrite={editInWrite}
             onCopied={(tag) => flash(`Copied ${tag}`)}
