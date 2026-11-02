@@ -2,7 +2,12 @@ import { describe, expect, it, mock } from "bun:test";
 import { mcpParityManifest } from "@sendlit/api-contract";
 import { z } from "zod";
 
-mock.module("../db/client", () => ({ db: {}, pool: {} }));
+// The real test database: importing the server starts Better Auth, whose OAuth
+// plugin queries it in the background. Built before mocking, so the factory is
+// synchronous and safe when other files share the process.
+const { makeTestDb } = await import("../test/db");
+const testDb = await makeTestDb();
+mock.module("../db/client", () => ({ db: testDb, pool: {} }));
 
 const { sendLitMcpTools } = await import("./server");
 const { authorizeMcpOperation, listMcpOperationScopes, MCP_SCOPES } = await import(

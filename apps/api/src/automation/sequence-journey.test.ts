@@ -22,7 +22,10 @@ const captureEvent = vi.fn();
 mock.module("../observability", () => ({ ...observability, captureEvent }));
 
 const { db } = await import("../db/client");
-const { ongoingSequences, rules } = await import("../db/schema");
+const { ongoingSequences, rules, sequenceEmails, sequences } = await import(
+  "../db/schema"
+);
+const { eq } = await import("drizzle-orm");
 const { EventType } = await import("../config/constants");
 const { sendMail } = await import("../mail/send");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
@@ -69,6 +72,18 @@ async function subscribeAt(
 ) {
   const { team, contact } = await seedTeamAndContact(tdb);
   const { sequenceRow } = await seedSequence(tdb, { teamId: team.id, emails });
+  // The database stamps these with the real time, but enrollment uses the
+  // faked clock. Seed them at `at` so a past `at` doesn't look like the
+  // sequence changed after the contact entered.
+  const seededAt = new Date(at);
+  await tdb
+    .update(sequences)
+    .set({ createdAt: seededAt, updatedAt: seededAt })
+    .where(eq(sequences.id, sequenceRow.id));
+  await tdb
+    .update(sequenceEmails)
+    .set({ createdAt: seededAt, updatedAt: seededAt })
+    .where(eq(sequenceEmails.sequenceId, sequenceRow.id));
   await tdb.insert(rules).values({
     teamId: team.id,
     ruleId: `rule_${crypto.randomUUID()}`,
