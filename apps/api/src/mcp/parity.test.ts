@@ -2,7 +2,12 @@ import { describe, expect, it, mock } from "bun:test";
 import { validateParityManifest } from "@codelitdev/mcp-server-kit";
 import { contract, mcpParityManifest } from "@sendlit/api-contract";
 
-mock.module("../db/client", () => ({ db: {}, pool: {} }));
+// The real test database: importing the server starts Better Auth, whose OAuth
+// plugin queries it in the background. Built before mocking, so the factory is
+// synchronous: platform-conformance.test.ts shares this process in CI.
+const { makeTestDb } = await import("../test/db");
+const testDb = await makeTestDb();
+mock.module("../db/client", () => ({ db: testDb, pool: {} }));
 
 const { createSendLitMcp } = await import("./server");
 
