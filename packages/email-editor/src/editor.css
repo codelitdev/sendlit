@@ -1921,10 +1921,11 @@ fieldset.sle-seg {
   left: 0;
   font-variant-numeric: tabular-nums;
 }
+/* Matches the sent quote: tinted from the text colour, so it reads on any palette. */
 .sle-item.k-quote {
-  padding: 1em 10px;
-  background: #f9f9f9;
-  border-left: 10px solid #ddd;
+  padding: 16px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  border-left: 4px solid color-mix(in srgb, currentColor 30%, transparent);
 }
 .sle-item .sle-ed {
   min-height: 1em;

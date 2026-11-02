@@ -223,6 +223,14 @@ function tone(color: Rgb, page: Rgb, text: Rgb) {
 const mix = (from: Rgb, to: Rgb, amount: number) =>
   from.map((channel, at) => channel + (to[at] - channel) * amount) as Rgb;
 
+/** A hex colour `amount` of the way from one colour to another, for tints
+ * that must be plain hex in an email. `fallback` when either can't be read. */
+export function blend(from: string, to: string, amount: number, fallback: string) {
+  const a = toRgb(from);
+  const b = toRgb(to);
+  return a && b ? toHex(mix(a, b, amount)) : fallback;
+}
+
 /** The email's blocks recoloured for a palette. Without this, blocks that set
  * their own colours stay as they were, dark on dark in a dark palette: text and
  * backgrounds keep their tone between page and text (muted body text stays

@@ -1,4 +1,5 @@
 import { Markdown } from "@react-email/components";
+import { blend } from "@/lib/palettes";
 import type { EmailStyle } from "@/types/email-editor";
 
 export interface MarkdownContentOptions {
@@ -48,6 +49,12 @@ export function MarkdownContent({
     margin: "16px 0 8px",
   });
 
+  // A quote is tinted from the page and text colours, so it reads on any
+  // palette; the default is a light grey box that vanishes on a dark page.
+  const page = style?.structure.page.background ?? "#ffffff";
+  const text =
+    style?.structure.page.foreground ?? style?.colors.foreground ?? "#000000";
+
   return (
     <Markdown
       markdownCustomStyles={{
@@ -71,6 +78,16 @@ export function MarkdownContent({
           listStyleType: "decimal",
         },
         li: { ...commonTextStyles, margin: "4px 0" },
+        blockQuote: {
+          ...commonTextStyles,
+          margin: "0 0 16px",
+          // The paragraph inside brings a 16px bottom margin; 1px of padding
+          // keeps it inside the box instead of collapsing through.
+          padding: "16px 16px 1px",
+          background: blend(page, text, 0.06, "transparent"),
+          borderLeft: `4px solid ${blend(page, text, 0.3, "currentColor")}`,
+          color: "inherit",
+        },
         link: {
           ...commonTextStyles,
           color: style?.colors.accent || "inherit",
