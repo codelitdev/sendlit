@@ -96,7 +96,7 @@ function updateImageSrc(content: EmailContent | null, mediaLitId: string, src: s
   }
 }
 
-async function ensureUploadedMedia({
+export async function ensureUploadedMedia({
   teamId,
   mediaLitId,
   alt,
@@ -169,4 +169,34 @@ export async function syncEmailContentMediaReferences({
   });
 
   return reconciledContent;
+}
+
+/**
+ * Registers a single image (for example a broadcast's social image) as the
+ * only media of a resource. An uploaded MediaLit file is sealed, added to the
+ * media library and referenced, so it can't be deleted while in use; any
+ * other URL is kept as it is and the resource references no media. Returns
+ * the URL to store, which is the sealed one for MediaLit files.
+ */
+export async function syncImageMediaReference({
+  teamId,
+  url,
+  alt,
+  resource,
+}: {
+  teamId: string;
+  url?: string | null;
+  alt?: string;
+  resource: MediaReferenceResource;
+}): Promise<string | null> {
+  const mediaLitId = url ? extractMediaLitIdFromUrl(url) : undefined;
+  const row = mediaLitId
+    ? await ensureUploadedMedia({ teamId, mediaLitId, alt })
+    : null;
+  await replaceMediaReferencesForResource({
+    teamId,
+    resource,
+    mediaRows: row ? [row] : [],
+  });
+  return row?.url ?? url ?? null;
 }

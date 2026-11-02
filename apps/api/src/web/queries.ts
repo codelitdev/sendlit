@@ -5,6 +5,7 @@ import { db } from "../db/client";
 import { sequenceEmails, sequences, settings, signupForms, teams } from "../db/schema";
 import { createForm } from "../forms/queries";
 import { renderCampaignHtml } from "../mail/campaign";
+import { syncImageMediaReference } from "../media/email-content";
 import { getTeamSettingsRow, type TeamSettings } from "../settings/general/queries";
 import { archiveUrl, issueUrl } from "./urls";
 
@@ -246,7 +247,17 @@ export async function updateWebPublishing(
   if (input.seoDescription !== undefined) {
     values.webSeoDescription = input.seoDescription || null;
   }
-  if (input.ogImage !== undefined) values.webOgImage = input.ogImage || null;
+  if (input.ogImage !== undefined) {
+    values.webOgImage = await syncImageMediaReference({
+      teamId: sequence.teamId,
+      url: input.ogImage,
+      resource: {
+        resourceType: "BROADCAST_WEB_PAGE",
+        resourceInternalId: sequence.id,
+        resourcePublicId: sequence.sequenceId,
+      },
+    });
+  }
   if (input.noindex !== undefined) values.webNoindex = input.noindex;
   if (input.canonicalUrl !== undefined)
     values.webCanonicalUrl = input.canonicalUrl || null;

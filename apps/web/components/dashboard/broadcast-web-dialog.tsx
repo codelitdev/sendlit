@@ -1,8 +1,9 @@
 "use client";
 
-import { ExternalLink, Globe } from "lucide-react";
+import { ExternalLink, Globe, ImagePlus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { EmailImageUploadDialog } from "@/components/dashboard/email-image-upload-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/codelit/button";
 import {
@@ -24,6 +25,8 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 
+const SOCIAL_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
 const ERRORS: Record<string, string> = {
   slug_taken: "Another issue already uses this URL slug.",
 };
@@ -37,6 +40,7 @@ export function BroadcastWebDialog({ sequenceId }: { sequenceId: string }) {
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
   const [ogImage, setOgImage] = useState("");
+  const [pickingImage, setPickingImage] = useState(false);
   const [canonicalUrl, setCanonicalUrl] = useState("");
   const [noindex, setNoindex] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -164,14 +168,46 @@ export function BroadcastWebDialog({ sequenceId }: { sequenceId: string }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="web-og-image">Social image URL</Label>
-            <Input
-              id="web-og-image"
-              type="url"
-              value={ogImage}
-              onChange={(event) => setOgImage(event.target.value)}
-              placeholder="https://…"
-            />
+            <Label>Social image</Label>
+            {ogImage && (
+              <div className="overflow-hidden rounded-md border bg-muted">
+                {/* biome-ignore lint/performance/noImgElement: MediaLit URLs from arbitrary hosts; next/image would need remotePatterns/loader config */}
+                <img
+                  src={ogImage}
+                  alt="Social preview"
+                  className="max-h-40 w-full object-contain"
+                />
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <EmailImageUploadDialog
+                open={pickingImage}
+                setOpen={setPickingImage}
+                acceptedMimeTypes={SOCIAL_IMAGE_TYPES}
+                description="Upload an image, or pick one from your media library, to show when this issue is shared."
+                onSelect={(image) => setOgImage(image.src)}
+              >
+                <Button type="button" variant="outline" size="sm">
+                  <ImagePlus className="size-4" />
+                  {ogImage ? "Replace image" : "Upload image"}
+                </Button>
+              </EmailImageUploadDialog>
+              {ogImage && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOgImage("")}
+                >
+                  <Trash2 className="size-4" />
+                  Remove
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Shown in link previews on social networks and chat apps. Uploads also
+              appear in your media library.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="web-canonical">Canonical URL</Label>

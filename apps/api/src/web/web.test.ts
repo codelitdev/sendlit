@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock, vi } from "bun:test";
 import express from "express";
 
 mock.module("../db/client", async () => {
@@ -6,9 +6,21 @@ mock.module("../db/client", async () => {
   return { db: await makeTestDb() };
 });
 
+mock.module("../media/service", () => ({
+  sealMedia: vi.fn((mediaId: string) =>
+    Promise.resolve({ mediaId, file: `https://cdn.test/p/${mediaId}/main.webp` }),
+  ),
+  deleteMedia: vi.fn(),
+}));
+mock.module("../media/deletion-queue", () => ({ queueMediaLitDeletion: vi.fn() }));
+
 const { eq } = await import("drizzle-orm");
 const { db } = await import("../db/client");
-const { sequenceEmails, sequences, signupForms } = await import("../db/schema");
+const { media, mediaReferences, sequenceEmails, sequences, signupForms } = await import(
+  "../db/schema"
+);
+const { deleteMedia, sealMedia } = await import("../media/service");
+const { deleteSequence } = await import("../sequences/queries");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 const { emailContent, seedSequence } = await import("../test/fixtures");
 const { requestApp } = await import("../test/http");
@@ -135,6 +147,66 @@ describe("web publishing", () => {
     await expect(updateWebPublishing(drip, { published: true })).rejects.toMatchObject({
       status: 400,
     });
+  });
+
+  it("seals an uploaded social image into the media library and keeps it in use", async () => {
+    const { team } = await setup();
+    const issue = await seedBroadcast(team.id, "With image");
+
+    const first = await updateWebPublishing(issue, {
+      ogImage: "https://cdn.test/draft/og-upload/main.png",
+    });
+    expect(sealMedia).toHaveBeenCalledWith("og-upload");
+    expect(first.ogImage).toBe("https://cdn.test/p/og-upload/main.webp");
+    const [row] = await tdb.select().from(media).where(eq(media.teamId, team.id));
+    expect(row.mediaLitId).toBe("og-upload");
+    const refs = await tdb.select().from(mediaReferences);
+    expect(refs).toMatchObject([
+      {
+        mediaId: row.id,
+        resourceType: "BROADCAST_WEB_PAGE",
+        resourcePublicId: issue.sequenceId,
+      },
+    ]);
+
+    // Choosing it again from the library doesn't seal it twice.
+    (sealMedia as unknown as ReturnType<typeof vi.fn>).mockClear();
+    await updateWebPublishing(issue, { ogImage: first.ogImage });
+    expect(sealMedia).not.toHaveBeenCalled();
+    expect(await tdb.select().from(mediaReferences)).toHaveLength(1);
+
+    // An external URL stays as it is and releases the library image, which
+    // stays in the library.
+    const external = await updateWebPublishing(issue, {
+      ogImage: "https://example.com/og.png",
+    });
+    expect(external.ogImage).toBe("https://example.com/og.png");
+    expect(await tdb.select().from(mediaReferences)).toHaveLength(0);
+    expect(await tdb.select().from(media)).toHaveLength(1);
+
+    const cleared = await updateWebPublishing(issue, { ogImage: null });
+    expect(cleared.ogImage).toBeNull();
+  });
+
+  it("releases the social image when the broadcast is deleted", async () => {
+    const { team } = await setup();
+    const sent = await seedBroadcast(team.id, "Draft with image", false);
+    const [issue] = await tdb
+      .update(sequences)
+      .set({ status: "draft" })
+      .where(eq(sequences.id, sent.id))
+      .returning();
+    await updateWebPublishing(issue, {
+      ogImage: "https://cdn.test/draft/og-deleted/main.png",
+    });
+    expect(await tdb.select().from(media)).toHaveLength(1);
+
+    expect(
+      await deleteSequence({ teamId: team.id, sequenceId: issue.sequenceId }),
+    ).toBe(true);
+    expect(await tdb.select().from(mediaReferences)).toHaveLength(0);
+    expect(await tdb.select().from(media)).toHaveLength(0);
+    expect(deleteMedia).toHaveBeenCalledWith("og-deleted");
   });
 
   it("lists only published issues that were sent, newest first", async () => {

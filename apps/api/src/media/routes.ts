@@ -11,6 +11,7 @@ import {
   getMediaByMediaId,
   listMedia,
   listMediaReferences,
+  type MediaReferenceResourceType,
   updateMediaMetadata,
 } from "./queries";
 import { getMediaUploadSignature } from "./service";
@@ -91,7 +92,7 @@ const impl = s.router(contract.media, {
       body: {
         items: serializeDates(
           references.map((reference) => ({
-            resourceType: reference.resourceType as "TEMPLATE" | "SEQUENCE_EMAIL",
+            resourceType: reference.resourceType as MediaReferenceResourceType,
             resourcePublicId: reference.resourcePublicId,
             parentResourcePublicId: reference.parentResourcePublicId,
             createdAt: reference.createdAt,

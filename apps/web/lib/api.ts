@@ -133,7 +133,7 @@ export interface Media {
 }
 
 export interface MediaReference {
-  resourceType: "TEMPLATE" | "SEQUENCE_EMAIL";
+  resourceType: "TEMPLATE" | "SEQUENCE_EMAIL" | "BROADCAST_WEB_PAGE";
   resourcePublicId: string;
   parentResourcePublicId?: string | null;
   createdAt?: string | null;
