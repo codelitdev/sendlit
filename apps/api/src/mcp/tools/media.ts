@@ -8,15 +8,9 @@ import {
   updateMediaMetadata,
 } from "../../media/queries";
 import { omitInternal } from "../../utils/public";
-import type { McpToolRegistrar } from "../tool-registry";
-import { getTeamId } from "./auth";
-import {
-  AUTH_ERROR,
-  errorResult,
-  INTERNAL_ERROR,
-  jsonResult,
-  NOT_FOUND,
-} from "./responses";
+import type { SendLitMcpTool } from "../context";
+import { dedicatedTool } from "../tool";
+import { notFound, toolError } from "./responses";
 import {
   mediaListSchema,
   mediaReferenceListSchema,
@@ -44,163 +38,116 @@ function toPublicReference(reference: {
   };
 }
 
-export function registerMediaTools(server: McpToolRegistrar): void {
-  server.registerTool(
-    "list_media",
-    {
-      description:
-        "Returns uploaded MediaLit-backed media for the team. Unsplash and external URL images are not stored here.",
-      inputSchema: {
-        query: z.string().optional(),
-        page: z.number().int().min(1).optional(),
-        pageSize: z.number().int().min(1).max(100).optional(),
-      },
-      outputSchema: mediaListSchema,
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
+export const mediaTools = (): SendLitMcpTool[] => [
+  dedicatedTool({
+    name: "list_media",
+    title: "List Media",
+    operationId: "media.list",
+    risk: "read",
+    description:
+      "Returns uploaded MediaLit-backed media for the team. Unsplash and external URL images are not stored here.",
+    inputSchema: z.object({
+      query: z.string().optional(),
+      page: z.number().int().min(1).optional(),
+      pageSize: z.number().int().min(1).max(100).optional(),
+    }),
+    outputSchema: mediaListSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const [items, total] = await Promise.all([
+        listMedia({
+          teamId: context.teamId,
+          query: args.query,
+          page: args.page,
+          pageSize: args.pageSize,
+        }),
+        countMedia({ teamId: context.teamId, query: args.query }),
+      ]);
+      return { items: items.map(toPublicMedia), total };
     },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      try {
-        const [items, total] = await Promise.all([
-          listMedia({
-            teamId,
-            query: args.query,
-            page: args.page,
-            pageSize: args.pageSize,
-          }),
-          countMedia({ teamId, query: args.query }),
-        ]);
-        return jsonResult({
-          items: items.map(toPublicMedia),
-          total,
-        });
-      } catch {
-        return INTERNAL_ERROR;
-      }
-    },
-  );
+  }),
 
-  server.registerTool(
-    "get_media",
-    {
-      description: "Returns one uploaded media item by its media ID.",
-      inputSchema: { mediaId: z.string().min(1) },
-      outputSchema: mediaSchema,
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
+  dedicatedTool({
+    name: "get_media",
+    title: "Get Media",
+    operationId: "media.get",
+    risk: "read",
+    description: "Returns one uploaded media item by its media ID.",
+    inputSchema: z.object({ mediaId: z.string().min(1) }),
+    outputSchema: mediaSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const row = await getMediaByMediaId(context.teamId, args.mediaId);
+      if (!row) return notFound();
+      return toPublicMedia(row);
     },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      try {
-        const row = await getMediaByMediaId(teamId, args.mediaId);
-        if (!row) return NOT_FOUND;
-        return jsonResult(toPublicMedia(row));
-      } catch {
-        return INTERNAL_ERROR;
-      }
-    },
-  );
+  }),
 
-  server.registerTool(
-    "update_media",
-    {
-      description: "Updates editable metadata for uploaded media.",
-      inputSchema: {
-        mediaId: z.string().min(1),
-        alt: z.string().nullable().optional(),
-        caption: z.string().nullable().optional(),
-      },
-      outputSchema: mediaSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        openWorldHint: false,
-      },
+  dedicatedTool({
+    name: "update_media",
+    title: "Update Media",
+    operationId: "media.update",
+    risk: "write",
+    description: "Updates editable metadata for uploaded media.",
+    inputSchema: z.object({
+      mediaId: z.string().min(1),
+      alt: z.string().nullable().optional(),
+      caption: z.string().nullable().optional(),
+    }),
+    outputSchema: mediaSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      const row = await updateMediaMetadata({
+        teamId: context.teamId,
+        mediaId: args.mediaId,
+        alt: args.alt,
+        caption: args.caption,
+      });
+      if (!row) return notFound();
+      return toPublicMedia(row);
     },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      try {
-        const row = await updateMediaMetadata({
-          teamId,
-          mediaId: args.mediaId,
-          alt: args.alt,
-          caption: args.caption,
-        });
-        if (!row) return NOT_FOUND;
-        return jsonResult(toPublicMedia(row));
-      } catch {
-        return INTERNAL_ERROR;
-      }
-    },
-  );
+  }),
 
-  server.registerTool(
-    "delete_media",
-    {
-      description:
-        "Deletes uploaded media only when no saved template, broadcast, or sequence email references it.",
-      inputSchema: { mediaId: z.string().min(1) },
-      outputSchema: successMessageSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      try {
-        const result = await deleteUnusedMedia(teamId, args.mediaId);
-        if (result === "not_found") return NOT_FOUND;
-        if (result === "in_use") {
-          return errorResult("Media is still in use.");
-        }
-        return jsonResult({ message: "Media deleted." });
-      } catch {
-        return INTERNAL_ERROR;
+  dedicatedTool({
+    name: "delete_media",
+    title: "Delete Media",
+    operationId: "media.remove",
+    risk: "destructive",
+    description:
+      "Deletes uploaded media only when no saved template, broadcast, or sequence email references it.",
+    inputSchema: z.object({ mediaId: z.string().min(1) }),
+    outputSchema: successMessageSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      const result = await deleteUnusedMedia(context.teamId, args.mediaId);
+      if (result === "not_found") return notFound();
+      if (result === "in_use") {
+        return toolError("conflict", {
+          reason: "media_in_use",
+          message: "Media is still in use. list_media_references shows what uses it.",
+        });
       }
+      return { message: "Media deleted." };
     },
-  );
+  }),
 
-  server.registerTool(
-    "list_media_references",
-    {
-      description:
-        "Lists saved templates, broadcasts, or sequence emails that use the uploaded media item.",
-      inputSchema: { mediaId: z.string().min(1) },
-      outputSchema: mediaReferenceListSchema,
-      annotations: {
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
+  dedicatedTool({
+    name: "list_media_references",
+    title: "List Media References",
+    operationId: "media.references",
+    risk: "read",
+    description:
+      "Lists saved templates, broadcasts, or sequence emails that use the uploaded media item.",
+    inputSchema: z.object({ mediaId: z.string().min(1) }),
+    outputSchema: mediaReferenceListSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const references = await listMediaReferences({
+        teamId: context.teamId,
+        mediaId: args.mediaId,
+      });
+      if (!references) return notFound();
+      return { items: references.map(toPublicReference) };
     },
-    async (args: any, extra: any) => {
-      const teamId = getTeamId(extra);
-      if (!teamId) return AUTH_ERROR;
-      try {
-        const references = await listMediaReferences({
-          teamId,
-          mediaId: args.mediaId,
-        });
-        if (!references) return NOT_FOUND;
-        return jsonResult({
-          items: references.map(toPublicReference),
-        });
-      } catch {
-        return INTERNAL_ERROR;
-      }
-    },
-  );
-}
+  }),
+];

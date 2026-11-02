@@ -1,5 +1,5 @@
-import type { ServerContext } from "@modelcontextprotocol/server";
-import { errorResult } from "./tools/responses";
+import { createPlatformError, type PlatformError } from "@codelitdev/platform";
+import type { SendLitMcpContext } from "./context";
 
 export const MCP_SCOPES = {
   contactsRead: "contacts:read",
@@ -33,186 +33,179 @@ export const MCP_SCOPES_SUPPORTED = Object.freeze(
   Object.values(MCP_SCOPES),
 ) as readonly McpScope[];
 
-const toolPolicies = {
-  list_contacts: MCP_SCOPES.contactsRead,
-  get_contact: MCP_SCOPES.contactsRead,
-  get_contact_deliveries: MCP_SCOPES.contactsRead,
-  get_contact_events: MCP_SCOPES.contactsRead,
-  track_event: MCP_SCOPES.contactsWrite,
-  list_event_definitions: MCP_SCOPES.contactsRead,
-  get_event_definition: MCP_SCOPES.contactsRead,
-  create_event_definition: MCP_SCOPES.contactsWrite,
-  update_event_definition: MCP_SCOPES.contactsWrite,
-  delete_event_definition: MCP_SCOPES.contactsWrite,
-  create_contact: MCP_SCOPES.contactsWrite,
-  update_contact: MCP_SCOPES.contactsWrite,
-  delete_contact: MCP_SCOPES.contactsWrite,
-  delete_contacts: MCP_SCOPES.contactsWrite,
-  preview_delete_contacts: MCP_SCOPES.contactsRead,
-  get_contact_deletion: MCP_SCOPES.contactsRead,
-  add_contact_tag: MCP_SCOPES.contactsWrite,
-  remove_contact_tag: MCP_SCOPES.contactsWrite,
-  import_contacts: MCP_SCOPES.contactsWrite,
-  export_contacts: MCP_SCOPES.contactsRead,
-
-  list_segments: MCP_SCOPES.contactsRead,
-  get_segment: MCP_SCOPES.contactsRead,
-  create_segment: MCP_SCOPES.contactsWrite,
-  update_segment: MCP_SCOPES.contactsWrite,
-  delete_segment: MCP_SCOPES.contactsWrite,
-  list_tags: MCP_SCOPES.contactsRead,
-  get_tag_references: MCP_SCOPES.contactsRead,
-  rename_tag: MCP_SCOPES.contactsWrite,
-  delete_tag: MCP_SCOPES.contactsWrite,
-  list_signup_forms: MCP_SCOPES.contactsRead,
-  get_signup_form: MCP_SCOPES.contactsRead,
-  create_signup_form: MCP_SCOPES.contactsWrite,
-  update_signup_form: MCP_SCOPES.contactsWrite,
-  delete_signup_form: MCP_SCOPES.contactsWrite,
-
-  list_system_templates: MCP_SCOPES.templatesRead,
-  list_templates: MCP_SCOPES.templatesRead,
-  get_template: MCP_SCOPES.templatesRead,
-  create_template: MCP_SCOPES.templatesWrite,
-  update_template: MCP_SCOPES.templatesWrite,
-  duplicate_template: MCP_SCOPES.templatesWrite,
-  delete_template: MCP_SCOPES.templatesWrite,
-
-  list_media: MCP_SCOPES.mediaRead,
-  get_media: MCP_SCOPES.mediaRead,
-  list_media_references: MCP_SCOPES.mediaRead,
-  update_media: MCP_SCOPES.mediaWrite,
-  delete_media: MCP_SCOPES.mediaWrite,
-
-  list_sequences: MCP_SCOPES.sequencesRead,
-  get_sequence: MCP_SCOPES.sequencesRead,
-  get_sequence_stats: MCP_SCOPES.sequencesRead,
-  get_sequence_schedule: MCP_SCOPES.sequencesRead,
-  list_sequence_email_waiting_contacts: MCP_SCOPES.sequencesRead,
-  get_sequence_subscribers: MCP_SCOPES.sequencesRead,
-  create_sequence: MCP_SCOPES.sequencesWrite,
-  update_sequence: MCP_SCOPES.sequencesWrite,
-  add_sequence_email: MCP_SCOPES.sequencesWrite,
-  update_sequence_email: MCP_SCOPES.sequencesWrite,
-  send_sequence_email_test: MCP_SCOPES.sequencesWrite,
-  delete_sequence_email: MCP_SCOPES.sequencesWrite,
-  delete_sequence: MCP_SCOPES.sequencesWrite,
-  preview_sequence_deletion: MCP_SCOPES.sequencesRead,
-  archive_broadcast: MCP_SCOPES.sequencesWrite,
-  unarchive_broadcast: MCP_SCOPES.sequencesWrite,
-  start_sequence: MCP_SCOPES.sequencesWrite,
-  pause_sequence: MCP_SCOPES.sequencesWrite,
-
-  get_email: MCP_SCOPES.emailsRead,
-  list_emails: MCP_SCOPES.emailsRead,
-  send_email: MCP_SCOPES.emailsSend,
-
-  get_broadcast_web_publishing: MCP_SCOPES.sequencesRead,
-  update_broadcast_web_publishing: MCP_SCOPES.sequencesWrite,
-  list_web_issues: MCP_SCOPES.sequencesRead,
-  get_web_issue: MCP_SCOPES.sequencesRead,
-  get_web_settings: MCP_SCOPES.settingsRead,
-  get_reputation: MCP_SCOPES.settingsRead,
-  connect_google_postmaster: MCP_SCOPES.settingsWrite,
-  disconnect_google_postmaster: MCP_SCOPES.settingsWrite,
-  connect_snds: MCP_SCOPES.settingsWrite,
-  disconnect_snds: MCP_SCOPES.settingsWrite,
-  sync_reputation: MCP_SCOPES.settingsWrite,
-  update_web_settings: MCP_SCOPES.settingsWrite,
-  get_general_settings: MCP_SCOPES.settingsRead,
-  update_general_settings: MCP_SCOPES.settingsWrite,
-  get_tracking_domain: MCP_SCOPES.settingsRead,
-  set_tracking_domain: MCP_SCOPES.settingsWrite,
-  verify_tracking_domain: MCP_SCOPES.settingsWrite,
-
-  get_esp_config: MCP_SCOPES.espRead,
-  list_esps: MCP_SCOPES.espRead,
-  get_esp: MCP_SCOPES.espRead,
-  check_esp_domain_authentication: MCP_SCOPES.espRead,
-  update_esp_config: MCP_SCOPES.espWrite,
-  delete_esp_config: MCP_SCOPES.espWrite,
-  send_test_email: MCP_SCOPES.espWrite,
-  create_esp: MCP_SCOPES.espWrite,
-  update_esp: MCP_SCOPES.espWrite,
-  delete_esp: MCP_SCOPES.espWrite,
-  test_esp: MCP_SCOPES.espWrite,
-  activate_esp: MCP_SCOPES.espWrite,
-  retire_esp: MCP_SCOPES.espWrite,
-
-  list_teams: MCP_SCOPES.teamsRead,
-  get_plan_usage: MCP_SCOPES.teamsRead,
-  create_team: MCP_SCOPES.teamsWrite,
-  rename_team: MCP_SCOPES.teamsWrite,
-  delete_team: MCP_SCOPES.teamsWrite,
-  list_api_keys: MCP_SCOPES.apiKeysRead,
-  create_api_key: MCP_SCOPES.apiKeysWrite,
-  delete_api_key: MCP_SCOPES.apiKeysWrite,
-
-  get_esp_feedback_connection: MCP_SCOPES.feedbackRead,
-  upsert_esp_feedback_connection: MCP_SCOPES.feedbackWrite,
-  test_esp_feedback_connection: MCP_SCOPES.feedbackWrite,
-  delete_esp_feedback_connection: MCP_SCOPES.feedbackWrite,
-  list_delivery_events: MCP_SCOPES.deliveryEventsRead,
-  get_delivery_event: MCP_SCOPES.deliveryEventsRead,
-  list_suppressions: MCP_SCOPES.suppressionsRead,
-  get_suppression: MCP_SCOPES.suppressionsRead,
-  release_suppression: MCP_SCOPES.suppressionsWrite,
-  add_suppression: MCP_SCOPES.suppressionsWrite,
+/**
+ * The OAuth scope each MCP-reachable REST operation needs, keyed by its
+ * contract operation id (see the parity manifest in `@sendlit/api-contract`).
+ * Dedicated tools and the generic `api.*` tools both authorize through this
+ * table, so an operation needs the same scope however it is reached. An
+ * operation missing here is refused (default deny).
+ */
+const operationScopes = {
+  "contacts.create": MCP_SCOPES.contactsWrite,
+  "contacts.list": MCP_SCOPES.contactsRead,
+  "contacts.get": MCP_SCOPES.contactsRead,
+  "contacts.update": MCP_SCOPES.contactsWrite,
+  "contacts.addTag": MCP_SCOPES.contactsWrite,
+  "contacts.removeTag": MCP_SCOPES.contactsWrite,
+  "contacts.deliveries": MCP_SCOPES.contactsRead,
+  "contacts.events": MCP_SCOPES.contactsRead,
+  "contacts.remove": MCP_SCOPES.contactsWrite,
+  "contacts.previewBulkDelete": MCP_SCOPES.contactsRead,
+  "contacts.bulkDelete": MCP_SCOPES.contactsWrite,
+  "contacts.bulkDeleteStatus": MCP_SCOPES.contactsRead,
+  "tags.list": MCP_SCOPES.contactsRead,
+  "tags.references": MCP_SCOPES.contactsRead,
+  "tags.rename": MCP_SCOPES.contactsWrite,
+  "tags.remove": MCP_SCOPES.contactsWrite,
+  "segments.create": MCP_SCOPES.contactsWrite,
+  "segments.list": MCP_SCOPES.contactsRead,
+  "segments.get": MCP_SCOPES.contactsRead,
+  "segments.update": MCP_SCOPES.contactsWrite,
+  "segments.remove": MCP_SCOPES.contactsWrite,
+  "media.list": MCP_SCOPES.mediaRead,
+  "media.get": MCP_SCOPES.mediaRead,
+  "media.update": MCP_SCOPES.mediaWrite,
+  "media.remove": MCP_SCOPES.mediaWrite,
+  "media.references": MCP_SCOPES.mediaRead,
+  "templates.listSystem": MCP_SCOPES.templatesRead,
+  "templates.create": MCP_SCOPES.templatesWrite,
+  "templates.list": MCP_SCOPES.templatesRead,
+  "templates.get": MCP_SCOPES.templatesRead,
+  "templates.update": MCP_SCOPES.templatesWrite,
+  "templates.duplicate": MCP_SCOPES.templatesWrite,
+  "templates.remove": MCP_SCOPES.templatesWrite,
+  "sequences.create": MCP_SCOPES.sequencesWrite,
+  "sequences.list": MCP_SCOPES.sequencesRead,
+  "sequences.get": MCP_SCOPES.sequencesRead,
+  "sequences.update": MCP_SCOPES.sequencesWrite,
+  "sequences.remove": MCP_SCOPES.sequencesWrite,
+  "sequences.deletionPreview": MCP_SCOPES.sequencesRead,
+  "sequences.archive": MCP_SCOPES.sequencesWrite,
+  "sequences.unarchive": MCP_SCOPES.sequencesWrite,
+  "sequences.addEmail": MCP_SCOPES.sequencesWrite,
+  "sequences.updateEmail": MCP_SCOPES.sequencesWrite,
+  "contacts.import": MCP_SCOPES.contactsWrite,
+  "suppressions.create": MCP_SCOPES.suppressionsWrite,
+  "forms.list": MCP_SCOPES.contactsRead,
+  "forms.create": MCP_SCOPES.contactsWrite,
+  "forms.get": MCP_SCOPES.contactsRead,
+  "forms.update": MCP_SCOPES.contactsWrite,
+  "forms.remove": MCP_SCOPES.contactsWrite,
+  "contacts.export": MCP_SCOPES.contactsRead,
+  "sequences.sendEmailTest": MCP_SCOPES.sequencesWrite,
+  "sequences.removeEmail": MCP_SCOPES.sequencesWrite,
+  "sequences.start": MCP_SCOPES.sequencesWrite,
+  "sequences.pause": MCP_SCOPES.sequencesWrite,
+  "sequences.stats": MCP_SCOPES.sequencesRead,
+  "sequences.schedule": MCP_SCOPES.sequencesRead,
+  "sequences.waitingContacts": MCP_SCOPES.sequencesRead,
+  "sequences.getWeb": MCP_SCOPES.sequencesRead,
+  "sequences.updateWeb": MCP_SCOPES.sequencesWrite,
+  "web.list": MCP_SCOPES.sequencesRead,
+  "web.get": MCP_SCOPES.sequencesRead,
+  "reputation.get": MCP_SCOPES.settingsRead,
+  "reputation.connectGoogle": MCP_SCOPES.settingsWrite,
+  "reputation.disconnectGoogle": MCP_SCOPES.settingsWrite,
+  "reputation.connectSnds": MCP_SCOPES.settingsWrite,
+  "reputation.disconnectSnds": MCP_SCOPES.settingsWrite,
+  "reputation.sync": MCP_SCOPES.settingsWrite,
+  "sequences.subscribers": MCP_SCOPES.sequencesRead,
+  "transactional.send": MCP_SCOPES.emailsSend,
+  "transactional.get": MCP_SCOPES.emailsRead,
+  "transactional.list": MCP_SCOPES.emailsRead,
+  "events.track": MCP_SCOPES.contactsWrite,
+  "events.definitions": MCP_SCOPES.contactsRead,
+  "events.definition": MCP_SCOPES.contactsRead,
+  "events.createDefinition": MCP_SCOPES.contactsWrite,
+  "events.updateDefinition": MCP_SCOPES.contactsWrite,
+  "events.deleteDefinition": MCP_SCOPES.contactsWrite,
+  "settings.esps.list": MCP_SCOPES.espRead,
+  "settings.esps.create": MCP_SCOPES.espWrite,
+  "settings.esps.get": MCP_SCOPES.espRead,
+  "settings.esps.update": MCP_SCOPES.espWrite,
+  "settings.esps.remove": MCP_SCOPES.espWrite,
+  "settings.esps.test": MCP_SCOPES.espWrite,
+  "settings.esps.domainAuthentication": MCP_SCOPES.espRead,
+  "settings.esps.activate": MCP_SCOPES.espWrite,
+  "settings.esps.retire": MCP_SCOPES.espWrite,
+  "settings.general.get": MCP_SCOPES.settingsRead,
+  "settings.general.update": MCP_SCOPES.settingsWrite,
+  "settings.trackingDomain.get": MCP_SCOPES.settingsRead,
+  "settings.trackingDomain.update": MCP_SCOPES.settingsWrite,
+  "settings.trackingDomain.verify": MCP_SCOPES.settingsWrite,
+  "settings.web.get": MCP_SCOPES.settingsRead,
+  "settings.web.update": MCP_SCOPES.settingsWrite,
+  "teams.list": MCP_SCOPES.teamsRead,
+  "teams.create": MCP_SCOPES.teamsWrite,
+  "teams.rename": MCP_SCOPES.teamsWrite,
+  "teams.remove": MCP_SCOPES.teamsWrite,
+  "teams.listKeys": MCP_SCOPES.apiKeysRead,
+  "teams.createKey": MCP_SCOPES.apiKeysWrite,
+  "teams.removeKey": MCP_SCOPES.apiKeysWrite,
+  "feedback.get": MCP_SCOPES.feedbackRead,
+  "feedback.upsert": MCP_SCOPES.feedbackWrite,
+  "feedback.test": MCP_SCOPES.feedbackWrite,
+  "feedback.remove": MCP_SCOPES.feedbackWrite,
+  "deliveryEvents.list": MCP_SCOPES.deliveryEventsRead,
+  "deliveryEvents.get": MCP_SCOPES.deliveryEventsRead,
+  "suppressions.list": MCP_SCOPES.suppressionsRead,
+  "suppressions.get": MCP_SCOPES.suppressionsRead,
+  "suppressions.release": MCP_SCOPES.suppressionsWrite,
+  "billing.organizationPlanUsage": MCP_SCOPES.teamsRead,
 } as const satisfies Record<string, McpScope>;
 
-export type McpToolName = keyof typeof toolPolicies;
+export type McpOperationId = keyof typeof operationScopes;
 
 /**
- * Tools a team API key may never call, mirroring REST, which refuses key
+ * Operations a team API key may never run, mirroring REST, which refuses key
  * management to key callers. Otherwise a leaked key could mint replacement
  * keys for itself, so revoking it would not cut off the attacker, or revoke
  * the team's other keys.
  */
-const teamKeyDeniedTools: ReadonlySet<McpToolName> = new Set<McpToolName>([
-  "list_api_keys",
-  "create_api_key",
-  "delete_api_key",
+const teamKeyDeniedOperations: ReadonlySet<string> = new Set<McpOperationId>([
+  "teams.listKeys",
+  "teams.createKey",
+  "teams.removeKey",
 ]);
 
-export function isMcpToolName(name: string): name is McpToolName {
-  return Object.hasOwn(toolPolicies, name);
+export function isMcpOperation(operationId: string): operationId is McpOperationId {
+  return Object.hasOwn(operationScopes, operationId);
 }
 
-export function getRequiredScope(name: string): McpScope {
-  if (!isMcpToolName(name)) {
-    throw new Error(`MCP tool '${name}' has no authorization policy.`);
+export function getRequiredScope(operationId: string): McpScope {
+  if (!isMcpOperation(operationId)) {
+    throw new Error(`MCP operation '${operationId}' has no authorization policy.`);
   }
-  return toolPolicies[name];
+  return operationScopes[operationId];
 }
 
-export function authorizeMcpTool(name: string, ctx: ServerContext) {
-  const requiredScope = getRequiredScope(name);
-  const authInfo = ctx.http?.authInfo;
-  const authKind = authInfo?.extra?.authKind;
-
-  if (!authInfo) {
-    return errorResult("Authentication required.");
+/** Why the caller may not run the operation, or null when it may. */
+export function authorizeMcpOperation(
+  operationId: string,
+  context: SendLitMcpContext,
+): PlatformError | null {
+  if (!isMcpOperation(operationId)) {
+    return createPlatformError("forbidden", {
+      safeDetails: { reason: "not_mcp_operation" },
+    });
   }
-
   // A team API key is already a full-access credential for exactly one team,
   // except for managing API keys, which requires a user (OAuth) session.
-  // Scoped team keys are a separate API-key product feature.
-  if (authKind === "team_key") {
-    if (teamKeyDeniedTools.has(name as McpToolName)) {
-      return errorResult(
-        "user_auth_required: managing API keys requires a user-authenticated session, not an API key.",
-      );
-    }
-    return null;
+  if (context.authKind === "team_key") {
+    return teamKeyDeniedOperations.has(operationId)
+      ? createPlatformError("forbidden", {
+          safeDetails: { reason: "user_auth_required" },
+        })
+      : null;
   }
-
-  if (authKind !== "oauth" || !authInfo.scopes.includes(requiredScope)) {
-    return errorResult(`insufficient_scope: this tool requires '${requiredScope}'.`);
-  }
-
-  return null;
+  const requiredScope = operationScopes[operationId];
+  return context.scopes.includes(requiredScope)
+    ? null
+    : createPlatformError("forbidden", {
+        safeDetails: { reason: "insufficient_scope", requiredScope },
+      });
 }
 
-export function listMcpToolPolicies(): Readonly<Record<McpToolName, McpScope>> {
-  return toolPolicies;
+export function listMcpOperationScopes(): Readonly<Record<McpOperationId, McpScope>> {
+  return operationScopes;
 }
