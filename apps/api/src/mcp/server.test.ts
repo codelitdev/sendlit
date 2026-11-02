@@ -2,7 +2,10 @@ import { describe, expect, it, mock } from "bun:test";
 import { mcpParityManifest } from "@sendlit/api-contract";
 import { z } from "zod";
 
-mock.module("../db/client", () => ({ db: {}, pool: {} }));
+mock.module("../db/client", async () => {
+  const { makeTestDb } = await import("../test/db.js");
+  return { db: await makeTestDb(), pool: {} };
+});
 
 const { sendLitMcpTools } = await import("./server");
 const { authorizeMcpOperation, listMcpOperationScopes, MCP_SCOPES } = await import(

@@ -171,32 +171,38 @@ export async function syncEmailContentMediaReferences({
   return reconciledContent;
 }
 
+/** An uploaded MediaLit file: `/i/<id>/main.<ext>` while a draft and
+ * `/p/<id>/main.<ext>` once sealed. Stricter than `extractMediaLitIdFromUrl`,
+ * because a client can send any URL here and an external image such as
+ * `https://cdn.example.com/assets/main.jpg` must be kept, not sealed. */
+const MEDIALIT_UPLOAD_PATH = /\/[ip]\/([^/]+)\/main\.[^/]+$/i;
+
 /**
- * Registers a single image (for example a broadcast's social image) as the
- * only media of a resource. An uploaded MediaLit file is sealed, added to the
- * media library and referenced, so it can't be deleted while in use; any
- * other URL is kept as it is and the resource references no media. Returns
- * the URL to store, which is the sealed one for MediaLit files.
+ * Seals a single image (for example a broadcast's social image) into the
+ * media library when it is an uploaded MediaLit file, and returns the URL to
+ * store, which is the sealed one, with the media row to reference. Any other
+ * URL is returned as it is, with no row. Run `replaceMediaReferencesForResource`
+ * with the row once the resource itself is saved.
  */
-export async function syncImageMediaReference({
+export async function resolveImageMedia({
   teamId,
   url,
   alt,
-  resource,
 }: {
   teamId: string;
   url?: string | null;
   alt?: string;
-  resource: MediaReferenceResource;
-}): Promise<string | null> {
-  const mediaLitId = url ? extractMediaLitIdFromUrl(url) : undefined;
+}): Promise<{ url: string | null; row: Media | null }> {
+  let mediaLitId: string | undefined;
+  try {
+    mediaLitId = url
+      ? MEDIALIT_UPLOAD_PATH.exec(new URL(url).pathname)?.[1]
+      : undefined;
+  } catch {
+    // Not a valid URL, so not an upload.
+  }
   const row = mediaLitId
     ? await ensureUploadedMedia({ teamId, mediaLitId, alt })
     : null;
-  await replaceMediaReferencesForResource({
-    teamId,
-    resource,
-    mediaRows: row ? [row] : [],
-  });
-  return row?.url ?? url ?? null;
+  return { url: row?.url ?? url ?? null, row };
 }

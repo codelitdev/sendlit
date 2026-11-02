@@ -277,9 +277,9 @@ Unsplash and external image URLs are ignored by media reference reconciliation b
 
 The Web page dialog of a broadcast lets the user upload a social image or pick one from the media library, through the same picker as the email image block. The API treats `ogImage` like an email image:
 
-1. A MediaLit URL is sealed (once), registered in the media library, and stored as the sealed URL.
-2. The broadcast's `BROADCAST_WEB_PAGE` reference is replaced with a reference to that media, so the image can't be deleted from the media library while the page uses it.
-3. Any other URL (including one entered through the REST API or MCP) is stored as it is, and the reference is cleared.
+1. An uploaded MediaLit URL (`/i/<id>/main.<ext>` as a draft, `/p/<id>/main.<ext>` once sealed) is sealed (once), registered in the media library, and stored as the sealed URL.
+2. Once the broadcast is saved, its `BROADCAST_WEB_PAGE` reference is replaced with a reference to that media, so the image can't be deleted from the media library while the page uses it. If the save fails, such as when another broadcast takes the slug in the meantime, the previous image stays referenced.
+3. Any other URL (including one entered through the REST API or MCP, even if its path ends in `/<name>/main.<ext>`) is stored as it is, and the reference is cleared.
 4. Replacing or removing the image releases the reference but never deletes the media.
 5. Deleting the broadcast releases the reference and runs `deleteOrphanedMedia` like it does for its emails.
 

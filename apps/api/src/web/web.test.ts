@@ -154,7 +154,7 @@ describe("web publishing", () => {
     const issue = await seedBroadcast(team.id, "With image");
 
     const first = await updateWebPublishing(issue, {
-      ogImage: "https://cdn.test/draft/og-upload/main.png",
+      ogImage: "https://cdn.test/i/og-upload/main.png",
     });
     expect(sealMedia).toHaveBeenCalledWith("og-upload");
     expect(first.ogImage).toBe("https://cdn.test/p/og-upload/main.webp");
@@ -188,6 +188,54 @@ describe("web publishing", () => {
     expect(cleared.ogImage).toBeNull();
   });
 
+  it("keeps an external image that only looks like a MediaLit path", async () => {
+    const { team } = await setup();
+    const issue = await seedBroadcast(team.id, "External image");
+    (sealMedia as unknown as ReturnType<typeof vi.fn>).mockClear();
+
+    const saved = await updateWebPublishing(issue, {
+      ogImage: "https://cdn.example.com/assets/main.jpg",
+    });
+
+    expect(saved.ogImage).toBe("https://cdn.example.com/assets/main.jpg");
+    expect(sealMedia).not.toHaveBeenCalled();
+    expect(await tdb.select().from(mediaReferences)).toHaveLength(0);
+  });
+
+  it("keeps the current social image in use when the update loses a slug race", async () => {
+    const { team } = await setup();
+    const one = await seedBroadcast(team.id, "Issue One");
+    const two = await seedBroadcast(team.id, "Issue Two");
+    const kept = await updateWebPublishing(two, {
+      ogImage: "https://cdn.test/i/og-kept/main.png",
+    });
+
+    // Another request takes the slug after this one checked it and while the
+    // new image is being sealed.
+    (sealMedia as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async (mediaId: string) => {
+        await tdb
+          .update(sequences)
+          .set({ webSlug: "raced" })
+          .where(eq(sequences.id, one.id));
+        return { mediaId, file: `https://cdn.test/p/${mediaId}/main.webp` };
+      },
+    );
+    await expect(
+      updateWebPublishing(two, {
+        slug: "raced",
+        ogImage: "https://cdn.test/i/og-new/main.png",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    const [row] = await tdb.select().from(sequences).where(eq(sequences.id, two.id));
+    expect(row.webOgImage).toBe(kept.ogImage);
+    const refs = await tdb.select().from(mediaReferences);
+    expect(refs).toHaveLength(1);
+    const [inUse] = await tdb.select().from(media).where(eq(media.id, refs[0].mediaId));
+    expect(inUse.mediaLitId).toBe("og-kept");
+  });
+
   it("releases the social image when the broadcast is deleted", async () => {
     const { team } = await setup();
     const sent = await seedBroadcast(team.id, "Draft with image", false);
@@ -197,7 +245,7 @@ describe("web publishing", () => {
       .where(eq(sequences.id, sent.id))
       .returning();
     await updateWebPublishing(issue, {
-      ogImage: "https://cdn.test/draft/og-deleted/main.png",
+      ogImage: "https://cdn.test/i/og-deleted/main.png",
     });
     expect(await tdb.select().from(media)).toHaveLength(1);
 
