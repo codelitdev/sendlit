@@ -2,10 +2,16 @@ import { describe, expect, it, mock } from "bun:test";
 import { validateParityManifest } from "@codelitdev/mcp-server-kit";
 import { contract, mcpParityManifest } from "@sendlit/api-contract";
 
-mock.module("../db/client", async () => {
-  const { makeTestDb } = await import("../test/db.js");
-  return { db: await makeTestDb(), pool: {} };
+// Better Auth queries the db while it loads, and this test only lists tools.
+// An inert query builder (every call returns it, awaiting gives no rows) lets
+// that finish without a second PGlite, which hangs `test:conformance` when it
+// shares a process with platform-conformance.test.ts.
+const inertQuery: unknown = new Proxy(() => undefined, {
+  get: (_target, key) =>
+    key === "then" ? (resolve: (rows: unknown[]) => void) => resolve([]) : inertQuery,
+  apply: () => inertQuery,
 });
+mock.module("../db/client", () => ({ db: inertQuery, pool: {} }));
 
 const { createSendLitMcp } = await import("./server");
 
