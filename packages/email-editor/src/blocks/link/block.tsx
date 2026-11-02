@@ -58,10 +58,7 @@ export function LinkBlock({ block, style }: LinkBlockProps) {
                 buttonBorderWidth !== "0px"
                   ? `${buttonBorderWidth} ${buttonBorderStyle} ${buttonBorderColor}`
                   : "none",
-              fontFamily:
-                block.settings.fontFamily ||
-                style?.typography.link.fontFamily ||
-                "Arial, sans-serif",
+              fontFamily: style?.typography.link.fontFamily || "Arial, sans-serif",
               lineHeight:
                 block.settings.lineHeight || style?.typography.link.lineHeight || "1.5",
               maxWidth: "100%",
@@ -92,10 +89,7 @@ export function LinkBlock({ block, style }: LinkBlockProps) {
             textDecoration,
             display: "inline-block", // Ensure the link is selectable even when empty
             padding: "4px 0", // Add minimal padding to ensure the link is clickable
-            fontFamily:
-              block.settings.fontFamily ||
-              style?.typography.link.fontFamily ||
-              "Arial, sans-serif",
+            fontFamily: style?.typography.link.fontFamily || "Arial, sans-serif",
             lineHeight:
               block.settings.lineHeight || style?.typography.link.lineHeight || "1.5",
           }}

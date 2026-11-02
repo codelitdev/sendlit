@@ -2,6 +2,8 @@ import { emailContentInputSchema, type TemplatePurpose } from "@sendlit/api-cont
 import type { Email, EmailBlock } from "@sendlit/email-editor";
 import { discoverRequiredTemplateVariables } from "../mail/render";
 
+// fontFamily is still accepted so older templates save, but the footer now
+// uses the email's text font and ignores it.
 const FOOTER_SETTINGS = new Set([
   "alignment",
   "fontFamily",

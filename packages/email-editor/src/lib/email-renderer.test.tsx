@@ -213,3 +213,37 @@ describe("new blocks", () => {
     expect(html).not.toContain("{% if");
   });
 });
+
+describe("fonts", () => {
+  it("uses the email's fonts and ignores a font saved on a block", async () => {
+    const html = await renderEmailToHtml({
+      email: {
+        ...defaultEmail,
+        style: {
+          ...defaultEmail.style,
+          typography: {
+            ...defaultEmail.style.typography,
+            text: {
+              ...defaultEmail.style.typography.text,
+              fontFamily: "Georgia, serif",
+            },
+            link: {
+              ...defaultEmail.style.typography.link,
+              fontFamily: "Verdana, sans-serif",
+            },
+          },
+        },
+        content: [
+          { blockType: "text", settings: { content: "Hello", fontFamily: "Courier" } },
+          {
+            blockType: "link",
+            settings: { text: "Go", url: "https://example.com", fontFamily: "Courier" },
+          },
+        ],
+      },
+    });
+    expect(html).toContain("Georgia, serif");
+    expect(html).toContain("Verdana, sans-serif");
+    expect(html).not.toContain("Courier");
+  });
+});

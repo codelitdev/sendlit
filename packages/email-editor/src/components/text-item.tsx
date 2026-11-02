@@ -90,11 +90,9 @@ export function itemStyle(
         ? "1.5em 10px"
         : "0 0 16px";
   return {
-    fontFamily:
-      settings.fontFamily ||
-      (heading
-        ? style?.typography.header.fontFamily
-        : style?.typography.text.fontFamily),
+    fontFamily: heading
+      ? style?.typography.header.fontFamily
+      : style?.typography.text.fontFamily,
     fontSize,
     fontWeight: heading ? 700 : undefined,
     lineHeight: heading

@@ -114,7 +114,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           settings: {
             content: "# Make your next announcement feel premium",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "26px",
             foregroundColor: "#111827",
             paddingTop: "8px",
@@ -127,7 +126,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "This layout is designed for launches, waitlist openings, seasonal updates, and event drops where the headline and CTA need to carry the message clearly.",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "17px",
             lineHeight: "1.7",
             foregroundColor: "#475569",
@@ -170,7 +168,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "## Why this template works\n\n- Fast visual hierarchy.\n- Clean body copy.\n- Strong CTA treatment.\n- Enough polish to feel current without being overdesigned.",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "16px",
             lineHeight: "1.7",
             foregroundColor: "#111827",
@@ -189,7 +186,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           },
         },
         createFooterEmailBlock({
-          fontFamily: "Helvetica, sans-serif",
           paddingTop: "0px",
           paddingBottom: "0px",
         }),
@@ -267,7 +263,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           settings: {
             content: "# Welcome aboard",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "26px",
             foregroundColor: "#111827",
             paddingTop: "6px",
@@ -280,7 +275,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "Thanks for joining us. This template works well for onboarding, first-touch education, getting-started checklists, and setting expectations for what comes next.",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "17px",
             lineHeight: "1.7",
             foregroundColor: "#475569",
@@ -313,7 +307,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "## What to do next\n\n- Complete your profile or setup.\n- Explore your dashboard or core feature.\n- Save this email for quick access later.",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "16px",
             lineHeight: "1.7",
             foregroundColor: "#111827",
@@ -332,7 +325,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           },
         },
         createFooterEmailBlock({
-          fontFamily: "Helvetica, sans-serif",
           paddingTop: "0px",
           paddingBottom: "0px",
         }),
@@ -411,7 +403,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           settings: {
             content: "# Products your customers are ready to buy next",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "26px",
             foregroundColor: "#0f172a",
             paddingTop: "8px",
@@ -424,7 +415,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "Use this for upgrades, bundles, complementary offers, limited-time incentives, and premium add-ons that naturally follow an initial purchase.",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "17px",
             lineHeight: "1.7",
             foregroundColor: "#475569",
@@ -457,7 +447,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "## Why this converts\n\n- Relevant add-on recommendation.\n- Clear next step.\n- A premium but simple visual treatment.\n- Plenty of room for benefits, pricing, or testimonials.",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "16px",
             lineHeight: "1.7",
             foregroundColor: "#0f172a",
@@ -476,7 +465,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           },
         },
         createFooterEmailBlock({
-          fontFamily: "Helvetica, sans-serif",
           paddingTop: "0px",
           paddingBottom: "0px",
         }),
@@ -551,7 +539,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           settings: {
             content: "# What happened this week",
             alignment: "left",
-            fontFamily: "Arial, sans-serif",
             fontSize: "26px",
             foregroundColor: "#0f172a",
             paddingTop: "10px",
@@ -564,7 +551,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "Use this for curated updates, editorial roundups, key announcements, and useful links your audience will want to save.",
             alignment: "left",
-            fontFamily: "Arial, sans-serif",
             fontSize: "17px",
             lineHeight: "1.7",
             foregroundColor: "#475569",
@@ -588,7 +574,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "## Featured update\n\nShare the biggest story or insight first. A short explanation plus one strong CTA is usually enough.",
             alignment: "left",
-            fontFamily: "Arial, sans-serif",
             fontSize: "16px",
             lineHeight: "1.7",
             foregroundColor: "#0f172a",
@@ -621,7 +606,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "## Also inside\n\n- A quick tip or takeaway.\n- One resource worth sharing.\n- A subtle CTA to your offer or archive.",
             alignment: "left",
-            fontFamily: "Arial, sans-serif",
             fontSize: "16px",
             lineHeight: "1.7",
             foregroundColor: "#0f172a",
@@ -640,7 +624,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           },
         },
         createFooterEmailBlock({
-          fontFamily: "Arial, sans-serif",
           paddingTop: "0px",
           paddingBottom: "0px",
         }),
@@ -714,7 +697,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
             content:
               "# Start writing here\n\nAdd your message, links, and call to action.",
             alignment: "left",
-            fontFamily: "Helvetica, sans-serif",
             fontSize: "16px",
             foregroundColor: "#111827",
             paddingTop: "12px",
@@ -722,7 +704,6 @@ const MARKETING_SYSTEM_TEMPLATES: Array<
           },
         },
         createFooterEmailBlock({
-          fontFamily: "Helvetica, sans-serif",
           paddingTop: "8px",
           paddingBottom: "0px",
         }),

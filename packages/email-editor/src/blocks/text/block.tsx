@@ -36,7 +36,6 @@ export function TextBlock({ block, style, selectedBlockId }: TextBlockProps) {
           content={content}
           style={style}
           options={{
-            fontFamily: block.settings.fontFamily,
             fontSize: block.settings.fontSize,
             lineHeight: block.settings.lineHeight,
             letterSpacing: block.settings.letterSpacing,

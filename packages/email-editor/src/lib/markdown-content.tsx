@@ -3,7 +3,6 @@ import { blend } from "@/lib/palettes";
 import type { EmailStyle } from "@/types/email-editor";
 
 export interface MarkdownContentOptions {
-  fontFamily?: string;
   fontSize?: string;
   lineHeight?: string;
   letterSpacing?: string;
@@ -15,7 +14,8 @@ export interface MarkdownContentOptions {
 /**
  * Renders email markdown with the email's typography. Shared by every block
  * that holds markdown (text, columns, conditional section) so they all look
- * the same in the editor, the preview and the sent email.
+ * the same in the editor, the preview and the sent email. Fonts come only from
+ * the email's typography, never from a block.
  */
 export function MarkdownContent({
   content,
@@ -27,8 +27,7 @@ export function MarkdownContent({
   options?: MarkdownContentOptions;
 }) {
   const commonTextStyles = {
-    fontFamily:
-      options.fontFamily || style?.typography.text.fontFamily || "Arial, sans-serif",
+    fontFamily: style?.typography.text.fontFamily || "Arial, sans-serif",
     fontSize: options.fontSize || style?.typography.text.fontSize || "16px",
     lineHeight: options.lineHeight || style?.typography.text.lineHeight || "1.5",
     letterSpacing:
@@ -39,8 +38,7 @@ export function MarkdownContent({
       options.textDecoration || style?.typography.text.textDecoration || "none",
   };
 
-  const headerFontFamily =
-    options.fontFamily || style?.typography.header.fontFamily || "Arial, sans-serif";
+  const headerFontFamily = style?.typography.header.fontFamily || "Arial, sans-serif";
   const baseSize = Number.parseInt(options.fontSize || "16", 10);
   const heading = (multiplier: number, minimum: number) => ({
     fontWeight: "bold",
@@ -94,7 +92,7 @@ export function MarkdownContent({
         },
       }}
       markdownContainerStyles={{
-        fontFamily: options.fontFamily || "Arial, sans-serif",
+        fontFamily: commonTextStyles.fontFamily,
         textAlign: options.alignment || "left",
         fontSize: options.fontSize || "16px",
         lineHeight: options.lineHeight || "1.5",

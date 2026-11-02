@@ -90,7 +90,8 @@ correctly.
 **Style** mode is for the look:
 
 - Pick a palette (Default, Warm, Forest, Mono, Plain or Night) or set your own
-  colours and fonts.
+  colours and fonts. Fonts apply to the whole email; blocks don't have their
+  own.
 - Select a block to change its settings.
 - Preview on desktop or mobile, with sample data, or in a dark-mode inbox.
 
