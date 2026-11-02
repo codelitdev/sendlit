@@ -22,7 +22,9 @@ const captureEvent = vi.fn();
 mock.module("../observability", () => ({ ...observability, captureEvent }));
 
 const { db } = await import("../db/client");
-const { ongoingSequences, rules } = await import("../db/schema");
+const { ongoingSequences, rules, sequenceEmails, sequences } = await import(
+  "../db/schema"
+);
 const { EventType } = await import("../config/constants");
 const { sendMail } = await import("../mail/send");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
@@ -146,6 +148,12 @@ describe("a contact's journey through a multi-day sequence", () => {
     ]);
     // What the old enrollment did: due straight away.
     await tdb.update(ongoingSequences).set({ nextEmailScheduledTime: start });
+    // The seeds are stamped with the real clock. Without this the sequence
+    // looks edited after the contact entered, which silences the check once
+    // the real date passes `start`.
+    const before = new Date(start - DAY);
+    await tdb.update(sequences).set({ updatedAt: before });
+    await tdb.update(sequenceEmails).set({ updatedAt: before });
 
     expect(await pollAt(start + 60_000)).toEqual(["Day 13"]);
     const [event] = earlySendEvents();
