@@ -91,7 +91,7 @@ export function DocHeader({
               if (event.key === "Enter" || (event.key === "ArrowDown" && atEnd)) {
                 event.preventDefault();
                 document
-                  .querySelector<HTMLInputElement>("[data-sle-field=preview]")
+                  .querySelector<HTMLTextAreaElement>("[data-sle-field=preview]")
                   ?.focus();
               }
             }}
@@ -100,19 +100,32 @@ export function DocHeader({
       )}
       <div className="fld">
         <span className="tg">Preview text</span>
-        <input
+        {/* One line of text that wraps, so a long preview stays visible. */}
+        <textarea
           className="sle-prev"
+          rows={1}
           aria-label="Preview text"
           placeholder="Preview text: the line shown after the subject in the inbox"
           data-sle-field="preview"
           onFocus={onFieldFocus}
           value={previewText}
-          onChange={(event) => onPreviewTextChange(event.target.value)}
+          onChange={(event) =>
+            onPreviewTextChange(event.target.value.replace(/\s*\n\s*/g, " "))
+          }
           onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === "ArrowDown") {
+            const field = event.currentTarget;
+            // On one line the arrows leave the field; once it wraps they move
+            // between its lines first.
+            const oneLine =
+              field.scrollHeight <=
+              Number.parseFloat(getComputedStyle(field).lineHeight) * 1.5;
+            const atStart =
+              oneLine || (field.selectionStart === 0 && field.selectionEnd === 0);
+            const atEnd = oneLine || field.selectionStart === field.value.length;
+            if (event.key === "Enter" || (event.key === "ArrowDown" && atEnd)) {
               event.preventDefault();
               onEnter();
-            } else if (event.key === "ArrowUp") {
+            } else if (event.key === "ArrowUp" && atStart) {
               const subject = document.querySelector<HTMLTextAreaElement>(
                 "[data-sle-field=subject]",
               );

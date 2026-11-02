@@ -52,7 +52,8 @@ export function ConditionalBlock({
               padding: "6px 14px 0",
               fontSize: "12px",
               fontWeight: 600,
-              color: "#737373",
+              // The text colour, faded: readable on light and dark pages.
+              opacity: 0.75,
             }}
           >
             {settings.has === false ? "Contacts without" : "Contacts tagged"}{" "}

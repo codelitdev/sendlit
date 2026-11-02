@@ -788,7 +788,8 @@
   border-radius: 4px;
   font: 500 0.82em / 1.6 var(--sle-mono);
   background: oklch(0.6 0.14 150 / 0.12);
-  color: oklch(0.42 0.12 150);
+  /* Green leaning toward the text colour: darker on light pages, lighter on dark. */
+  color: color-mix(in oklch, oklch(0.6 0.14 150) 55%, currentColor);
   border: 1px dashed oklch(0.6 0.14 150 / 0.5);
   text-transform: none;
   letter-spacing: 0;
@@ -1306,18 +1307,23 @@ select.sle-in {
   border: 0;
   outline: 0;
   background: none;
+  resize: none;
+  field-sizing: content;
+  min-height: 1.5em;
+  overflow: hidden;
   padding: 0;
   margin: 10px 0 0;
   font-family: inherit;
   font-size: 1.05em;
   line-height: 1.5;
-  color: var(--sle-muted);
+  /* On the email's page: faded from its text colour, so it reads on any palette. */
+  color: color-mix(in srgb, currentColor 72%, transparent);
   caret-color: var(--sle-accent);
 }
 .sle-subj::placeholder,
 .sle-prev::placeholder {
-  color: var(--sle-muted);
-  opacity: 0.55;
+  color: currentColor;
+  opacity: 0.45;
 }
 .sle-footnote {
   display: flex;
@@ -1627,7 +1633,8 @@ select.sle-in {
   gap: 14px;
   margin-top: 12px;
   font: 400 12.5px / 1.3 var(--sle-font);
-  color: var(--sle-muted);
+  /* On the email's page, so faded from its text colour, not the editor's grey. */
+  color: color-mix(in srgb, currentColor 70%, transparent);
 }
 .sle-meta .warn {
   color: oklch(0.55 0.13 70);
@@ -1637,10 +1644,9 @@ select.sle-in {
   align-items: center;
   gap: 5px;
   font-weight: 500;
-  color: var(--sle-muted);
 }
 .sle-meta .lnk:hover {
-  color: var(--sle-text);
+  text-decoration: underline;
 }
 .sle-ibx {
   display: grid;

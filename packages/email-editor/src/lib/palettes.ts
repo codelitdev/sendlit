@@ -104,6 +104,7 @@ export function darkStyle(style: EmailStyle): EmailStyle {
     ...style,
     colors: {
       ...style.colors,
+      ...darkAccent(style.colors.accent),
       background: "#000000",
       foreground: "#e7e7ea",
       border: "#333336",
@@ -116,6 +117,19 @@ export function darkStyle(style: EmailStyle): EmailStyle {
 }
 
 type Rgb = [number, number, number];
+
+const DARK_PAGE: Rgb = [0x1c / 255, 0x1c / 255, 0x1e / 255];
+
+/** Links use the accent as text, so a dark accent is lightened until it reads
+ * on the dark page, and buttons get text that reads on the new accent. */
+function darkAccent(accent: string): Partial<EmailStyle["colors"]> {
+  const rgb = toRgb(accent);
+  if (!rgb || contrast(rgb, DARK_PAGE) >= 4.6) return {};
+  const next = readable(rgb, DARK_PAGE, [1, 1, 1]);
+  const ink: Rgb =
+    contrast(next, [1, 1, 1]) >= contrast(next, DARK_PAGE) ? [1, 1, 1] : DARK_PAGE;
+  return { accent: toHex(next), accentForeground: toHex(ink) };
+}
 
 function toRgb(hex: string): Rgb | null {
   const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
@@ -231,6 +245,21 @@ export function blend(from: string, to: string, amount: number, fallback: string
   return a && b ? toHex(mix(a, b, amount)) : fallback;
 }
 
+const contrast = (a: Rgb, b: Rgb) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+/** `color`, moved toward `toward` just far enough to read on `background`
+ * (WCAG AA is 4.5:1; 4.6 leaves room for rounding to hex). */
+function readable(color: Rgb, background: Rgb, toward: Rgb): Rgb {
+  for (let amount = 0; amount <= 1; amount += 0.05) {
+    const next = mix(color, toward, amount);
+    if (contrast(next, background) >= 4.6) return next;
+  }
+  return toward;
+}
+
 /** The email's blocks recoloured for a palette. Without this, blocks that set
  * their own colours stay as they were, dark on dark in a dark palette: text and
  * backgrounds keep their tone between page and text (muted body text stays
@@ -251,8 +280,9 @@ export function paletteContent(email: Email, palette: Palette): EmailBlock[] {
   return email.content.map((block) => {
     const settings = { ...(block.settings as Record<string, unknown>) };
     if ("foregroundColor" in settings) {
-      // Never fainter than readable.
-      settings.foregroundColor = retone(settings.foregroundColor, 0.6);
+      const toned = toRgb(String(retone(settings.foregroundColor, 0.6)));
+      // Never fainter than readable on the new page.
+      if (toned) settings.foregroundColor = toHex(readable(toned, newPage, newText));
     }
     if ("backgroundColor" in settings) {
       settings.backgroundColor = retone(settings.backgroundColor, 0);

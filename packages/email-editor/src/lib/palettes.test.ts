@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { defaultEmail } from "./default-email";
-import { darkBlock, PALETTES, paletteContent } from "./palettes";
+import { blend, darkBlock, darkStyle, PALETTES, paletteContent } from "./palettes";
 
 const text = (settings: Record<string, unknown>) => ({
   id: "a",
@@ -77,5 +77,32 @@ describe("paletteContent", () => {
     expect(button.settings.textColor).toBeUndefined();
     expect(divider.settings.color).toBeUndefined();
     expect(heading.settings.content).toBe("# Hi");
+  });
+});
+
+describe("darkStyle", () => {
+  it("lightens an accent too dark to read as a link, with button text to match", () => {
+    const style = {
+      ...defaultEmail.style,
+      colors: { ...defaultEmail.style.colors, accent: "#18181b" as const },
+    };
+    const dark = darkStyle(style).colors;
+    expect(dark.accent).not.toBe("#18181b");
+    expect(dark.accentForeground).toBe("#1c1c1e");
+  });
+
+  it("keeps an accent that already reads on a dark page", () => {
+    const style = {
+      ...defaultEmail.style,
+      colors: { ...defaultEmail.style.colors, accent: "#60a5fa" as const },
+    };
+    expect(darkStyle(style).colors.accent).toBe("#60a5fa");
+  });
+});
+
+describe("blend", () => {
+  it("mixes two hex colours, or falls back", () => {
+    expect(blend("#000000", "#ffffff", 0.5, "x")).toBe("#808080");
+    expect(blend("red", "#ffffff", 0.5, "x")).toBe("x");
   });
 });
