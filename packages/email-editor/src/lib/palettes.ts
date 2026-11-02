@@ -1,4 +1,4 @@
-import type { Email, EmailStyle } from "../types/email-editor";
+import type { Email, EmailBlock, EmailStyle } from "../types/email-editor";
 
 export interface Palette {
   name: string;
@@ -113,4 +113,88 @@ export function darkStyle(style: EmailStyle): EmailStyle {
       page: { ...style.structure.page, background: "#1c1c1e", foreground: "#e7e7ea" },
     },
   };
+}
+
+type Rgb = [number, number, number];
+
+function toRgb(hex: string): Rgb | null {
+  const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return null;
+  const digits =
+    match[1].length === 3
+      ? [...match[1]].map((digit) => digit + digit).join("")
+      : match[1];
+  return [0, 2, 4].map(
+    (at) => Number.parseInt(digits.slice(at, at + 2), 16) / 255,
+  ) as Rgb;
+}
+
+function luminance([r, g, b]: Rgb) {
+  const linear = (c: number) =>
+    c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+}
+
+/** The colour with its lightness flipped and clamped, hue and saturation kept. */
+function flipLightness([r, g, b]: Rgb, clamp: (lightness: number) => number) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lightness = (max + min) / 2;
+  const delta = max - min;
+  const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  const hue =
+    delta === 0
+      ? 0
+      : max === r
+        ? ((g - b) / delta + 6) % 6
+        : max === g
+          ? (b - r) / delta + 2
+          : (r - g) / delta + 4;
+  const next = clamp(1 - lightness);
+  const chroma = (1 - Math.abs(2 * next - 1)) * saturation;
+  const x = chroma * (1 - Math.abs((hue % 2) - 1));
+  const m = next - chroma / 2;
+  const [r1, g1, b1] =
+    hue < 1
+      ? [chroma, x, 0]
+      : hue < 2
+        ? [x, chroma, 0]
+        : hue < 3
+          ? [0, chroma, x]
+          : hue < 4
+            ? [0, x, chroma]
+            : hue < 5
+              ? [x, 0, chroma]
+              : [chroma, 0, x];
+  return `#${[r1, g1, b1]
+    .map((channel) =>
+      Math.round((channel + m) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+const TEXT_COLORS = ["foregroundColor", "textColor"];
+const SURFACE_COLORS = ["backgroundColor", "borderColor", "color"];
+
+/** A block's own colours as a dark-mode mail client shows them: dark text is
+ * lightened and light backgrounds and lines are darkened, while mid-tone
+ * colours such as a button's stay. Without this, a block that sets its own
+ * text colour reads dark on dark. */
+export function darkBlock<T extends EmailBlock>(block: T): T {
+  const settings = { ...(block.settings as Record<string, unknown>) };
+  let changed = false;
+  for (const key of [...TEXT_COLORS, ...SURFACE_COLORS]) {
+    const value = settings[key];
+    const rgb = typeof value === "string" ? toRgb(value) : null;
+    if (!rgb) continue;
+    const text = TEXT_COLORS.includes(key);
+    if (text ? luminance(rgb) >= 0.3 : luminance(rgb) <= 0.5) continue;
+    settings[key] = flipLightness(rgb, (lightness) =>
+      text ? Math.max(lightness, 0.75) : Math.min(Math.max(lightness, 0.12), 0.2),
+    );
+    changed = true;
+  }
+  return changed ? { ...block, settings } : block;
 }

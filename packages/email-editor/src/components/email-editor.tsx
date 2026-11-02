@@ -21,7 +21,7 @@ import { setFallback } from "../lib/inline-markdown";
 import { countWords } from "../lib/markdown-edit";
 import { type MenuPlacement, placeMenu } from "../lib/menu-placement";
 import { normalizeEmail } from "../lib/normalize-email";
-import { darkStyle } from "../lib/palettes";
+import { darkBlock, darkStyle } from "../lib/palettes";
 import {
   explodeTextBlocks,
   itemMarkdown,
@@ -1297,8 +1297,9 @@ export function EmailEditor({
 
   function renderRow(row: Row) {
     if (mode === "write" && isItem(row.block)) return renderItem(row);
+    const sampled = sample && inStyle ? withSamples(row.block, samples) : row.block;
     const shown = (
-      sample && inStyle ? withSamples(row.block, samples) : row.block
+      inStyle && darkInbox ? darkBlock(sampled) : sampled
     ) as Required<EmailBlock>;
     const capabilities = getBlockCapabilities(row.block.blockType, blockRegistry);
     return (
