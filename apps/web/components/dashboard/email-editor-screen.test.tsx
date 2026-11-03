@@ -162,6 +162,24 @@ describe("EmailEditorScreen", () => {
     expect(mocks.back).toHaveBeenCalled();
   });
 
+  it("gives the unsaved-changes dialog room for its three actions", () => {
+    render(
+      <EmailEditorScreen
+        exitFallbackHref="/templates"
+        purpose="transactional"
+        initialContent={initialContent}
+        onSave={mock()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Change document"));
+    fireEvent.click(screen.getByRole("button", { name: "Exit editor" }));
+
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog.className).toContain("data-[size=default]:sm:max-w-lg");
+    expect(dialog.className).not.toContain("data-[size=default]:sm:max-w-sm");
+  });
+
   it("uses the fallback route for a deep-linked editor", () => {
     Object.defineProperty(window.history, "length", {
       configurable: true,

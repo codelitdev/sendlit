@@ -366,7 +366,8 @@ export function EmailEditorScreen({
       {error && <Banner className="mx-4 mt-4 shrink-0">{error}</Banner>}
 
       <AlertDialog open={leaving} onOpenChange={setLeaving}>
-        <AlertDialogContent>
+        {/* Three actions don't fit the default width of a confirmation. */}
+        <AlertDialogContent className="data-[size=default]:sm:max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Save your changes?</AlertDialogTitle>
             <AlertDialogDescription>
