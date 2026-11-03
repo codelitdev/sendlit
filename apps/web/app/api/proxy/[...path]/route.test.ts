@@ -204,11 +204,12 @@ describe("BFF proxy auth failures", () => {
   it("refuses a write that did not come from the dashboard's own origin", async () => {
     const { POST } = await import("./route");
 
-    for (const headers of [
+    const bad: Record<string, string>[] = [
       { origin: "https://api.example.com" },
       { referer: "https://api.example.com/w/team/p/issue" },
       {},
-    ]) {
+    ];
+    for (const headers of bad) {
       const response = await POST(
         request("sendlit_team_id=team_123", {
           method: "POST",
