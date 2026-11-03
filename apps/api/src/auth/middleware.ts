@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import { dashboardSessionBoundary } from "./csrf";
 import { mcpProtectedResourceMetadataUrl, mcpResourceUrl } from "./better-auth";
+import { dashboardSessionBoundary } from "./csrf";
 import {
   type AuthInput,
   type AuthResult,

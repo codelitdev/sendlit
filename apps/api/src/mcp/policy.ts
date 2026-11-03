@@ -1,6 +1,6 @@
 import { createPlatformError, type PlatformError } from "@codelitdev/platform";
-import type { SendLitMcpContext } from "./context";
 import { canManageTeamEsp, isTeamAdminOrKey } from "../team/authority";
+import type { SendLitMcpContext } from "./context";
 
 export const MCP_SCOPES = {
   contactsRead: "contacts:read",
