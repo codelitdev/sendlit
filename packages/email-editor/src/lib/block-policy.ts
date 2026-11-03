@@ -130,3 +130,27 @@ export function canInsertAfter(
 ): boolean {
   return getBlockCapabilities(block.blockType, blockRegistry).placement !== "last";
 }
+
+/** Moves a block to `targetIndex` (an insertion index in the current list),
+ * or returns null when its type or the placement rules don't allow it. */
+export function reorderBlocks(
+  content: EmailBlock[],
+  blockId: string,
+  targetIndex: number,
+  blockRegistry: BlockRegistry,
+): EmailBlock[] | null {
+  const from = content.findIndex((block) => block.id === blockId);
+  if (from === -1) return null;
+  if (!getBlockCapabilities(content[from].blockType, blockRegistry).movable) {
+    return null;
+  }
+  const next = [...content];
+  const [moved] = next.splice(from, 1);
+  const to = Math.max(
+    0,
+    Math.min(from < targetIndex ? targetIndex - 1 : targetIndex, next.length),
+  );
+  if (to === from) return null;
+  next.splice(to, 0, moved);
+  return hasValidPlacement(next, blockRegistry) ? next : null;
+}

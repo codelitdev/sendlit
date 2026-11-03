@@ -119,6 +119,58 @@ const emailBlockInputSchema = z.discriminatedUnion("blockType", [
     settings: z.object({ src: z.string().min(1) }).passthrough(),
   }),
   blockBaseSchema.extend({ blockType: z.literal("separator") }),
+  blockBaseSchema.extend({
+    blockType: z.literal("spacer"),
+    settings: z.object({ height: pixelSchema.optional() }).passthrough(),
+  }),
+  blockBaseSchema.extend({
+    blockType: z.literal("columns"),
+    settings: z
+      .object({
+        left: z.string(),
+        right: z.string(),
+        ratio: z.enum(["11", "12", "21"]).optional(),
+        stack: z.boolean().optional(),
+      })
+      .passthrough(),
+  }),
+  blockBaseSchema.extend({
+    blockType: z.literal("social"),
+    settings: z
+      .object({
+        links: z.array(
+          z.object({
+            network: z.enum([
+              "website",
+              "instagram",
+              "linkedin",
+              "youtube",
+              "x",
+              "facebook",
+              "tiktok",
+            ]),
+            url: z.string().regex(/^(?:https?:\/\/\S+)?$/i, "Expected an http(s) URL"),
+          }),
+        ),
+      })
+      .passthrough(),
+  }),
+  blockBaseSchema.extend({
+    blockType: z.literal("html"),
+    settings: z.object({ code: z.string() }).passthrough(),
+  }),
+  blockBaseSchema.extend({
+    blockType: z.literal("conditional"),
+    settings: z
+      .object({
+        tag: z
+          .string()
+          .regex(/^[A-Za-z0-9][A-Za-z0-9 _.-]{0,39}$/, "Expected a plain tag name"),
+        has: z.boolean().optional(),
+        content: z.string(),
+      })
+      .passthrough(),
+  }),
   blockBaseSchema.extend({ blockType: z.literal("footer") }),
 ]);
 

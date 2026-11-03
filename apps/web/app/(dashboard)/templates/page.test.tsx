@@ -35,6 +35,11 @@ mock.module("@sendlit/email-editor/blocks", () => ({
   Text: {},
   Separator: {},
   Link: {},
+  Spacer: {},
+  Columns: {},
+  Social: {},
+  HtmlSnippet: {},
+  Conditional: {},
   ImageBlock: { configure: () => ({}) },
 }));
 mock.module("@/components/dashboard/email-image-upload-dialog", () => ({

@@ -39,6 +39,38 @@ describe("mail render helpers", () => {
     expect(html).toContain("Hello Ada");
   });
 
+  it("shows a conditional section only to contacts with the tag", async () => {
+    const content = {
+      ...defaultEmail,
+      content: [
+        { blockType: "text" as const, settings: { content: "Hello" } },
+        {
+          blockType: "conditional" as const,
+          settings: { tag: "customer", has: true, content: "Customers only" },
+        },
+        {
+          blockType: "conditional" as const,
+          settings: { tag: "customer", has: false, content: "Not yet a customer" },
+        },
+      ],
+    };
+    const send = (tags: string[]) =>
+      renderEmailContent({ content, variables: { subscriber: { tags } } });
+
+    const customer = await send(["beta", "customer"]);
+    expect(customer).toContain("Customers only");
+    expect(customer).not.toContain("Not yet a customer");
+    expect(customer).not.toContain("{%");
+
+    const other = await send(["beta"]);
+    expect(other).not.toContain("Customers only");
+    expect(other).toContain("Not yet a customer");
+    expect(other).not.toContain("{%");
+
+    const untagged = await send([]);
+    expect(untagged).not.toContain("Customers only");
+  });
+
   it("renders the shared managed footer from server-owned context", async () => {
     const content = {
       ...defaultEmail,

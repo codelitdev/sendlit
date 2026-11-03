@@ -33,6 +33,11 @@ mock.module("@sendlit/email-editor/blocks", () => ({
   Text: {},
   Separator: {},
   Link: {},
+  Spacer: {},
+  Columns: {},
+  Social: {},
+  HtmlSnippet: {},
+  Conditional: { metadata: { name: "conditional" } },
   ImageBlock: { configure: () => ({}) },
 }));
 mock.module("@/components/dashboard/email-image-upload-dialog", () => ({
@@ -178,9 +183,15 @@ describe("EmailEditorScreen", () => {
           block.capabilities?.deletable === false,
       ),
     ).toBe(true);
-    expect(screen.getByText("{{ subscriber.email }}")).toBeTruthy();
-    expect(screen.getByText("{{ subscriber.tags }}")).toBeTruthy();
-    expect(screen.queryByText("{{ address }}")).toBeNull();
+    const tags = mocks.editorProps.variables.map((variable: any) => variable.tag);
+    expect(tags).toContain("{{ subscriber.email }}");
+    expect(tags).toContain("{{ subscriber.tags }}");
+    expect(tags).not.toContain("{{ address }}");
+    expect(
+      mocks.editorProps.blocks.some(
+        (block: any) => block.metadata?.name === "conditional",
+      ),
+    ).toBe(true);
   });
 
   it("keeps transactional editing footer-free and exposes required business variables", () => {
@@ -198,9 +209,14 @@ describe("EmailEditorScreen", () => {
       mocks.editorProps.blocks.some((block: any) => block.metadata?.name === "footer"),
     ).toBe(false);
     expect(mocks.editorProps.renderContext).toBeUndefined();
-    expect(screen.getByText("{{ customer.name }}")).toBeTruthy();
-    expect(screen.getByText("{{ otp }}")).toBeTruthy();
-    expect(screen.queryByText("{{ subscriber.email }}")).toBeNull();
+    const tags = mocks.editorProps.variables.map((variable: any) => variable.tag);
+    expect(tags).toEqual(["{{ customer.name }}", "{{ otp }}"]);
+    // Conditional sections need a subscriber, which transactional sends lack.
+    expect(
+      mocks.editorProps.blocks.some(
+        (block: any) => block.metadata?.name === "conditional",
+      ),
+    ).toBe(false);
   });
 
   it("does not expose template duplication from the editor", async () => {

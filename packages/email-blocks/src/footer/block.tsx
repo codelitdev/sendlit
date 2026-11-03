@@ -4,6 +4,7 @@ import type { FooterSettings, SendLitEmailRenderContext } from "./types";
 
 export function FooterBlock({
   block,
+  style,
   renderContext,
   unsubscribeLabel,
   viewInBrowserLabel,
@@ -18,7 +19,6 @@ export function FooterBlock({
 
   const {
     alignment = "center",
-    fontFamily = "Arial, sans-serif",
     fontSize = "12px",
     foregroundColor = "#64748b",
     backgroundColor = "transparent",
@@ -39,7 +39,7 @@ export function FooterBlock({
         boxSizing: "border-box",
         width: "100%",
         textAlign: alignment,
-        fontFamily,
+        fontFamily: style?.typography.text.fontFamily || "Arial, sans-serif",
         fontSize,
         color: foregroundColor,
         backgroundColor,

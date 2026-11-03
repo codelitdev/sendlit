@@ -1,6 +1,7 @@
 import type { BlockComponent } from "@/types/block-registry";
 import { ImageBlock as block } from "./block";
 import { metadata } from "./metadata";
+import { ImageQuickEdit } from "./quick-edit";
 import { ImageSettings as settings } from "./settings";
 import type { ImageBlockConfig, ImageBlockSettings } from "./types";
 
@@ -12,6 +13,7 @@ const baseImageBlock: BlockComponent<ImageBlockSettings> = {
   block,
   settings,
   metadata,
+  quickEdit: ImageQuickEdit,
   defaultSettings: () => ({
     src: "",
     alt: "Image",
@@ -32,6 +34,7 @@ export const ImageBlock: ConfigurableImageBlock = {
     return {
       ...baseImageBlock,
       settings: (props) => Settings({ ...props, uploader }),
+      quickEdit: (props) => ImageQuickEdit({ ...props, uploader }),
     };
   },
 };

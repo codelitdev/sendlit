@@ -15,6 +15,7 @@ export type {
   BlockPlacement,
   BlockRegistry,
 } from "./types/block-registry";
+export type { EditorTheme, EditorVariable } from "./types/editor-ui";
 export type {
   BlockRenderProps,
   BlockSettingsProps,

@@ -117,3 +117,133 @@ describe("renderEmailToHtml", () => {
     expect(html).toContain("Error: render exploded");
   });
 });
+
+describe("new blocks", () => {
+  const withBlock = (blockType: string, settings: Record<string, unknown>) => ({
+    ...defaultEmail,
+    content: [{ blockType, settings }],
+  });
+
+  it("renders a spacer of the requested height", async () => {
+    const html = await renderEmailToHtml({
+      email: withBlock("spacer", { height: "40px" }),
+    });
+    expect(html).toContain("height:40px");
+  });
+
+  it("renders both columns with their markdown", async () => {
+    const html = await renderEmailToHtml({
+      email: withBlock("columns", {
+        left: "**Left**",
+        right: "Right *text*",
+        ratio: "12",
+        stack: true,
+      }),
+    });
+    expect(html).toContain("<strong");
+    expect(html).toContain("Left");
+    expect(html).toContain("Right");
+    expect(html).toContain("width:33%");
+    expect(html).toContain("width:67%");
+    expect(html).toContain("max-width:480px");
+  });
+
+  it("renders only social links with a web url", async () => {
+    const html = await renderEmailToHtml({
+      email: withBlock("social", {
+        links: [
+          { network: "instagram", url: "https://instagram.com/sendlit" },
+          { network: "x", url: "javascript:alert(1)" },
+          { network: "youtube", url: "" },
+        ],
+      }),
+    });
+    expect(html).toContain("https://instagram.com/sendlit");
+    expect(html).toContain("Instagram");
+    expect(html).not.toContain("javascript:");
+    expect(html).not.toContain("YouTube");
+  });
+
+  it("sends the code of an html block as-is", async () => {
+    const html = await renderEmailToHtml({
+      email: withBlock("html", { code: '<p class="x">Hello <b>there</b></p>' }),
+    });
+    expect(html).toContain('<p class="x">Hello <b>there</b></p>');
+  });
+
+  it("wraps a conditional section in Liquid when sending", async () => {
+    const html = await renderEmailToHtml({
+      email: withBlock("conditional", {
+        tag: "customer",
+        has: true,
+        content: "Members only",
+      }),
+    });
+    expect(html).toContain("{% if subscriber.tags contains");
+    expect(html).toContain("customer");
+    expect(html).toContain("Members only");
+    expect(html).toContain("{% endif %}");
+  });
+
+  it("uses unless for contacts without the tag", async () => {
+    const html = await renderEmailToHtml({
+      email: withBlock("conditional", { tag: "customer", has: false, content: "Hi" }),
+    });
+    expect(html).toContain("{% unless subscriber.tags contains");
+    expect(html).toContain("{% endunless %}");
+  });
+
+  it("drops a conditional section whose tag could break the Liquid expression", async () => {
+    const html = await renderEmailToHtml({
+      email: withBlock("conditional", {
+        tag: 'x" %}{% endif %}secret{% if "y',
+        content: "Secret offer",
+      }),
+    });
+    expect(html).not.toContain("Secret offer");
+    expect(html).not.toContain("{% if");
+  });
+
+  it("shows conditional sections to everyone in previews", async () => {
+    const html = await renderEmailToHtml({
+      email: withBlock("conditional", { tag: "customer", content: "Members only" }),
+      showConditionals: true,
+    });
+    expect(html).toContain("Members only");
+    expect(html).not.toContain("{% if");
+  });
+});
+
+describe("fonts", () => {
+  it("uses the email's fonts and ignores a font saved on a block", async () => {
+    const html = await renderEmailToHtml({
+      email: {
+        ...defaultEmail,
+        style: {
+          ...defaultEmail.style,
+          typography: {
+            ...defaultEmail.style.typography,
+            text: {
+              ...defaultEmail.style.typography.text,
+              fontFamily: "Georgia, serif",
+            },
+            link: {
+              ...defaultEmail.style.typography.link,
+              fontFamily: "Verdana, sans-serif",
+            },
+          },
+        },
+        content: [
+          { blockType: "text", settings: { content: "Hello", fontFamily: "Courier" } },
+          {
+            blockType: "link",
+            settings: { text: "Go", url: "https://example.com", fontFamily: "Courier" },
+          },
+        ],
+      },
+    });
+    expect(html).toContain("Georgia, serif");
+    expect(html).toContain("Verdana, sans-serif");
+    expect(html).not.toContain("Courier");
+  });
+});

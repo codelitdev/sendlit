@@ -1,6 +1,7 @@
 import type { BlockComponent } from "@/types/block-registry";
 import { LinkBlock as block } from "./block";
 import { metadata } from "./metadata";
+import { LinkQuickEdit as quickEdit } from "./quick-edit";
 import { LinkSettings as settings } from "./settings";
 import type { LinkBlockSettings } from "./types";
 
@@ -8,6 +9,7 @@ export const LinkBlock: BlockComponent<LinkBlockSettings> = {
   block,
   settings,
   metadata,
+  quickEdit,
   defaultSettings: () => ({
     text: "Link Text",
     url: "#",

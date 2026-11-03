@@ -92,7 +92,7 @@ export function SettingsColorPicker({
             type="button"
             onClick={handleReset}
             className="text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Reset to default"
+            aria-label={`Reset ${label}`}
           >
             <X className="h-3 w-3" />
           </button>

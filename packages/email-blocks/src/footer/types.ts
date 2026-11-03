@@ -1,6 +1,5 @@
 export interface FooterSettings {
   alignment?: "left" | "center" | "right";
-  fontFamily?: string;
   fontSize?: `${number}px`;
   foregroundColor?: `#${string}`;
   backgroundColor?: `#${string}` | "transparent";

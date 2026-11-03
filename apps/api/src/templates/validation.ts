@@ -2,6 +2,8 @@ import { emailContentInputSchema, type TemplatePurpose } from "@sendlit/api-cont
 import type { Email, EmailBlock } from "@sendlit/email-editor";
 import { discoverRequiredTemplateVariables } from "../mail/render";
 
+// fontFamily is still accepted so older templates save, but the footer now
+// uses the email's text font and ignores it.
 const FOOTER_SETTINGS = new Set([
   "alignment",
   "fontFamily",
@@ -121,6 +123,11 @@ export function validateTemplateContent(
   if (purpose === "transactional") {
     if (footerIndexes.length > 0) {
       throw new TemplateValidationError("footer_not_allowed");
+    }
+    // Conditional sections read the subscriber's tags; transactional sends have
+    // no subscriber.
+    if (contentBlocks.some((block) => block.blockType === "conditional")) {
+      throw new TemplateValidationError("conditional_not_allowed");
     }
     const reservedVariables = findReservedMarketingVariables(content);
     if (reservedVariables.length > 0) {

@@ -9,14 +9,20 @@ import {
 } from "@sendlit/email-blocks/footer";
 import { normalizeEmail } from "@sendlit/email-editor";
 import {
+  Columns,
+  Conditional,
+  HtmlSnippet,
   ImageBlock,
   Link,
   Separator,
+  Social,
+  Spacer,
   Text,
   type UploaderProps,
 } from "@sendlit/email-editor/blocks";
 import { Check, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import {
   type ReactNode,
   useCallback,
@@ -27,6 +33,16 @@ import {
 } from "react";
 import { Banner } from "@/components/dashboard/banner";
 import { EmailImageUploadDialog } from "@/components/dashboard/email-image-upload-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/codelit/button";
 import { IconButton } from "@/components/ui/codelit/icon-button";
@@ -39,23 +55,28 @@ const MARKETING_VARIABLES = [
   {
     tag: "{{ subscriber.email }}",
     description: "The email of the subscriber",
+    sample: "priya@example.com",
   },
   {
     tag: "{{ subscriber.name }}",
     description: "The name of the subscriber",
+    sample: "Priya",
   },
   {
     tag: "{{ subscriber.tags }}",
     description: "The subscriber's tags",
+    sample: "customer, beta",
   },
   {
     tag: "{{ view_in_browser_url }}",
     description: "Link to the web version of this email",
+    sample: "[link to web version]",
   },
   {
     tag: "{{ web_version_url }}",
     description:
       "Public web page of this broadcast once published, else its web version",
+    sample: "[public page link]",
   },
 ];
 
@@ -78,6 +99,10 @@ const BASE_EMAIL_EDITOR_BLOCKS = [
   Separator,
   Link,
   ImageBlock.configure({ uploader: EmailImageUploader }),
+  Spacer,
+  Columns,
+  Social,
+  HtmlSnippet,
 ];
 
 const SENDLIT_FOOTER_BLOCK = createFooterBlock({
@@ -99,8 +124,10 @@ const SENDLIT_FOOTER_BLOCK = createFooterBlock({
   },
 });
 
+// Conditional sections read the subscriber's tags, which only marketing sends have.
 export const MARKETING_EMAIL_EDITOR_BLOCKS = [
   ...BASE_EMAIL_EDITOR_BLOCKS,
+  Conditional,
   SENDLIT_FOOTER_BLOCK,
 ];
 export const TRANSACTIONAL_EMAIL_EDITOR_BLOCKS = BASE_EMAIL_EDITOR_BLOCKS;
@@ -126,36 +153,38 @@ export function marketingPreviewContext({
 /**
  * Full-screen email editing screen — the only place `EmailEditor` is rendered,
  * mounted under the chrome-free `/editor` layout (no dashboard sidebar). It
- * locks to the viewport: the page itself never scrolls, only the variables
- * panel and the editor's own canvas/settings panes do. Everywhere else shows
+ * locks to the viewport: the page itself never scrolls, only the editor's own
+ * canvas and style panes do. Everywhere else shows
  * an `EmailPreview` with an edit button that navigates here; exit returns to
  * wherever the user came from.
  */
 export function EmailEditorScreen({
   exitFallbackHref,
-  screenTitle = "Editing email",
+  title = "Editing email",
   initialContent,
   onSave,
   purpose,
   requiredVariables = [],
   saveLabel = "Save",
-  header,
   actions,
   viewInBrowser = true,
   extraVariables = [],
+  subject,
+  onSubjectChange,
+  senderName,
+  otherChangesUnsaved = false,
 }: {
   /** Where exit lands when there's no history to go back to (deep link). */
   exitFallbackHref: string;
-  screenTitle?: string;
+  /** The left of the host bar: a label, or a field such as a template's name. */
+  title?: ReactNode;
   initialContent: Email;
-  /** Persists the edited content; extra fields owned by `header` controls
-   * (e.g. a template's title) are the caller's to include. */
+  /** Persists the edited content; extra fields owned by `title` (e.g. a
+   * template's name) are the caller's to include. */
   onSave: (content: Email) => Promise<void>;
   purpose: TemplatePurpose;
   requiredVariables?: string[];
   saveLabel?: string;
-  /** Optional controls rendered in the bar above the editor canvas. */
-  header?: ReactNode;
   /** Extra top-bar controls. `saveContent` persists the current document
    * (throwing on failure), e.g. before sending a test of it. */
   actions?: (saveContent: () => Promise<void>) => ReactNode;
@@ -164,8 +193,17 @@ export function EmailEditorScreen({
   /** More merge tags for this email, e.g. `{{ event.* }}` of the custom
    * event that starts its sequence. */
   extraVariables?: { tag: string; description: string }[];
+  /** The subject line, written above the email. Saving it is the caller's. */
+  subject?: string;
+  onSubjectChange?: (subject: string) => void;
+  /** The sender shown in the inbox preview. */
+  senderName?: string;
+  /** Edits the caller saves along with the content, such as the subject or a
+   * template's name, that haven't been saved yet. */
+  otherChangesUnsaved?: boolean;
 }) {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
   const normalizedInitialContent = useMemo(
     () => normalizeEmail(initialContent),
     [initialContent],
@@ -178,6 +216,13 @@ export function EmailEditorScreen({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Edited since the last save. The editor only reports edits, never its
+  // first render, so any change means there's something to lose.
+  const contentChanged = useRef(false);
+  const [leaving, setLeaving] = useState(false);
+  const unsaved = () => contentChanged.current || otherChangesUnsaved;
+  const unsavedRef = useRef(unsaved);
+  unsavedRef.current = unsaved;
   const [mailingAddress, setMailingAddress] = useState(
     "Set your mailing address in Settings",
   );
@@ -219,9 +264,38 @@ export function EmailEditorScreen({
 
   const handleContentChange = useCallback((nextContent: Email) => {
     contentRef.current = nextContent;
+    contentChanged.current = true;
+  }, []);
+
+  // Closing the tab or reloading with unsaved edits asks first.
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (unsavedRef.current()) event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  // Ctrl or Cmd+S saves, as in any editor, instead of saving the page.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void saveRef.current();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
 
   function exit() {
+    if (unsaved()) setLeaving(true);
+    else leave();
+  }
+
+  function leave() {
     if (window.history.length > 1) {
       router.back();
     } else {
@@ -229,15 +303,21 @@ export function EmailEditorScreen({
     }
   }
 
-  async function save() {
+  /** Saves, returning whether it worked. */
+  async function save(): Promise<boolean> {
+    if (saving) return false;
     setSaving(true);
     setError(null);
     try {
+      contentChanged.current = false;
       await onSave(contentRef.current);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      return true;
     } catch (err) {
+      contentChanged.current = true;
       setError(err instanceof ApiError ? err.message : "Failed to save email");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -246,15 +326,19 @@ export function EmailEditorScreen({
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">{screenTitle}</span>
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {typeof title === "string" ? (
+            <span className="text-sm text-muted-foreground">{title}</span>
+          ) : (
+            title
+          )}
           <Badge variant="secondary" className="capitalize">
             {purpose}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
           {actions?.(() => onSave(contentRef.current))}
-          <Button onClick={save} disabled={saving}>
+          <Button onClick={() => void save()} disabled={saving}>
             {saving ? (
               <Loader size={16} />
             ) : saved ? (
@@ -270,43 +354,42 @@ export function EmailEditorScreen({
 
       {error && <Banner className="mx-4 mt-4 shrink-0">{error}</Banner>}
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="w-64 shrink-0 space-y-4 overflow-y-auto border-r p-4">
-          <h2 className="font-semibold">Variables</h2>
-          <p className="text-sm text-muted-foreground">
-            You can use the following variables in your content.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            These will be replaced with the actual data while sending emails.
-          </p>
-          {variables.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              This template has no required variables.
-            </p>
-          ) : (
-            <dl className="space-y-3">
-              {variables.map((variable) => (
-                <div key={variable.tag} className="space-y-1">
-                  <dt>
-                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                      {variable.tag}
-                    </code>
-                  </dt>
-                  <dd className="text-xs text-muted-foreground">
-                    {variable.description}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </aside>
+      <AlertDialog open={leaving} onOpenChange={setLeaving}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Save your changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You've edited this email since it was last saved. Leaving now discards
+              those edits.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={leave}>
+              Discard changes
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={async () => {
+                if (await save()) leave();
+              }}
+            >
+              Save and exit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
+      <div className="flex min-h-0 flex-1">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {header && <div className="shrink-0 border-b px-6 py-3">{header}</div>}
           <div className="min-h-0 flex-1">
             <EmailEditor
               email={normalizedInitialContent}
               onChange={handleContentChange}
+              subject={subject}
+              onSubjectChange={onSubjectChange}
+              variables={variables}
+              senderName={senderName}
+              theme={resolvedTheme === "dark" ? "dark" : "sendlit"}
               blocks={
                 purpose === "marketing"
                   ? MARKETING_EMAIL_EDITOR_BLOCKS

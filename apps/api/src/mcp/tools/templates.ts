@@ -88,7 +88,7 @@ export const templateTools = (): SendLitMcpTool[] => [
       title: z.string().min(1),
       purpose: templatePurposeSchema,
       content: emailContentInputSchema.describe(
-        "A complete SendLit email document. Include all style sections (colors, typography.header/text/link, interactives, and structure) and only text, link, image, separator, or footer blocks. Use list_system_templates and duplicate_template as the safest valid starting point.",
+        "A complete SendLit email document. Include all style sections (colors, typography.header/text/link, interactives, and structure) and only text, link, image, separator, spacer, columns, social, html, conditional (marketing only), or footer blocks. Use list_system_templates and duplicate_template as the safest valid starting point.",
       ),
     }),
     outputSchema: templateSchema,

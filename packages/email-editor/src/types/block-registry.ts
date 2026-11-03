@@ -26,6 +26,11 @@ export interface BlockComponent<TSettings = any, TRenderContext = any> {
   settings: ComponentType<BlockSettingsProps<TSettings>>;
   metadata: BlockMetadata;
   defaultSettings?: () => TSettings;
+  /** The few fields worth editing in place while writing (a button's label and
+   * link, an image's alt text). The full form stays in Style mode. */
+  quickEdit?: ComponentType<BlockSettingsProps<TSettings>>;
+  /** Lay the quick fields out in a row (default) or a column. */
+  quickEditLayout?: "row" | "column";
   capabilities?: Partial<BlockCapabilities>;
 }
 
