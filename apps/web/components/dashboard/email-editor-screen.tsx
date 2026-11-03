@@ -303,19 +303,30 @@ export function EmailEditorScreen({
     }
   }
 
+  /** Persists the current document, throwing on failure. Every save goes
+   * through here, so a save from an action (such as a test send) also counts
+   * as saved for the unsaved-changes check. */
+  async function persist() {
+    contentChanged.current = false;
+    try {
+      await onSave(contentRef.current);
+    } catch (err) {
+      contentChanged.current = true;
+      throw err;
+    }
+  }
+
   /** Saves, returning whether it worked. */
   async function save(): Promise<boolean> {
     if (saving) return false;
     setSaving(true);
     setError(null);
     try {
-      contentChanged.current = false;
-      await onSave(contentRef.current);
+      await persist();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       return true;
     } catch (err) {
-      contentChanged.current = true;
       setError(err instanceof ApiError ? err.message : "Failed to save email");
       return false;
     } finally {
@@ -337,7 +348,7 @@ export function EmailEditorScreen({
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          {actions?.(() => onSave(contentRef.current))}
+          {actions?.(persist)}
           <Button onClick={() => void save()} disabled={saving}>
             {saving ? (
               <Loader size={16} />
