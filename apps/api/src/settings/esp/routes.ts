@@ -3,12 +3,11 @@ import { createExpressEndpoints, initServer } from "@ts-rest/express";
 import { Router } from "express";
 import { requireAuth } from "../../auth/middleware";
 import { requireTeam } from "../../auth/require-team";
-import { getTeamDeliverySetting } from "../../delivery/queries";
 import { dailySendCount } from "../../mail/rate-limit";
 import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/transport";
 import { effectiveDailySendLimit, warmupState } from "../../mail/warmup";
 import { captureEvent } from "../../observability";
-import { getTeamMembership } from "../../team/queries";
+import { canManageTeamEsp as canManageTeamEspFor } from "../../team/authority";
 import { isEspDeleteBlocker } from "./delete-blockers";
 import {
   checkAndRememberDomainAuthentication,
@@ -27,13 +26,7 @@ router.use(["/settings/esp", "/settings/esps"], requireAuth, requireTeam);
 
 const s = initServer();
 
-async function canManageTeamEsp(req: any): Promise<boolean> {
-  const delivery = await getTeamDeliverySetting(req.teamId);
-  if (!delivery?.teamEspEnabled) return false;
-  if (req.authKind === "team_key") return true;
-  const membership = await getTeamMembership(req.teamId, req.userId);
-  return membership?.role === "admin";
-}
+const canManageTeamEsp = (req: any) => canManageTeamEspFor(req);
 
 function toPublicShape(config: EspConfig) {
   return {

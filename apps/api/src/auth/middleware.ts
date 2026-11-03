@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import { mcpProtectedResourceMetadataUrl } from "./better-auth";
+import { dashboardSessionBoundary } from "./csrf";
+import { mcpProtectedResourceMetadataUrl, mcpResourceUrl } from "./better-auth";
 import {
   type AuthInput,
   type AuthResult,
@@ -8,6 +9,8 @@ import {
 } from "./resolve-auth";
 
 type AuthResolver = (input: AuthInput) => Promise<AuthResult>;
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 type AuthMiddlewareMode = "rest" | "mcp";
 
@@ -84,7 +87,33 @@ export function createAuthMiddleware(
         return;
       }
 
+      // OAuth tokens are issued for the MCP resource only. REST has no scope
+      // map, so honouring one there would turn a narrowly scoped MCP grant
+      // into the user's full authority (including minting team API keys).
+      if (
+        mode === "rest" &&
+        auth.kind === "oauth" &&
+        !auth.identity.audiences?.some((audience) => audience !== mcpResourceUrl)
+      ) {
+        res.status(401).json({
+          error: "invalid_token",
+          error_description: "This token is only valid for the MCP resource.",
+        });
+        return;
+      }
+
       applyAuthToRequest(req, auth, mode);
+
+      // A session cookie is sent by the browser on any request to this origin,
+      // including a form on a tenant-published page. State changes therefore
+      // need the dashboard's Origin plus double-submit CSRF token.
+      if (mode === "rest" && auth.kind === "session" && !SAFE_METHODS.has(req.method)) {
+        const failure = dashboardSessionBoundary(req, res);
+        if (failure) {
+          res.status(failure.status).json(failure.body);
+          return;
+        }
+      }
       if (auth.kind === "oauth" || auth.kind === "session") {
         req.auth = auth.identity;
       }

@@ -10,6 +10,8 @@ const mocks = {
   connectSnds: vi.fn(),
   syncTeamNow: vi.fn(),
   consumeRateLimit: vi.fn(),
+  isTeamAdminOrKey: vi.fn(),
+  canManageTeamEsp: vi.fn(),
 };
 
 class FakeSndsLinkError extends Error {}
@@ -19,6 +21,10 @@ mock.module("../../settings/tracking-domain/queries", () => ({
   setTrackingDomain: mocks.setTrackingDomain,
   verifyTrackingDomain: mocks.verifyTrackingDomain,
   toPublicTrackingDomain: (domain: unknown) => domain,
+}));
+mock.module("../../team/authority", () => ({
+  isTeamAdminOrKey: mocks.isTeamAdminOrKey,
+  canManageTeamEsp: mocks.canManageTeamEsp,
 }));
 mock.module("../../reputation/google", () => ({
   startGoogleConnect: mocks.startGoogleConnect,
@@ -55,6 +61,8 @@ const call = (name: string, args: Record<string, unknown> = {}, ctx: any = conte
 
 beforeEach(() => {
   for (const fn of Object.values(mocks)) fn.mockReset();
+  mocks.isTeamAdminOrKey.mockResolvedValue(true);
+  mocks.canManageTeamEsp.mockResolvedValue(true);
 });
 
 describe("MCP tracking domain tools", () => {
@@ -102,6 +110,32 @@ describe("MCP tracking domain tools", () => {
 });
 
 describe("MCP reputation tools", () => {
+  it("keeps connecting and disconnecting accounts from a team member, as REST does", async () => {
+    mocks.isTeamAdminOrKey.mockResolvedValue(false);
+    const member = {
+      ...context,
+      authKind: "oauth" as const,
+      user: { id: "user-1" },
+      scopes: ["settings:read", "settings:write"],
+    };
+    for (const [name, args] of [
+      ["connect_google_postmaster", {}],
+      ["disconnect_google_postmaster", { confirm: true }],
+      [
+        "connect_snds",
+        { dataUrl: "https://sendersupport.olc.protection.outlook.com/x" },
+      ],
+      ["disconnect_snds", { confirm: true }],
+    ] as const) {
+      await expect(call(name, { ...args }, member)).resolves.toMatchObject({
+        error: { code: "forbidden", safeDetails: { reason: "team_admin_required" } },
+      });
+    }
+    expect(mocks.startGoogleConnect).not.toHaveBeenCalled();
+    expect(mocks.connectSnds).not.toHaveBeenCalled();
+    expect(mocks.deleteConnection).not.toHaveBeenCalled();
+  });
+
   it("returns the Google sign-in URL, or says Postmaster isn't configured", async () => {
     mocks.startGoogleConnect.mockReturnValue("https://accounts.google.com/x");
     await expect(call("connect_google_postmaster")).resolves.toEqual({
