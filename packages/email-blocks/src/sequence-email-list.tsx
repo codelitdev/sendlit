@@ -2,7 +2,7 @@
 
 import type { BlockComponent } from "@sendlit/email-editor";
 import { ChevronDown, ChevronUp, Mail, Plus, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,6 +65,9 @@ export interface SequenceEmailListProps {
   draftLabel?: string;
   emptyMessage?: string;
   formatDelay?: (ms: number) => string;
+  /** Extra line under an email's delay and status, such as who is waiting
+   * for it. Return nothing to leave it out for that email. */
+  renderEmailDetail?: (email: SequenceEmail) => ReactNode;
   className?: string;
 }
 
@@ -121,6 +124,7 @@ export function SequenceEmailList({
   draftLabel = "Draft",
   emptyMessage = "No emails yet.",
   formatDelay = defaultFormatDelay,
+  renderEmailDetail,
   className,
 }: SequenceEmailListProps) {
   const [addOpen, setAddOpen] = useState(false);
@@ -136,6 +140,7 @@ export function SequenceEmailList({
       {ordered.map((email, index) => {
         const href = getEmailHref?.(email);
         const Row = href ? "a" : "div";
+        const detail = renderEmailDetail?.(email);
         return (
           <Row
             key={email.emailId}
@@ -158,6 +163,9 @@ export function SequenceEmailList({
                 {" · "}
                 {email.published ? publishedLabel : draftLabel}
               </p>
+              {detail ? (
+                <p className="truncate text-xs text-muted-foreground">{detail}</p>
+              ) : null}
             </div>
             {onReorder && ordered.length > 1 && (
               <div className="flex flex-col">

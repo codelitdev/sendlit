@@ -1,10 +1,11 @@
 "use client";
 
 import { Loader } from "@codelitdev/design-system";
-import { UserRound } from "lucide-react";
+import { Trash2, UserRound } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { DeleteAccountDialog } from "@/components/dashboard/delete-account-dialog";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
@@ -19,6 +20,9 @@ import { Button } from "@/components/ui/codelit/button";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/codelit/tabs";
+import { navigateTo } from "@/lib/navigation";
+import { resetPosthogUser } from "@/lib/posthog-browser";
+import { clearOrganizationIdCookie, clearTeamIdCookie } from "@/lib/tokens";
 
 const ACCOUNT_TABS = ["general"] as const;
 type AccountTab = (typeof ACCOUNT_TABS)[number];
@@ -43,6 +47,7 @@ export default function AccountPage() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     if (tabParam !== "billing" && tabParam !== "notifications") return;
@@ -211,6 +216,38 @@ export default function AccountPage() {
                 </div>
               </CardContent>
             </Card>
+            <Card className="mt-6 border-destructive/40">
+              <CardHeader>
+                <CardTitle className="text-base">Danger zone</CardTitle>
+                <CardDescription>
+                  Deleting your account can’t be undone.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Delete your account and erase your name and email. Organizations only
+                  you own are deleted with their contacts; you leave the others.
+                </p>
+                <Button
+                  variant="destructive"
+                  className="shrink-0"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="size-4" />
+                  Delete account
+                </Button>
+              </CardContent>
+            </Card>
+            <DeleteAccountDialog
+              open={deleteOpen}
+              onOpenChange={setDeleteOpen}
+              onDeleted={() => {
+                resetPosthogUser();
+                clearTeamIdCookie();
+                clearOrganizationIdCookie();
+                navigateTo("/login");
+              }}
+            />
           </TabsContent>
         </Tabs>
       </div>

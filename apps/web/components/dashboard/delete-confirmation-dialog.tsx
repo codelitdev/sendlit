@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +19,11 @@ export function DeleteConfirmationDialog({
   title = "Delete this item?",
   description = "This action cannot be undone.",
   confirmLabel = "Delete",
+  confirmDisabled = false,
+  confirmVariant = "destructive",
+  pendingLabel = "Deleting…",
+  errorMessage,
+  children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -26,10 +31,20 @@ export function DeleteConfirmationDialog({
   title?: string;
   description?: string;
   confirmLabel?: string;
+  /** Holds the confirm button, e.g. while the details below load. */
+  confirmDisabled?: boolean;
+  /** `primary` for reversible actions such as archiving. */
+  confirmVariant?: "destructive" | "primary";
+  /** Shown on the confirm button while `onConfirm` runs. */
+  pendingLabel?: string;
+  /** Explains a failed delete; defaults to a generic retry message. */
+  errorMessage?: (error: unknown) => ReactNode;
+  /** Details shown between the description and the buttons. */
+  children?: ReactNode;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReactNode>(null);
 
   return (
     <AlertDialog
@@ -51,18 +66,19 @@ export function DeleteConfirmationDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {children}
         {error && (
-          <p className="text-sm text-destructive" role="alert">
+          <div className="text-sm text-destructive" role="alert">
             {error}
-          </p>
+          </div>
         )}
         <AlertDialogFooter>
           <AlertDialogCancel ref={cancelRef} disabled={isDeleting}>
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
-            variant="destructive"
-            disabled={isDeleting}
+            variant={confirmVariant}
+            disabled={isDeleting || confirmDisabled}
             onClick={async (event) => {
               event.preventDefault();
               setIsDeleting(true);
@@ -70,14 +86,17 @@ export function DeleteConfirmationDialog({
               try {
                 await onConfirm();
                 onOpenChange(false);
-              } catch {
-                setError("Unable to delete this item. Please try again.");
+              } catch (failure) {
+                setError(
+                  errorMessage?.(failure) ??
+                    "Unable to delete this item. Please try again.",
+                );
               } finally {
                 setIsDeleting(false);
               }
             }}
           >
-            {isDeleting ? "Deleting…" : confirmLabel}
+            {isDeleting ? pendingLabel : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

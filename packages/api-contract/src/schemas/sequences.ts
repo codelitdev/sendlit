@@ -166,6 +166,8 @@ export const sequenceSchema = z.object({
   /** Whether sends link a hosted web version ("View in browser"). On for
    * new broadcasts, off for new sequences. */
   viewInBrowser: z.boolean(),
+  /** When a sent broadcast was archived; `null` when it isn't. */
+  archivedAt: z.string().nullable().optional(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
   emails: z.array(sequenceEmailSchema),
@@ -183,8 +185,16 @@ export const sequenceSchema = z.object({
     .optional(),
 });
 
+export const archivedFilters = ["exclude", "only", "include"] as const;
+
 export const listSequencesQuerySchema = z.object({
   type: z.enum(mailTypes),
+  archived: z
+    .enum(archivedFilters)
+    .optional()
+    .describe(
+      "Archived broadcasts: exclude (default) hides them, only lists just them, include lists both",
+    ),
   offset: z.coerce.number().int().min(1).optional(),
   itemsPerPage: z.coerce.number().int().min(1).max(50).optional(),
 });
@@ -289,6 +299,74 @@ export const sequenceStatsSchema = z.object({
   bounceRate: z.number().optional(),
   complaintRate: z.number().optional(),
 });
+
+export const sequenceScheduleSchema = z.object({
+  waiting: z
+    .number()
+    .describe("Contacts in the sequence who are waiting for their next email"),
+  emails: z.array(
+    z.object({
+      emailId: z.string(),
+      waiting: z.number().describe("Contacts whose next email is this one"),
+      nextSendAt: z
+        .number()
+        .nullable()
+        .describe(
+          "The earliest due time among them (epoch millis), not a time they share: each contact's delay counts from their own entry. null when no one is waiting",
+        ),
+    }),
+  ),
+});
+
+export const waitingContactSchema = z.object({
+  contactId: z.string(),
+  email: z.string(),
+  name: z.string().nullable(),
+  nextSendAt: z
+    .number()
+    .describe("When this contact is due to get the email (epoch millis)"),
+});
+
+export const listWaitingContactsQuerySchema = z.object({
+  after: z
+    .string()
+    .optional()
+    .describe("The previous page's `nextCursor`; omit for the first page"),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  q: z.string().optional().describe("Matches the contact's email or name"),
+});
+
+export const waitingContactsPageSchema = z.object({
+  items: z.array(waitingContactSchema),
+  total: z.number().describe("Every waiting contact that matches, across all pages"),
+  nextCursor: z
+    .string()
+    .nullable()
+    .describe("Pass as `after` for the next page; null on the last page"),
+});
+
+export const sequenceDeletionPreviewSchema = z.object({
+  status: z.string().describe("The broadcast or sequence's current status"),
+  blocker: z
+    .enum(["sequence_active", "broadcast_sent"])
+    .nullable()
+    .describe(
+      "Why it can't be deleted right now (sequence_active: pause it first; broadcast_sent: archive the broadcast instead), or null when it can",
+    ),
+  enrolledCount: z
+    .number()
+    .int()
+    .describe("Contacts currently in the sequence; deleting it stops their emails"),
+  emailsSentCount: z
+    .number()
+    .int()
+    .describe("Emails it has sent; their delivery, open and click history is deleted"),
+});
+
+export type SequenceDeletionPreview = z.infer<typeof sequenceDeletionPreviewSchema>;
+export type SequenceSchedule = z.infer<typeof sequenceScheduleSchema>;
+export type WaitingContact = z.infer<typeof waitingContactSchema>;
+export type WaitingContactsPage = z.infer<typeof waitingContactsPageSchema>;
 
 export const listSubscribersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),

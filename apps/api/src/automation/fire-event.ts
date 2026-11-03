@@ -63,6 +63,7 @@ export async function fireEvent({
       sequenceId: sequences.sequenceId,
       type: sequences.type,
       status: sequences.status,
+      emailsOrder: sequences.emailsOrder,
       filter: sequences.filter,
       excludeFilter: sequences.excludeFilter,
       reentry: sequences.reentry,

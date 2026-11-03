@@ -30,6 +30,7 @@ import {
 import { toast } from "sonner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
+import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { EspConfigurationDialog } from "@/components/dashboard/esp-configuration-dialog";
 import { EspFeedbackDialog } from "@/components/dashboard/esp-feedback-dialog";
 import { Loading } from "@/components/dashboard/loading";
@@ -108,6 +109,7 @@ import {
   createOrganizationSendingDomain,
   createOrganizationTeam,
   createPaidOrganizationBillingCheckout,
+  deleteOrganization,
   deleteOrganizationEsp,
   type EspConfig,
   enterOrganizationTeam,
@@ -158,8 +160,10 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { espProviderLabel } from "@/lib/esp-providers";
-import { reloadPage } from "@/lib/navigation";
+import { navigateTo, reloadPage } from "@/lib/navigation";
 import {
+  clearOrganizationIdCookie,
+  clearTeamIdCookie,
   getOrganizationIdFromCookie,
   notifyTeamsChanged,
   selectOrganizationContext,
@@ -216,7 +220,11 @@ const ORGANIZATION_ERROR_MESSAGES: Record<string, string> = {
   delivery_policy_not_found:
     "Delivery settings are not available for this organization.",
   delivery_source_in_use:
-    "This mailbox is still assigned to a team. Remove its assignments and try again.",
+    "This mailbox is still in use by sending campaigns or queued email. Let that work finish, or retire the mailbox to cancel it, and try again.",
+  esp_has_delivery_history:
+    "This mailbox has delivery history, so it stays retired to keep reports intact. A retired mailbox can't send.",
+  esp_retire_instead:
+    "A mailbox that has been activated can't be deleted. Retire it instead; it stops sending and its reports stay intact.",
   domain_exists: "That sending domain has already been added.",
   domain_invalid: "Enter a valid domain, such as example.com.",
   domain_not_found: "That sending domain could not be found.",
@@ -982,6 +990,13 @@ export default function OrganizationsPage() {
                           </Button>
                         </CardFooter>
                       </Card>
+                      {selectedOrganization?.role === "owner" &&
+                      selectedOrganization.status !== "pending_payment" ? (
+                        <OrganizationDangerZone
+                          organization={selectedOrganization}
+                          onOpenBilling={() => selectTab("plan")}
+                        />
+                      ) : null}
                     </TabsContent>
                   )}
                   {selectedTab === "plan" && (
@@ -1123,6 +1138,106 @@ export default function OrganizationsPage() {
         )}
       </div>
     </ScrollablePage>
+  );
+}
+
+/** Owner-only deletion, confirmed by typing the organization's name. */
+function OrganizationDangerZone({
+  organization,
+  onOpenBilling,
+}: {
+  organization: Organization;
+  onOpenBilling: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [typedName, setTypedName] = useState("");
+  const inputId = useId();
+
+  return (
+    <Card className="mt-6 border-destructive/40">
+      <OrganizationSectionHeader
+        title="Danger zone"
+        description="Deleting an organization can’t be undone."
+      />
+      <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Delete this organization, archive its teams, revoke its keys and sending
+          domains, retire its mailboxes and delete its uploaded media.
+        </p>
+        <Button
+          variant="destructive"
+          className="shrink-0"
+          onClick={() => {
+            setTypedName("");
+            setOpen(true);
+          }}
+        >
+          <Trash2 className="size-4" />
+          Delete organization
+        </Button>
+      </CardContent>
+      <DeleteConfirmationDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Delete ${organization.name}?`}
+        description="Its teams stop sending, everyone loses access, and its uploaded media is deleted. Billing history, delivery reports and suppressions are kept. This can’t be undone."
+        confirmLabel="Delete organization"
+        confirmDisabled={typedName.trim() !== organization.name}
+        errorMessage={(error) => {
+          if (
+            error instanceof ApiError &&
+            error.message === "active_subscription_exists"
+          ) {
+            return (
+              <p>
+                This organization has an active subscription. Cancel it first, then
+                delete the organization when the paid period ends.{" "}
+                <button
+                  type="button"
+                  className="font-medium underline underline-offset-4"
+                  onClick={() => {
+                    setOpen(false);
+                    onOpenBilling();
+                  }}
+                >
+                  Manage billing
+                </button>
+              </p>
+            );
+          }
+          if (
+            error instanceof ApiError &&
+            error.message === "recent_authentication_required"
+          ) {
+            return "For your security, sign in again before deleting this organization.";
+          }
+          return errorMessage(
+            error,
+            "Unable to delete this organization. Please try again.",
+          );
+        }}
+        onConfirm={async () => {
+          await deleteOrganization(organization.organizationId);
+          clearTeamIdCookie();
+          clearOrganizationIdCookie();
+          toast.success(`${organization.name} was deleted`);
+          navigateTo("/team-selection");
+        }}
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor={inputId}>
+            Type <span className="font-mono font-semibold">{organization.name}</span> to
+            confirm
+          </Label>
+          <Input
+            id={inputId}
+            autoComplete="off"
+            value={typedName}
+            onChange={(event) => setTypedName(event.target.value)}
+          />
+        </div>
+      </DeleteConfirmationDialog>
+    </Card>
   );
 }
 
@@ -1904,54 +2019,59 @@ function SharedEspsSection({
                           <Mail className="size-4" />
                         </IconButton>
                       )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <IconButton
-                            aria-label={`Mailbox actions for ${esp.name}`}
-                            variant="outline"
-                            size="sm"
-                          >
-                            <MoreHorizontal />
-                          </IconButton>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {esp.status !== "retired" && esp.status !== "draining" && (
-                            <DropdownMenuItem
-                              disabled={transitioningId === esp.espId}
-                              onSelect={() => void transition(esp)}
+                      {esp.status !== "retired" && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <IconButton
+                              aria-label={`Mailbox actions for ${esp.name}`}
+                              variant="outline"
+                              size="sm"
                             >
-                              <Activity />
-                              {transitioningId === esp.espId
-                                ? "Working…"
-                                : esp.status === "active"
-                                  ? "Suspend"
-                                  : esp.status === "suspended"
-                                    ? "Resume"
-                                    : "Activate"}
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuSeparator />
-                          {esp.status !== "retired" ? (
-                            <DropdownMenuItem
-                              variant="destructive"
-                              disabled={transitioningId === esp.espId}
-                              onSelect={() => setRetiringEsp(esp)}
-                            >
-                              <Archive />
-                              Retire shared ESP
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              variant="destructive"
-                              disabled={transitioningId === esp.espId}
-                              onSelect={() => setDeletingEsp(esp)}
-                            >
-                              <Trash2 />
-                              Delete shared ESP
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                              <MoreHorizontal />
+                            </IconButton>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {esp.status !== "draining" && (
+                              <DropdownMenuItem
+                                disabled={transitioningId === esp.espId}
+                                onSelect={() => void transition(esp)}
+                              >
+                                <Activity />
+                                {transitioningId === esp.espId
+                                  ? "Working…"
+                                  : esp.status === "active"
+                                    ? "Suspend"
+                                    : esp.status === "suspended"
+                                      ? "Resume"
+                                      : "Activate"}
+                              </DropdownMenuItem>
+                            )}
+                            {/* A never-activated draft is deleted; anything that
+                                has been live is retired and kept for its history
+                                (#12). A retired mailbox has nothing left to do. */}
+                            <DropdownMenuSeparator />
+                            {esp.status === "draft" && !esp.activatedAt ? (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                disabled={transitioningId === esp.espId}
+                                onSelect={() => setDeletingEsp(esp)}
+                              >
+                                <Trash2 />
+                                Delete shared ESP
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                disabled={transitioningId === esp.espId}
+                                onSelect={() => setRetiringEsp(esp)}
+                              >
+                                <Archive />
+                                Retire shared ESP
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1996,7 +2116,8 @@ function SharedEspsSection({
             <AlertDialogHeader>
               <AlertDialogTitle>Delete {deletingEsp?.name}?</AlertDialogTitle>
               <AlertDialogDescription>
-                This permanently removes the retired shared ESP. It cannot be restored.
+                This permanently removes the draft shared ESP. It has never been
+                activated, so no team or report depends on it. It cannot be restored.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

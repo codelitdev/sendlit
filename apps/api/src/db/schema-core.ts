@@ -94,6 +94,10 @@ export const user = pgTable("user", {
     () => organizations.id,
     { onDelete: "set null" },
   ),
+  /** Set when the person deleted their account (#134). The row stays as an
+   * anonymous tombstone so ids in billing, audit and trial records still
+   * resolve; its name and email are erased and it can never sign in. */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
@@ -1383,6 +1387,10 @@ export const sequences = pgTable(
     webNoindex: boolean("web_noindex").notNull().default(false),
     /** Where the issue really lives when a platform hosts it. */
     webCanonicalUrl: text("web_canonical_url"),
+    /** When a sent broadcast was archived (#147): hidden from the default
+     * list and the public web archive, with its report and delivery
+     * history kept. `null` when not archived. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
@@ -1577,6 +1585,13 @@ export const ongoingSequences = pgTable(
     // The 60s due-poll (`getDueOngoingSequences`) filters on this column.
     nextScheduledIdx: index("ongoing_sequences_next_email_scheduled_time_idx").on(
       table.nextEmailScheduledTime,
+    ),
+    // One sequence's waiting contacts, soonest first (`getWaitingContacts`),
+    // without walking every other sequence's rows in the index above.
+    sequenceNextScheduledIdx: index("ongoing_sequences_sequence_id_next_email_idx").on(
+      table.sequenceId,
+      table.nextEmailScheduledTime,
+      table.id,
     ),
   }),
 );

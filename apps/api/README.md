@@ -248,6 +248,24 @@ AES-256-GCM in `src/utils/secret-crypto.ts` and are never returned to clients.
 `/settings/esp` (singular) remains as a backward-compatible alias over the
 team's default user ESP.
 
+Deleting an ESP never deletes delivery history. `DELETE /settings/esps/:espId`
+(and MCP `delete_esp`) answers `409` with a reason code when the ESP can't go:
+
+- `esp_is_default`: it is the team's live default delivery source. Make another
+  source the default, or retire it (`POST /settings/esps/:espId/retire`, MCP
+  `retire_esp`) first.
+- `delivery_source_in_use`: a sending sequence or broadcast, or queued email,
+  still needs it.
+- `esp_has_delivery_history`: transactional email, a delivery-feedback
+  connection, or organization grants point at it. Retire it instead; a retired
+  ESP can't send and its history stays intact.
+
+Otherwise the ESP is deleted: draft, paused, and completed sequences are
+detached from it, sent campaign messages keep their provider snapshot, and a
+retired default is replaced by another active team ESP (or cleared).
+Organization ESPs follow the same rules, and in addition only a never-activated
+draft is deleted (`esp_retire_instead` otherwise).
+
 Every sequence and transactional email persists an internal `deliveryRoute`
 (`custom` or `platform`) alongside the resolved user ESP's internal id
 (`outboxId`). `custom` is the only route currently reachable — it always

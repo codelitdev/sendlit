@@ -19,6 +19,7 @@ import { normalizeEmail } from "../utils/email";
 // `generateUniqueId` is only still needed here for `unsubscribeToken`, an
 // opaque secret rather than a public resource ID.
 import { generateUniqueId } from "../utils/id";
+import { deleteContactRows } from "./bulk-delete";
 import {
   buildContactExclusionCondition,
   buildContactFilterCondition,
@@ -183,6 +184,13 @@ interface ContactListQuery {
   excludeFilter?: ContactFilterWithAggregator;
 }
 
+/** Contacts whose email or name contains `searchText`, taken literally: `%`,
+ * `_` and `\\` aren't wildcards. */
+export function contactSearchCondition(searchText: string) {
+  const pattern = `%${searchText.replace(/[\\%_]/g, "\\$&")}%`;
+  return or(ilike(contacts.email, pattern), ilike(contacts.name, pattern))!;
+}
+
 export function listContactsConditions({
   teamId,
   searchText,
@@ -190,14 +198,7 @@ export function listContactsConditions({
   excludeFilter,
 }: ContactListQuery & { teamId: string }) {
   const conditions = [eq(contacts.teamId, teamId)];
-  if (searchText) {
-    conditions.push(
-      or(
-        ilike(contacts.email, `%${searchText}%`),
-        ilike(contacts.name, `%${searchText}%`),
-      )!,
-    );
-  }
+  if (searchText) conditions.push(contactSearchCondition(searchText));
   const filters = Array.isArray(filter) ? filter : filter ? [filter] : [];
   for (const contactFilter of filters) {
     const filterCondition = buildContactFilterCondition(contactFilter);
@@ -406,13 +407,20 @@ export async function removeTagFromContact(
   return row ?? null;
 }
 
-export async function deleteContact(teamId: string, contactId: string): Promise<void> {
-  // `contact_custom_field_values.contact_id` is now an internal-id FK with
-  // `ON DELETE CASCADE`, so deleting the contact row below cascades to its
-  // custom field values automatically — no separate delete needed.
-  await db
-    .delete(contacts)
-    .where(and(eq(contacts.teamId, teamId), eq(contacts.contactId, contactId)));
+/** Deletes one contact (public id). Like a bulk delete, it keeps the
+ * address suppressed if the contact had unsubscribed (see
+ * `deleteContactRows`). */
+export async function deleteContact(
+  teamId: string,
+  contactId: string,
+  actorUserId?: string | null,
+): Promise<void> {
+  const rows = await db
+    .select({ id: contacts.id, email: contacts.email, subscribed: contacts.subscribed })
+    .from(contacts)
+    .where(and(eq(contacts.teamId, teamId), eq(contacts.contactId, contactId)))
+    .limit(1);
+  await deleteContactRows(teamId, rows, actorUserId);
   captureEvent({
     event: "contact_deleted",
     source: "contacts.delete",

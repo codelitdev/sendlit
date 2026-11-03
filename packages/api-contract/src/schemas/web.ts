@@ -26,7 +26,7 @@ export const webPublishingSchema = z.object({
   ogImage: z.string().nullable(),
   noindex: z.boolean(),
   canonicalUrl: z.string().nullable(),
-  /** Published and already sent, so the page is public. */
+  /** Published, already sent and not archived, so the page is public. */
   live: z.boolean(),
   /** When the issue was sent; `null` until then. */
   publishedAt: z.string().nullable(),

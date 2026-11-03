@@ -1,22 +1,32 @@
 import {
+  type AccountDeletionOrganization,
+  type AccountDeletionPreview,
   type BillingCatalogKey,
   type BillingPlan,
+  type ContactDeletion,
   type ContactEvent,
   type CustomFields,
   contactFilterSchema,
   contract,
+  type DeleteTagResult,
   type DomainAuthentication,
   type EspWarmup,
   type EventDefinitionDetail,
   type ImportContactRow,
   type ImportContactsResult,
   type PaidPlan,
+  type RenameTagResult,
   type Reputation,
+  type SequenceDeletionPreview,
+  type SequenceSchedule,
   type SignupForm,
   type SignupFormInput,
+  type TagReferences,
+  type TagSummary,
   type TrackEventBody,
   type TrackingDomain,
   type TriggerTypeValue,
+  type WaitingContactsPage,
   type WebPublishing,
   type WebSettings,
 } from "@sendlit/api-contract";
@@ -261,6 +271,37 @@ export function deleteContact(contactId: string) {
   return unwrap<void>(client.contacts.remove({ params: { contactId } }));
 }
 
+/** Which contacts a bulk delete targets: explicit ids, or everything
+ * matching a filter (every page, not only the one shown). */
+export type ContactSelection =
+  | { contactIds: string[] }
+  | { match: { filter?: ContactFilterWithAggregator } };
+
+function toApiSelection(selection: ContactSelection) {
+  if ("contactIds" in selection) return { contactIds: selection.contactIds };
+  return { match: { filter: toApiContactFilter(selection.match.filter) } };
+}
+
+export function previewContactDeletion(selection: ContactSelection) {
+  return unwrap<{ count: number; unsubscribed: number }>(
+    client.contacts.previewBulkDelete({ body: toApiSelection(selection) as any }),
+  );
+}
+
+export function deleteContacts(selection: ContactSelection, expectedCount: number) {
+  return unwrap<ContactDeletion>(
+    client.contacts.bulkDelete({
+      body: { ...toApiSelection(selection), expectedCount } as any,
+    }),
+  );
+}
+
+export function getContactDeletion(deletionId: string) {
+  return unwrap<ContactDeletion>(
+    client.contacts.bulkDeleteStatus({ params: { deletionId } }),
+  );
+}
+
 export interface ContactDelivery {
   sequenceId: string;
   sequenceTitle: string;
@@ -368,6 +409,26 @@ export function createSegment(input: {
 
 export function deleteSegment(segmentId: string) {
   return unwrap<void>(client.segments.remove({ params: { segmentId } }));
+}
+
+// ---- Tags ----------------------------------------------------------------
+
+export async function listTags() {
+  return (await unwrap<{ items: TagSummary[] }>(client.tags.list())).items;
+}
+
+export function getTagReferences(tag: string) {
+  return unwrap<TagReferences>(client.tags.references({ params: { tag } }));
+}
+
+export function renameTag(tag: string, name: string) {
+  return unwrap<RenameTagResult>(
+    client.tags.rename({ params: { tag }, body: { name } }),
+  );
+}
+
+export function deleteTag(tag: string) {
+  return unwrap<DeleteTagResult>(client.tags.remove({ params: { tag } }));
 }
 
 // ---- Media --------------------------------------------------------------
@@ -482,7 +543,12 @@ export function deleteTemplate(templateId: string) {
 
 export function listSequences(
   type: MailType,
-  params: { offset?: number; itemsPerPage?: number } = {},
+  params: {
+    offset?: number;
+    itemsPerPage?: number;
+    /** Archived broadcasts are left out unless this is `only` or `include`. */
+    archived?: "exclude" | "only" | "include";
+  } = {},
 ) {
   return unwrap<Paginated<Sequence>>(
     client.sequences.list({ query: { type, ...params } }),
@@ -660,8 +726,45 @@ export function pauseSequence(sequenceId: string) {
   return unwrap<Sequence>(client.sequences.pause({ params: { sequenceId } }));
 }
 
+/** Hides a sent broadcast from the list and the web archive, keeping its report. */
+export function archiveBroadcast(sequenceId: string) {
+  return unwrap<Sequence>(client.sequences.archive({ params: { sequenceId } }));
+}
+
+export function unarchiveBroadcast(sequenceId: string) {
+  return unwrap<Sequence>(client.sequences.unarchive({ params: { sequenceId } }));
+}
+
+/** Enrolled contacts and sent emails a delete would remove, and any blocker. */
+export function getSequenceDeletionPreview(sequenceId: string) {
+  return unwrap<SequenceDeletionPreview>(
+    client.sequences.deletionPreview({ params: { sequenceId } }),
+  );
+}
+
 export function getSequenceStats(sequenceId: string) {
   return unwrap<SequenceStats>(client.sequences.stats({ params: { sequenceId } }));
+}
+
+/** Contacts waiting for each email of a sequence, and when the next is due. */
+export function getSequenceSchedule(sequenceId: string) {
+  return unwrap<SequenceSchedule>(
+    client.sequences.schedule({ params: { sequenceId } }),
+  );
+}
+
+/** The contacts whose next email in a sequence is `emailId`, soonest first. */
+export function listWaitingContacts(
+  sequenceId: string,
+  emailId: string,
+  { after, limit = 20, q }: { after?: string; limit?: number; q?: string } = {},
+) {
+  return unwrap<WaitingContactsPage>(
+    client.sequences.waitingContacts({
+      params: { sequenceId, emailId },
+      query: { after, limit, q: q || undefined },
+    }),
+  );
 }
 
 export interface Overview {
@@ -814,6 +917,13 @@ export function activateEsp(espId: string) {
   return unwrap<EspConfig>(client.settings.esps.activate({ params: { espId } }));
 }
 
+/** Retires a team ESP now: it stops sending and keeps its delivery history. */
+export function retireEsp(espId: string) {
+  return unwrap<EspConfig>(
+    client.settings.esps.retire({ params: { espId }, body: { transition: "cancel" } }),
+  );
+}
+
 // ---- Bounce/complaint delivery feedback ------------------------------------
 
 /** Providers with a reviewed webhook adapter — see
@@ -963,6 +1073,8 @@ export interface Organization {
   organizationId: string;
   name: string;
   status: "pending_payment" | "active" | "suspended" | "abandoned" | "closed";
+  /** The signed-in user's role; present when listing organizations. */
+  role?: "owner" | "admin" | "member";
   createdAt: string;
   updatedAt: string;
 }
@@ -1105,6 +1217,40 @@ export function abandonPendingOrganization(organizationId: string) {
     `/organizations/${organizationId}/abandon`,
     { method: "POST" },
   );
+}
+
+/** Deletes (closes) an organization. Owner only; fails with
+ * `active_subscription_exists` while a paid subscription is running. */
+export function deleteOrganization(organizationId: string) {
+  return billingActionRequest<void>(
+    "organization_close",
+    organizationId,
+    `/organizations/${organizationId}`,
+    { method: "DELETE" },
+  );
+}
+
+// ---- Account --------------------------------------------------------------
+
+export type { AccountDeletionOrganization, AccountDeletionPreview };
+
+/** What deleting the account does to each organization, and what blocks it. */
+export function getAccountDeletion() {
+  return organizationRequest<AccountDeletionPreview>("/account/deletion");
+}
+
+/** Emails the code `deleteAccount` needs. */
+export function sendAccountDeletionCode() {
+  return organizationRequest<void>("/account/deletion/code", { method: "POST" });
+}
+
+/** Deletes the signed-in account (ADR 0009). Fails with `email_mismatch`,
+ * `invalid_code` or `account_deletion_blocked`. */
+export function deleteAccount(email: string, code: string) {
+  return organizationRequest<void>("/account/deletion", {
+    method: "POST",
+    body: JSON.stringify({ email, code }),
+  });
 }
 
 export function createOrganization(name: string) {

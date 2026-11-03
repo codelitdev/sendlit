@@ -50,6 +50,7 @@ const PROPERTY_ALLOWLIST = new Set([
   "alert_code",
   "billing_alert",
   "age_ms",
+  "early_by_ms",
   "count",
   // Hosted abuse controls (abuse/telemetry.ts): codes and internal ids only.
   "organization_id",
@@ -72,6 +73,22 @@ const PROPERTY_ALLOWLIST = new Set([
   // Transactional email: already sent, were missing from the allowlist.
   "txe_id",
   "delivery_source",
+  // Organization deletion (organization/delete.ts): counts only.
+  "teams_count",
+  "media_failed_count",
+  // Account deletion (account/delete.ts): counts only.
+  "organizations_deleted_count",
+  "organizations_left_count",
+  "contacts_erased_count",
+  // Media cleanup on resource deletes (media/queries.ts deleteOrphanedMedia).
+  "media_deleted_count",
+  // Bulk contact deletion (contacts/bulk-delete.ts): counts only.
+  "suppressed_count",
+  // ESP deletion (settings/esp, organization ESPs): public esp_ id.
+  "esp_id",
+  // Sequence deletion (sequences/queries.ts deleteSequence): counts only.
+  "enrolled_count",
+  "emails_sent_count",
 ]);
 
 /** Allowlisted keys that hold opaque record ids. They skip the package's
@@ -89,6 +106,7 @@ const IDENTIFIER_KEYS = new Set([
   "organization_id",
   "form_id",
   "txe_id",
+  "esp_id",
 ]);
 
 /**

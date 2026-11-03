@@ -1,9 +1,21 @@
 import type { Email as EmailContent } from "@sendlit/email-editor";
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  min,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { assertLargeBroadcastReviewed } from "../abuse/broadcast-review";
 import { assertEmailContentAllowed } from "../abuse/content-scan";
 import { assertNoImportUnderReview } from "../abuse/imports";
-import { getMatchingContactIds } from "../automation/queries";
+import { getMatchingContactIds, getNextPublishedEmail } from "../automation/queries";
 import {
   assertMarketingAllowedForContactUsage,
   assertSendAllowedForTeam,
@@ -22,6 +34,7 @@ import {
   sequenceDelayBetweenMailsInMillis,
 } from "../config/constants";
 import { responses } from "../config/strings";
+import { contactSearchCondition } from "../contacts/queries";
 import {
   type ContactFilterWithAggregator,
   sequenceAudience,
@@ -29,6 +42,7 @@ import {
 import { db } from "../db/client";
 import {
   contacts,
+  emailContentVersions,
   emailDeliveries,
   emailEvents,
   espConfigs,
@@ -41,11 +55,19 @@ import {
   resolveDeliverySource,
 } from "../delivery/queries";
 import { syncEmailContentMediaReferences } from "../media/email-content";
-import { deleteMediaReferencesForResource } from "../media/queries";
+import {
+  deleteMediaReferencesForResource,
+  deleteOrphanedMedia,
+} from "../media/queries";
 import { captureEvent } from "../observability";
 import { assertMailingAddressConfigured } from "../settings/general/queries";
 import { getTeam } from "../team/queries";
 import { resolveStartingTemplate } from "../templates/queries";
+import {
+  broadcastArchiveBlocker,
+  type SequenceDeleteBlocker,
+  sequenceDeleteBlocker,
+} from "./delete-blockers";
 import {
   addRule,
   defaultEmailContent,
@@ -227,22 +249,34 @@ export async function getSequenceBySequenceId(
   return hydrate(row);
 }
 
+/** Which broadcasts a list shows: archived ones are hidden by default. */
+export type ArchivedFilter = "exclude" | "only" | "include";
+
+function listCondition(teamId: string, type: MailType, archived: ArchivedFilter) {
+  const conditions: SQL[] = [eq(sequences.teamId, teamId), eq(sequences.type, type)];
+  if (archived === "exclude") conditions.push(isNull(sequences.archivedAt));
+  if (archived === "only") conditions.push(isNotNull(sequences.archivedAt));
+  return and(...conditions);
+}
+
 export async function listSequences({
   teamId,
   type,
   offset = 1,
   itemsPerPage: perPage = itemsPerPage,
+  archived = "exclude",
 }: {
   teamId: string;
   type: MailType;
   offset?: number;
   itemsPerPage?: number;
+  archived?: ArchivedFilter;
 }): Promise<HydratedSequence[]> {
   const pageSize = Math.min(Math.max(perPage, 1), maxItemsPerPage);
   const rows = await db
     .select()
     .from(sequences)
-    .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)))
+    .where(listCondition(teamId, type, archived))
     .limit(pageSize)
     .offset((Math.max(offset, 1) - 1) * pageSize);
   if (rows.length === 0) return [];
@@ -272,11 +306,15 @@ export async function listSequences({
   );
 }
 
-export async function countSequences(teamId: string, type: MailType): Promise<number> {
+export async function countSequences(
+  teamId: string,
+  type: MailType,
+  archived: ArchivedFilter = "exclude",
+): Promise<number> {
   const [row] = await db
     .select({ value: count() })
     .from(sequences)
-    .where(and(eq(sequences.teamId, teamId), eq(sequences.type, type)));
+    .where(listCondition(teamId, type, archived));
   return row?.value ?? 0;
 }
 
@@ -483,7 +521,10 @@ export async function addMailToSequence({
 
   const [row] = await db
     .update(sequences)
-    .set({ emailsOrder: [...sequence.emailsOrder, email.emailId] })
+    .set({
+      emailsOrder: [...sequence.emailsOrder, email.emailId],
+      updatedAt: new Date(),
+    })
     .where(eq(sequences.id, sequence.id))
     .returning();
 
@@ -613,6 +654,57 @@ export async function updateMailInSequence({
   return getSequenceBySequenceId(teamId, sequenceId);
 }
 
+/**
+ * The ids of the given sequence emails that were already sent: they have a
+ * delivery or a stored content version.
+ */
+async function sentEmailIds(emailIds: string[]): Promise<Set<string>> {
+  if (!emailIds.length) return new Set();
+  const [delivered, versioned] = await Promise.all([
+    db
+      .selectDistinct({ id: emailDeliveries.emailId })
+      .from(emailDeliveries)
+      .where(inArray(emailDeliveries.emailId, emailIds)),
+    db
+      .selectDistinct({ id: emailContentVersions.sequenceEmailId })
+      .from(emailContentVersions)
+      .where(inArray(emailContentVersions.sequenceEmailId, emailIds)),
+  ]);
+  return new Set([...delivered, ...versioned].map((row) => row.id));
+}
+
+/**
+ * Removes the media references of sequence emails about to be deleted and
+ * returns the media rows to pass to `deleteOrphanedMedia` after the delete.
+ * Media of an email that was already sent (`sentIds`) is left out: inboxes
+ * and "view in browser" pages load its images by URL, so it stays in the
+ * media library until the user deletes it there. Pass `sentIds` when the
+ * deliveries that prove it are gone by now.
+ */
+async function releaseEmailMedia(
+  teamId: string,
+  emailIds: string[],
+  sentIds?: Set<string>,
+): Promise<string[]> {
+  if (!emailIds.length) return [];
+  const sent = sentIds ?? (await sentEmailIds(emailIds));
+  const draftIds = emailIds.filter((id) => !sent.has(id));
+
+  const kept = new Set(
+    await deleteMediaReferencesForResource({
+      teamId,
+      resourceType: "SEQUENCE_EMAIL",
+      resourceInternalId: emailIds.filter((id) => sent.has(id)),
+    }),
+  );
+  const released = await deleteMediaReferencesForResource({
+    teamId,
+    resourceType: "SEQUENCE_EMAIL",
+    resourceInternalId: draftIds,
+  });
+  return released.filter((id) => !kept.has(id));
+}
+
 export async function deleteMailFromSequence({
   teamId,
   sequenceId,
@@ -632,13 +724,7 @@ export async function deleteMailFromSequence({
   }
 
   const email = sequence.emails.find((item) => item.emailId === emailId);
-  if (email) {
-    await deleteMediaReferencesForResource({
-      teamId,
-      resourceType: "SEQUENCE_EMAIL",
-      resourceInternalId: email.id,
-    });
-  }
+  const mediaIds = email ? await releaseEmailMedia(teamId, [email.id]) : [];
 
   await db
     .delete(sequenceEmails)
@@ -653,8 +739,10 @@ export async function deleteMailFromSequence({
     .update(sequences)
     .set({
       emailsOrder: sequence.emailsOrder.filter((id) => id !== emailId),
+      updatedAt: new Date(),
     })
     .where(eq(sequences.id, sequence.id));
+  const media = await deleteOrphanedMedia(teamId, mediaIds);
 
   captureEvent({
     event: "sequence_email_deleted",
@@ -664,12 +752,78 @@ export async function deleteMailFromSequence({
       sequence_id: sequence.sequenceId,
       sequence_type: sequence.type,
       email_id: emailId,
+      media_deleted_count: media.deleted,
     },
   });
 
   return getSequenceBySequenceId(teamId, sequenceId);
 }
 
+export interface SequenceDeletionImpact {
+  status: string;
+  /** Why it can't be deleted now, or null when it can. */
+  blocker: SequenceDeleteBlocker | null;
+  /** Contacts currently moving through it; they stop receiving it. */
+  enrolledCount: number;
+  /** Emails it has sent; their delivery and open/click history is deleted. */
+  emailsSentCount: number;
+}
+
+function deleteBlockerOf(sequence: HydratedSequence) {
+  return sequenceDeleteBlocker({
+    status: sequence.status,
+    type: sequence.type,
+    report: sequence.report,
+    sendAt: sequence.emails[0]?.delayInMillis,
+  });
+}
+
+/**
+ * Rows that may be deleted right now, repeated in the delete statement so a
+ * sequence started (or a broadcast that began sending) since the check is
+ * kept: not active, except a broadcast still waiting for its send time;
+ * and never a broadcast that has started sending.
+ */
+const deletableNow = () => {
+  const notStarted = sql`${sequences.report}->'broadcast'->>'lockedAt' IS NULL`;
+  return or(
+    and(eq(sequences.type, "sequence"), sql`${sequences.status} <> 'active'`),
+    and(eq(sequences.type, "broadcast"), notStarted),
+  );
+};
+
+/** What deleting a sequence would remove, shown before the user confirms. */
+export async function getSequenceDeletionImpact(
+  teamId: string,
+  sequenceId: string,
+): Promise<SequenceDeletionImpact | null> {
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+  if (!sequence) return null;
+  const [[enrolled], [sent]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(ongoingSequences)
+      .where(eq(ongoingSequences.sequenceId, sequence.id)),
+    db
+      .select({ value: count() })
+      .from(emailDeliveries)
+      .where(eq(emailDeliveries.sequenceId, sequence.id)),
+  ]);
+  return {
+    status: sequence.status,
+    blocker: deleteBlockerOf(sequence),
+    enrolledCount: enrolled?.value ?? 0,
+    emailsSentCount: sent?.value ?? 0,
+  };
+}
+
+/**
+ * Permanently deletes a broadcast or sequence that isn't active (see ADR
+ * 0007). Contacts still enrolled in a paused sequence leave it, and its
+ * delivery and open/click history goes with it; the outbound message log
+ * and suppressions are kept. Throws a `SequenceDeleteBlocker` code when it
+ * can't be deleted; returns false when it doesn't exist.
+ */
 export async function deleteSequence({
   teamId,
   sequenceId,
@@ -679,18 +833,28 @@ export async function deleteSequence({
 }): Promise<boolean> {
   const sequence = await getSequenceBySequenceId(teamId, sequenceId);
   if (!sequence) return false;
+  const blocker = deleteBlockerOf(sequence);
+  if (blocker) throw new Error(blocker);
 
-  for (const email of sequence.emails) {
-    await deleteMediaReferencesForResource({
-      teamId,
-      resourceType: "SEQUENCE_EMAIL",
-      resourceInternalId: email.id,
-    });
+  const impact = await getSequenceDeletionImpact(teamId, sequenceId);
+  const emailIds = sequence.emails.map((email) => email.id);
+  // Read before the delete: the deliveries that mark an email as sent
+  // cascade away with the sequence.
+  const sentIds = await sentEmailIds(emailIds);
+
+  // Guarded on status so a sequence started since the read above is kept.
+  const removed = await db
+    .delete(sequences)
+    .where(and(eq(sequences.id, sequence.id), deletableNow()))
+    .returning({ id: sequences.id });
+  if (!removed.length) {
+    const current = await getSequenceBySequenceId(teamId, sequenceId);
+    if (!current) return false;
+    throw new Error(deleteBlockerOf(current) ?? "sequence_active");
   }
 
-  await db
-    .delete(sequences)
-    .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)));
+  const mediaIds = await releaseEmailMedia(teamId, emailIds, sentIds);
+  const media = await deleteOrphanedMedia(teamId, mediaIds);
 
   captureEvent({
     event: "sequence_deleted",
@@ -698,11 +862,61 @@ export async function deleteSequence({
     teamId,
     properties: {
       sequence_id: sequence.sequenceId,
+      media_deleted_count: media.deleted,
       sequence_type: sequence.type,
+      sequence_status: sequence.status,
+      enrolled_count: impact?.enrolledCount ?? 0,
+      emails_sent_count: impact?.emailsSentCount ?? 0,
     },
   });
 
   return true;
+}
+
+/**
+ * Archives (or, with `archived: false`, restores) a sent broadcast (#147).
+ * An archived broadcast is hidden from the default list and the public web
+ * archive; its report, delivery history and images are kept. Throws
+ * `broadcast_not_sent` for a draft or scheduled broadcast (delete it
+ * instead) and `sequence_active` while it is sending; returns null when
+ * there is no such broadcast.
+ */
+export async function setBroadcastArchived({
+  teamId,
+  sequenceId,
+  archived,
+}: {
+  teamId: string;
+  sequenceId: string;
+  archived: boolean;
+}): Promise<HydratedSequence | null> {
+  const sequence = await getSequenceBySequenceId(teamId, sequenceId);
+  if (sequence?.type !== "broadcast") return null;
+  if (archived) {
+    const blocker = broadcastArchiveBlocker({
+      status: sequence.status,
+      type: sequence.type,
+      report: sequence.report,
+      sendAt: sequence.emails[0]?.delayInMillis,
+    });
+    if (blocker) throw new Error(blocker);
+  }
+  if (Boolean(sequence.archivedAt) === archived) return sequence;
+
+  const [row] = await db
+    .update(sequences)
+    .set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() })
+    .where(eq(sequences.id, sequence.id))
+    .returning();
+
+  captureEvent({
+    event: archived ? "broadcast_archived" : "broadcast_unarchived",
+    source: archived ? "sequences.archive" : "sequences.unarchive",
+    teamId,
+    properties: { sequence_id: sequence.sequenceId, sequence_status: sequence.status },
+  });
+
+  return hydrate(row);
 }
 
 export async function startSequence({
@@ -720,6 +934,8 @@ export async function startSequence({
   if (!["draft", "paused"].includes(sequence.status)) {
     throw new Error(responses.sequence_already_started);
   }
+  // An archived broadcast was paused mid-send; restore it before resuming.
+  if (sequence.archivedAt) throw new Error(responses.broadcast_archived);
   if (!sequence.emails.some((e) => e.published)) {
     throw new Error(responses.no_published_emails);
   }
@@ -965,6 +1181,178 @@ export async function getSubscribersCount(sequenceId: string): Promise<number> {
     .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
     .where(eq(sequences.sequenceId, sequenceId));
   return rows.length;
+}
+
+/** Enrollments grouped by what they've been sent (one group per step), each
+ * with the email it gets next. Small however many contacts are waiting. */
+async function waitingGroups(
+  sequence: Pick<HydratedSequence, "id" | "emailsOrder" | "emails">,
+) {
+  const groups = await db
+    .select({
+      sentEmailIds: ongoingSequences.sentEmailIds,
+      waiting: count(),
+      nextSendAt: min(ongoingSequences.nextEmailScheduledTime),
+    })
+    .from(ongoingSequences)
+    .where(eq(ongoingSequences.sequenceId, sequence.id))
+    .groupBy(ongoingSequences.sentEmailIds);
+  return groups.map((group) => ({
+    ...group,
+    nextSendAt: group.nextSendAt === null ? null : Number(group.nextSendAt),
+    emailId:
+      getNextPublishedEmail(sequence.emailsOrder, sequence.emails, group)?.emailId ??
+      null,
+  }));
+}
+
+/** Contacts waiting for each email, and when the first of them is due. */
+export async function getSequenceSchedule(
+  sequence: Pick<HydratedSequence, "id" | "emailsOrder" | "emails">,
+): Promise<{
+  waiting: number;
+  emails: Array<{ emailId: string; waiting: number; nextSendAt: number | null }>;
+}> {
+  const byEmail = new Map<string, { waiting: number; nextSendAt: number | null }>();
+  for (const group of await waitingGroups(sequence)) {
+    if (!group.emailId) continue;
+    const entry = byEmail.get(group.emailId) ?? { waiting: 0, nextSendAt: null };
+    entry.waiting += group.waiting;
+    if (
+      group.nextSendAt !== null &&
+      (entry.nextSendAt === null || group.nextSendAt < entry.nextSendAt)
+    ) {
+      entry.nextSendAt = group.nextSendAt;
+    }
+    byEmail.set(group.emailId, entry);
+  }
+
+  const emails = sequence.emailsOrder.map((emailId) => ({
+    emailId,
+    ...(byEmail.get(emailId) ?? { waiting: 0, nextSendAt: null }),
+  }));
+  return { waiting: emails.reduce((sum, e) => sum + e.waiting, 0), emails };
+}
+
+/** Where a page of waiting contacts ends; the next page starts after it. */
+type WaitingCursor = { nextSendAt: number; id: string };
+
+export class InvalidCursorError extends Error {
+  constructor() {
+    super("invalid_cursor");
+  }
+}
+
+function encodeWaitingCursor(cursor: WaitingCursor): string {
+  return Buffer.from(JSON.stringify([cursor.nextSendAt, cursor.id])).toString(
+    "base64url",
+  );
+}
+
+function decodeWaitingCursor(value: string): WaitingCursor {
+  try {
+    const [nextSendAt, id] = JSON.parse(Buffer.from(value, "base64url").toString());
+    if (Number.isSafeInteger(nextSendAt) && typeof id === "string" && isUuid(id)) {
+      return { nextSendAt, id };
+    }
+  } catch {}
+  throw new InvalidCursorError();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+/**
+ * The contacts whose next email is `emailId`, soonest due first. Pages by
+ * cursor (`after`, the previous page's `nextCursor`) so a late page costs the
+ * same as the first; `q` matches email or name. `total` counts every match.
+ */
+export async function getWaitingContacts(
+  sequence: Pick<HydratedSequence, "id" | "emailsOrder" | "emails">,
+  emailId: string,
+  {
+    after,
+    limit = itemsPerPage,
+    q,
+  }: { after?: string; limit?: number; q?: string } = {},
+): Promise<{
+  items: Array<{
+    contactId: string;
+    email: string;
+    name: string | null;
+    nextSendAt: number;
+  }>;
+  total: number;
+  nextCursor: string | null;
+}> {
+  const cursor = after ? decodeWaitingCursor(after) : null;
+  const groups = (await waitingGroups(sequence)).filter((g) => g.emailId === emailId);
+  if (groups.length === 0) return { items: [], total: 0, nextCursor: null };
+
+  const conditions: SQL[] = [
+    eq(ongoingSequences.sequenceId, sequence.id),
+    or(
+      ...groups.map(
+        (g) =>
+          sql`${ongoingSequences.sentEmailIds} = ${
+            g.sentEmailIds.length
+              ? sql`ARRAY[${sql.join(
+                  g.sentEmailIds.map((id) => sql`${id}`),
+                  sql`, `,
+                )}]::text[]`
+              : sql`'{}'::text[]`
+          }`,
+      ),
+    )!,
+  ];
+  const search = q?.trim();
+  if (search) conditions.push(contactSearchCondition(search));
+
+  const [rows, total] = await Promise.all([
+    db
+      .select({
+        id: ongoingSequences.id,
+        contactId: contacts.contactId,
+        email: contacts.email,
+        name: contacts.name,
+        nextSendAt: ongoingSequences.nextEmailScheduledTime,
+      })
+      .from(ongoingSequences)
+      .innerJoin(contacts, eq(contacts.id, ongoingSequences.contactId))
+      .where(
+        and(
+          ...conditions,
+          cursor
+            ? sql`(${ongoingSequences.nextEmailScheduledTime}, ${ongoingSequences.id}) > (${cursor.nextSendAt}, ${cursor.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(asc(ongoingSequences.nextEmailScheduledTime), asc(ongoingSequences.id))
+      .limit(limit + 1),
+    search
+      ? db
+          .select({ value: count() })
+          .from(ongoingSequences)
+          .innerJoin(contacts, eq(contacts.id, ongoingSequences.contactId))
+          .where(and(...conditions))
+          .then(([row]) => row?.value ?? 0)
+      : groups.reduce((sum, g) => sum + g.waiting, 0),
+  ]);
+
+  const page = rows.slice(0, limit);
+  const last = page[page.length - 1];
+  return {
+    items: page.map(({ id: _id, ...r }) => ({
+      ...r,
+      nextSendAt: Number(r.nextSendAt),
+    })),
+    total,
+    nextCursor:
+      rows.length > limit && last
+        ? encodeWaitingCursor({ nextSendAt: Number(last.nextSendAt), id: last.id })
+        : null,
+  };
 }
 
 async function countDistinctContactsWithEvent(

@@ -10,12 +10,14 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import { CLIENT_IP_HEADER } from "./abuse/signup";
+import accountRoutes from "./account/routes";
 import { auth } from "./auth/better-auth";
 import oauthPagesRoutes from "./auth/oauth-pages";
 import billingRoutes from "./billing/routes";
 import billingWebhookRoutes from "./billing/webhooks/routes";
 import contactsRoutes from "./contacts/routes";
 import segmentsRoutes from "./contacts/segments-routes";
+import tagsRoutes from "./contacts/tags-routes";
 import deliveryRoutes from "./delivery/routes";
 import deliveryEventsRoutes from "./delivery-feedback/delivery-events-routes";
 import feedbackRoutes from "./delivery-feedback/feedback-routes";
@@ -24,7 +26,7 @@ import espWebhookRoutes from "./delivery-feedback/webhook-route";
 import eventsRoutes from "./events/routes";
 import signupFormPublicRoutes from "./forms/public-routes";
 import signupFormRoutes from "./forms/routes";
-import mcpRoutes from "./mcp/routes";
+import { createMcpRoutes } from "./mcp/routes";
 import mediaRoutes from "./media/routes";
 import { captureError, getTeamId } from "./observability";
 import organizationRoutes from "./organization/routes";
@@ -98,7 +100,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(oauthPagesRoutes);
   // The MCP handler owns JSON parsing and protocol content-type errors, so it
   // must be mounted before the API's global Express body parser.
-  app.use(mcpRoutes);
+  app.use(createMcpRoutes());
   // Mounted before global body parsing: this route needs the unmodified raw
   // request bytes for provider signature verification and has no
   // session/API-key concept at all — see delivery-feedback/webhook-route.ts.
@@ -148,6 +150,7 @@ export function createApp(options: CreateAppOptions) {
   app.use(billingRoutes);
   app.use(provisioningRoutes);
   app.use(organizationRoutes);
+  app.use(accountRoutes);
 
   // Team management is user-scoped: `/teams` must be registered before the
   // routers below, whose blanket `requireTeam` middleware otherwise intercepts
@@ -157,6 +160,7 @@ export function createApp(options: CreateAppOptions) {
 
   app.use(contactsRoutes);
   app.use(segmentsRoutes);
+  app.use(tagsRoutes);
   app.use(mediaRoutes);
   app.use(templatesRoutes);
   app.use(sequencesRoutes);

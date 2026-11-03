@@ -1,245 +1,102 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import {
-  type AuthInfo,
-  createMcpHandler,
-  type McpHttpHandler,
-  type ServerContext,
-} from "@modelcontextprotocol/server";
+import { describe, expect, it, mock } from "bun:test";
+import { mcpParityManifest } from "@sendlit/api-contract";
+import { z } from "zod";
 
-mock.module("../db/client", () => ({ db: {}, pool: {} }));
+// The real test database: importing the server starts Better Auth, whose OAuth
+// plugin queries it in the background. Built before mocking, so the factory is
+// synchronous and safe when other files share the process.
+const { makeTestDb } = await import("../test/db");
+const testDb = await makeTestDb();
+mock.module("../db/client", () => ({ db: testDb, pool: {} }));
 
-const apiKeyMocks = {
-  createApiKey: mock(),
-  deleteApiKey: mock(),
-  getApiKeysByTeamId: mock(),
-};
-const actualApiKeyQueries = await import("../apikey/queries");
-mock.module("../apikey/queries", () => ({
-  ...actualApiKeyQueries,
-  ...apiKeyMocks,
-}));
+const { sendLitMcpTools } = await import("./server");
+const { authorizeMcpOperation, listMcpOperationScopes, MCP_SCOPES } = await import(
+  "./policy"
+);
 
-const { authorizeMcpTool, listMcpToolPolicies, MCP_SCOPES } = await import("./policy");
-const { buildMcpServer } = await import("./server");
-
-const endpoint = new URL("http://sendlit.test/mcp");
-const teamKeyAuth: AuthInfo = {
-  token: "tak_test",
-  clientId: "team-key:tak_test",
-  scopes: [],
-  extra: {
-    authKind: "team_key",
-    teamId: "team-1",
-    user: null,
-  },
+const context = {
+  authKind: "team_key" as const,
+  teamId: "team-1",
+  user: null,
+  scopes: [] as string[],
+  requestId: "",
 };
 
-function createHandler() {
-  return createMcpHandler(() => buildMcpServer(), {
-    legacy: "stateless",
-  });
-}
-
-function transportFor(handler: McpHttpHandler, authInfo = teamKeyAuth) {
-  return new StreamableHTTPClientTransport(endpoint, {
-    fetch: (input, init) => handler.fetch(new Request(input, init), { authInfo }),
-  });
-}
-
-const closeables: Array<{ close(): Promise<void> }> = [];
-
-afterEach(async () => {
-  for (const fn of Object.values(apiKeyMocks)) fn.mockReset();
-  await Promise.allSettled(closeables.splice(0).map((item) => item.close()));
-});
-
-describe("MCP server", () => {
-  it("serves the complete deterministic tool catalog on 2026-07-28", async () => {
-    const handler = createHandler();
-    const client = new Client(
-      { name: "sendlit-test", version: "1.0.0" },
-      { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+describe("SendLit MCP catalog and policy", () => {
+  it("serves one uniquely named tool per manifest tool, in a stable order", () => {
+    const names = sendLitMcpTools().map((tool) => tool.name);
+    const manifestTools = mcpParityManifest.flatMap((entry) =>
+      entry.mcp ? [entry.mcp.tool] : [],
     );
-    closeables.push(client, handler);
+    expect(new Set(names).size).toBe(names.length);
+    expect([...names].sort()).toEqual([...new Set(manifestTools)].sort());
+    expect(sendLitMcpTools().map((tool) => tool.name)).toEqual(names);
+  });
 
-    await client.connect(transportFor(handler));
-    expect(client.getProtocolEra()).toBe("modern");
-
-    const result = await client.listTools();
-    expect(result.tools).toHaveLength(101);
-    expect(result.tools.map((tool) => tool.name).sort()).toEqual(
-      Object.keys(listMcpToolPolicies()).sort(),
-    );
-    expect(new Set(result.tools.map((tool) => tool.name)).size).toBe(101);
-    expect(result.ttlMs).toBe(300_000);
-    expect(result.cacheScope).toBe("private");
-    for (const tool of result.tools) {
-      expect(tool.description).toBeTruthy();
-      expect(tool.inputSchema).toMatchObject({ type: "object" });
-      expect(tool.outputSchema).toBeTruthy();
-      expect(tool.annotations).toBeTruthy();
+  // What the Claude and ChatGPT directories review (see ADR 0010).
+  it("gives every tool a title, short name, description and explicit open-world hint", () => {
+    for (const tool of sendLitMcpTools()) {
+      expect(tool.title?.length, tool.name).toBeGreaterThan(0);
+      expect(tool.name.length, tool.name).toBeLessThanOrEqual(64);
+      expect(tool.description.length, tool.name).toBeGreaterThan(20);
+      expect(typeof tool.annotations?.openWorldHint, tool.name).toBe("boolean");
     }
-
-    const refreshed = await client.listTools(undefined, {
-      cacheMode: "refresh",
-    });
-    expect(refreshed.tools.map((tool) => tool.name)).toEqual(
-      result.tools.map((tool) => tool.name),
-    );
   });
 
-  it("rejects protocol-envelope/header mismatches", async () => {
-    const handler = createHandler();
-    const client = new Client(
-      { name: "sendlit-header-test", version: "1.0.0" },
-      { versionNegotiation: { mode: { pin: "2026-07-28" } } },
-    );
-    closeables.push(client, handler);
-    let tamperHeaders = false;
-    const transport = new StreamableHTTPClientTransport(endpoint, {
-      fetch: (input, init) => {
-        const request = new Request(input, init);
-        if (!tamperHeaders) {
-          return handler.fetch(request, { authInfo: teamKeyAuth });
-        }
-        const headers = new Headers(request.headers);
-        headers.set("Mcp-Method", "tools/call");
-        return handler.fetch(new Request(request, { headers }), {
-          authInfo: teamKeyAuth,
-        });
-      },
-    });
-
-    await client.connect(transport);
-    tamperHeaders = true;
-
-    await expect(
-      client.listTools(undefined, { cacheMode: "refresh" }),
-    ).rejects.toThrow();
+  it("advertises confirm on every destructive tool", () => {
+    const destructive = sendLitMcpTools().filter((tool) => tool.risk === "destructive");
+    expect(destructive.length).toBeGreaterThan(0);
+    for (const tool of destructive) {
+      expect(tool.inputSchema, tool.name).toBeInstanceOf(z.ZodObject);
+      expect(
+        Object.keys((tool.inputSchema as z.AnyZodObject).shape),
+        tool.name,
+      ).toContain("confirm");
+    }
   });
 
-  it("enforces default-deny OAuth scopes while allowing fixed-team keys", () => {
-    const baseContext = {
-      mcpReq: {},
-      http: { authInfo: teamKeyAuth },
-    } as unknown as ServerContext;
-    expect(authorizeMcpTool("send_email", baseContext)).toBeNull();
-
-    const oauthContext = {
-      mcpReq: {},
-      http: {
-        authInfo: {
-          token: "oauth-token",
-          clientId: "client-1",
-          scopes: [MCP_SCOPES.contactsRead],
-          extra: {
-            authKind: "oauth",
-            teamId: "team-1",
-            user: null,
-          },
-        },
-      },
-    } as unknown as ServerContext;
-
-    expect(authorizeMcpTool("list_contacts", oauthContext)).toBeNull();
-    expect(authorizeMcpTool("send_email", oauthContext)).toMatchObject({
-      isError: true,
-      content: [
-        expect.objectContaining({
-          text: expect.stringContaining(MCP_SCOPES.emailsSend),
-        }),
-      ],
-    });
-    expect(() => authorizeMcpTool("unregistered_tool", oauthContext)).toThrow(
-      "has no authorization policy",
-    );
+  it("gives every MCP-reachable operation a scope, and no other operation one", () => {
+    const reachable = mcpParityManifest
+      .flatMap((entry) => (entry.parity === "required" ? [entry.rest.operationId] : []))
+      .sort();
+    expect(Object.keys(listMcpOperationScopes()).sort()).toEqual(reachable);
   });
 
-  it("denies API key management to team API keys", () => {
-    const teamKeyContext = {
-      mcpReq: {},
-      http: { authInfo: teamKeyAuth },
-    } as unknown as ServerContext;
-
-    for (const tool of ["list_api_keys", "create_api_key", "delete_api_key"]) {
-      expect(authorizeMcpTool(tool, teamKeyContext)).toMatchObject({
-        isError: true,
-        content: [
-          expect.objectContaining({
-            text: expect.stringContaining("user_auth_required"),
-          }),
-        ],
+  it("lets team keys run everything but key management", () => {
+    expect(authorizeMcpOperation("transactional.send", context)).toBeNull();
+    expect(authorizeMcpOperation("settings.esps.remove", context)).toBeNull();
+    for (const operationId of [
+      "teams.listKeys",
+      "teams.createKey",
+      "teams.removeKey",
+    ]) {
+      expect(authorizeMcpOperation(operationId, context)).toMatchObject({
+        code: "forbidden",
+        safeDetails: { reason: "user_auth_required" },
       });
     }
-
-    const oauthContext = {
-      mcpReq: {},
-      http: {
-        authInfo: {
-          token: "oauth-token",
-          clientId: "client-1",
-          scopes: [MCP_SCOPES.apiKeysRead, MCP_SCOPES.apiKeysWrite],
-          extra: {
-            authKind: "oauth",
-            teamId: "team-1",
-            user: null,
-          },
-        },
-      },
-    } as unknown as ServerContext;
-    for (const tool of ["list_api_keys", "create_api_key", "delete_api_key"]) {
-      expect(authorizeMcpTool(tool, oauthContext)).toBeNull();
-    }
   });
 
-  it("refuses team-key calls to key tools before touching keys", async () => {
-    const handler = createHandler();
-    const client = new Client(
-      { name: "sendlit-team-key-test", version: "1.0.0" },
-      { versionNegotiation: { mode: { pin: "2026-07-28" } } },
-    );
-    closeables.push(client, handler);
-    await client.connect(transportFor(handler));
-
-    const calls = [
-      { name: "list_api_keys", arguments: {} },
-      { name: "create_api_key", arguments: { name: "replacement" } },
-      { name: "delete_api_key", arguments: { keyId: "tak_other" } },
-    ];
-    for (const call of calls) {
-      const result = await client.callTool(call);
-      expect(result.isError).toBe(true);
-      expect(JSON.stringify(result.content)).toContain("user_auth_required");
-    }
-
-    expect(apiKeyMocks.getApiKeysByTeamId).not.toHaveBeenCalled();
-    expect(apiKeyMocks.createApiKey).not.toHaveBeenCalled();
-    expect(apiKeyMocks.deleteApiKey).not.toHaveBeenCalled();
-  });
-
-  it("still lets OAuth sessions with api_keys scopes manage keys", async () => {
-    apiKeyMocks.deleteApiKey.mockResolvedValue(undefined);
-    const handler = createHandler();
-    const client = new Client(
-      { name: "sendlit-oauth-key-test", version: "1.0.0" },
-      { versionNegotiation: { mode: { pin: "2026-07-28" } } },
-    );
-    closeables.push(client, handler);
-    await client.connect(
-      transportFor(handler, {
-        token: "oauth-token",
-        clientId: "client-1",
-        scopes: [MCP_SCOPES.apiKeysWrite],
-        extra: { authKind: "oauth", teamId: "team-1", user: null },
-      }),
-    );
-
-    const result = await client.callTool({
-      name: "delete_api_key",
-      arguments: { keyId: "tak_other" },
+  it("requires the operation's scope for OAuth and refuses unknown operations", () => {
+    const oauth = {
+      ...context,
+      authKind: "oauth" as const,
+      scopes: [MCP_SCOPES.contactsRead],
+    };
+    expect(authorizeMcpOperation("contacts.list", oauth)).toBeNull();
+    expect(authorizeMcpOperation("transactional.send", oauth)).toMatchObject({
+      code: "forbidden",
+      safeDetails: { reason: "insufficient_scope", requiredScope: "emails:send" },
     });
-    expect(result.isError).toBeFalsy();
-    expect(apiKeyMocks.deleteApiKey).toHaveBeenCalledWith("team-1", "tak_other");
+    expect(
+      authorizeMcpOperation("teams.createKey", {
+        ...oauth,
+        scopes: [MCP_SCOPES.apiKeysWrite],
+      }),
+    ).toBeNull();
+    expect(authorizeMcpOperation("billing.portal", oauth)).toMatchObject({
+      code: "forbidden",
+      safeDetails: { reason: "not_mcp_operation" },
+    });
   });
 });

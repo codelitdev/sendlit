@@ -61,6 +61,7 @@ function getAuthMode(path: string, method: string): AuthMode {
   if (dashboardSessionOnlyOperations.has(`${verb} ${path}`)) {
     return "dashboardSession";
   }
+  if (path === "/account" || path.startsWith("/account/")) return "dashboardSession";
   if (path === "/billing/catalog") return "public";
   if (path.startsWith("/provisioning/")) return "organization";
   if (path.startsWith("/teams")) return "user";
@@ -150,6 +151,11 @@ export const openApiDocument = generateOpenApi(
         name: "Segments",
         description:
           "Saved, named, reusable contact filters - build a filter once, reuse it across broadcasts and sequences.",
+      },
+      {
+        name: "Tags",
+        description:
+          "Team-wide tags: list them with contact counts, see where one is used, rename or delete it.",
       },
       {
         name: "Media",

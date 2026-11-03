@@ -237,7 +237,8 @@ export async function resolveAuth(
     const authenticated = await dependencies.authenticateBearer(token);
     if (!authenticated) return { status: "invalid_token" };
     const user = await dependencies.getUser(authenticated.identity.subject);
-    if (!user) return { status: "unauthorized" };
+    // A deleted account's unexpired tokens stop working at once (#134).
+    if (!user || user.deletedAt) return { status: "unauthorized" };
     if (!(await dependencies.ensureDefaultOrganization(user.id))) {
       return { status: "unauthorized" };
     }
@@ -268,7 +269,7 @@ export async function resolveAuth(
     return { status: "unauthorized" };
   }
   const user = await dependencies.getUser(session.identity.subject);
-  if (!user) return { status: "unauthorized" };
+  if (!user || user.deletedAt) return { status: "unauthorized" };
   if (!(await dependencies.ensureDefaultOrganization(user.id))) {
     return { status: "unauthorized" };
   }

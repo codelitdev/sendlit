@@ -9,7 +9,7 @@ import { invalidateEspTransport, invalidateTeamTransport } from "../../mail/tran
 import { effectiveDailySendLimit, warmupState } from "../../mail/warmup";
 import { captureEvent } from "../../observability";
 import { getTeamMembership } from "../../team/queries";
-
+import { isEspDeleteBlocker } from "./delete-blockers";
 import {
   checkAndRememberDomainAuthentication,
   createEspConfig,
@@ -169,11 +169,14 @@ const collectionImpl = s.router(contract.settings.esps, {
     try {
       await deleteEspConfig(teamId, params.espId);
     } catch (err: any) {
-      if (err.message === "delivery_source_in_use") {
-        return {
-          status: 409,
-          body: { error: "delivery_source_in_use" },
-        };
+      if (isEspDeleteBlocker(err.message)) {
+        captureEvent({
+          event: "esp_config_delete_blocked",
+          source: "settings.esps.remove",
+          teamId,
+          properties: { esp_id: config.espId, reason: err.message },
+        });
+        return { status: 409, body: { error: err.message } };
       }
       throw err;
     }

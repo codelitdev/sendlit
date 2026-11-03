@@ -73,6 +73,8 @@ function mcpOnly(tool: string, reason: string): McpParityManifestEntry {
 
 const BILLING_SESSION_ONLY =
   "Billing is dashboard-session only: plan changes, checkout, portal, cancellation and action tokens require a human session with recent authentication, so there are no MCP tools.";
+const ACCOUNT_DELETION =
+  "Deleting an account is dashboard-session only and needs a code emailed to the person; MCP and API keys must never be able to erase a person's account.";
 const ORGANIZATION_ADMIN =
   "Organization administration (members, teams, shared ESPs, feedback, delivery policy, sending domains, usage and audit) is organization-scoped; MCP is team-scoped and accepts neither organization sessions nor organization API keys.";
 const ORGANIZATION_KEYS =
@@ -80,7 +82,7 @@ const ORGANIZATION_KEYS =
 const PROVISIONING =
   "Team provisioning authenticates with organization API keys; MCP is team-scoped and does not accept organization keys.";
 const ESP_LIFECYCLE =
-  "ESP suspend, resume and retire are operational lifecycle controls kept REST/dashboard-only; MCP exposes create, activate, test and delete.";
+  "ESP suspend and resume are operational lifecycle controls kept REST/dashboard-only; MCP exposes create, activate, test, retire and delete.";
 const DELIVERY_SELECTION =
   "Team delivery-source selection (shared organization delivery vs user ESPs) is REST/dashboard-only; MCP manages user ESP configurations directly.";
 const DEFAULT_ESP_ALIAS =
@@ -97,6 +99,15 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("contacts.deliveries", "get_contact_deliveries", "read"),
   required("contacts.events", "get_contact_events", "read"),
   required("contacts.remove", "delete_contact", "destructive"),
+  required("contacts.previewBulkDelete", "preview_delete_contacts", "read"),
+  required("contacts.bulkDelete", "delete_contacts", "destructive"),
+  required("contacts.bulkDeleteStatus", "get_contact_deletion", "read"),
+
+  // Tags
+  required("tags.list", "list_tags", "read"),
+  required("tags.references", "get_tag_references", "read"),
+  required("tags.rename", "rename_tag", "write"),
+  required("tags.remove", "delete_tag", "destructive"),
 
   // Segments
   required("segments.create", "create_segment", "write"),
@@ -130,10 +141,10 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("sequences.list", "list_sequences", "read"),
   required("sequences.get", "get_sequence", "read"),
   required("sequences.update", "update_sequence", "write"),
-  restOnly(
-    "sequences.remove",
-    "Deleting a whole broadcast or sequence (and its delivery history) is REST/dashboard-only; MCP can remove individual sequence emails and pause sequences.",
-  ),
+  required("sequences.remove", "delete_sequence", "destructive"),
+  required("sequences.deletionPreview", "preview_sequence_deletion", "read"),
+  required("sequences.archive", "archive_broadcast", "write"),
+  required("sequences.unarchive", "unarchive_broadcast", "write"),
   required("sequences.addEmail", "add_sequence_email", "write"),
   required("sequences.updateEmail", "update_sequence_email", "write"),
   required("contacts.import", "import_contacts", "write"),
@@ -149,6 +160,8 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("sequences.start", "start_sequence", "write"),
   required("sequences.pause", "pause_sequence", "write"),
   required("sequences.stats", "get_sequence_stats", "read"),
+  required("sequences.schedule", "get_sequence_schedule", "read"),
+  required("sequences.waitingContacts", "list_sequence_email_waiting_contacts", "read"),
   required("sequences.getWeb", "get_broadcast_web_publishing", "read"),
   required("sequences.updateWeb", "update_broadcast_web_publishing", "write"),
   required("web.list", "list_web_issues", "read"),
@@ -193,7 +206,7 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("settings.esps.activate", "activate_esp", "write"),
   restOnly("settings.esps.suspend", ESP_LIFECYCLE),
   restOnly("settings.esps.resume", ESP_LIFECYCLE),
-  restOnly("settings.esps.retire", ESP_LIFECYCLE),
+  required("settings.esps.retire", "retire_esp", "destructive"),
   mcpOnly("get_esp_config", DEFAULT_ESP_ALIAS),
   mcpOnly("update_esp_config", DEFAULT_ESP_ALIAS),
   mcpOnly("delete_esp_config", DEFAULT_ESP_ALIAS),
@@ -218,6 +231,9 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("teams.removeKey", "delete_api_key", "destructive"),
 
   // Organization administration
+  restOnly("account.getDeletion", ACCOUNT_DELETION),
+  restOnly("account.sendDeletionCode", ACCOUNT_DELETION),
+  restOnly("account.delete", ACCOUNT_DELETION),
   restOnly("organizations.list", ORGANIZATION_ADMIN),
   restOnly("organizations.create", ORGANIZATION_ADMIN),
   restOnly("organizations.get", ORGANIZATION_ADMIN),

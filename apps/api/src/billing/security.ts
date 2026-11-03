@@ -130,7 +130,12 @@ async function sessionContext(req: any) {
   return current;
 }
 
-function commonBoundary(req: any, res: any): BillingSecurityFailure | null {
+/** Session-only, same-origin and CSRF checks for sensitive dashboard writes
+ * (billing actions, account deletion). */
+export function dashboardSessionBoundary(
+  req: any,
+  res: any,
+): BillingSecurityFailure | null {
   if (!req.userId || req.authKind !== "session") {
     return {
       status: 403,
@@ -245,7 +250,7 @@ export async function issueBillingActionToken(
   action: BillingAction,
   target: string,
 ): Promise<BillingSecurityFailure | { token: string; expiresAt: string }> {
-  const boundary = commonBoundary(req, res);
+  const boundary = dashboardSessionBoundary(req, res);
   if (boundary) return boundary;
   if (!validTarget(target) || !billingActions.includes(action)) {
     return { status: 403, body: { error: "billing_action_invalid" } };
@@ -316,7 +321,7 @@ export async function readBillingActionToken(
 ): Promise<
   BillingSecurityFailure | { token: string; sessionId: string; sessionCreatedAt: Date }
 > {
-  const boundary = commonBoundary(req, res);
+  const boundary = dashboardSessionBoundary(req, res);
   if (boundary) return boundary;
   const token =
     typeof req.headers?.["x-sendlit-billing-action-token"] === "string"
@@ -399,7 +404,7 @@ export async function requireBillingAction(
   action: LegacyAction,
   target: string,
 ): Promise<BillingSecurityFailure | null> {
-  const boundary = commonBoundary(req, res);
+  const boundary = dashboardSessionBoundary(req, res);
   if (boundary) return boundary;
   const token =
     typeof req.headers?.["x-sendlit-billing-action-token"] === "string"

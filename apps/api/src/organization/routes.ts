@@ -40,6 +40,8 @@ import {
   toPublicFeedbackConnection,
 } from "../delivery-feedback/feedback-connection-shape";
 import { warmupState } from "../mail/warmup";
+import { captureEvent } from "../observability";
+import { isEspDeleteBlocker } from "../settings/esp/delete-blockers";
 import {
   canActivateForOrganization,
   requiresFeedbackForOrganization,
@@ -65,11 +67,11 @@ import {
   renameTeam,
 } from "../team/queries";
 import { listOrganizationAuditEvents, recordOrganizationAuditEvent } from "./audit";
+import { deleteOrganization } from "./delete";
 import { getOrganizationMailActivity } from "./mail-activity";
 import {
   abandonPendingOrganization,
   addOrganizationMemberByEmail,
-  closeOrganization,
   createOrganization,
   getOrganizationByPublicId,
   getOrganizationMembership,
@@ -150,7 +152,8 @@ async function resolveAuthorization(
   keyScopes: string[] | null;
 } | null> {
   const organization = await getOrganizationByPublicId(publicOrganizationId);
-  if (!organization) return null;
+  // A deleted (closed) organization is gone for every caller.
+  if (!organization || organization.status === "closed") return null;
   if (req.authKind === "organization_key") {
     if (req.organizationId !== organization.id) return null;
     return {
@@ -355,7 +358,10 @@ const impl = s.router(contract.organizations, {
     return {
       status: 200,
       body: {
-        items: organizations.map(serializeOrganization),
+        items: organizations.map((organization) => ({
+          ...serializeOrganization(organization),
+          role: organization.role,
+        })),
         ownsFreeOrganization: await userOwnsFreeOrganization((req as any).userId),
       },
     };
@@ -473,7 +479,7 @@ const impl = s.router(contract.organizations, {
     );
     if (boundary) return boundary as any;
     try {
-      await closeOrganization(authorization.organization.id, {
+      await deleteOrganization(authorization.organization.id, {
         type: "user",
         id: (req as any).userId,
       });
@@ -1229,13 +1235,27 @@ const impl = s.router(contract.organizations, {
         "organization_esp.deleted",
         { metadata: { espId: config.espId } },
       );
+      captureEvent({
+        event: "organization_esp_deleted",
+        source: "organizations.esps.delete",
+        properties: {
+          esp_id: config.espId,
+          organization_id: authorization.organization.id,
+        },
+      });
       return { status: 204, body: undefined };
     } catch (error: any) {
-      if (error.message === "delivery_source_in_use") {
-        return {
-          status: 409,
-          body: { error: "delivery_source_in_use" },
-        };
+      if (isEspDeleteBlocker(error.message)) {
+        captureEvent({
+          event: "esp_config_delete_blocked",
+          source: "organizations.esps.delete",
+          properties: {
+            esp_id: config.espId,
+            organization_id: authorization.organization.id,
+            reason: error.message,
+          },
+        });
+        return { status: 409, body: { error: error.message } };
       }
       throw error;
     }

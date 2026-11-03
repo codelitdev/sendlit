@@ -11,6 +11,8 @@ import { isPlanGateError } from "../billing/errors";
 import { listContactEvents } from "../events/queries";
 import { omitInternal } from "../utils/public";
 import { serializeDates } from "../utils/serialize";
+import { countSelection, selectionCondition } from "./bulk-delete";
+import { getContactDeletion, startContactDeletion } from "./deletion-queue";
 import { exportContactsCsv } from "./export";
 import { importContacts } from "./import";
 import {
@@ -146,6 +148,29 @@ const impl = s.router(contract.contacts, {
     );
     return { status: 200, body: csv };
   },
+  previewBulkDelete: async ({ body, req }) => {
+    const resolved = await selectionCondition((req as any).teamId, body);
+    if ("error" in resolved) {
+      return resolved.error === "segment_not_found"
+        ? { status: 404, body: { error: resolved.error } }
+        : { status: 400, body: { error: resolved.error } };
+    }
+    return { status: 200, body: await countSelection(resolved.condition) };
+  },
+  bulkDelete: async ({ body, req }) => {
+    const { expectedCount, ...selection } = body;
+    return (await startContactDeletion({
+      teamId: (req as any).teamId,
+      selection,
+      expectedCount,
+      actorUserId: (req as any).user?.id ?? null,
+    })) as any;
+  },
+  bulkDeleteStatus: async ({ params, req }) => {
+    const deletion = await getContactDeletion((req as any).teamId, params.deletionId);
+    if (!deletion) return { status: 404, body: { error: "deletion_not_found" } };
+    return { status: 200, body: deletion };
+  },
   get: async ({ params, req }) => {
     const contact = await getContactByContactId(params.contactId);
     if (!contact || contact.teamId !== (req as any).teamId) {
@@ -205,7 +230,11 @@ const impl = s.router(contract.contacts, {
     return { status: 200, body: await listContactEvents(contact.id, query) };
   },
   remove: async ({ params, req }) => {
-    await deleteContact((req as any).teamId, params.contactId);
+    await deleteContact(
+      (req as any).teamId,
+      params.contactId,
+      (req as any).user?.id ?? null,
+    );
     return { status: 204, body: undefined };
   },
 });

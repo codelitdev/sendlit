@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   auth,
   authBasePath,
+  hostedLoginCaptcha,
   hostedLoginMethods,
   oauthTeamSelectionAdapter,
   webClientUrl,
@@ -21,6 +22,7 @@ router.use(
     faviconUrl: new URL("/icon.svg", webClientUrl).toString(),
     primaryColor: "oklch(0.47 0.14 150)",
     loginMethods: hostedLoginMethods,
+    captcha: hostedLoginCaptcha,
     legacyHostOnlySessionCookieNames: process.env.AUTH_COOKIE_DOMAIN
       ? [
           "__Secure-better-auth.session_token",

@@ -16,9 +16,11 @@ mock.module("../media/service", () => ({
   ),
   deleteMedia: vi.fn(),
 }));
+mock.module("../media/deletion-queue", () => ({ queueMediaLitDeletion: vi.fn() }));
 
 const { db } = await import("../db/client");
-const { emailTemplates, media, mediaReferences } = await import("../db/schema");
+const { emailTemplates, espConfigs, media, mediaReferences, transactionalEmails } =
+  await import("../db/schema");
 const { deleteMedia, sealMedia } = await import("../media/service");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
@@ -339,7 +341,7 @@ describe("template queries", () => {
     ).toHaveLength(0);
   });
 
-  it("removes only template media references when a template is deleted", async () => {
+  it("deletes a deleted template's media from MediaLit and the media table", async () => {
     const { team } = await seedTeamAndContact(tdb);
     const template = await createTemplate({
       teamId: team.id,
@@ -350,14 +352,93 @@ describe("template queries", () => {
 
     await deleteTemplate(team.id, template.templateId);
 
-    expect(deleteMedia).not.toHaveBeenCalled();
+    expect((deleteMedia as ReturnType<typeof vi.fn>).mock.calls).toEqual([
+      ["template-deleted-media"],
+    ]);
     expect(sealMedia).not.toHaveBeenCalled();
+    expect(await tdb.select().from(media)).toHaveLength(0);
+    expect(await tdb.select().from(mediaReferences)).toHaveLength(0);
+  });
+
+  it("keeps media another template still uses", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const first = await createTemplate({
+      teamId: team.id,
+      title: "First",
+      content: emailWithImage("template-shared-media"),
+    });
+    const second = await createTemplate({
+      teamId: team.id,
+      title: "Second",
+      content: emailWithImage("template-shared-media"),
+    });
+    vi.clearAllMocks();
+
+    await deleteTemplate(team.id, first.templateId);
+
+    expect(deleteMedia).not.toHaveBeenCalled();
     expect(await tdb.select().from(media)).toHaveLength(1);
-    expect(
-      await tdb
-        .select()
-        .from(mediaReferences)
-        .where(eq(mediaReferences.resourceInternalId, template.id)),
-    ).toHaveLength(0);
+    const references = await tdb.select().from(mediaReferences);
+    expect(references.map((row) => row.resourceInternalId)).toEqual([second.id]);
+  });
+
+  it("keeps the media of a template a transactional email was sent with", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const template = await createTemplate({
+      teamId: team.id,
+      title: "Receipt",
+      content: emailWithImage("template-sent-media"),
+    });
+    const [esp] = await tdb
+      .insert(espConfigs)
+      .values({
+        ownerScope: "team",
+        teamId: team.id,
+        name: "Default ESP",
+        host: "smtp.example.com",
+        fromName: "Test Sender",
+        fromEmail: "sender@example.com",
+        status: "active",
+      })
+      .returning();
+    await tdb.insert(transactionalEmails).values({
+      teamId: team.id,
+      deliverySourceType: "team",
+      outboxId: esp.id,
+      toEmail: "reader@example.com",
+      subject: "Receipt",
+      templateId: template.templateId,
+      html: '<img src="https://cdn.test/i/template-sent-media/main.webp">',
+      status: "sent",
+    });
+    vi.clearAllMocks();
+
+    await deleteTemplate(team.id, template.templateId);
+
+    expect(deleteMedia).not.toHaveBeenCalled();
+    expect(await tdb.select().from(media)).toHaveLength(1);
+    expect(await tdb.select().from(mediaReferences)).toHaveLength(0);
+  });
+
+  it("never deletes another team's media for the same file", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const { team: otherTeam } = await seedTeamAndContact(tdb);
+    const template = await createTemplate({
+      teamId: team.id,
+      title: "Ours",
+      content: emailWithImage("cross-team-media"),
+    });
+    await createTemplate({
+      teamId: otherTeam.id,
+      title: "Theirs",
+      content: emailWithImage("cross-team-media"),
+    });
+    vi.clearAllMocks();
+
+    await deleteTemplate(team.id, template.templateId);
+
+    expect(deleteMedia).not.toHaveBeenCalled();
+    const rows = await tdb.select().from(media);
+    expect(rows.map((row) => row.teamId)).toEqual([otherTeam.id]);
   });
 });

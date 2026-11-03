@@ -25,7 +25,7 @@ Authenticate with one of these headers:
 Authorization: Bearer <oauth-access-token>
 ```
 
-or:
+or a team API key in `x-sendlit-apikey` (or the standard `X-API-Key`; send only one):
 
 ```http
 x-sendlit-apikey: sl_live_...
@@ -51,12 +51,14 @@ Organization API keys, dashboard session cookies, and `X-Sendlit-Team-Id` are
 not accepted as MCP authentication. Use the REST API for organization
 discovery, shared-delivery setup, and team provisioning; see
 [Headless organization setup](/developers/headless-provisioning).
+Deleting an account is dashboard-only and has no MCP tool; see
+[Account](/workspace/account#delete-your-account).
 
 OAuth clients (including MCP clients like Claude) have no way to send a custom header during authorization, so a multi-team account instead picks a team as part of the OAuth flow itself: after login, and before the consent screen, the account is shown a "select a team" step (mirroring how apps like Notion resolve their own multi-workspace ambiguity). The chosen team is baked into the issued access token and used for every subsequent request — no header needed. Accounts with exactly one team skip this step entirely.
 
 ### OAuth scopes
 
-OAuth access is default-deny per tool. Read and write permissions are separate:
+OAuth access is default-deny: every tool needs the scope of the REST operation it performs. Read and write permissions are separate:
 
 - `contacts:read`, `contacts:write`
 - `templates:read`, `templates:write`
@@ -76,9 +78,11 @@ OAuth access is default-deny per tool. Read and write permissions are separate:
 ### Contacts and segments
 
 - `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`
+- `preview_delete_contacts`, `delete_contacts` (bulk, by ids or by search/segment/filter; requires the previewed `expectedCount` for a match) and `get_contact_deletion` (progress of a large background deletion). See [Delete contacts](/email-marketing/contacts#delete-contacts).
 - `add_contact_tag`, `remove_contact_tag`, `get_contact_deliveries`
 - `import_contacts` (up to 1000 rows per call, statuses only get stricter) and `export_contacts` (CSV)
 - `list_segments`, `get_segment`, `create_segment`, `update_segment`, `delete_segment`
+- `list_tags` (with contact counts), `get_tag_references`, `rename_tag`, `delete_tag` (team-wide; contacts scopes)
 - `list_signup_forms`, `get_signup_form`, `create_signup_form`, `update_signup_form`, `delete_signup_form` (public [signup forms](/email-marketing/signup-forms); contacts scopes)
 
 Segments save reusable filters over contact fields, tags, subscription state, signup date, and custom fields.
@@ -117,8 +121,10 @@ Broadcasts use the sequence resource with one email and an audience filter. For 
 
 - `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`
 - `add_sequence_email`, `update_sequence_email`, `delete_sequence_email`
+- `preview_sequence_deletion`, `delete_sequence` (destructive: pause an active sequence first; its enrollments and stats are deleted). Draft and scheduled broadcasts can be deleted; sent ones can't (`broadcast_sent`)
+- `archive_broadcast`, `unarchive_broadcast` hide a sent broadcast from the list and the web archive, keeping its report. `list_sequences` takes `archived` (`exclude` by default, `only`, `include`)
 - `send_sequence_email_test` sends a `[Test]` copy of one email to you (or up to five addresses)
-- `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_subscribers`
+- `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_schedule`, `list_sequence_email_waiting_contacts`, `get_sequence_subscribers`
 - `get_broadcast_web_publishing`, `update_broadcast_web_publishing`, `list_web_issues`, `get_web_issue` ([web archive](/email-marketing/web-archive))
 
 Send a test with `send_sequence_email_test` and use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.
@@ -152,7 +158,7 @@ The ESP tools manage the team’s sending providers and default provider. Secret
 - `get_plan_usage` returns the current team's parent-organization plan, usage, and limits. It never returns provider IDs or portal links.
 - `list_api_keys`, `create_api_key`, `delete_api_key`
 
-Mutating tools such as `create_team`, `create_contact`, `update_contact`, `send_email`, and `start_sequence` return the same plan-gate error object as REST (`plan_limit_reached`, `plan_feature_unavailable`, `sending_paused`) in `structuredContent`. Checkout, portal, and invoice tools are not exposed through MCP.
+Mutating tools such as `create_team`, `create_contact`, `update_contact`, `send_email`, and `start_sequence` return plan-gate errors as a `forbidden` error whose `details.reason` is the REST code (`plan_limit_reached`, `plan_feature_unavailable`, `sending_paused`). Checkout, portal, and invoice tools are not exposed through MCP.
 
 API key management tools are refused when the caller authenticates with an API key; connect with OAuth to use them. The full API key secret is returned only by `create_api_key`. Store it immediately; it cannot be recovered from a later listing.
 
@@ -163,6 +169,12 @@ API key management tools are refused when the caller authenticates with an API k
 - `list_suppressions`, `get_suppression`, `add_suppression`, `release_suppression`
 
 Delivery-feedback connections are supported only for providers with a reviewed asynchronous feedback adapter: Resend, Postmark, SendGrid, Mailgun, and Amazon SES. For SES, pass `expectedTopicArn` (the SNS topic subscribed to the webhook URL) to `upsert_esp_feedback_connection` instead of `credential`; see [Amazon SES bounces and complaints](/self-hosting/amazon-ses-feedback). Releasing a SendLit suppression does not remove a provider-native suppression, and complaint suppressions are not releasable through the owner API.
+
+## Tool results and errors
+
+Every tool has a title, and its annotations say whether it only reads (`readOnlyHint`), can delete or permanently change data (`destructiveHint`), or reaches outside your team's workspace (`openWorldHint`, for example sending email). Destructive tools such as `delete_contact`, `delete_sequence` or `retire_esp` take a `confirm` argument and refuse to run unless it is `true`: confirm the target with the person first.
+
+A failed call is a tool result with `isError: true` and `structuredContent` of `{ code, message, details }`. `code` is one of `validation_failed`, `not_found`, `conflict`, `forbidden`, `rate_limited`, `unauthenticated` or `internal_error`. `details.reason` carries SendLit's own error code (for example `plan_limit_reached`, `sending_paused`, `template_not_transactional`, `insufficient_scope` or `broadcast_sent`) and `details.message` explains it; plan limits keep the limit, usage and upgrade link REST returns.
 
 ## Example client configuration
 
@@ -185,4 +197,4 @@ Prefer the client’s secure secret-store or environment-variable mechanism. Do 
 
 ## Operational limits
 
-The MCP endpoint is rate limited to 60 requests per minute. High-impact tools such as sending email, tracking events (`track_event`), activating sequences, testing ESPs, managing API keys, deleting teams, and releasing suppressions are limited to 20 requests per minute. A missing or invalid credential returns HTTP 401, a missing OAuth scope returns an `insufficient_scope` tool error, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.
+The MCP endpoint is rate limited to 60 requests per minute. High-impact tools such as sending email, tracking events (`track_event`), activating sequences, testing ESPs, managing API keys, deleting teams, deleting contacts in bulk (`delete_contacts`), and releasing suppressions are limited to 20 requests per minute. A missing or invalid credential returns HTTP 401 with a `WWW-Authenticate` challenge, a missing OAuth scope returns a `forbidden` tool error with reason `insufficient_scope`, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.

@@ -6,6 +6,7 @@ export {
   type McpParityRisk,
   mcpParityManifest,
 } from "./mcp-parity";
+export * from "./schemas/account";
 export * from "./schemas/billing";
 export * from "./schemas/common";
 export * from "./schemas/contacts";
@@ -22,6 +23,7 @@ export * from "./schemas/reputation";
 export * from "./schemas/sequences";
 export * from "./schemas/settings";
 export * from "./schemas/suppressions";
+export * from "./schemas/tags";
 export * from "./schemas/teams";
 export * from "./schemas/templates";
 export * from "./schemas/transactional";

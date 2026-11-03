@@ -268,11 +268,20 @@ This can be implemented either as a diff or by deleting all existing references 
 
 Unsplash and external image URLs are ignored by media reference reconciliation because SendLit does not own or clean up those assets.
 
-On deleting a template, broadcast, sequence, or sequence email:
+Editing content never deletes media: an image removed from an email or template stays in the media library, because sent versions of that email may still show it and the user may add it back. Users delete unused images from the Media page.
 
-1. Delete the resource's media reference rows.
-2. Do not delete the media rows.
-3. Do not delete MediaLit files.
+On deleting a template, broadcast, sequence, or sequence email (#157):
+
+1. Delete the resource's media reference rows and note which media they pointed at.
+2. Delete the resource.
+3. Pass the noted media to `deleteOrphanedMedia` (`src/media/queries.ts`). It deletes each `media` row of the team that now has no references and that no stored sent content (`email_content_versions`) shows, then deletes the MediaLit file unless another team holds a row for the same file.
+
+Media used by mail that was already sent is never deleted, because inboxes and "view in browser" pages load images by URL:
+
+- a sequence or broadcast email that has a delivery or a stored content version keeps its media (it stays in the media library, unreferenced, until the user deletes it);
+- a template a transactional email was sent with keeps its media.
+
+MediaLit outages never block a delete or leave a row pointing at a missing file: the `media` row is deleted first, a failed MediaLit delete goes to `captureError` and is queued on the `media-deletion` BullMQ queue (`src/media/deletion-queue.ts`, ten attempts with exponential backoff from one minute). The worker skips a file a team uses again.
 
 On deleting media from the media library:
 
@@ -282,14 +291,12 @@ On deleting media from the media library:
 
 This prevents the case where an email derived from a template deletes an image that is still used by the original template.
 
-On deleting a team:
+On purging a team (organization deletion, and account deletion under #134):
 
-1. List all MediaLit-backed media rows for the team.
-2. Delete each underlying file from MediaLit.
-3. Delete the team row.
-4. Let database cascades delete the team's `Media` and `MediaReference` rows.
+1. Delete every `media` row of the team (references cascade).
+2. Delete each MediaLit file no other team holds a row for; failures are queued as above.
 
-The team deletion path must perform MediaLit cleanup before the team row is deleted because database cascades cannot clean up external storage.
+Archiving a team does not delete its media: an archived team can be restored. Its files go when its organization is deleted.
 
 ## Package Boundaries
 

@@ -6,6 +6,7 @@ import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { sequenceDeliveryRates } from "../automation/sending-health";
 import { planGateHttp } from "../billing/errors";
+import { captureEvent } from "../observability";
 import { MAILING_ADDRESS_REQUIRED } from "../settings/general/constants";
 import { omitInternal } from "../utils/public";
 import { serializeDates } from "../utils/serialize";
@@ -14,6 +15,7 @@ import {
   updateWebPublishing,
   WebPublishingError,
 } from "../web/queries";
+import { broadcastArchiveErrors, isSequenceDeleteBlocker } from "./delete-blockers";
 import {
   addMailToSequence,
   countSequences,
@@ -23,12 +25,17 @@ import {
   getEmailSentCount,
   getSequenceBySequenceId,
   getSequenceClickThroughRate,
+  getSequenceDeletionImpact,
   getSequenceOpenRate,
+  getSequenceSchedule,
   getSubscribers,
   getSubscribersCount,
+  getWaitingContacts,
   type HydratedSequence,
+  InvalidCursorError,
   listSequences,
   pauseSequence,
+  setBroadcastArchived,
   startSequence,
   updateMailInSequence,
   updateSequence,
@@ -94,8 +101,9 @@ const impl = s.router(contract.sequences, {
         type: query.type,
         offset: query.offset,
         itemsPerPage: query.itemsPerPage,
+        archived: query.archived,
       }),
-      countSequences(teamId, query.type),
+      countSequences(teamId, query.type, query.archived),
     ]);
     return { status: 200, body: { items: items.map(toBody), total } };
   },
@@ -211,12 +219,57 @@ const impl = s.router(contract.sequences, {
     }
   },
   remove: async ({ params, req }) => {
-    const deleted = await deleteSequence({
-      teamId: (req as any).teamId,
-      sequenceId: params.sequenceId,
-    });
+    const teamId = (req as any).teamId;
+    let deleted: boolean;
+    try {
+      deleted = await deleteSequence({ teamId, sequenceId: params.sequenceId });
+    } catch (err: any) {
+      if (isSequenceDeleteBlocker(err.message)) {
+        captureEvent({
+          event: "sequence_delete_blocked",
+          source: "sequences.remove",
+          teamId,
+          properties: { sequence_id: params.sequenceId, reason: err.message },
+        });
+        return { status: 409, body: { error: err.message } };
+      }
+      throw err;
+    }
     if (!deleted) return { status: 404, body: { error: "Sequence not found" } };
     return { status: 204, body: undefined };
+  },
+  archive: async ({ params, req }) => {
+    try {
+      const sequence = await setBroadcastArchived({
+        teamId: (req as any).teamId,
+        sequenceId: params.sequenceId,
+        archived: true,
+      });
+      if (!sequence) return { status: 404, body: { error: "Broadcast not found" } };
+      return { status: 200, body: toBody(sequence) };
+    } catch (err: any) {
+      if (err.message in broadcastArchiveErrors) {
+        return { status: 409, body: { error: err.message } };
+      }
+      throw err;
+    }
+  },
+  unarchive: async ({ params, req }) => {
+    const sequence = await setBroadcastArchived({
+      teamId: (req as any).teamId,
+      sequenceId: params.sequenceId,
+      archived: false,
+    });
+    if (!sequence) return { status: 404, body: { error: "Broadcast not found" } };
+    return { status: 200, body: toBody(sequence) };
+  },
+  deletionPreview: async ({ params, req }) => {
+    const preview = await getSequenceDeletionImpact(
+      (req as any).teamId,
+      params.sequenceId,
+    );
+    if (!preview) return { status: 404, body: { error: "Sequence not found" } };
+    return { status: 200, body: preview };
   },
   start: async ({ params, req }) => {
     try {
@@ -300,6 +353,34 @@ const impl = s.router(contract.sequences, {
         complaintRate: rates.complaintRate,
       },
     };
+  },
+  schedule: async ({ params, req }) => {
+    const sequence = await getSequenceBySequenceId(
+      (req as any).teamId,
+      params.sequenceId,
+    );
+    if (!sequence) return { status: 404, body: { error: "Sequence not found" } };
+    return { status: 200, body: await getSequenceSchedule(sequence) };
+  },
+  waitingContacts: async ({ params, query, req }) => {
+    const sequence = await getSequenceBySequenceId(
+      (req as any).teamId,
+      params.sequenceId,
+    );
+    if (!sequence?.emailsOrder.includes(params.emailId)) {
+      return { status: 404, body: { error: "Sequence not found" } };
+    }
+    try {
+      return {
+        status: 200,
+        body: await getWaitingContacts(sequence, params.emailId, query),
+      };
+    } catch (error) {
+      if (error instanceof InvalidCursorError) {
+        return { status: 400, body: { error: "invalid_cursor" } };
+      }
+      throw error;
+    }
   },
   subscribers: async ({ params, query, req }) => {
     if (!(await getSequenceBySequenceId((req as any).teamId, params.sequenceId))) {

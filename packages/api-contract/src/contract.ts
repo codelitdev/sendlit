@@ -1,6 +1,11 @@
 import { initContract } from "@ts-rest/core";
 import { z } from "zod";
 import {
+  accountDeletionBlockedSchema,
+  accountDeletionPreviewSchema,
+  deleteAccountBodySchema,
+} from "./schemas/account";
+import {
   billingActionTokenBodySchema,
   billingActionTokenResponseSchema,
   billingCancellationResponseSchema,
@@ -19,13 +24,17 @@ import {
 } from "./schemas/billing";
 import { errorSchema, itemsList, paginated } from "./schemas/common";
 import {
+  contactDeletionSchema,
   type contactDeliverySchema,
   contactSchema,
+  contactSelectionSchema,
   createContactBodySchema,
+  deleteContactsBodySchema,
   exportContactsQuerySchema,
   importContactsBodySchema,
   importContactsResultSchema,
   listContactsQuerySchema,
+  previewContactDeletionResultSchema,
   updateContactBodySchema,
 } from "./schemas/contacts";
 import {
@@ -89,6 +98,7 @@ import {
   organizationAuditEventSchema,
   organizationEnterTeamBodySchema,
   organizationEnterTeamResponseSchema,
+  organizationListItemSchema,
   organizationMailActivityQuerySchema,
   organizationMailActivitySchema,
   organizationMemberSchema,
@@ -109,12 +119,16 @@ import {
   createSequenceBodySchema,
   listSequencesQuerySchema,
   listSubscribersQuerySchema,
+  listWaitingContactsQuerySchema,
   sendSequenceEmailTestBodySchema,
+  sequenceDeletionPreviewSchema,
   sequenceEmailTestResultSchema,
+  sequenceScheduleSchema,
   sequenceSchema,
   sequenceStatsSchema,
   updateSequenceBodySchema,
   updateSequenceEmailBodySchema,
+  waitingContactsPageSchema,
 } from "./schemas/sequences";
 import {
   generalSettingsSchema,
@@ -128,6 +142,13 @@ import {
   releaseSuppressionBodySchema,
   suppressionSchema,
 } from "./schemas/suppressions";
+import {
+  deleteTagResultSchema,
+  renameTagBodySchema,
+  renameTagResultSchema,
+  tagReferencesSchema,
+  tagSummarySchema,
+} from "./schemas/tags";
 import {
   apiKeySchema,
   createApiKeyBodySchema,
@@ -233,6 +254,42 @@ const contactsContract = c.router(
       description:
         "Returns every contact, or those matching segmentId and/or filter, as CSV: email, name, status (subscribed, unsubscribed, bounced or complained), tags, created_at, suppression_reason, then one column per custom field.",
     },
+    previewBulkDelete: {
+      method: "POST",
+      path: "/contacts/bulk-delete/preview",
+      body: contactSelectionSchema,
+      responses: {
+        200: previewContactDeletionResultSchema,
+        400: errorSchema,
+        404: errorSchema,
+      },
+      summary: "Preview a bulk contact deletion",
+      description:
+        "Counts the contacts a bulk delete would remove (and how many are unsubscribed) without deleting anything. Pass the count to bulkDelete as expectedCount. 404 when segmentId doesn't exist.",
+    },
+    bulkDelete: {
+      method: "POST",
+      path: "/contacts/bulk-delete",
+      body: deleteContactsBodySchema,
+      responses: {
+        200: contactDeletionSchema,
+        202: contactDeletionSchema,
+        400: errorSchema,
+        404: errorSchema,
+        409: errorSchema.extend({ count: z.number().int().optional() }),
+      },
+      summary: "Delete contacts in bulk",
+      description:
+        "Permanently deletes up to 1000 contacts by id, or every contact matching q, segmentId and filter. With match, pass the preview's count as expectedCount; if the live count differs nothing is deleted (409 count_changed, with the new count). Only contacts that existed when the request arrived are deleted. Up to 1000 contacts are deleted before the response (200, status completed); larger selections run in the background (202, status queued) and report progress at GET /contacts/bulk-delete/{deletionId}. Each contact's custom field values, sequence progress, events and delivery records are deleted with it, and no sequence triggers fire. Suppressions are kept, and the address of every deleted unsubscribed contact is added to the suppression list (reason manual), so re-importing or re-adding it never mails it again. This is not a full privacy erasure: delivery logs and the suppression list keep the address.",
+    },
+    bulkDeleteStatus: {
+      method: "GET",
+      path: "/contacts/bulk-delete/:deletionId",
+      responses: { 200: contactDeletionSchema, 404: errorSchema },
+      summary: "Get a bulk contact deletion",
+      description:
+        "Progress of a background bulk delete. Finished deletions are kept for 24 hours.",
+    },
     get: {
       method: "GET",
       path: "/contacts/:contactId",
@@ -290,6 +347,55 @@ const contactsContract = c.router(
     },
   },
   { metadata: { tag: "Contacts" } },
+);
+
+/**
+ * Team-wide tag management. Tags live on contacts, so a tag "exists" while at
+ * least one contact carries it; segments, broadcast/sequence filters and
+ * triggers, sequence email actions and signup forms only name it.
+ */
+const tagsContract = c.router(
+  {
+    list: {
+      method: "GET",
+      path: "/tags",
+      responses: { 200: itemsList(tagSummarySchema) },
+      summary: "List tags",
+      description:
+        "Returns every tag carried by at least one of the team's contacts, sorted by name, with the number of contacts that carry it.",
+    },
+    references: {
+      method: "GET",
+      path: "/tags/:tag/references",
+      responses: { 200: tagReferencesSchema },
+      summary: "List where a tag is used",
+      description:
+        "Returns how many contacts carry the tag and the segments, broadcasts, sequences (audience filters, tag triggers, email tag actions) and signup forms that name it. Call it before deleting a tag.",
+    },
+    rename: {
+      method: "PATCH",
+      path: "/tags/:tag",
+      body: renameTagBodySchema,
+      responses: {
+        200: renameTagResultSchema,
+        400: errorSchema,
+        404: errorSchema,
+      },
+      summary: "Rename a tag",
+      description:
+        "Renames the tag on every contact, and in segments, broadcast and sequence filters and tag triggers, sequence email tag actions and signup forms. Renaming to a tag that already exists merges the two. Sent broadcasts keep their original filters. Renaming doesn't trigger tag-added or tag-removed sequences. 404 `tag_not_found` when nothing uses the tag; 400 `tag_unchanged` when the new name is the same.",
+    },
+    remove: {
+      method: "DELETE",
+      path: "/tags/:tag",
+      body: c.noBody(),
+      responses: { 200: deleteTagResultSchema, 404: errorSchema },
+      summary: "Delete a tag from every contact",
+      description:
+        "Removes the tag from every contact of the team. Segments, filters, triggers, email actions and signup forms that name the tag are left as they are and returned in `references`: a filter on a deleted tag matches nobody, and a trigger or form can add it again. Check `GET /tags/:tag/references` first. Deleting doesn't trigger tag-removed sequences. 404 `tag_not_found` when nothing uses the tag.",
+    },
+  },
+  { metadata: { tag: "Tags" } },
 );
 
 /**
@@ -472,6 +578,8 @@ const templatesContract = c.router(
       path: "/templates/:templateId",
       responses: { 204: c.noBody() },
       summary: "Delete an email template",
+      description:
+        "Permanently deletes the template. Its images that no other template or email uses are deleted from the media library and storage, unless a transactional email was sent with the template.",
     },
   },
   { metadata: { tag: "Templates" } },
@@ -498,6 +606,8 @@ const sequencesContract = c.router(
       query: listSequencesQuerySchema,
       responses: { 200: paginated(sequenceSchema) },
       summary: "List broadcasts or sequences",
+      description:
+        "Archived broadcasts are left out unless `archived` is `only` or `include`.",
     },
     get: {
       method: "GET",
@@ -521,8 +631,36 @@ const sequencesContract = c.router(
     remove: {
       method: "DELETE",
       path: "/sequences/:sequenceId",
-      responses: { 204: c.noBody(), 404: errorSchema },
+      responses: { 204: c.noBody(), 404: errorSchema, 409: errorSchema },
       summary: "Delete a broadcast or sequence",
+      description:
+        "Permanently deletes the broadcast or sequence, its emails and triggers. An active sequence or a sending broadcast can't be deleted: pause it first (409 `sequence_active`). A draft or scheduled broadcast can be deleted; one that has started sending can't (409 `broadcast_sent`): archive it instead with POST /sequences/{sequenceId}/archive. Contacts still enrolled in a paused sequence leave it, and its delivery, open and click history is deleted too, so its stats are gone; check GET /sequences/{sequenceId}/deletion-preview first. The outbound message log and suppressions are kept. Images it uses that nothing else uses are deleted from the media library and storage; images used by sent mail are kept.",
+    },
+    deletionPreview: {
+      method: "GET",
+      path: "/sequences/:sequenceId/deletion-preview",
+      responses: { 200: sequenceDeletionPreviewSchema, 404: errorSchema },
+      summary: "Preview what deleting a broadcast or sequence removes",
+      description:
+        "How many contacts are enrolled and how many emails it has sent, and whether it can be deleted right now. Nothing is changed.",
+    },
+    archive: {
+      method: "POST",
+      path: "/sequences/:sequenceId/archive",
+      body: c.noBody(),
+      responses: { 200: sequenceSchema, 404: errorSchema, 409: errorSchema },
+      summary: "Archive a sent broadcast",
+      description:
+        'Hides a sent broadcast from the broadcasts list (see `archived` on GET /sequences) and from the public web archive, its feed and sitemap. Its report, delivery history and images are kept, and recipients\' "view in browser" links keep working. 409 `broadcast_not_sent` for a draft or scheduled broadcast (delete it instead) and `sequence_active` while it is sending. Archiving an archived broadcast changes nothing. 404 for sequences.',
+    },
+    unarchive: {
+      method: "POST",
+      path: "/sequences/:sequenceId/unarchive",
+      body: c.noBody(),
+      responses: { 200: sequenceSchema, 404: errorSchema },
+      summary: "Restore an archived broadcast",
+      description:
+        "Puts an archived broadcast back in the broadcasts list, and back on the web archive when it is published there.",
     },
     addEmail: {
       method: "POST",
@@ -575,6 +713,8 @@ const sequencesContract = c.router(
         404: errorSchema,
       },
       summary: "Remove an email from a sequence",
+      description:
+        "Removes the email. Images it uses that nothing else uses are deleted from the media library and storage; images used by sent mail are kept.",
     },
     start: {
       method: "POST",
@@ -621,6 +761,27 @@ const sequencesContract = c.router(
       path: "/sequences/:sequenceId/stats",
       responses: { 200: sequenceStatsSchema, 404: errorSchema },
       summary: "Delivery / open-rate / click-through-rate stats for a sequence",
+    },
+    schedule: {
+      method: "GET",
+      path: "/sequences/:sequenceId/schedule",
+      responses: { 200: sequenceScheduleSchema, 404: errorSchema },
+      summary: "Contacts waiting for each email of a sequence",
+      description:
+        "For each email, in send order: how many contacts in the sequence will get it next and the earliest of their due times. A contact counts once, against the email they're waiting for, so emails they've had or will get later don't count them. Each contact's delay counts from their own entry, so their due times differ; list them with `GET /sequences/{sequenceId}/emails/{emailId}/waiting`. Due times are the earliest a contact can get the email; pauses and sending limits can make it later.",
+    },
+    waitingContacts: {
+      method: "GET",
+      path: "/sequences/:sequenceId/emails/:emailId/waiting",
+      query: listWaitingContactsQuerySchema,
+      responses: {
+        200: waitingContactsPageSchema,
+        400: errorSchema,
+        404: errorSchema,
+      },
+      summary: "Contacts waiting for a sequence email",
+      description:
+        "The contacts whose next email in the sequence is this one, soonest due first, each with their own due time. `q` matches email or name. Pages hold `limit` contacts (default 10, at most 100); pass `nextCursor` as `after` for the next page. `total` counts every match. A cursor that can't be read returns 400 `invalid_cursor`.",
     },
     subscribers: {
       method: "GET",
@@ -804,7 +965,7 @@ const espCollectionContract = c.router(
       },
       summary: "Remove a user-managed ESP configuration",
       description:
-        "Removes an ESP with no active or queued dependencies. Draft, paused, and completed sequences are detached first.",
+        "Deletes an ESP that has never carried delivery history; delivery history is never deleted. Draft, paused, and completed sequences are detached first. 409 explains a blocked delete: `esp_is_default` (the team's live default; pick another default or retire it first), `delivery_source_in_use` (a sending sequence or broadcast, or queued email, needs it), or `esp_has_delivery_history` (transactional email, delivery feedback, or grants point at it; retire it instead).",
     },
     domainAuthentication: {
       method: "GET",
@@ -1229,7 +1390,7 @@ const organizationsContract = c.router(
       path: "/organizations",
       responses: {
         200: z.object({
-          items: z.array(organizationSchema),
+          items: z.array(organizationListItemSchema),
           ownsFreeOrganization: z.boolean(),
         }),
         403: errorSchema,
@@ -1279,7 +1440,9 @@ const organizationsContract = c.router(
         409: errorSchema,
         503: errorSchema,
       },
-      summary: "Close an organization",
+      summary: "Delete an organization",
+      description:
+        "Owner only, from a dashboard session. Fails with `409 active_subscription_exists` while a subscription is active or paid through a future date (cancel it in billing first), and with `409 billing_checkout_pending` while a checkout is open. Deleting closes the organization, archives its teams, revokes organization and team API keys and sending domains, retires every ESP config with its credentials wiped, and deletes its teams' MediaLit files. Billing history, audit events, delivery reporting and suppressions are kept.",
     },
     abandon: {
       method: "POST",
@@ -1529,6 +1692,8 @@ const organizationsContract = c.router(
         409: errorSchema,
       },
       summary: "Delete an eligible never-activated organization ESP",
+      description:
+        "Only a never-activated draft with no history is deleted. 409 explains a blocked delete: `esp_retire_instead` (it has been activated; retire it instead), `esp_has_delivery_history`, or `delivery_source_in_use`.",
     },
     getEspFeedback: {
       method: "GET",
@@ -2122,9 +2287,55 @@ const billingContract = c.router(
   { metadata: { tag: "Billing" } },
 );
 
+const accountContract = c.router({
+  getDeletion: {
+    method: "GET",
+    path: "/account/deletion",
+    responses: {
+      200: accountDeletionPreviewSchema,
+      401: errorSchema,
+      403: errorSchema,
+    },
+    summary: "Preview deleting your account",
+    description:
+      "Dashboard session only. Lists every organization you belong to and what deleting your account does to it: `delete` when you are its last owner (it is deleted and its contacts' personal data erased), `leave` otherwise. `blocker` says what has to happen first: `active_subscription_exists` or `billing_checkout_pending` (cancel billing), `last_organization_owner` (other people are members: make one of them an owner or remove them), `billing_manager_required` (you pay for a running subscription of an organization you would leave).",
+  },
+  sendDeletionCode: {
+    method: "POST",
+    path: "/account/deletion/code",
+    body: c.noBody(),
+    responses: {
+      204: c.noBody(),
+      401: errorSchema,
+      403: errorSchema,
+      429: errorSchema,
+    },
+    summary: "Email a code to confirm deleting your account",
+    description:
+      "Dashboard session only. Sends a one-time code, valid for 5 minutes, to the account's email. `POST /account/deletion` needs it.",
+  },
+  delete: {
+    method: "POST",
+    path: "/account/deletion",
+    body: deleteAccountBodySchema,
+    responses: {
+      204: c.noBody(),
+      400: errorSchema,
+      401: errorSchema,
+      403: errorSchema,
+      409: accountDeletionBlockedSchema,
+    },
+    summary: "Delete your account",
+    description:
+      "Dashboard session only, with the account's email typed to confirm and the code from `POST /account/deletion/code` (`400 email_mismatch`, `400 invalid_code`). Fails with `409 account_deletion_blocked`, listing the blocking organizations, while any blocker from `GET /account/deletion` remains; nothing changes then. Otherwise every organization you are the last owner of is deleted like `DELETE /organizations/:organizationId` and its contacts, signup confirmations, recipient addresses and raw webhook payloads are erased (suppression hashes stay); you leave every other organization and team; your sessions, sign-in methods, OAuth tokens and consents end; and your name and email are erased. Billing records and audit events keep an anonymous id. Signing in again with the same email creates a new, empty account.",
+  },
+});
+
 export const contract = c.router({
+  account: accountContract,
   contacts: contactsContract,
   segments: segmentsContract,
+  tags: tagsContract,
   media: mediaContract,
   templates: templatesContract,
   sequences: sequencesContract,
