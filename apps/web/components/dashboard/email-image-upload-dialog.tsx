@@ -42,6 +42,7 @@ interface UnsplashPhoto {
 
 interface EmailImageUploadDialogProps {
   acceptedMimeTypes?: string[];
+  description?: string;
   disabled?: boolean;
   onSelect: (image: SelectedImage) => void;
   open: boolean;
@@ -55,6 +56,7 @@ function getUploadedImageSrc(media: Record<string, string>) {
 
 export function EmailImageUploadDialog({
   acceptedMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"],
+  description = "Upload or choose an image for this email.",
   disabled = false,
   onSelect,
   open,
@@ -288,9 +290,7 @@ export function EmailImageUploadDialog({
       <DialogContent className="max-w-2xl" showCloseButton={!isUploading}>
         <DialogHeader>
           <DialogTitle>Select Image</DialogTitle>
-          <DialogDescription>
-            Upload or choose an image for this email.
-          </DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="upload" value={activeTab} onValueChange={setActiveTab}>

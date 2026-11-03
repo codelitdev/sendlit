@@ -5,6 +5,8 @@ import { db } from "../db/client";
 import { sequenceEmails, sequences, settings, signupForms, teams } from "../db/schema";
 import { createForm } from "../forms/queries";
 import { renderCampaignHtml } from "../mail/campaign";
+import { resolveImageMedia } from "../media/email-content";
+import { replaceMediaReferencesForResource } from "../media/queries";
 import { getTeamSettingsRow, type TeamSettings } from "../settings/general/queries";
 import { archiveUrl, issueUrl } from "./urls";
 
@@ -246,7 +248,14 @@ export async function updateWebPublishing(
   if (input.seoDescription !== undefined) {
     values.webSeoDescription = input.seoDescription || null;
   }
-  if (input.ogImage !== undefined) values.webOgImage = input.ogImage || null;
+  // The upload is sealed now, but the page only references it once it is
+  // saved, so a failed update (such as a slug taken in the meantime) leaves
+  // the old image in use.
+  let ogImage: Awaited<ReturnType<typeof resolveImageMedia>> | undefined;
+  if (input.ogImage !== undefined) {
+    ogImage = await resolveImageMedia({ teamId: sequence.teamId, url: input.ogImage });
+    values.webOgImage = ogImage.url;
+  }
   if (input.noindex !== undefined) values.webNoindex = input.noindex;
   if (input.canonicalUrl !== undefined)
     values.webCanonicalUrl = input.canonicalUrl || null;
@@ -264,6 +273,17 @@ export async function updateWebPublishing(
       .set(values)
       .where(eq(sequences.id, sequence.id))
       .returning();
+    if (ogImage) {
+      await replaceMediaReferencesForResource({
+        teamId: sequence.teamId,
+        resource: {
+          resourceType: "BROADCAST_WEB_PAGE",
+          resourceInternalId: sequence.id,
+          resourcePublicId: sequence.sequenceId,
+        },
+        mediaRows: ogImage.row ? [ogImage.row] : [],
+      });
+    }
     return toWebPublishing(row);
   } catch (error: any) {
     if (error?.code === "23505" || error?.cause?.code === "23505") {

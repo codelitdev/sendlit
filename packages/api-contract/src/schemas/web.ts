@@ -45,7 +45,12 @@ export const updateWebPublishingBodySchema = z.object({
     .describe("URL slug; defaults to one made from the title"),
   seoTitle: z.string().trim().max(200).nullable().optional(),
   seoDescription: z.string().trim().max(500).nullable().optional(),
-  ogImage: httpUrl.nullable().optional().describe("Image for social previews"),
+  ogImage: httpUrl
+    .nullable()
+    .optional()
+    .describe(
+      "Image for social previews. An image uploaded to MediaLit is added to the media library and can't be deleted while the page uses it",
+    ),
   noindex: z.boolean().optional().describe("Ask search engines not to index the page"),
   canonicalUrl: httpUrl
     .nullable()

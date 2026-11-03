@@ -853,7 +853,15 @@ export async function deleteSequence({
     throw new Error(deleteBlockerOf(current) ?? "sequence_active");
   }
 
-  const mediaIds = await releaseEmailMedia(teamId, emailIds, sentIds);
+  const mediaIds = [
+    ...(await releaseEmailMedia(teamId, emailIds, sentIds)),
+    // The web page goes with the broadcast, so its social image is released too.
+    ...(await deleteMediaReferencesForResource({
+      teamId,
+      resourceType: "BROADCAST_WEB_PAGE",
+      resourceInternalId: sequence.id,
+    })),
+  ];
   const media = await deleteOrphanedMedia(teamId, mediaIds);
 
   captureEvent({

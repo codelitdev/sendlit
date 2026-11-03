@@ -150,7 +150,10 @@ interface Media {
 Media references record where a media asset is used.
 
 ```ts
-type MediaReferenceResourceType = "TEMPLATE" | "SEQUENCE_EMAIL";
+type MediaReferenceResourceType =
+    | "TEMPLATE"
+    | "SEQUENCE_EMAIL"
+    | "BROADCAST_WEB_PAGE";
 
 interface MediaReference {
     id: string;
@@ -175,6 +178,8 @@ For `TEMPLATE`, `resourceInternalId` should be `email_templates.id` and `resourc
 For `SEQUENCE_EMAIL`, `resourceInternalId` should be `sequence_emails.id` and `resourcePublicId` should be `sequence_emails.emailId`. `parentResourceInternalId` should be `sequences.id` and `parentResourcePublicId` should be `sequences.sequenceId`.
 
 Broadcast email content is stored as a `sequence_emails` row under a `sequences` row with `type = 'broadcast'`, so broadcast usage should be represented as `SEQUENCE_EMAIL` with parent sequence context.
+
+For `BROADCAST_WEB_PAGE`, `resourceInternalId` should be `sequences.id` and `resourcePublicId` should be `sequences.sequenceId`. It records that a broadcast's public web page uses the image as its social (Open Graph) image, and it is kept apart from `SEQUENCE_EMAIL` because saving the email body replaces that resource's references.
 
 References should be recalculated when email content is saved. They should be removed when the owning template, broadcast, sequence, or sequence email is deleted.
 
@@ -267,6 +272,16 @@ Replacing references means the submitted email body is the source of truth for t
 This can be implemented either as a diff or by deleting all existing references for the saved resource and inserting the newly extracted set inside the same transaction as the content save.
 
 Unsplash and external image URLs are ignored by media reference reconciliation because SendLit does not own or clean up those assets.
+
+### Social image of a broadcast's web page
+
+The Web page dialog of a broadcast lets the user upload a social image or pick one from the media library, through the same picker as the email image block. The API treats `ogImage` like an email image:
+
+1. An uploaded MediaLit URL (`/i/<id>/main.<ext>` as a draft, `/p/<id>/main.<ext>` once sealed) is sealed (once), registered in the media library, and stored as the sealed URL.
+2. Once the broadcast is saved, its `BROADCAST_WEB_PAGE` reference is replaced with a reference to that media, so the image can't be deleted from the media library while the page uses it. If the save fails, such as when another broadcast takes the slug in the meantime, the previous image stays referenced.
+3. Any other URL (including one entered through the REST API or MCP, even if its path ends in `/<name>/main.<ext>`) is stored as it is, and the reference is cleared.
+4. Replacing or removing the image releases the reference but never deletes the media.
+5. Deleting the broadcast releases the reference and runs `deleteOrphanedMedia` like it does for its emails.
 
 Editing content never deletes media: an image removed from an email or template stays in the media library, because sent versions of that email may still show it and the user may add it back. Users delete unused images from the Media page.
 
