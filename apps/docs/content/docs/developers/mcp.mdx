@@ -73,6 +73,16 @@ OAuth access is default-deny: every tool needs the scope of the REST operation i
 - `delivery_events:read`
 - `suppressions:read`, `suppressions:write`
 
+A scope says what a token may do; it does not change what the person behind it
+may do in their team. Changing the team's ESP (`create_esp`, `update_esp`,
+`update_esp_config`, `delete_esp`, `delete_esp_config`, `activate_esp`, `retire_esp`, `test_esp`,
+`send_test_email`) and connecting or disconnecting Google Postmaster Tools or SNDS need a team
+admin, exactly as in the dashboard and REST API. ESP changes also need
+the organization to allow team ESPs. A team member with `esp:write` or
+`settings:write` gets `forbidden` with reason `team_admin_required` or
+`team_esp_disabled`. Team API keys count as the team's own credential and are
+allowed.
+
 ## Available tools
 
 ### Contacts and segments

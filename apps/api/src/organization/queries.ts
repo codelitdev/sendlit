@@ -13,6 +13,7 @@ import {
   organizationMembers,
   organizations,
   settings,
+  teamApiKeys,
   teamDeliverySettings,
   teamMembers,
   teams,
@@ -607,6 +608,42 @@ async function assertBillingManagerRetained(
   }
 }
 
+/**
+ * Team membership is its own table, so leaving an organization (or losing
+ * admin rights in it) does not touch it. Without this the person keeps full
+ * access to every team of the organization, and the team API keys they minted
+ * keep working. Runs inside the caller's transaction.
+ */
+async function revokeOrganizationTeamAccess(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  organizationId: string,
+  userId: string,
+): Promise<void> {
+  const organizationTeams = tx
+    .select({ id: teams.id })
+    .from(teams)
+    .where(eq(teams.organizationId, organizationId));
+  await tx
+    .delete(teamMembers)
+    .where(
+      and(
+        eq(teamMembers.userId, userId),
+        inArray(teamMembers.teamId, organizationTeams),
+      ),
+    );
+  await tx
+    .update(teamApiKeys)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(teamApiKeys.createdByType, "user"),
+        eq(teamApiKeys.createdById, userId),
+        isNull(teamApiKeys.revokedAt),
+        inArray(teamApiKeys.teamId, organizationTeams),
+      ),
+    );
+}
+
 export async function updateOrganizationMemberRole(
   organizationId: string,
   userId: string,
@@ -656,6 +693,10 @@ export async function updateOrganizationMemberRole(
       .update(organizationMembers)
       .set({ role, updatedAt: new Date() })
       .where(eq(organizationMembers.id, membership.id));
+    // Team access came with admin rights; a plain member does not keep it.
+    if (role === "member" && membership.role !== "member") {
+      await revokeOrganizationTeamAccess(tx, organizationId, userId);
+    }
   });
   return getOrganizationMemberView(organizationId, userId);
 }
@@ -691,6 +732,7 @@ export async function removeOrganizationMember(
     await tx
       .delete(organizationMembers)
       .where(eq(organizationMembers.id, membership.id));
+    await revokeOrganizationTeamAccess(tx, organizationId, userId);
     return true;
   });
 }

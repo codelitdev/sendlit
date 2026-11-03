@@ -19,6 +19,7 @@ const {
   organizationEspUsageBuckets,
   organizations,
   outboundMessages,
+  teamApiKeys,
   sequences,
   teams,
   user,
@@ -49,7 +50,11 @@ const {
   createOrganization,
   getOrganizationMembership,
   listOrganizationsForUser,
+  removeOrganizationMember,
+  updateOrganizationMemberRole,
 } = await import("./queries");
+const { createApiKey } = await import("../apikey/queries");
+const { ensureTeamMembership, getTeamMembership } = await import("../team/queries");
 
 const tdb = db as unknown as TestDb;
 
@@ -594,6 +599,83 @@ describe("one owned Free organization", () => {
 
     await expect(createOrganization(owner.id, "Second")).resolves.toMatchObject({
       name: "Second",
+    });
+  });
+
+  describe("losing access to the organization", () => {
+    async function adminWithTeamAndKey() {
+      const [owner, admin] = await tdb
+        .insert(user)
+        .values(
+          ["Owner", "Admin"].map((name) => ({
+            id: crypto.randomUUID(),
+            name,
+            email: `${name}-${crypto.randomUUID()}@example.com`.toLowerCase(),
+            emailVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })),
+        )
+        .returning();
+      const organization = await createOrganization(owner.id, "Acme");
+      await addOrganizationMemberByEmail(organization.id, admin.email, "admin");
+      const team = await createTeam({
+        organizationId: organization.id,
+        creatorUserId: admin.id,
+        name: "Marketing",
+      });
+      const key = await createApiKey(team.id, "ci", {
+        createdByType: "user",
+        createdById: admin.id,
+      });
+      return { owner, admin, organization, team, key };
+    }
+
+    it("removes a member's team access and the team keys they minted", async () => {
+      const { admin, organization, team, key } = await adminWithTeamAndKey();
+      expect(await getTeamMembership(team.id, admin.id)).not.toBeNull();
+
+      await expect(removeOrganizationMember(organization.id, admin.id)).resolves.toBe(
+        true,
+      );
+
+      expect(await getTeamMembership(team.id, admin.id)).toBeNull();
+      const [row] = await tdb
+        .select()
+        .from(teamApiKeys)
+        .where(eq(teamApiKeys.teamApiKeyId, key.apiKey.teamApiKeyId));
+      expect(row.revokedAt).not.toBeNull();
+    });
+
+    it("leaves other people's team access and keys alone", async () => {
+      const { owner, admin, organization, team } = await adminWithTeamAndKey();
+      await ensureTeamMembership({ teamId: team.id, userId: owner.id, role: "admin" });
+      const ownerKey = await createApiKey(team.id, "owner key", {
+        createdByType: "user",
+        createdById: owner.id,
+      });
+
+      await removeOrganizationMember(organization.id, admin.id);
+
+      expect(await getTeamMembership(team.id, owner.id)).not.toBeNull();
+      const [row] = await tdb
+        .select()
+        .from(teamApiKeys)
+        .where(eq(teamApiKeys.teamApiKeyId, ownerKey.apiKey.teamApiKeyId));
+      expect(row.revokedAt).toBeNull();
+    });
+
+    it("takes team access away when an admin is demoted to member, but not when promoted", async () => {
+      const { admin, organization, team } = await adminWithTeamAndKey();
+
+      await updateOrganizationMemberRole(organization.id, admin.id, "owner");
+      expect(await getTeamMembership(team.id, admin.id)).not.toBeNull();
+
+      await updateOrganizationMemberRole(organization.id, admin.id, "admin");
+      expect(await getTeamMembership(team.id, admin.id)).not.toBeNull();
+
+      await updateOrganizationMemberRole(organization.id, admin.id, "member");
+      expect(await getTeamMembership(team.id, admin.id)).toBeNull();
     });
   });
 });

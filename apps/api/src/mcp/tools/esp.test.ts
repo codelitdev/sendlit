@@ -13,6 +13,8 @@ const mocks = {
   invalidateEspTransport: vi.fn(),
   invalidateTeamTransport: vi.fn(),
   testEspConfig: vi.fn(),
+  isTeamAdminOrKey: vi.fn(),
+  canManageTeamEsp: vi.fn(),
 };
 
 // bun shares module mocks across test files in one process, so this mock
@@ -31,6 +33,10 @@ mock.module("../../settings/esp/queries", () => ({
 mock.module("../../mail/transport", () => ({
   invalidateEspTransport: mocks.invalidateEspTransport,
   invalidateTeamTransport: mocks.invalidateTeamTransport,
+}));
+mock.module("../../team/authority", () => ({
+  isTeamAdminOrKey: mocks.isTeamAdminOrKey,
+  canManageTeamEsp: mocks.canManageTeamEsp,
 }));
 mock.module("../../settings/esp/test", () => ({ testEspConfig: mocks.testEspConfig }));
 
@@ -56,6 +62,8 @@ const call = (name: string, args: Record<string, unknown> = {}, ctx: any = conte
 
 beforeEach(() => {
   for (const fn of Object.values(mocks)) fn.mockReset();
+  mocks.isTeamAdminOrKey.mockResolvedValue(true);
+  mocks.canManageTeamEsp.mockResolvedValue(true);
 });
 
 describe("MCP ESP tools", () => {
@@ -284,5 +292,37 @@ describe("MCP ESP tools", () => {
       },
     });
     expect(mocks.createEspConfig).not.toHaveBeenCalled();
+  });
+
+  it("keeps ESP changes from a team member, as REST does", async () => {
+    mocks.canManageTeamEsp.mockResolvedValue(false);
+    mocks.isTeamAdminOrKey.mockResolvedValue(false);
+    for (const [name, args] of [
+      ["update_esp", { espId: "esp-1", host: "attacker.example" }],
+      ["update_esp_config", { host: "attacker.example" }],
+      ["test_esp", { espId: "esp-1", to: "me@example.com" }],
+      ["create_esp", { name: "x" }],
+      ["delete_esp", { espId: "esp-1", confirm: true }],
+      ["activate_esp", { espId: "esp-1" }],
+      ["retire_esp", { espId: "esp-1", confirm: true }],
+    ] as const) {
+      await expect(call(name, { ...args }, oauth)).resolves.toMatchObject({
+        error: { code: "forbidden", safeDetails: { reason: "team_esp_disabled" } },
+      });
+    }
+    expect(mocks.updateEspConfig).not.toHaveBeenCalled();
+    expect(mocks.testEspConfig).not.toHaveBeenCalled();
+    expect(mocks.createEspConfig).not.toHaveBeenCalled();
+    expect(mocks.canManageTeamEsp).toHaveBeenCalledWith({
+      authKind: "oauth",
+      teamId: "team-1",
+      userId: "user-1",
+    });
+  });
+
+  it("leaves reading ESPs open to any team member", async () => {
+    mocks.canManageTeamEsp.mockResolvedValue(false);
+    mocks.listEspConfigs.mockResolvedValue([]);
+    await expect(call("list_esps", {}, oauth)).resolves.not.toHaveProperty("error");
   });
 });
