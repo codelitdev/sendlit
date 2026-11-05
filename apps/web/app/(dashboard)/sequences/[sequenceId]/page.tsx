@@ -9,6 +9,7 @@ import {
   type ReentryMode,
   type Sequence,
   SequenceAnalytics,
+  type SequenceEmail,
   SequenceEmailList,
   type SequenceStats,
   TagEditor,
@@ -23,8 +24,9 @@ import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteSequenceDialog } from "@/components/dashboard/delete-sequence-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import {
-  UnpublishedChangesActions,
-  VersionHistoryButton,
+  EmailMoreMenu,
+  PublishAllChangesActions,
+  UnpublishedChangesStrip,
 } from "@/components/dashboard/draft-controls";
 import {
   MARKETING_EMAIL_EDITOR_BLOCKS,
@@ -103,6 +105,19 @@ const STATUS_VARIANT: Record<Sequence["status"], "success" | "secondary" | "outl
     completed: "outline",
   };
 
+/** What the step editor edits: the working copy, i.e. the unpublished
+ * changes when there are some. */
+function editableEmail(email: SequenceEmail): EmailDraft {
+  return {
+    subject: email.draft?.subject ?? email.subject,
+    content: email.draft?.content ?? email.content,
+    delayInMillis: email.delayInMillis,
+    published: email.published,
+    actionType: email.actionType,
+    actionData: email.actionData,
+  };
+}
+
 export default function SequenceEditorPage({
   params,
 }: {
@@ -159,19 +174,7 @@ export default function SequenceEditorPage({
   function selectEmail(s: Sequence, emailId?: string) {
     setSelectedEmailId(emailId ?? null);
     const found = s.emails.find((e) => e.emailId === emailId);
-    setEmailDraft(
-      found
-        ? {
-            // The working copy: unpublished changes when there are some.
-            subject: found.draft?.subject ?? found.subject,
-            content: found.draft?.content ?? found.content,
-            delayInMillis: found.delayInMillis,
-            published: found.published,
-            actionType: found.actionType,
-            actionData: found.actionData,
-          }
-        : null,
-    );
+    setEmailDraft(found ? editableEmail(found) : null);
   }
 
   // Who waits for which email depends on the order and what's published, so
@@ -319,6 +322,14 @@ export default function SequenceEditorPage({
     );
   if (!sequence || !meta) return <Loading />;
 
+  const selectedEmail = sequence.emails.find((e) => e.emailId === selectedEmailId);
+  // Save covers the fields above the content, which is edited on its own page.
+  const emailChanged =
+    selectedEmail !== undefined &&
+    emailDraft !== null &&
+    JSON.stringify({ ...editableEmail(selectedEmail), content: null }) !==
+      JSON.stringify({ ...emailDraft, content: null });
+
   return (
     <ScrollablePage>
       <div className="w-full">
@@ -330,7 +341,7 @@ export default function SequenceEditorPage({
             <Badge variant={STATUS_VARIANT[sequence.status]}>{sequence.status}</Badge>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <UnpublishedChangesActions sequence={sequence} onChange={onDraftsChanged} />
+            <PublishAllChangesActions sequence={sequence} onChange={onDraftsChanged} />
             <Button
               variant="outline"
               onClick={() => setDeleteOpen(true)}
@@ -461,6 +472,10 @@ export default function SequenceEditorPage({
               emails={sequence.emails}
               emailsOrder={sequence.emailsOrder}
               selectedEmailId={selectedEmailId ?? undefined}
+              // Not "Published"/"Draft": those name a step's unpublished
+              // changes; this is whether contacts get the step at all.
+              publishedLabel="Active"
+              draftLabel="Skipped"
               onSelect={(emailId) => selectEmail(sequence, emailId)}
               onAdd={async (templateId) => {
                 const updated = await addSequenceEmail(sequenceId, templateId);
@@ -514,70 +529,32 @@ export default function SequenceEditorPage({
           <div>
             {emailDraft ? (
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardHeader>
                   <CardTitle className="text-base">Edit email</CardTitle>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {selectedEmailId && (
-                      <>
-                        <UnpublishedChangesActions
-                          sequence={sequence}
-                          emailIds={[selectedEmailId]}
-                          size="sm"
-                          onChange={onDraftsChanged}
-                        />
-                        <VersionHistoryButton
-                          sequence={sequence}
-                          emailId={selectedEmailId}
-                          onChange={onDraftsChanged}
-                        />
-                      </>
-                    )}
-                    <Button size="sm" onClick={saveEmail} disabled={savingEmail}>
-                      {savingEmail ? (
-                        "Saving…"
-                      ) : (
-                        <>
-                          <Check className="size-4" />
-                          Save
-                        </>
-                      )}
-                    </Button>
-                  </div>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="email-subject">Subject</Label>
-                      <Input
-                        id="email-subject"
-                        value={emailDraft.subject}
-                        onChange={(e) =>
-                          setEmailDraft({
-                            ...emailDraft,
-                            subject: e.target.value,
-                          })
-                        }
-                        placeholder="Your subject line"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-4 sm:justify-start">
-                      <Label htmlFor="email-published" className="flex-1 sm:flex-none">
-                        Published
-                      </Label>
-                      <Switch
-                        id="email-published"
-                        checked={emailDraft.published}
-                        onCheckedChange={(published) =>
-                          setEmailDraft({
-                            ...emailDraft,
-                            published,
-                          })
-                        }
-                      />
-                    </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-subject">Subject</Label>
+                    <Input
+                      id="email-subject"
+                      value={emailDraft.subject}
+                      onChange={(e) =>
+                        setEmailDraft({
+                          ...emailDraft,
+                          subject: e.target.value,
+                        })
+                      }
+                      placeholder="Your subject line"
+                    />
+                    {selectedEmail?.draft &&
+                      selectedEmail.draft.subject !== selectedEmail.subject && (
+                        <p className="text-xs text-muted-foreground">
+                          Published subject: {selectedEmail.subject || "—"}
+                        </p>
+                      )}
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="email-delay">Send after (days)</Label>
                       <Input
@@ -646,18 +623,71 @@ export default function SequenceEditorPage({
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label>Content</Label>
-                      <Button size="sm" variant="outline" asChild>
-                        <Link
-                          href={`/editor/sequences/${sequenceId}/emails/${selectedEmailId}`}
-                        >
-                          <Pencil className="size-4" />
-                          Edit content
-                        </Link>
-                      </Button>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        id="email-published"
+                        checked={emailDraft.published}
+                        onCheckedChange={(published) =>
+                          setEmailDraft({
+                            ...emailDraft,
+                            published,
+                          })
+                        }
+                      />
+                      <Label
+                        htmlFor="email-published"
+                        className="flex flex-col items-start gap-0.5"
+                      >
+                        <span>Send this email</span>
+                        <span className="font-normal text-muted-foreground">
+                          {emailDraft.published
+                            ? "Contacts get this email at this step."
+                            : "Contacts skip this email."}
+                        </span>
+                      </Label>
                     </div>
+                    {/* Green only when there's something to save, so it doesn't
+                        compete with Publish. */}
+                    <Button
+                      size="sm"
+                      variant={emailChanged ? "primary" : "outline"}
+                      onClick={saveEmail}
+                      disabled={savingEmail || !emailChanged}
+                    >
+                      <Check className="size-4" />
+                      {savingEmail ? "Saving…" : "Save"}
+                    </Button>
+                  </div>
+
+                  <div className="space-y-1.5 border-t pt-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label>Content</Label>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" asChild>
+                          <Link
+                            href={`/editor/sequences/${sequenceId}/emails/${selectedEmailId}`}
+                          >
+                            <Pencil className="size-4" />
+                            Edit content
+                          </Link>
+                        </Button>
+                        {selectedEmailId && (
+                          <EmailMoreMenu
+                            sequence={sequence}
+                            emailId={selectedEmailId}
+                            onChange={onDraftsChanged}
+                          />
+                        )}
+                      </div>
+                    </div>
+                    {selectedEmailId && (
+                      <UnpublishedChangesStrip
+                        sequence={sequence}
+                        emailIds={[selectedEmailId]}
+                        onChange={onDraftsChanged}
+                      />
+                    )}
                     <EmailPreview
                       content={emailDraft.content}
                       minHeight="420px"

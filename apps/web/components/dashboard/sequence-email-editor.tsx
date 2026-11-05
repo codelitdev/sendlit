@@ -3,7 +3,7 @@
 import type { Email, Sequence } from "@sendlit/email-blocks";
 import { useEffect, useRef, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
-import { UnpublishedChangesActions } from "@/components/dashboard/draft-controls";
+import { EditorDraftActions } from "@/components/dashboard/draft-controls";
 import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
 import { SendTestDialog } from "@/components/dashboard/send-test-dialog";
@@ -138,16 +138,6 @@ export function SequenceEmailEditor({
       }}
       actions={(saveContent) => (
         <>
-          <UnpublishedChangesActions
-            sequence={sequence}
-            emailIds={[email.emailId]}
-            beforePublish={async () => {
-              // Publish what's on screen.
-              await saveContent();
-              return latestSequence.current;
-            }}
-            onChange={sequenceSaved}
-          />
           <SendTestDialog
             sendingVia={sendingOptionFor(sendingOptions, deliverySource)}
             subject={email.subject}
@@ -156,6 +146,16 @@ export function SequenceEmailEditor({
             lastTestSentAt={email.lastTestSentAt}
             beforeSend={saveContent}
             onSent={(lastTestSentAt) => setEmail({ ...email, lastTestSentAt })}
+          />
+          <EditorDraftActions
+            sequence={sequence}
+            emailId={email.emailId}
+            beforePublish={async () => {
+              // Publish what's on screen.
+              await saveContent();
+              return latestSequence.current;
+            }}
+            onChange={sequenceSaved}
           />
         </>
       )}

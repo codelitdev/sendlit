@@ -30,8 +30,8 @@ import { BroadcastWebDialog } from "@/components/dashboard/broadcast-web-dialog"
 import { DeleteSequenceDialog } from "@/components/dashboard/delete-sequence-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import {
-  UnpublishedChangesActions,
-  VersionHistoryButton,
+  EmailMoreMenu,
+  UnpublishedChangesStrip,
 } from "@/components/dashboard/draft-controls";
 import {
   MARKETING_EMAIL_EDITOR_BLOCKS,
@@ -111,6 +111,12 @@ function toLocalInputValue(date: Date): string {
     .slice(0, 16);
 }
 
+/** A broadcast's title is its email's subject: the unpublished one while
+ * there is a draft. */
+function workingTitle(sequence: Sequence): string {
+  return sequence.emails[0]?.draft?.subject ?? sequence.title;
+}
+
 export default function BroadcastEditorPage({
   params,
 }: {
@@ -156,7 +162,7 @@ export default function BroadcastEditorPage({
       const s = await getSequence(sequenceId);
       setSequence(s);
       setMeta({
-        title: s.title,
+        title: workingTitle(s),
         filter: s.filter,
         excludeFilter: s.excludeFilter,
         deliverySource: s.deliverySource,
@@ -183,11 +189,13 @@ export default function BroadcastEditorPage({
   }
 
   /** A publish, discard or restore changed the email and maybe the title,
-   * which mirrors its subject. */
+   * which is its subject. */
   function onDraftsChanged(updated: Sequence) {
     setSequence(updated);
     showEmail(updated);
-    setMeta((current) => (current ? { ...current, title: updated.title } : current));
+    setMeta((current) =>
+      current ? { ...current, title: workingTitle(updated) } : current,
+    );
   }
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when sequenceId changes
@@ -369,7 +377,6 @@ export default function BroadcastEditorPage({
             {sequence.archivedAt && <Badge variant="outline">archived</Badge>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <UnpublishedChangesActions sequence={sequence} onChange={onDraftsChanged} />
             {sequence.archivedAt ? (
               <Button variant="outline" onClick={unarchive} disabled={working}>
                 <ArchiveRestore className="size-4" />
@@ -497,13 +504,6 @@ export default function BroadcastEditorPage({
           </Banner>
         )}
 
-        {scheduledForLabel && sequence.hasUnpublishedChanges && (
-          <Banner variant="warning" className="mb-4">
-            This broadcast has unpublished changes. It sends the published version on{" "}
-            {scheduledForLabel} unless you publish them first.
-          </Banner>
-        )}
-
         {autoPaused && (
           <AutoPauseBanner
             report={sequence.report}
@@ -566,6 +566,12 @@ export default function BroadcastEditorPage({
                   }
                   placeholder="e.g. October newsletter"
                 />
+                {workingTitle(sequence) !== sequence.title && (
+                  <p className="text-xs text-muted-foreground">
+                    Published title: {sequence.title || "—"}. The new title is part of
+                    the unpublished changes.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Delivery source</Label>
@@ -626,25 +632,34 @@ export default function BroadcastEditorPage({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Content</CardTitle>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {sequence.emails[0] && contentEditable && (
-                  <VersionHistoryButton
-                    sequence={sequence}
-                    emailId={sequence.emails[0].emailId}
-                    onChange={onDraftsChanged}
-                  />
-                )}
-                {contentEditable && (
+              {contentEditable && (
+                <div className="flex items-center gap-2">
                   <Button size="sm" variant="outline" asChild>
                     <Link href={`/editor/broadcasts/${sequenceId}`}>
                       <Pencil className="size-4" />
                       Edit content
                     </Link>
                   </Button>
-                )}
-              </div>
+                  {sequence.emails[0] && (
+                    <EmailMoreMenu
+                      sequence={sequence}
+                      emailId={sequence.emails[0].emailId}
+                      onChange={onDraftsChanged}
+                    />
+                  )}
+                </div>
+              )}
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
+              <UnpublishedChangesStrip
+                sequence={sequence}
+                onChange={onDraftsChanged}
+                message={
+                  scheduledForLabel
+                    ? `It sends the published version on ${scheduledForLabel} unless you publish.`
+                    : undefined
+                }
+              />
               <EmailPreview
                 content={email.content}
                 minHeight="420px"
