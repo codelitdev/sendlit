@@ -29,7 +29,10 @@ import { quotaExhaustionDeferral, SendDeferredError } from "../mail/rate-limit";
 import { EmailRenderError } from "../mail/render";
 import { sendMail } from "../mail/send";
 import { captureError, captureEvent } from "../observability";
-import { getOrCreateContentVersion } from "../sequences/content-versions";
+import {
+  getOrCreateContentVersion,
+  versionForContact,
+} from "../sequences/content-versions";
 import logger from "../services/log";
 import { withoutProviderTracking } from "../settings/esp/provider-capabilities";
 import { trackingOriginForTeam } from "../settings/tracking-domain/queries";
@@ -151,7 +154,9 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
       contact,
       sequence: sequenceRow,
       ongoingSequence,
-      email: nextEmail,
+      // The published version, never a draft (#184), or the one this
+      // contact was kept on when changes went to new entrants only.
+      email: await versionForContact(nextEmail, ongoingSequence.pinnedVersions),
     });
     if (sequenceRow.type === "sequence") {
       reportEarlySend(ongoingSequence, sequenceRow, nextEmail);

@@ -131,13 +131,14 @@ Broadcasts use the sequence resource with one email and an audience filter. For 
 
 - `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`
 - `add_sequence_email`, `update_sequence_email`, `delete_sequence_email`
+- `publish_sequence_changes`, `discard_sequence_changes`, `list_sequence_email_versions`, `restore_sequence_email_version`: while a broadcast or sequence is active, `update_sequence_email` saves subject and content changes as a draft, and they reach contacts only after `publish_sequence_changes`
 - `preview_sequence_deletion`, `delete_sequence` (destructive: pause an active sequence first; its enrollments and stats are deleted). Draft and scheduled broadcasts can be deleted; sent ones can't (`broadcast_sent`)
 - `archive_broadcast`, `unarchive_broadcast` hide a sent broadcast from the list and the web archive, keeping its report. `list_sequences` takes `archived` (`exclude` by default, `only`, `include`)
 - `send_sequence_email_test` sends a `[Test]` copy of one email to you (or up to five addresses)
 - `start_sequence`, `pause_sequence`, `get_sequence_stats`, `get_sequence_schedule`, `list_sequence_email_waiting_contacts`, `get_sequence_subscribers`
 - `get_broadcast_web_publishing`, `update_broadcast_web_publishing`, `list_web_issues`, `get_web_issue` ([web archive](/email-marketing/web-archive))
 
-Send a test with `send_sequence_email_test` and use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing.
+Send a test with `send_sequence_email_test` and use `start_sequence` only after the audience, trigger, email content, delays, and optional tag actions are correct. Use `pause_sequence` to stop future sequence processing. To change a running sequence, edit with `update_sequence_email`, send a test (it uses the draft), and confirm with the user before `publish_sequence_changes`.
 
 ### Transactional email
 

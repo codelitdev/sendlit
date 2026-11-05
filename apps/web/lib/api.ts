@@ -15,9 +15,11 @@ import {
   type ImportContactRow,
   type ImportContactsResult,
   type PaidPlan,
+  type PublishScope,
   type RenameTagResult,
   type Reputation,
   type SequenceDeletionPreview,
+  type SequenceEmailVersion,
   type SequenceSchedule,
   type SignupForm,
   type SignupFormInput,
@@ -688,7 +690,46 @@ export function updateSequenceEmail(
   );
 }
 
-export type { ContactEvent, EventDefinitionDetail };
+/** Publishes unpublished email changes (all, or `emailIds`). `scope` is for
+ * running sequences: whether contacts already in it get them too. */
+export function publishSequenceChanges(
+  sequenceId: string,
+  body: { emailIds?: string[]; scope?: PublishScope } = {},
+) {
+  return unwrap<Sequence>(
+    client.sequences.publishChanges({ params: { sequenceId }, body }),
+  );
+}
+
+/** Throws away unpublished email changes (all, or `emailIds`). */
+export function discardSequenceChanges(sequenceId: string, emailIds?: string[]) {
+  return unwrap<Sequence>(
+    client.sequences.discardChanges({ params: { sequenceId }, body: { emailIds } }),
+  );
+}
+
+/** The versions an email was published with, live one first. */
+export async function listSequenceEmailVersions(sequenceId: string, emailId: string) {
+  const { items } = await unwrap<{ items: SequenceEmailVersion[] }>(
+    client.sequences.emailVersions({ params: { sequenceId, emailId } }),
+  );
+  return items;
+}
+
+/** Loads an earlier published version into the email's draft. */
+export function restoreSequenceEmailVersion(
+  sequenceId: string,
+  emailId: string,
+  versionId: string,
+) {
+  return unwrap<Sequence>(
+    client.sequences.restoreEmailVersion({
+      params: { sequenceId, emailId, versionId },
+    }),
+  );
+}
+
+export type { ContactEvent, EventDefinitionDetail, PublishScope, SequenceEmailVersion };
 
 export interface SequenceEmailTestResult {
   /** Event-triggered sequences: where `{{ event.* }}` came from. */

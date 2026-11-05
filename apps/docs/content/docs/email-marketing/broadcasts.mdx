@@ -16,6 +16,21 @@ Marketing templates contain one final managed footer. SendLit renders the
 workspace mailing address and recipient-specific unsubscribe URL at delivery
 time.
 
+## Edit a scheduled broadcast
+
+Once a broadcast is scheduled, changes to its subject and content are saved
+as a draft and the broadcast keeps the last published version. Until you
+click **Publish changes**, the broadcast page warns that it will send the
+published version at its send time. **Discard changes** throws the draft
+away, and **Version history** restores an earlier published version into the
+draft. Its title stays the published subject until you publish a new one.
+When the broadcast starts sending, any unpublished changes are dropped, and a
+broadcast that has started sending can't be changed. Cancelling the
+schedule makes it a draft again, and edits are saved directly. See
+[Edit a running sequence](/email-marketing/sequences#edit-a-running-sequence)
+for the API and MCP calls; a broadcast has no contacts in flight, so
+publishing it takes no `scope`.
+
 ## Plain text and the web version
 
 Every broadcast and sequence email is sent with a plain-text part generated

@@ -30,6 +30,7 @@ import { getTeam } from "../team/queries";
 import { normalizeEmail } from "../utils/email";
 import { getEmailFrom, getListUnsubscribeHeaders } from "../utils/mail";
 import { getOrCreateContentVersion } from "./content-versions";
+import { workingCopy } from "./drafts";
 import { takeTestSendQuota } from "./test-send-limits";
 
 /** A test goes to at most this many addresses (Mailchimp allows a handful). */
@@ -76,7 +77,7 @@ export async function sendSequenceEmailTest({
     .where(and(eq(sequences.teamId, teamId), eq(sequences.sequenceId, sequenceId)))
     .limit(1);
   if (!sequence) throw new Error("sequence_not_found");
-  const [email] = await db
+  const [stored] = await db
     .select()
     .from(sequenceEmails)
     .where(
@@ -86,7 +87,9 @@ export async function sendSequenceEmailTest({
       ),
     )
     .limit(1);
-  if (!email) throw new Error("email_not_found");
+  if (!stored) throw new Error("email_not_found");
+  // A test shows the edits being worked on: the draft when there is one.
+  const email = { ...stored, ...workingCopy(stored) };
   const team = await getTeam(teamId);
   if (!team) throw new Error("sequence_not_found");
 

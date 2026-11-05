@@ -32,6 +32,12 @@ mock.module("../web/queries", () => ({
   updateWebPublishing: mock(),
   WebPublishingError: class extends Error {},
 }));
+mock.module("./publish", () => ({
+  publishEmailChanges: mock(),
+  discardEmailChanges: mock(),
+  listEmailVersions: mock(),
+  restoreEmailVersion: mock(),
+}));
 mock.module("./test-send", () => ({
   sendSequenceEmailTest: mocks.sendSequenceEmailTest,
 }));

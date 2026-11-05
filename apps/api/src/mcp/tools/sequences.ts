@@ -1,9 +1,12 @@
 import {
   archivedFilters,
   contactFilterSchema,
+  discardSequenceChangesBodySchema,
   emailContentInputSchema,
+  publishSequenceChangesBodySchema,
   sequenceDeletionPreviewSchema,
   sequenceEmailTestResultSchema,
+  sequenceEmailVersionSchema,
   updateSequenceBodySchema,
 } from "@sendlit/api-contract";
 import { z } from "zod";
@@ -15,6 +18,16 @@ import {
   broadcastArchiveErrors,
   sequenceDeleteBlockerMessages,
 } from "../../sequences/delete-blockers";
+import {
+  sequenceHasUnpublishedChanges,
+  toPublicSequenceEmail,
+} from "../../sequences/drafts";
+import {
+  discardEmailChanges,
+  listEmailVersions,
+  publishEmailChanges,
+  restoreEmailVersion,
+} from "../../sequences/publish";
 import type { HydratedSequence } from "../../sequences/queries";
 import {
   addMailToSequence,
@@ -42,6 +55,7 @@ import {
 import { sendSequenceEmailTest } from "../../sequences/test-send";
 import { MAILING_ADDRESS_REQUIRED } from "../../settings/general/constants";
 import { omitInternal } from "../../utils/public";
+import { serializeDates } from "../../utils/serialize";
 import type { SendLitMcpTool } from "../context";
 import { dedicatedTool } from "../tool";
 import {
@@ -71,9 +85,8 @@ function toPublicSequence(sequence: HydratedSequence) {
       "deliverySourceType",
       "deliverySourceIntent",
     ]),
-    emails: sequence.emails.map((email) =>
-      omitInternal(email, ["sequenceId", "contentScanHash", "contentScanReasons"]),
-    ),
+    emails: sequence.emails.map(toPublicSequenceEmail),
+    hasUnpublishedChanges: sequenceHasUnpublishedChanges(sequence),
   };
 }
 
@@ -83,6 +96,7 @@ const NOT_FOUND_REASONS = new Set([
   "template_not_found",
   "team_not_found",
   "item_not_found",
+  "version_not_found",
 ]);
 const RATE_LIMITED_REASONS = new Set([
   "test_send_limit_reached",
@@ -96,6 +110,7 @@ const CONFLICT_REASONS = new Set([
   "mail_already_sent",
   "broadcast_archived",
   "broadcast_held_for_review",
+  "draft_changed",
   "esp_cannot_change_after_start",
   "esp_not_configured",
   "duplicate_title",
@@ -326,7 +341,7 @@ export const sequenceTools = (): SendLitMcpTool[] => [
     operationId: "sequences.updateEmail",
     risk: "write",
     description:
-      'Updates one email within a sequence/broadcast: subject, content, delay, publish status, or the tag action fired on send. Edits apply to later sends only; the "view in browser" page of an email already sent keeps showing what was sent. A sent broadcast can\'t be edited.',
+      "Updates one email within a sequence/broadcast: subject, content, delay, publish status, or the tag action fired on send. While the broadcast or sequence is active (running, or scheduled), subject and content are saved as a draft (the email's `draft`) and contacts keep getting the published version until you call publish_sequence_changes; show the user the draft and confirm before publishing. Otherwise they're saved directly. Delay, published and tag action changes apply right away. The \"view in browser\" page of an email already sent keeps showing what was sent. A sent broadcast can't be edited.",
     inputSchema: z.object({
       sequenceId: z.string(),
       emailId: z.string(),
@@ -365,12 +380,115 @@ export const sequenceTools = (): SendLitMcpTool[] => [
   }),
 
   dedicatedTool({
+    name: "publish_sequence_changes",
+    title: "Publish Sequence Changes",
+    operationId: "sequences.publishChanges",
+    risk: "write",
+    description:
+      "Publishes the unpublished changes (drafts) of a broadcast or sequence, so sends use them: the given emails, or every email with a draft. Confirm with the user first; this changes what contacts receive. For a sequence, scope in_flight (default) also gives the new version to contacts already in it at their next step; new_entrants keeps them on the version they entered with. The replaced version stays in the email's history (list_sequence_email_versions). Errors: mail_already_sent for a broadcast that has started sending, draft_changed when the draft was edited meanwhile, content_blocked or content_held_for_review from SendLit Cloud's content check.",
+    inputSchema: z.object({
+      sequenceId: z.string(),
+      emailIds: publishSequenceChangesBodySchema.shape.emailIds,
+      scope: publishSequenceChangesBodySchema.shape.scope,
+    }),
+    outputSchema: sequenceSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      try {
+        const sequence = await publishEmailChanges({
+          teamId: context.teamId,
+          ...args,
+        });
+        if (!sequence) return notFound();
+        return toPublicSequence(sequence);
+      } catch (err) {
+        return sequenceError(err);
+      }
+    },
+  }),
+
+  dedicatedTool({
+    name: "discard_sequence_changes",
+    title: "Discard Sequence Changes",
+    operationId: "sequences.discardChanges",
+    risk: "destructive",
+    description:
+      "Deletes the unpublished changes (drafts) of the given emails of a broadcast or sequence, or of all of them, so they show the published version again. The edits can't be recovered. Sends are not affected.",
+    inputSchema: z.object({
+      sequenceId: z.string(),
+      emailIds: discardSequenceChangesBodySchema.shape.emailIds,
+    }),
+    outputSchema: sequenceSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      try {
+        const sequence = await discardEmailChanges({
+          teamId: context.teamId,
+          ...args,
+        });
+        if (!sequence) return notFound();
+        return toPublicSequence(sequence);
+      } catch (err) {
+        return sequenceError(err);
+      }
+    },
+  }),
+
+  dedicatedTool({
+    name: "list_sequence_email_versions",
+    title: "List Sequence Email Versions",
+    operationId: "sequences.emailVersions",
+    risk: "read",
+    description:
+      "Lists the versions a broadcast or sequence email has been published with: the live one first, then earlier ones newest first (at most 20), with their subject and content. Restore one with restore_sequence_email_version.",
+    inputSchema: z.object({ sequenceId: z.string(), emailId: z.string() }),
+    outputSchema: z.object({ items: z.array(sequenceEmailVersionSchema) }),
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      const versions = await listEmailVersions({
+        teamId: context.teamId,
+        ...args,
+      });
+      if (!versions) return notFound();
+      return { items: serializeDates(versions) };
+    },
+  }),
+
+  dedicatedTool({
+    name: "restore_sequence_email_version",
+    title: "Restore Sequence Email Version",
+    operationId: "sequences.restoreEmailVersion",
+    risk: "write",
+    description:
+      "Loads an earlier published version of an email (from list_sequence_email_versions) into its draft. Nothing changes for contacts until the draft is published with publish_sequence_changes. Unless the broadcast or sequence is active, it's restored directly.",
+    inputSchema: z.object({
+      sequenceId: z.string(),
+      emailId: z.string(),
+      versionId: z.string(),
+    }),
+    outputSchema: sequenceSchema,
+    annotations: { openWorldHint: false },
+    async handler({ context, args }) {
+      try {
+        const sequence = await restoreEmailVersion({
+          teamId: context.teamId,
+          ...args,
+        });
+        if (!sequence) return notFound();
+        return toPublicSequence(sequence);
+      } catch (err) {
+        return sequenceError(err);
+      }
+    },
+  }),
+
+  dedicatedTool({
     name: "send_sequence_email_test",
     title: "Send Sequence Email Test",
     operationId: "sequences.sendEmailTest",
     risk: "write",
     description:
-      "Sends a test of one broadcast/sequence email, rendered exactly like a real send (merge tags, footer, tracking) with a [Test] subject prefix; its \"view in browser\" link shows the email as tested. Defaults to the current user's own address (OAuth sessions only; API-key sessions must supply `to`). Suppressed addresses are skipped; opens, clicks and the unsubscribe link in a test change nothing. Every recipient counts as one test: by default 100 per team in any 24 hours (50 in any 3 hours) and 20 per email per 24 hours (errors `test_send_limit_reached`, `test_send_email_limit_reached`). Tests through an organization's shared mailbox also use the team's shared-delivery quota.",
+      "Sends a test of one broadcast/sequence email, rendered exactly like a real send (merge tags, footer, tracking) with a [Test] subject prefix. It sends the draft when the email has unpublished changes, so they can be checked before publishing; its \"view in browser\" link shows the email as tested. Defaults to the current user's own address (OAuth sessions only; API-key sessions must supply `to`). Suppressed addresses are skipped; opens, clicks and the unsubscribe link in a test change nothing. Every recipient counts as one test: by default 100 per team in any 24 hours (50 in any 3 hours) and 20 per email per 24 hours (errors `test_send_limit_reached`, `test_send_email_limit_reached`). Tests through an organization's shared mailbox also use the team's shared-delivery quota.",
     inputSchema: z.object({
       sequenceId: z.string(),
       emailId: z.string(),

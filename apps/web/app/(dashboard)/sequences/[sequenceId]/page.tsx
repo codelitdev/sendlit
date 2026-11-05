@@ -23,6 +23,10 @@ import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteSequenceDialog } from "@/components/dashboard/delete-sequence-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import {
+  UnpublishedChangesActions,
+  VersionHistoryButton,
+} from "@/components/dashboard/draft-controls";
+import {
   MARKETING_EMAIL_EDITOR_BLOCKS,
   marketingPreviewContext,
 } from "@/components/dashboard/email-editor-screen";
@@ -158,8 +162,9 @@ export default function SequenceEditorPage({
     setEmailDraft(
       found
         ? {
-            subject: found.subject,
-            content: found.content,
+            // The working copy: unpublished changes when there are some.
+            subject: found.draft?.subject ?? found.subject,
+            content: found.draft?.content ?? found.content,
             delayInMillis: found.delayInMillis,
             published: found.published,
             actionType: found.actionType,
@@ -261,6 +266,12 @@ export default function SequenceEditorPage({
     }
   }
 
+  /** A publish, discard or restore changed the emails' working copies. */
+  function onDraftsChanged(updated: Sequence) {
+    setSequence(updated);
+    selectEmail(updated, selectedEmailId ?? undefined);
+  }
+
   async function toggleStatus() {
     if (!sequence) return;
     setError(null);
@@ -318,7 +329,8 @@ export default function SequenceEditorPage({
             </h1>
             <Badge variant={STATUS_VARIANT[sequence.status]}>{sequence.status}</Badge>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <UnpublishedChangesActions sequence={sequence} onChange={onDraftsChanged} />
             <Button
               variant="outline"
               onClick={() => setDeleteOpen(true)}
@@ -464,19 +476,29 @@ export default function SequenceEditorPage({
                 const waiting =
                   schedule?.emails.find((e) => e.emailId === email.emailId)?.waiting ??
                   0;
-                if (!waiting) return null;
+                const unpublished = email.draft ? (
+                  <span className="font-medium text-[var(--warning)]">
+                    Unpublished changes
+                  </span>
+                ) : null;
+                if (!waiting) return unpublished;
+                // One line each: the list truncates a single line to its
+                // narrow column, which would hide the waiting link.
                 return (
-                  <LinkButton
-                    variant="link"
-                    className="h-auto p-0 text-xs"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setWaitingEmailId(email.emailId);
-                    }}
-                  >
-                    {waiting.toLocaleString()} waiting
-                  </LinkButton>
+                  <span className="flex flex-col items-start whitespace-normal">
+                    {unpublished}
+                    <LinkButton
+                      variant="link"
+                      className="h-auto p-0 text-xs"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setWaitingEmailId(email.emailId);
+                      }}
+                    >
+                      {waiting.toLocaleString()} waiting
+                    </LinkButton>
+                  </span>
                 );
               }}
               systemTemplates={systemTemplates}
@@ -494,16 +516,33 @@ export default function SequenceEditorPage({
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                   <CardTitle className="text-base">Edit email</CardTitle>
-                  <Button size="sm" onClick={saveEmail} disabled={savingEmail}>
-                    {savingEmail ? (
-                      "Saving…"
-                    ) : (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {selectedEmailId && (
                       <>
-                        <Check className="size-4" />
-                        Save
+                        <UnpublishedChangesActions
+                          sequence={sequence}
+                          emailIds={[selectedEmailId]}
+                          size="sm"
+                          onChange={onDraftsChanged}
+                        />
+                        <VersionHistoryButton
+                          sequence={sequence}
+                          emailId={selectedEmailId}
+                          onChange={onDraftsChanged}
+                        />
                       </>
                     )}
-                  </Button>
+                    <Button size="sm" onClick={saveEmail} disabled={savingEmail}>
+                      {savingEmail ? (
+                        "Saving…"
+                      ) : (
+                        <>
+                          <Check className="size-4" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
                   <div className="grid gap-4 sm:grid-cols-2">

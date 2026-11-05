@@ -1,8 +1,9 @@
 "use client";
 
-import type { Email } from "@sendlit/email-blocks";
-import { useEffect, useState } from "react";
+import type { Email, Sequence } from "@sendlit/email-blocks";
+import { useEffect, useRef, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
+import { UnpublishedChangesActions } from "@/components/dashboard/draft-controls";
 import { EmailEditorScreen } from "@/components/dashboard/email-editor-screen";
 import { Loading } from "@/components/dashboard/loading";
 import { SendTestDialog } from "@/components/dashboard/send-test-dialog";
@@ -46,6 +47,13 @@ export function SequenceEmailEditor({
   // A broadcast's subject is its title; the API keeps the two in step.
   const [isBroadcast, setIsBroadcast] = useState(false);
   const [savedSubject, setSavedSubject] = useState("");
+  // The latest saved state, for "Unpublished changes" and Publish.
+  const [sequence, setSequence] = useState<Sequence>();
+  const latestSequence = useRef<Sequence>(undefined);
+  function sequenceSaved(updated: Sequence) {
+    latestSequence.current = updated;
+    setSequence(updated);
+  }
   const [eventVariables, setEventVariables] = useState<
     { tag: string; description: string }[]
   >([]);
@@ -57,6 +65,8 @@ export function SequenceEmailEditor({
       .catch(() => undefined);
     getSequence(sequenceId)
       .then((sequence) => {
+        latestSequence.current = sequence;
+        setSequence(sequence);
         setDeliverySource(sequence.deliverySource ?? null);
         setViewInBrowser(sequence.viewInBrowser);
         setIsBroadcast(sequence.type === "broadcast");
@@ -81,11 +91,13 @@ export function SequenceEmailEditor({
           setError("Email not found");
           return;
         }
-        setSavedSubject(found.subject);
+        // The working copy: unpublished changes when there are some.
+        const subject = found.draft?.subject ?? found.subject;
+        setSavedSubject(subject);
         setEmail({
           emailId: found.emailId,
-          subject: found.subject,
-          content: found.content,
+          subject,
+          content: found.draft?.content ?? found.content,
           lastTestSentAt: found.lastTestSentAt,
         });
       })
@@ -95,7 +107,7 @@ export function SequenceEmailEditor({
   }, [sequenceId, emailId]);
 
   if (error) return <Banner>{error}</Banner>;
-  if (!email) return <Loading />;
+  if (!email || !sequence) return <Loading />;
 
   return (
     <EmailEditorScreen
@@ -109,27 +121,43 @@ export function SequenceEmailEditor({
         sendingOptionFor(sendingOptions, deliverySource)?.fromName ?? undefined
       }
       initialContent={email.content}
+      // While it's active, saving doesn't change what contacts get.
+      saveLabel={sequence.status === "active" ? "Save draft" : "Save"}
       otherChangesUnsaved={email.subject !== savedSubject}
       onSave={async (content) => {
         if (isBroadcast && email.subject !== savedSubject) {
           await updateSequence(sequenceId, { title: email.subject });
         }
-        await updateSequenceEmail(sequenceId, email.emailId, {
-          content,
-          ...(isBroadcast ? {} : { subject: email.subject }),
-        });
+        sequenceSaved(
+          await updateSequenceEmail(sequenceId, email.emailId, {
+            content,
+            ...(isBroadcast ? {} : { subject: email.subject }),
+          }),
+        );
         setSavedSubject(email.subject);
       }}
       actions={(saveContent) => (
-        <SendTestDialog
-          sendingVia={sendingOptionFor(sendingOptions, deliverySource)}
-          subject={email.subject}
-          sequenceId={sequenceId}
-          emailId={email.emailId}
-          lastTestSentAt={email.lastTestSentAt}
-          beforeSend={saveContent}
-          onSent={(lastTestSentAt) => setEmail({ ...email, lastTestSentAt })}
-        />
+        <>
+          <UnpublishedChangesActions
+            sequence={sequence}
+            emailIds={[email.emailId]}
+            beforePublish={async () => {
+              // Publish what's on screen.
+              await saveContent();
+              return latestSequence.current;
+            }}
+            onChange={sequenceSaved}
+          />
+          <SendTestDialog
+            sendingVia={sendingOptionFor(sendingOptions, deliverySource)}
+            subject={email.subject}
+            sequenceId={sequenceId}
+            emailId={email.emailId}
+            lastTestSentAt={email.lastTestSentAt}
+            beforeSend={saveContent}
+            onSent={(lastTestSentAt) => setEmail({ ...email, lastTestSentAt })}
+          />
+        </>
       )}
     />
   );

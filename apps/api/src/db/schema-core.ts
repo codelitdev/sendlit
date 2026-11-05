@@ -1446,6 +1446,13 @@ export const sequenceEmails = pgTable(
     templateId: text("template_id"),
     actionType: text("action_type"), // tag:add | tag:remove
     actionData: jsonb("action_data"),
+    /** The working draft of a started sequence's or broadcast's email
+     * (#184). `subject` and `content` above are the published version that
+     * sends use; edits are saved here until they're published. Both are set
+     * together, or both are null when there are no unpublished changes. */
+    draftSubject: text("draft_subject"),
+    draftContent: jsonb("draft_content"),
+    draftUpdatedAt: timestamp("draft_updated_at", { withTimezone: true }),
     /** When a test of this email was last sent (`POST .../test`). */
     lastTestSentAt: timestamp("last_test_sent_at", { withTimezone: true }),
     /** Hosted content scan (`abuse/content-scan.ts`): `clean`, `review`
@@ -1471,9 +1478,9 @@ export const sequenceEmails = pgTable(
   }),
 );
 
-/** What a broadcast or sequence email looked like when it was sent: one
- * row per distinct subject and content (`contentHash` from
- * `abuse/content-scan.ts`), never updated. A send's "view in browser" link
+/** What a broadcast or sequence email looked like when it was sent or
+ * published: one row per distinct subject and content (`contentHash` from
+ * `abuse/content-scan.ts`), whose subject and content never change. A send's "view in browser" link
  * points at its row, so later edits don't change what earlier recipients
  * see. Deleted with the email. */
 export const emailContentVersions = pgTable(
@@ -1494,6 +1501,10 @@ export const emailContentVersions = pgTable(
     contentHash: text("content_hash").notNull(),
     subject: text("subject").notNull(),
     content: jsonb("content").notNull(),
+    /** When this version last went live (#184): set on publish, so the
+     * published versions form the email's history and can be restored.
+     * Null for versions that were only sent as tests. */
+    publishedAt: timestamp("published_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({
@@ -1568,6 +1579,10 @@ export const ongoingSequences = pgTable(
      * contacts get the day's capacity while an ESP warms up. */
     priority: bigint("priority", { mode: "number" }).notNull().default(0),
     sentEmailIds: text("sent_email_ids").array().notNull().default([]),
+    /** Emails this contact keeps getting in an earlier version (#184):
+     * public `emailId` to the internal `email_content_versions.id`, set
+     * when changes are published for new entrants only. */
+    pinnedVersions: jsonb("pinned_versions").$type<Record<string, string>>(),
     /** Snapshot of the custom event that enrolled the contact, rendered as
      * `{{ event.* }}`. Null for every other trigger. */
     triggerEvent: jsonb("trigger_event").$type<TriggerEventSnapshot>(),

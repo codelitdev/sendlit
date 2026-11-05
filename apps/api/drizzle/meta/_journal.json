@@ -218,6 +218,13 @@
       "when": 1793380715744,
       "tag": "0030_waiting_contacts_index",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793851987921,
+      "tag": "0031_email_drafts",
+      "breakpoints": true
     }
   ]
 }

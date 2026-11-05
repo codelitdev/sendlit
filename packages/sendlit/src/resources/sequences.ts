@@ -12,6 +12,9 @@ export type CreateSequenceInput = Body<typeof routes.create>;
 export type UpdateSequenceInput = Body<typeof routes.update>;
 export type AddSequenceEmailInput = Body<typeof routes.addEmail>;
 export type UpdateSequenceEmailInput = Body<typeof routes.updateEmail>;
+export type PublishSequenceChangesInput = Body<typeof routes.publishChanges>;
+export type DiscardSequenceChangesInput = Body<typeof routes.discardChanges>;
+export type SequenceEmailVersion = Ok<typeof routes.emailVersions>["items"][number];
 export type ListSequencesQuery = Query<typeof routes.list>;
 export type ListSequenceSubscribersQuery = Query<typeof routes.subscribers>;
 
@@ -69,6 +72,60 @@ export class Sequences {
         emailId: assertId(emailId, "emailId"),
       },
       body: input,
+    });
+  }
+
+  /** Publishes unpublished email changes (drafts) of a broadcast or
+   * sequence, so sends use them. While it's active, `updateEmail` saves
+   * subject and content changes as a draft. */
+  async publishChanges(
+    sequenceId: string,
+    input: PublishSequenceChangesInput = {},
+  ): Promise<Sequence> {
+    return this.http.request(routes.publishChanges, {
+      params: { sequenceId: assertId(sequenceId, "sequenceId") },
+      body: input,
+    });
+  }
+
+  /** Throws away unpublished email changes. Sends are not affected. */
+  async discardChanges(
+    sequenceId: string,
+    input: DiscardSequenceChangesInput = {},
+  ): Promise<Sequence> {
+    return this.http.request(routes.discardChanges, {
+      params: { sequenceId: assertId(sequenceId, "sequenceId") },
+      body: input,
+    });
+  }
+
+  /** The versions an email has been published with, live one first. */
+  async emailVersions(
+    sequenceId: string,
+    emailId: string,
+  ): Promise<SequenceEmailVersion[]> {
+    const { items } = await this.http.request(routes.emailVersions, {
+      params: {
+        sequenceId: assertId(sequenceId, "sequenceId"),
+        emailId: assertId(emailId, "emailId"),
+      },
+    });
+    return items;
+  }
+
+  /** Loads an earlier published version into the email's draft; publish
+   * it with `publishChanges` to roll back. */
+  async restoreEmailVersion(
+    sequenceId: string,
+    emailId: string,
+    versionId: string,
+  ): Promise<Sequence> {
+    return this.http.request(routes.restoreEmailVersion, {
+      params: {
+        sequenceId: assertId(sequenceId, "sequenceId"),
+        emailId: assertId(emailId, "emailId"),
+        versionId: assertId(versionId, "versionId"),
+      },
     });
   }
 

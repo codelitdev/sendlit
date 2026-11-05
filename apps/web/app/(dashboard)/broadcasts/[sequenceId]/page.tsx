@@ -30,6 +30,10 @@ import { BroadcastWebDialog } from "@/components/dashboard/broadcast-web-dialog"
 import { DeleteSequenceDialog } from "@/components/dashboard/delete-sequence-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import {
+  UnpublishedChangesActions,
+  VersionHistoryButton,
+} from "@/components/dashboard/draft-controls";
+import {
   MARKETING_EMAIL_EDITOR_BLOCKS,
   marketingPreviewContext,
 } from "@/components/dashboard/email-editor-screen";
@@ -157,19 +161,33 @@ export default function BroadcastEditorPage({
         excludeFilter: s.excludeFilter,
         deliverySource: s.deliverySource,
       });
-      const firstEmail = s.emails[0];
-      if (firstEmail) {
-        setEmail({
-          content: firstEmail.content,
-          delayInMillis: firstEmail.delayInMillis,
-        });
-      }
+      showEmail(s);
       if (s.status !== "draft") {
         setStats(await getSequenceStats(sequenceId));
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load broadcast");
     }
+  }
+
+  /** Shows the email's working copy: its unpublished changes when there
+   * are some. */
+  function showEmail(s: Sequence) {
+    const firstEmail = s.emails[0];
+    if (firstEmail) {
+      setEmail({
+        content: firstEmail.draft?.content ?? firstEmail.content,
+        delayInMillis: firstEmail.delayInMillis,
+      });
+    }
+  }
+
+  /** A publish, discard or restore changed the email and maybe the title,
+   * which mirrors its subject. */
+  function onDraftsChanged(updated: Sequence) {
+    setSequence(updated);
+    showEmail(updated);
+    setMeta((current) => (current ? { ...current, title: updated.title } : current));
   }
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when sequenceId changes
@@ -332,8 +350,12 @@ export default function BroadcastEditorPage({
   // Except its content when the pause was because the email couldn't be built:
   // fixing it is how the broadcast gets going again. Its audience and schedule
   // stay locked.
+  // A scheduled broadcast's content can change too: edits are saved as
+  // unpublished changes until they're published.
   const contentEditable =
-    editable || (autoPaused && sequence.report?.autoPause?.reason === "render_error");
+    editable ||
+    scheduledFor !== null ||
+    (autoPaused && sequence.report?.autoPause?.reason === "render_error");
 
   return (
     <ScrollablePage>
@@ -347,6 +369,7 @@ export default function BroadcastEditorPage({
             {sequence.archivedAt && <Badge variant="outline">archived</Badge>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <UnpublishedChangesActions sequence={sequence} onChange={onDraftsChanged} />
             {sequence.archivedAt ? (
               <Button variant="outline" onClick={unarchive} disabled={working}>
                 <ArchiveRestore className="size-4" />
@@ -474,6 +497,13 @@ export default function BroadcastEditorPage({
           </Banner>
         )}
 
+        {scheduledForLabel && sequence.hasUnpublishedChanges && (
+          <Banner variant="warning" className="mb-4">
+            This broadcast has unpublished changes. It sends the published version on{" "}
+            {scheduledForLabel} unless you publish them first.
+          </Banner>
+        )}
+
         {autoPaused && (
           <AutoPauseBanner
             report={sequence.report}
@@ -596,14 +626,23 @@ export default function BroadcastEditorPage({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Content</CardTitle>
-              {contentEditable && (
-                <Button size="sm" variant="outline" asChild>
-                  <Link href={`/editor/broadcasts/${sequenceId}`}>
-                    <Pencil className="size-4" />
-                    Edit content
-                  </Link>
-                </Button>
-              )}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {sequence.emails[0] && contentEditable && (
+                  <VersionHistoryButton
+                    sequence={sequence}
+                    emailId={sequence.emails[0].emailId}
+                    onChange={onDraftsChanged}
+                  />
+                )}
+                {contentEditable && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/editor/broadcasts/${sequenceId}`}>
+                      <Pencil className="size-4" />
+                      Edit content
+                    </Link>
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <EmailPreview

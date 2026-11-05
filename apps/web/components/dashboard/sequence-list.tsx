@@ -19,6 +19,7 @@ import { ListPagination } from "@/components/dashboard/list-pagination";
 import { Loading } from "@/components/dashboard/loading";
 import { NewSequenceDialog } from "@/components/dashboard/new-sequence-dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { UnpublishedChangesBadge } from "@/components/dashboard/publish-changes-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { Badge } from "@/components/ui/codelit/badge";
@@ -226,20 +227,23 @@ export function SequenceListPage({
                       {sequence.title || "Untitled"}
                     </td>
                     <td className="px-4 py-3">
-                      {type === "broadcast" ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <Badge variant={presentBroadcastStatus(sequence).variant}>
-                            {presentBroadcastStatus(sequence).label}
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        {type === "broadcast" ? (
+                          <>
+                            <Badge variant={presentBroadcastStatus(sequence).variant}>
+                              {presentBroadcastStatus(sequence).label}
+                            </Badge>
+                            {sequence.archivedAt && (
+                              <Badge variant="outline">archived</Badge>
+                            )}
+                          </>
+                        ) : (
+                          <Badge variant={STATUS_VARIANT[sequence.status]}>
+                            {sequence.status}
                           </Badge>
-                          {sequence.archivedAt && (
-                            <Badge variant="outline">archived</Badge>
-                          )}
-                        </span>
-                      ) : (
-                        <Badge variant={STATUS_VARIANT[sequence.status]}>
-                          {sequence.status}
-                        </Badge>
-                      )}
+                        )}
+                        {sequence.hasUnpublishedChanges && <UnpublishedChangesBadge />}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {sequence.emails.length}

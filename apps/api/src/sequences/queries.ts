@@ -68,6 +68,7 @@ import {
   type SequenceDeleteBlocker,
   sequenceDeleteBlocker,
 } from "./delete-blockers";
+import { draftPatch, editsAreDrafts, noDraft, workingCopy } from "./drafts";
 import {
   addRule,
   defaultEmailContent,
@@ -179,13 +180,7 @@ export async function createSequence({
   const reconciledContent = await syncEmailContentMediaReferences({
     teamId,
     content,
-    resource: {
-      resourceType: "SEQUENCE_EMAIL",
-      resourceInternalId: email.id,
-      resourcePublicId: email.emailId,
-      parentResourceInternalId: sequence.id,
-      parentResourcePublicId: sequence.sequenceId,
-    },
+    resource: emailMediaResource(sequence, email),
   });
   if (reconciledContent) {
     await db
@@ -357,7 +352,11 @@ export async function updateSequence({
     throw new Error(responses.mail_already_sent);
   }
   const patch: Partial<Sequence> = { updatedAt: new Date() };
-  if (title !== undefined) patch.title = title;
+  // A broadcast's title is its published subject: while it's scheduled, a
+  // new title is the email's draft subject and becomes the title when
+  // it's published, so a broadcast never shows a title it wasn't sent with.
+  const titleIsDraft = current.type === "broadcast" && editsAreDrafts(current);
+  if (title !== undefined && !titleIsDraft) patch.title = title;
   const triggerChanged =
     triggerType !== undefined ||
     triggerData !== undefined ||
@@ -451,7 +450,18 @@ export async function updateSequence({
     if (broadcastEmail) {
       await db
         .update(sequenceEmails)
-        .set({ subject: title, updatedAt: new Date() })
+        .set({
+          // A scheduled broadcast's new subject waits to be published.
+          ...(editsAreDrafts(current)
+            ? draftPatch(broadcastEmail, { subject: title })
+            : {
+                subject: title,
+                // An open draft keeps its content, now saved directly.
+                content: workingCopy(broadcastEmail).content as any,
+                ...noDraft,
+              }),
+          updatedAt: new Date(),
+        })
         .where(eq(sequenceEmails.id, broadcastEmail.id));
     }
   }
@@ -504,13 +514,7 @@ export async function addMailToSequence({
   const reconciledContent = await syncEmailContentMediaReferences({
     teamId,
     content,
-    resource: {
-      resourceType: "SEQUENCE_EMAIL",
-      resourceInternalId: email.id,
-      resourcePublicId: email.emailId,
-      parentResourceInternalId: sequence.id,
-      parentResourcePublicId: sequence.sequenceId,
-    },
+    resource: emailMediaResource(sequence, email),
   });
   if (reconciledContent) {
     await db
@@ -543,7 +547,22 @@ export async function addMailToSequence({
   return hydrate(row);
 }
 
-function isBroadcastLocked(sequence: HydratedSequence): boolean {
+export function emailMediaResource(
+  sequence: Pick<Sequence, "id" | "sequenceId">,
+  email: Pick<SequenceEmail, "id" | "emailId">,
+) {
+  return {
+    resourceType: "SEQUENCE_EMAIL" as const,
+    resourceInternalId: email.id,
+    resourcePublicId: email.emailId,
+    parentResourceInternalId: sequence.id,
+    parentResourcePublicId: sequence.sequenceId,
+  };
+}
+
+export function isBroadcastLocked(
+  sequence: Pick<HydratedSequence, "type" | "status" | "report">,
+): boolean {
   const report = (sequence.report || {}) as any;
   return (
     sequence.type === "broadcast" &&
@@ -587,19 +606,17 @@ export async function updateMailInSequence({
     if (!template) throw new Error(responses.item_not_found);
   }
 
+  // While it's active, subject and content edits are saved as a draft and
+  // the published version keeps sending until they're published (#184).
+  const asDraft = editsAreDrafts(sequence);
   if (content) {
     verifyMandatoryTags((content as any).content || []);
     content =
       (await syncEmailContentMediaReferences({
         teamId,
         content: content as EmailContent,
-        resource: {
-          resourceType: "SEQUENCE_EMAIL",
-          resourceInternalId: email.id,
-          resourcePublicId: email.emailId,
-          parentResourceInternalId: sequence.id,
-          parentResourcePublicId: sequence.sequenceId,
-        },
+        alsoReferenced: asDraft ? (email.content as EmailContent) : undefined,
+        resource: emailMediaResource(sequence, email),
       })) || content;
   }
 
@@ -607,21 +624,24 @@ export async function updateMailInSequence({
   // Broadcasts always mirror the sequence title as their subject and are
   // always published, so those fields aren't independently editable.
   if (sequence.type === "broadcast") {
-    patch.subject = sequence.title;
+    // Its title is the published subject; a drafted subject (set through
+    // the title while scheduled) is kept by `draftPatch`.
+    subject = asDraft ? undefined : sequence.title;
     patch.published = true;
-  } else {
-    if (subject !== undefined) patch.subject = subject;
-    if (published !== undefined) patch.published = published;
+  } else if (published !== undefined) {
+    patch.published = published;
   }
-  if (content !== undefined) patch.content = content as any;
-  // A running sequence sends edits straight away, so they're scanned now.
-  if (sequence.status === "active" && (patch.content || patch.subject)) {
-    await assertEmailContentAllowed({
-      teamId,
-      email,
-      subject: patch.subject ?? email.subject,
-      content: patch.content ?? email.content,
-    });
+  if (asDraft) {
+    if (subject !== undefined || content !== undefined) {
+      Object.assign(patch, draftPatch(email, { subject, content }));
+    }
+  } else if (subject !== undefined || content !== undefined) {
+    // Saved directly; an open draft (from while it was active) is what the
+    // editor showed, so it's folded in.
+    const working = workingCopy(email);
+    patch.subject = subject ?? working.subject;
+    patch.content = (content ?? working.content) as any;
+    Object.assign(patch, noDraft);
   }
   if (delayInMillis !== undefined) patch.delayInMillis = delayInMillis;
   if (templateId !== undefined) patch.templateId = templateId;
