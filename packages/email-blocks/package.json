@@ -1,6 +1,6 @@
 {
   "name": "@sendlit/email-blocks",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Headless, ready-to-use blocks for composing your own email workflows powered by SendLit",
   "author": "SendLit",
   "license": "MIT",
