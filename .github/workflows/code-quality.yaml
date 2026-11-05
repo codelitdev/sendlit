@@ -23,3 +23,4 @@ jobs:
             - run: bun run format:check
             - run: bun run build:packages
             - run: bun run typecheck
+            - run: bun --filter @sendlit/api openapi:check
