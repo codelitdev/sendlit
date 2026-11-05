@@ -7,10 +7,11 @@ import {
   type ContactFilterWithAggregator,
   TagEditor,
 } from "@sendlit/email-blocks";
-import { Download, Plus, Tags, Trash2 } from "lucide-react";
+import { Download, Plus, Tags, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AiAssistantHint } from "@/components/dashboard/ai-assistant-promo";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
@@ -34,6 +35,14 @@ import {
 import { IconButton } from "@/components/ui/codelit/icon-button";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Progress } from "@/components/ui/progress";
 import {
   type ContactSelection,
@@ -282,9 +291,34 @@ export default function ContactsPage() {
           {contacts === null ? (
             <Loading className="p-6" />
           ) : contacts.length === 0 ? (
-            <p className="p-6 text-sm text-muted-foreground">
-              No contacts yet. Create one to get started.
-            </p>
+            filter.filters.length > 0 ? (
+              <p className="p-6 text-sm text-muted-foreground">
+                No contacts match these filters.
+              </p>
+            ) : (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Users />
+                  </EmptyMedia>
+                  <EmptyTitle>No contacts yet</EmptyTitle>
+                  <EmptyDescription>
+                    Import a CSV from another tool, add contacts one by one, or collect
+                    them with a signup form.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <ImportContactsDialog onImported={() => load()} />
+                    <Button onClick={() => setOpen(true)}>
+                      <Plus className="size-4" />
+                      New contact
+                    </Button>
+                  </div>
+                  <AiAssistantHint action="import them" />
+                </EmptyContent>
+              </Empty>
+            )
           ) : (
             <table className="w-full text-sm">
               <thead>

@@ -11,6 +11,9 @@ https://api.sendlit.app/mcp
 
 For a local installation, replace the origin with the API origin configured in your environment, for example `http://localhost:5000/mcp`.
 
+In the dashboard, **Settings → AI assistants** shows your server URL with setup
+steps for Claude, Claude Code, Cursor, VS Code and other clients.
+
 ## Connect and authenticate
 
 SendLit supports both the current `2026-07-28` protocol and the existing `2025-11-25` Streamable HTTP initialize handshake. Modern clients may call `server/discover`, then `tools/list` and `tools/call`; existing clients begin with `initialize`. Every request is self-contained: there is no MCP session ID or retained server-side transport state.
