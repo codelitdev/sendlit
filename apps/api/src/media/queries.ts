@@ -7,7 +7,11 @@ import { deleteMedia as deleteMediaFile } from "./service";
 
 export type Media = typeof media.$inferSelect;
 export type MediaReference = typeof mediaReferences.$inferSelect;
-export type MediaReferenceResourceType = "TEMPLATE" | "SEQUENCE_EMAIL";
+export type MediaReferenceResourceType =
+  | "TEMPLATE"
+  | "SEQUENCE_EMAIL"
+  /** A broadcast's web page, which shows the media as its social image. */
+  | "BROADCAST_WEB_PAGE";
 
 export interface MediaReferenceResource {
   resourceType: MediaReferenceResourceType;

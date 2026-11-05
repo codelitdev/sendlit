@@ -3,6 +3,20 @@ import { type NextRequest, NextResponse } from "next/server";
 import { API_URL } from "@/lib/config";
 import { TEAM_ID_COOKIE } from "@/lib/tokens";
 
+/** True when the browser says the request came from this dashboard's own
+ * origin. Browsers always send `Origin` on a non-GET fetch or form POST. */
+function isSameOriginRequest(req: NextRequest): boolean {
+  const host =
+    req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? req.nextUrl.host;
+  const source = req.headers.get("origin") ?? req.headers.get("referer");
+  if (!source) return false;
+  try {
+    return new URL(source).host === host;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Same-origin dashboard proxy. Browser requests carry only httpOnly session
  * cookies; the API resolves those cookies and enforces team membership. No
@@ -13,10 +27,17 @@ async function forward(
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await params;
-  const cookieHeader = req.headers.get("cookie");
-  const targetUrl = `${API_URL}/${path.join("/")}${req.nextUrl.search}`;
   const method = req.method;
   const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+  // The API trusts the session cookie plus a double-submit token for writes.
+  // The proxy attaches that token itself, so it must first prove the request
+  // came from this dashboard and not from another origin (a sibling site, or
+  // a page a tenant published on the API host).
+  if (isMutation && !isSameOriginRequest(req)) {
+    return NextResponse.json({ error: "csrf_origin_invalid" }, { status: 403 });
+  }
+  const cookieHeader = req.headers.get("cookie");
+  const targetUrl = `${API_URL}/${path.join("/")}${req.nextUrl.search}`;
   // Establish the readable double-submit cookie on the first same-origin
   // request. It is not forwarded upstream on reads, preserving the proxy's
   // existing cookie/privacy behavior; mutation requests forward it.
@@ -51,8 +72,8 @@ async function forward(
       ...(req.headers.get("origin") ? { Origin: req.headers.get("origin")! } : {}),
       ...(req.headers.get("referer") ? { Referer: req.headers.get("referer")! } : {}),
       ...(forwardedCookie ? { Cookie: forwardedCookie } : {}),
-      ...(req.headers.get("x-sendlit-csrf")
-        ? { "X-Sendlit-CSRF": req.headers.get("x-sendlit-csrf")! }
+      ...(isMutation
+        ? { "X-Sendlit-CSRF": req.headers.get("x-sendlit-csrf") || csrfToken }
         : {}),
       ...(req.headers.get("x-sendlit-billing-action-token")
         ? {
@@ -77,6 +98,12 @@ async function forward(
           "Content-Type": upstream.headers.get("Content-Type") || "application/json",
         },
   });
+
+  // Nothing the API returns through here is a page to render. Tenant-authored
+  // HTML (web views, archives) must never run on the dashboard origin, so
+  // sandbox every response and stop the browser guessing a type.
+  res.headers.set("Content-Security-Policy", "default-src 'none'; sandbox");
+  res.headers.set("X-Content-Type-Options", "nosniff");
 
   if (upstream.status === 401) {
     res.headers.set("X-Auth-Error", "session_expired");

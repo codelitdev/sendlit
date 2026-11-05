@@ -44,16 +44,6 @@ export function TextSettings({ block, style, updateBlock }: TextSettingsProps) {
     { value: "48px", label: "48px" },
   ];
 
-  // Font family options
-  const fontFamilyOptions = [
-    { value: "Arial, sans-serif", label: "Arial" },
-    { value: "Helvetica, sans-serif", label: "Helvetica" },
-    { value: "Georgia, serif", label: "Georgia" },
-    { value: "'Times New Roman', serif", label: "Times New Roman" },
-    { value: "Verdana, sans-serif", label: "Verdana" },
-    { value: "monospace", label: "Monospace" },
-  ];
-
   // Line height options
   const lineHeightOptions = [
     { value: "1", label: "1" },
@@ -87,14 +77,6 @@ export function TextSettings({ block, style, updateBlock }: TextSettingsProps) {
         onChange={(value) => handleSettingChange("alignment", value)}
         options={alignmentOptions}
         defaultValue="left"
-      />
-
-      <SettingsSelect
-        label="Font Family"
-        value={block.settings.fontFamily || ""}
-        onChange={(value) => handleSettingChange("fontFamily", value)}
-        options={fontFamilyOptions}
-        defaultValue=""
       />
 
       <SettingsSelect

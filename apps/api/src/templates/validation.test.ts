@@ -88,6 +88,65 @@ describe("template content validation", () => {
     );
   });
 
+  it("accepts the new blocks and rejects malformed ones at write time", () => {
+    const email = (block: Email["content"][number]): Email => ({
+      ...defaultEmail,
+      content: [block, createFooterEmailBlock()],
+    });
+    const valid: Email["content"] = [
+      { blockType: "spacer", settings: { height: "24px" } },
+      { blockType: "columns", settings: { left: "a", right: "b", ratio: "12" } },
+      {
+        blockType: "social",
+        settings: { links: [{ network: "x", url: "https://x.com/sendlit" }] },
+      },
+      { blockType: "html", settings: { code: "<p>Hi</p>" } },
+      {
+        blockType: "conditional",
+        settings: { tag: "customer", has: false, content: "Hi" },
+      },
+    ];
+    for (const block of valid) {
+      expect(() =>
+        validateTemplateInputContent(email(block), "marketing"),
+      ).not.toThrow();
+    }
+
+    const invalid: Email["content"] = [
+      { blockType: "spacer", settings: { height: "tall" } },
+      { blockType: "columns", settings: { left: "a" } },
+      {
+        blockType: "social",
+        settings: { links: [{ network: "x", url: "javascript:alert(1)" }] },
+      },
+      { blockType: "html", settings: {} },
+      {
+        blockType: "conditional",
+        settings: { tag: 'a" %}{% endif %}', content: "Hi" },
+      },
+    ];
+    for (const block of invalid) {
+      expect(() =>
+        validateTemplateInputContent(email(block), "marketing"),
+      ).toThrowError(expect.objectContaining({ message: "invalid_email_content" }));
+    }
+  });
+
+  it("keeps conditional sections out of transactional content", () => {
+    const transactional: Email = {
+      ...defaultEmail,
+      content: [
+        {
+          blockType: "conditional",
+          settings: { tag: "customer", content: "Hi" },
+        },
+      ],
+    };
+    expect(() =>
+      validateTemplateInputContent(transactional, "transactional"),
+    ).toThrowError(expect.objectContaining({ message: "conditional_not_allowed" }));
+  });
+
   it("rejects footer and reserved marketing variables transactionally", () => {
     expect(() =>
       validateTemplateContent(content("Hello", "marketing"), "transactional"),

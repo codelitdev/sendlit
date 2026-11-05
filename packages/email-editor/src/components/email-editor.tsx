@@ -1,47 +1,70 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronRight, Copy, PenLine, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TextBlock as StandardTextRenderer } from "../blocks/text/block";
+import { getBlockChoices } from "../lib/block-choices";
 import {
   canDeleteBlock,
   canDuplicateBlock,
   canInsertAfter,
   canMoveBlock,
+  getBlockCapabilities,
   getDefaultBlockSettings,
+  reorderBlocks,
   resolveInsertionIndex,
 } from "../lib/block-policy";
+import { type ChecklistItem, checklistLabel, computeChecklist } from "../lib/checklist";
 import { defaultEmail } from "../lib/default-email";
+import { History } from "../lib/history";
+import { setFallback } from "../lib/inline-markdown";
+import { countWords } from "../lib/markdown-edit";
+import { type MenuPlacement, placeMenu } from "../lib/menu-placement";
 import { normalizeEmail } from "../lib/normalize-email";
+import {
+  darkBlock,
+  darkStyle,
+  type Palette,
+  paletteContent,
+  paletteStyle,
+} from "../lib/palettes";
+import {
+  explodeTextBlocks,
+  itemMarkdown,
+  mergeTextItems,
+  parseItem,
+  type Row,
+  splitMarkdown,
+  toRows,
+} from "../lib/text-items";
 import type { BlockRegistry } from "../types/block-registry";
+import type { BlockChoice, EditorTheme, EditorVariable } from "../types/editor-ui";
 import type { Email, EmailBlock, EmailStyle } from "../types/email-editor";
-import { AddBlockButton } from "./add-block-button";
-import { BlockSettingsPanel } from "./block-settings-panel";
-import { BlockWrapper } from "./block-wrapper";
-import { EditorLayout } from "./layout/editor-layout";
+import { BlockMenu } from "./block-menu";
+import { BlockRow, ItemRow, type RowEvents } from "./block-row";
+import { Checklist } from "./checklist";
+import { ControlsBar } from "./controls-bar";
+import { DocHeader, InboxRow } from "./doc-header";
+import { Inspector } from "./inspector";
+import { plainText, TextItem } from "./text-item";
 import "../index.css";
+import "../editor.css";
 
-// Simple ID generator
 function generateId() {
-  return Math.random().toString(36).substr(2, 9);
+  return Math.random().toString(36).slice(2, 11);
 }
 
-// Helper function to deep merge objects
 function deepMerge(target: any, source: any) {
   const output = { ...target };
-
   if (isObject(target) && isObject(source)) {
-    Object.keys(source).forEach((key) => {
-      if (isObject(source[key])) {
-        if (!(key in target)) {
-          Object.assign(output, { [key]: source[key] });
-        } else {
-          output[key] = deepMerge(target[key], source[key]);
-        }
+    for (const key of Object.keys(source)) {
+      if (isObject(source[key]) && key in target) {
+        output[key] = deepMerge(target[key], source[key]);
       } else {
-        Object.assign(output, { [key]: source[key] });
+        output[key] = source[key];
       }
-    });
+    }
   }
-
   return output;
 }
 
@@ -49,23 +72,99 @@ function isObject(item: any) {
   return item && typeof item === "object" && !Array.isArray(item);
 }
 
-function getEmailWithBlockIds(email: Email): Email {
-  const normalized = normalizeEmail(email);
-  return {
-    style: normalized.style,
-    meta: normalized.meta,
-    content: normalized.content.map((block) => ({
-      ...block,
-      id: generateId(),
-      settings: block.settings || {},
-    })),
-  };
+/** Paragraph-by-paragraph writing applies to SendLit's own text block, whose
+ * content is markdown. A host that leaves it out, or registers its own block
+ * under the `text` name, gets ordinary blocks it selects and edits in Style. */
+export function usesTextItems(blockRegistry: BlockRegistry): boolean {
+  return blockRegistry.text?.block === StandardTextRenderer;
 }
 
-function stripBlockIds(email: Email): Email {
+const TAG = /\{\{\s*([\w.]+)(?:\s*\|\s*default:\s*"([^"]*)")?\s*\}\}/g;
+
+/** Replaces merge tags with their sample values, for the "Sample data" preview. */
+function withSamples(block: EmailBlock, samples: Map<string, string>): EmailBlock {
+  const fill = (text: string) =>
+    text.replace(TAG, (whole, path: string) => samples.get(path) ?? whole);
+  const settings = { ...block.settings };
+  for (const key of ["content", "left", "right", "text"]) {
+    if (typeof settings[key] === "string") settings[key] = fill(settings[key]);
+  }
+  return { ...block, settings };
+}
+
+function blockWords(block: EmailBlock) {
+  const s = block.settings ?? {};
+  return [s.content, s.left, s.right].reduce<number>(
+    (sum, text) => sum + (typeof text === "string" ? countWords(text) : 0),
+    0,
+  );
+}
+
+const MOBILE_WIDTH = 375;
+
+/** How a block is named in messages such as "Button deleted". */
+function labelOf(block: EmailBlock, blockRegistry: BlockRegistry) {
+  if (block.blockType === "text" && block.group) return "Text";
+  if (block.blockType === "link" && block.settings?.isButton) return "Button";
+  if (block.blockType === "separator") return "Divider";
+  return blockRegistry[block.blockType]?.metadata.displayName ?? "Block";
+}
+
+/** A block's accessible name: what it is and the start of its words, such as
+ * "Button block: Get started", so a screen reader can tell rows apart. */
+function describeBlock(block: EmailBlock, blockRegistry: BlockRegistry) {
+  const words =
+    block.blockType === "text"
+      ? plainText(String(block.settings.content ?? ""))
+      : block.blockType === "link"
+        ? String(block.settings.text ?? "")
+        : block.blockType === "image"
+          ? String(block.settings.alt ?? "")
+          : "";
+  const short = words.length > 60 ? `${words.slice(0, 60)}…` : words;
+  return `${labelOf(block, blockRegistry)} block${short ? `: ${short}` : ""}`;
+}
+
+/** Dialogs and popovers a host's quick edit may open outside the editor. */
+const DIALOGS =
+  '[role="dialog"], [role="alertdialog"], [data-radix-popper-content-wrapper]';
+
+const isItem = (block: EmailBlock | undefined): boolean =>
+  block?.blockType === "text" && Boolean(block.group);
+
+const isHeading = (block: EmailBlock) =>
+  parseItem(String(block.settings.content ?? "")).kind.startsWith("h");
+
+const withoutContent = ({ content: _drop, ...settings }: EmailBlock["settings"]) =>
+  settings;
+
+/** Where a new item written after `previous` belongs: its text block, so
+ * writing on stays one block. A paragraph after a block of only headings (a
+ * title set in its own size) takes the style of the nearest body text
+ * instead, joining it when it comes straight after. */
+function homeFor(
+  content: EmailBlock[],
+  previous: EmailBlock,
+  markdown: string,
+): Pick<EmailBlock, "group" | "settings"> {
+  const own = { group: previous.group, settings: withoutContent(previous.settings) };
+  if (parseItem(markdown).kind !== "p") return own;
+  const at = content.indexOf(previous);
+  const heading = content.filter(
+    (block) => isItem(block) && block.group === previous.group,
+  );
+  if (!heading.every(isHeading)) return own;
+  const body = (block: EmailBlock | undefined) =>
+    isItem(block) && block!.group !== previous.group && !isHeading(block!);
+  const next = content[at + 1];
+  if (body(next))
+    return { group: next!.group, settings: withoutContent(next!.settings) };
+  const nearest = [...content.slice(at + 1), ...content.slice(0, at).reverse()].find(
+    body,
+  );
   return {
-    ...email,
-    content: email.content.map((block) => ({ ...block, id: undefined })),
+    group: generateId(),
+    settings: nearest ? withoutContent(nearest.settings) : {},
   };
 }
 
@@ -74,6 +173,15 @@ interface EmailEditorProps {
   onChange?: (email: Email) => void;
   blockRegistry: BlockRegistry;
   renderContext?: unknown;
+  /** The subject line. Omit when the host edits it elsewhere. */
+  subject?: string;
+  onSubjectChange?: (subject: string) => void;
+  /** Merge tags offered while writing and in the Tags tab. */
+  variables?: EditorVariable[];
+  /** Shown as the sender in inbox previews. */
+  senderName?: string;
+  theme?: EditorTheme;
+  defaultMode?: "write" | "style";
 }
 
 export function EmailEditor({
@@ -81,321 +189,1332 @@ export function EmailEditor({
   onChange,
   blockRegistry,
   renderContext,
+  subject,
+  onSubjectChange,
+  variables = [],
+  senderName = "Your sender name",
+  theme = "sendlit",
+  defaultMode = "write",
 }: EmailEditorProps) {
-  const [email, setEmail] = useState<Email>(
-    getEmailWithBlockIds(initialEmail || defaultEmail),
-  );
-  const [movingBlockId, setMovingBlockId] = useState<string | null>(null);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-  const [showSettings] = useState(true);
+  const itemsOn = usesTextItems(blockRegistry);
+  const canWrite = Boolean(blockRegistry.text);
 
-  // Tracks the last value this component itself emitted via onChange (with
-  // block ids stripped, matching the shape of `initialEmail`). This lets us
-  // distinguish a genuine external reset (e.g. a different record loaded by
-  // the parent) from the parent simply echoing our own change back down as
-  // a new `initialEmail` reference, which would otherwise regenerate all
-  // block ids and invalidate `selectedBlockId`.
+  const load = useCallback(
+    (source: Email): Email => {
+      const normalized = normalizeEmail(source);
+      return {
+        style: normalized.style,
+        meta: normalized.meta,
+        content: itemsOn
+          ? explodeTextBlocks(normalized.content, generateId)
+          : normalized.content.map((block) => ({
+              ...block,
+              id: generateId(),
+              settings: block.settings || {},
+            })),
+      };
+    },
+    [itemsOn],
+  );
+
+  const [email, setEmail] = useState<Email>(() => load(initialEmail || defaultEmail));
+  const [mode, setMode] = useState<"write" | "style">(defaultMode);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeCaret, setActiveCaret] = useState<number | "end">("end");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [insertAfterId, setInsertAfterId] = useState<string | null>(null);
+  const [insertPlacement, setInsertPlacement] = useState<MenuPlacement>();
+  // Room for the quick settings popover: the visible height of the canvas.
+  const [popoverMax, setPopoverMax] = useState(480);
+  const [inspectorTab, setInspectorTab] = useState<"email" | "block" | "variables">(
+    "email",
+  );
+  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  const [sample, setSample] = useState(false);
+  const [darkInbox, setDarkInbox] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<{ id: string; edge: "before" | "after" } | null>(
+    null,
+  );
+  const [toast, setToast] = useState<string | null>(null);
+  const [, setHistoryVersion] = useState(0);
+
+  // Tracks the last value this component itself emitted via onChange, in the
+  // stored shape. This lets us tell a genuine external reset (another record
+  // loaded by the parent) from the parent echoing our own change back down,
+  // which would otherwise rebuild every item and lose the caret.
   const lastEmittedRef = useRef<Email | null>(null);
   const lastInitialEmailRef = useRef(initialEmail);
   const emailRef = useRef(email);
+  const historyRef = useRef(new History<Email>());
+  const rootRef = useRef<HTMLDivElement>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const choices = useMemo(() => getBlockChoices(blockRegistry), [blockRegistry]);
+
+  // What a screen reader hears: a live region that is always there, so each
+  // message is read out. The toast shows the same message on screen.
+  const [announcement, setAnnouncement] = useState("");
+  const announce = useCallback((message: string) => {
+    // A repeated message ("Moved down" twice) still has to change to be read.
+    setAnnouncement((current) => (current === message ? `${message}\u00a0` : message));
+  }, []);
+  const flash = useCallback(
+    (message: string) => {
+      setToast(message);
+      announce(message);
+      clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 2600);
+    },
+    [announce],
+  );
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   // Keep the parent informed in the same event that changes editor state.
   // Deferring this to an effect leaves a window where an immediate Save can
   // observe the previous document.
-  const commitEmail = useCallback(
+  const publish = useCallback(
     (nextEmail: Email) => {
       emailRef.current = nextEmail;
       setEmail(nextEmail);
-
-      const emitted = stripBlockIds(nextEmail);
+      const emitted = mergeTextItems(nextEmail);
       lastEmittedRef.current = emitted;
       onChange?.(emitted);
     },
     [onChange],
   );
 
-  // Update email when initialEmail prop changes
-  useEffect(() => {
-    if (!initialEmail || initialEmail === lastInitialEmailRef.current) {
-      return;
-    }
-    lastInitialEmailRef.current = initialEmail;
+  const commitEmail = useCallback(
+    (nextEmail: Email, historyKey: string | null = null) => {
+      historyRef.current.record(emailRef.current, historyKey);
+      setHistoryVersion((version) => version + 1);
+      publish(nextEmail);
+    },
+    [publish],
+  );
 
+  const commitContent = useCallback(
+    (content: EmailBlock[], historyKey: string | null = null) =>
+      commitEmail({ ...emailRef.current, content }, historyKey),
+    [commitEmail],
+  );
+
+  useEffect(() => {
+    if (!initialEmail || initialEmail === lastInitialEmailRef.current) return;
+    lastInitialEmailRef.current = initialEmail;
     const isEchoOfOwnChange =
       lastEmittedRef.current !== null &&
       JSON.stringify(lastEmittedRef.current) === JSON.stringify(initialEmail);
-    if (isEchoOfOwnChange) {
-      return;
-    }
-    const nextEmail = getEmailWithBlockIds(initialEmail);
+    if (isEchoOfOwnChange) return;
+
+    const nextEmail = load(initialEmail);
     emailRef.current = nextEmail;
+    historyRef.current.reset();
+    setHistoryVersion((version) => version + 1);
     setEmail(nextEmail);
-  }, [initialEmail]);
+    setActiveId(null);
+    setSelectedId(null);
+  }, [initialEmail, load]);
+
+  /** What a selection or an action in this mode stands for: in Style a text
+   * block is one row; while writing every item is its own row. */
+  const rowsOf = useCallback(
+    (content: EmailBlock[], inMode: "write" | "style"): Row[] =>
+      inMode === "style" && itemsOn
+        ? toRows(content, { keepEmpty: true })
+        : content.map((block, index) => ({
+            id: block.id!,
+            start: index,
+            end: index + 1,
+            block,
+          })),
+    [itemsOn],
+  );
+
+  // ---- email-wide edits ---------------------------------------------------
 
   const updateEmail = useCallback(
-    (newEmail: Email) => {
-      commitEmail(newEmail);
-    },
+    // The inspector edits style and meta; the blocks stay ours.
+    (next: Email) =>
+      commitEmail({ ...emailRef.current, style: next.style, meta: next.meta }, "email"),
     [commitEmail],
   );
 
   const updateEmailStyle = useCallback(
-    (styleUpdate: Partial<EmailStyle>) => {
-      const newEmail = {
-        ...emailRef.current,
-        style: deepMerge(emailRef.current.style, styleUpdate),
-      };
-      commitEmail(newEmail);
+    (styleUpdate: Partial<EmailStyle>) =>
+      commitEmail(
+        { ...emailRef.current, style: deepMerge(emailRef.current.style, styleUpdate) },
+        "style",
+      ),
+    [commitEmail],
+  );
+
+  const applyPalette = useCallback(
+    (palette: Palette) => {
+      const email = emailRef.current;
+      commitEmail(
+        {
+          ...email,
+          content: paletteContent(email, palette),
+          style: deepMerge(email.style, paletteStyle(palette)),
+        },
+        "style",
+      );
     },
     [commitEmail],
   );
 
-  const addBlock = useCallback(
-    (blockType: string, index: number) => {
+  /** Settings from a block's form. For a whole text block, the settings apply
+   * to all its items and new text is split into items again. */
+  const updateBlock = useCallback(
+    (id: string, partial: Partial<EmailBlock>) => {
+      const content = emailRef.current.content;
+      const row = rowsOf(content, mode).find((r) => r.id === id);
+      if (row && mode === "style" && isItem(content[row.start])) {
+        const items = content.slice(row.start, row.end);
+        const { content: markdown, ...shared } = partial.settings ?? {};
+        const group = items[0].group;
+        const changedText =
+          typeof markdown === "string" && markdown !== row.block.settings.content;
+        const nextItems = changedText
+          ? (splitMarkdown(markdown).length ? splitMarkdown(markdown) : [""]).map(
+              (unit, index) => ({
+                id: index === 0 ? items[0].id : generateId(),
+                blockType: "text",
+                group,
+                settings: { ...items[0].settings, ...shared, content: unit },
+              }),
+            )
+          : items.map((item) => ({
+              ...item,
+              settings: { ...item.settings, ...shared, content: item.settings.content },
+            }));
+        commitContent(
+          [...content.slice(0, row.start), ...nextItems, ...content.slice(row.end)],
+          `block:${id}`,
+        );
+        return;
+      }
+      commitContent(
+        content.map((block) => (block.id === id ? { ...block, ...partial } : block)),
+        `block:${id}`,
+      );
+    },
+    [commitContent, mode, rowsOf],
+  );
+
+  // ---- selection ----------------------------------------------------------
+
+  const activate = useCallback((id: string, caret: number | "end" = "end") => {
+    setSelectedId(null);
+    setInsertAfterId(null);
+    setActiveCaret(caret);
+    setActiveId(id);
+  }, []);
+
+  const select = useCallback(
+    (id: string) => {
+      setActiveId(null);
+      setInsertAfterId(null);
+      setSelectedId(id);
+      if (mode === "style") {
+        setInspectorTab("block");
+      } else {
+        const stage = rootRef.current?.querySelector(".sle-stage");
+        if (stage) setPopoverMax(Math.max(180, stage.clientHeight - 32));
+      }
+    },
+    [mode],
+  );
+
+  /** Puts the caret in an item, or selects any other block. */
+  const focusBlock = useCallback(
+    (id: string, caret: number | "end" = "end") => {
+      const block = emailRef.current.content.find((candidate) => candidate.id === id);
+      if (isItem(block)) activate(id, caret);
+      else select(id);
+    },
+    [activate, select],
+  );
+
+  // ---- inserting ----------------------------------------------------------
+
+  /** Adds any other block; `replaceId` swaps it in for an item. */
+  const insertBlock = useCallback(
+    (
+      blockType: string,
+      index: number,
+      settings: Record<string, unknown> = {},
+      replaceId?: string,
+    ): string | null => {
+      let content = emailRef.current.content;
+      let at = index;
+      if (replaceId) {
+        const from = content.findIndex((block) => block.id === replaceId);
+        if (from !== -1) {
+          content = content.filter((block) => block.id !== replaceId);
+          at = from;
+        }
+      }
       const insertionIndex = resolveInsertionIndex(
         blockType,
-        index,
-        emailRef.current.content,
+        at,
+        content,
         blockRegistry,
       );
-      if (insertionIndex === null) return;
-
-      const newBlock: EmailBlock = {
+      if (insertionIndex === null) return null;
+      const block: EmailBlock = {
         id: generateId(),
         blockType,
-        settings: getDefaultBlockSettings(blockType, blockRegistry),
+        settings: { ...getDefaultBlockSettings(blockType, blockRegistry), ...settings },
       };
-      const newEmail = {
-        ...emailRef.current,
-        content: [
-          ...emailRef.current.content.slice(0, insertionIndex),
-          newBlock,
-          ...emailRef.current.content.slice(insertionIndex),
-        ],
-      };
-
-      commitEmail(newEmail);
-      setSelectedBlockId(newBlock.id!);
+      commitContent([
+        ...content.slice(0, insertionIndex),
+        block,
+        ...content.slice(insertionIndex),
+      ]);
+      return block.id!;
     },
-    [blockRegistry, commitEmail],
+    [blockRegistry, commitContent],
   );
 
-  const updateBlock = useCallback(
-    (id: string, content: Partial<EmailBlock>) => {
-      const newEmail = {
-        ...emailRef.current,
-        content: emailRef.current.content.map((block) =>
-          block.id === id ? { ...block, ...content } : block,
-        ),
+  /** Adds a text item. Next to another item it joins that text block, so
+   * writing on stays one block rather than many. */
+  const insertText = useCallback(
+    (index: number, markdown: string): string | null => {
+      if (!itemsOn) return insertBlock("text", index, { content: markdown });
+      const content = emailRef.current.content;
+      const at = resolveInsertionIndex("text", index, content, blockRegistry);
+      if (at === null) return null;
+      const previous = content[at - 1];
+      const home = isItem(previous)
+        ? homeFor(content, previous!, markdown)
+        : { group: generateId(), settings: {} };
+      const item: EmailBlock = {
+        id: generateId(),
+        blockType: "text",
+        group: home.group,
+        settings: { ...home.settings, content: markdown },
       };
-      commitEmail(newEmail);
+      commitContent([...content.slice(0, at), item, ...content.slice(at)]);
+      return item.id!;
     },
-    [commitEmail],
+    [blockRegistry, commitContent, insertBlock, itemsOn],
   );
 
-  // const updateBlockStyle = useCallback(
-  //     (id: string, style: Partial<Style>) => {
-  //         const newEmail = {
-  //             ...email,
-  //             content: email.content.map((block) => {
-  //                 if (block.id === id) {
-  //                     return {
-  //                         ...block,
-  //                         style: {
-  //                             ...(block.style || {}),
-  //                             ...style,
-  //                         },
-  //                     };
-  //                 }
-  //                 return block;
-  //             }),
-  //         };
+  /** Inserts what a menu offered at `index`, replacing `replaceId` if given. */
+  const insertChoice = useCallback(
+    (choice: BlockChoice, index: number, replaceId?: string) => {
+      if (choice.text !== undefined && itemsOn) {
+        const id = insertText(index, choice.text);
+        if (id) activate(id, "end");
+        return;
+      }
+      const type = choice.blockType ?? "text";
+      const settings =
+        choice.text !== undefined ? { content: choice.text } : choice.settings;
+      const id = insertBlock(type, index, settings, replaceId);
+      if (id) focusBlock(id);
+    },
+    [activate, focusBlock, insertBlock, insertText, itemsOn],
+  );
 
-  //         setEmail(newEmail);
+  // ---- whole-row actions --------------------------------------------------
 
-  //         if (onChange) {
-  //             onChange(stripBlockIds(newEmail));
-  //         }
-  //     },
-  //     [email, onChange],
-  // );
+  /** Keyboard focus on a block itself, after the next render. */
+  const focusRow = useCallback((id: string) => {
+    setTimeout(() =>
+      rootRef.current
+        ?.querySelector<HTMLElement>(`[data-block-id="${id}"] .sle-hit`)
+        ?.focus(),
+    );
+  }, []);
 
   const deleteBlock = useCallback(
     (id: string) => {
-      const block = emailRef.current.content.find((candidate) => candidate.id === id);
-      if (!block || !canDeleteBlock(block, blockRegistry)) return;
-
-      const newEmail = {
-        ...emailRef.current,
-        content: emailRef.current.content.filter((block) => block.id !== id),
-      };
-
-      commitEmail(newEmail);
-
-      // If the deleted block was selected, clear selection
-      setSelectedBlockId((prevSelectedId) => {
-        if (prevSelectedId === id) {
-          return null;
-        }
-        return prevSelectedId;
-      });
-    },
-    [blockRegistry, commitEmail],
-  );
-
-  const moveBlock = useCallback(
-    (id: string, direction: "up" | "down") => {
-      if (!canMoveBlock(emailRef.current.content, id, direction, blockRegistry)) {
-        return;
+      const content = emailRef.current.content;
+      const row = rowsOf(content, mode).find((r) => r.id === id);
+      if (!row || !canDeleteBlock(row.block, blockRegistry)) return;
+      const next = [...content.slice(0, row.start), ...content.slice(row.end)];
+      commitContent(next);
+      setActiveId((current) => (current === id ? null : current));
+      setSelectedId((current) => (current === id ? null : current));
+      flash(`${labelOf(row.block, blockRegistry)} deleted. Undo brings it back.`);
+      // Keep focus in the email, on what was above (or else below) it.
+      const neighbour = next[row.start - 1] ?? next[row.start];
+      if (!neighbour) return;
+      if (mode === "write" && isItem(neighbour)) activate(neighbour.id!, "end");
+      else {
+        const target = rowsOf(next, mode).find(
+          (r) => r.start <= next.indexOf(neighbour) && next.indexOf(neighbour) < r.end,
+        );
+        if (target) focusRow(target.id);
       }
-      const index = emailRef.current.content.findIndex((block) => block.id === id);
-
-      const newContent = [...emailRef.current.content];
-      const [movedBlock] = newContent.splice(index, 1);
-      newContent.splice(direction === "up" ? index - 1 : index + 1, 0, movedBlock);
-
-      commitEmail({
-        ...emailRef.current,
-        content: newContent,
-      });
-
-      // Set the moving block ID to trigger animation
-      setMovingBlockId(id);
-
-      // Clear the moving block ID after animation completes
-      setTimeout(() => {
-        setMovingBlockId(null);
-      }, 350);
     },
-    [blockRegistry, commitEmail],
+    [activate, blockRegistry, commitContent, flash, focusRow, mode, rowsOf],
   );
 
   const duplicateBlock = useCallback(
     (id: string) => {
-      const blockToDuplicate = emailRef.current.content.find(
-        (block) => block.id === id,
+      const content = emailRef.current.content;
+      const row = rowsOf(content, mode).find((r) => r.id === id);
+      if (!row || !canDuplicateBlock(row.block, blockRegistry)) return;
+      const group = generateId();
+      const copies = content.slice(row.start, row.end).map((block) => ({
+        ...block,
+        id: generateId(),
+        // A copied text block in Style is its own block; a copied item while
+        // writing stays part of the text it sits in.
+        ...(block.group && mode === "style" ? { group } : {}),
+      }));
+      commitContent([
+        ...content.slice(0, row.end),
+        ...copies,
+        ...content.slice(row.end),
+      ]);
+      if (mode === "style") select(copies[0].id!);
+      else focusBlock(copies[0].id!);
+    },
+    [blockRegistry, commitContent, focusBlock, mode, rowsOf, select],
+  );
+
+  const canMoveRow = useCallback(
+    (rows: Row[], id: string, direction: "up" | "down") =>
+      canMoveBlock(
+        rows.map((row) => ({ ...row.block, id: row.id })),
+        id,
+        direction,
+        blockRegistry,
+      ),
+    [blockRegistry],
+  );
+
+  const moveBlock = useCallback(
+    (id: string, direction: "up" | "down") => {
+      const content = emailRef.current.content;
+      const rows = rowsOf(content, mode);
+      const index = rows.findIndex((row) => row.id === id);
+      if (index === -1 || !canMoveRow(rows, id, direction)) return;
+      const other = rows[direction === "up" ? index - 1 : index + 1];
+      const row = rows[index];
+      const [first, second] = direction === "up" ? [row, other] : [other, row];
+      const lo = Math.min(row.start, other.start);
+      const hi = Math.max(row.end, other.end);
+      commitContent([
+        ...content.slice(0, lo),
+        ...content.slice(first.start, first.end),
+        ...content.slice(second.start, second.end),
+        ...content.slice(hi),
+      ]);
+    },
+    [canMoveRow, commitContent, mode, rowsOf],
+  );
+
+  const dropBlock = useCallback(() => {
+    if (dragId && dropAt) {
+      const content = emailRef.current.content;
+      const target = content.findIndex((block) => block.id === dropAt.id);
+      const reordered =
+        target === -1
+          ? null
+          : reorderBlocks(
+              content,
+              dragId,
+              dropAt.edge === "before" ? target : target + 1,
+              blockRegistry,
+            );
+      if (reordered) commitContent(reordered);
+    }
+    setDragId(null);
+    setDropAt(null);
+  }, [blockRegistry, commitContent, dragId, dropAt]);
+
+  // ---- writing ------------------------------------------------------------
+
+  const changeItem = useCallback(
+    (id: string, markdown: string) => {
+      const content = emailRef.current.content;
+      commitContent(
+        content.map((block) =>
+          block.id === id
+            ? { ...block, settings: { ...block.settings, content: markdown } }
+            : block,
+        ),
+        `text:${id}`,
       );
-      if (!blockToDuplicate || !canDuplicateBlock(blockToDuplicate, blockRegistry)) {
+    },
+    [commitContent],
+  );
+
+  const splitItem = useCallback(
+    (id: string, before: string, after: string) => {
+      const content = emailRef.current.content;
+      const index = content.findIndex((block) => block.id === id);
+      const item = content[index];
+      if (!item) return;
+      const home = homeFor(content, item, after);
+      const created: EmailBlock = {
+        ...item,
+        id: generateId(),
+        group: home.group,
+        settings: { ...home.settings, content: after },
+      };
+      commitContent([
+        ...content.slice(0, index),
+        { ...item, settings: { ...item.settings, content: before } },
+        created,
+        ...content.slice(index + 1),
+      ]);
+      activate(created.id!, 0);
+    },
+    [activate, commitContent],
+  );
+
+  /** Backspace at the start of a paragraph: it joins the text above, or, when
+   * empty right after a button or image, goes away and selects that block. */
+  const mergeBack = useCallback(
+    (id: string) => {
+      const content = emailRef.current.content;
+      const index = content.findIndex((block) => block.id === id);
+      const item = content[index];
+      const previous = content[index - 1];
+      if (!item || !previous) return;
+      const { body } = parseItem(String(item.settings.content ?? ""));
+      if (isItem(previous)) {
+        const above = parseItem(String(previous.settings.content ?? ""));
+        commitContent([
+          ...content.slice(0, index - 1),
+          {
+            ...previous,
+            settings: {
+              ...previous.settings,
+              content: itemMarkdown(above.prefix, above.body + body),
+            },
+          },
+          ...content.slice(index + 1),
+        ]);
+        activate(previous.id!, above.body.length);
         return;
       }
-
-      const index = emailRef.current.content.findIndex((block) => block.id === id);
-      const duplicatedBlock = {
-        ...blockToDuplicate,
-        id: generateId(),
-      };
-
-      const newContent = [...emailRef.current.content];
-      newContent.splice(index + 1, 0, duplicatedBlock);
-
-      const newEmail = {
-        ...emailRef.current,
-        content: newContent,
-      };
-
-      commitEmail(newEmail);
-
-      // Set the selection immediately after creating the duplicated block
-      setSelectedBlockId(duplicatedBlock.id!);
+      if (!body && canDeleteBlock(item, blockRegistry)) {
+        commitContent([...content.slice(0, index), ...content.slice(index + 1)]);
+        select(previous.id!);
+      }
     },
-    [blockRegistry, commitEmail],
+    [activate, blockRegistry, commitContent, select],
   );
 
-  // Email editor content - mirroring the HTML email structure
-  const editorContent = (
-    <div className="email-html">
-      {/* Body equivalent - Apply body styles here */}
+  /** Moves a row from the keyboard, keeping focus on it and saying where it
+   * went. */
+  const moveRow = useCallback(
+    (id: string, direction: "up" | "down") => {
+      const rows = rowsOf(emailRef.current.content, mode);
+      if (!canMoveRow(rows, id, direction)) {
+        announce(`Can't move ${direction === "up" ? "higher" : "lower"}`);
+        return;
+      }
+      const focused = document.activeElement as HTMLElement | null;
+      const caret =
+        focused instanceof HTMLTextAreaElement ? focused.selectionStart : null;
+      moveBlock(id, direction);
+      announce(`Moved ${direction}`);
+      // Reordering can take focus off the row; put it back.
+      setTimeout(() => {
+        const row = rootRef.current?.querySelector(`[data-block-id="${id}"]`);
+        if (!row || row.contains(document.activeElement)) return;
+        const field = row.querySelector<HTMLTextAreaElement>("textarea.sle-ed");
+        if (field && caret !== null) {
+          field.focus();
+          field.setSelectionRange(caret, caret);
+        } else row.querySelector<HTMLElement>(".sle-hit")?.focus();
+      });
+    },
+    [announce, canMoveRow, mode, moveBlock, rowsOf],
+  );
+
+  const navigate = useCallback(
+    (id: string, direction: "prev" | "next") => {
+      const content = emailRef.current.content;
+      const index = content.findIndex((block) => block.id === id);
+      const next = content[index + (direction === "prev" ? -1 : 1)];
+      if (!next) {
+        // Up from the top of the email: back to the preview text.
+        if (direction === "prev")
+          rootRef.current
+            ?.querySelector<HTMLElement>("[data-sle-field=preview]")
+            ?.focus();
+        return;
+      }
+      if (isItem(next)) {
+        activate(next.id!, direction === "prev" ? "end" : 0);
+        return;
+      }
+      // A button, image or other block: focus it without opening its
+      // settings. Enter opens them; the arrows carry on past it.
+      setActiveId(null);
+      setSelectedId(null);
+      focusRow(next.id!);
+    },
+    [activate, focusRow],
+  );
+
+  const pasteParagraphs = useCallback(
+    (id: string, parts: string[], before: string, after: string) => {
+      const content = emailRef.current.content;
+      const index = content.findIndex((block) => block.id === id);
+      const item = content[index];
+      if (!item) return;
+      const units = [before + parts[0], ...parts.slice(1)];
+      const last = parseItem(units[units.length - 1]);
+      units[units.length - 1] = itemMarkdown(last.prefix, last.body + after);
+      const items = units.map((unit, i) => ({
+        ...item,
+        id: i === 0 ? item.id : generateId(),
+        settings: { ...item.settings, content: unit },
+      }));
+      commitContent([
+        ...content.slice(0, index),
+        ...items,
+        ...content.slice(index + 1),
+      ]);
+      activate(items[items.length - 1].id!, last.body.length);
+      flash(`Pasted ${parts.length} paragraphs`);
+    },
+    [activate, commitContent, flash],
+  );
+
+  const applyFallback = useCallback(
+    (path: string, value: string) => {
+      commitContent(
+        emailRef.current.content.map((block) => {
+          const settings = { ...block.settings };
+          let changed = false;
+          for (const key of ["content", "left", "right", "text"]) {
+            if (typeof settings[key] === "string") {
+              const next = setFallback(settings[key], path, value);
+              if (next !== settings[key]) {
+                settings[key] = next;
+                changed = true;
+              }
+            }
+          }
+          return changed ? { ...block, settings } : block;
+        }),
+      );
+      flash(
+        value.trim()
+          ? `Fallback added to every ${path}`
+          : `Fallback removed from ${path}`,
+      );
+    },
+    [commitContent, flash],
+  );
+
+  // ---- history ------------------------------------------------------------
+
+  const restore = useCallback(
+    (snapshot: Email | undefined) => {
+      setHistoryVersion((version) => version + 1);
+      if (!snapshot) return;
+      publish(snapshot);
+      const ids = new Set(snapshot.content.map((block) => block.id));
+      setActiveId((current) => (current && ids.has(current) ? current : null));
+      setSelectedId((current) => (current && ids.has(current) ? current : null));
+    },
+    [publish],
+  );
+  const undo = useCallback(
+    () => restore(historyRef.current.undo(emailRef.current)),
+    [restore],
+  );
+  const redo = useCallback(
+    () => restore(historyRef.current.redo(emailRef.current)),
+    [restore],
+  );
+
+  // Escape closes the insert menu from anywhere.
+  useEffect(() => {
+    if (!insertAfterId) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setInsertAfterId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [insertAfterId]);
+
+  /** Closes a block's quick settings and hands focus back to the block, so
+   * Enter opens them again and the arrow keys carry on through the text. */
+  const closePopover = useCallback(
+    (id: string) => {
+      setSelectedId(null);
+      focusRow(id);
+    },
+    [focusRow],
+  );
+
+  /** Done with a block's quick settings: write on in the paragraph after it,
+   * starting one if the next thing isn't text. */
+  const continueAfter = useCallback(
+    (id: string) => {
+      const content = emailRef.current.content;
+      const index = content.findIndex((block) => block.id === id);
+      const next = content[index + 1];
+      if (isItem(next)) return activate(next!.id!, 0);
+      const created = canWrite ? insertText(index + 1, "") : null;
+      if (created) activate(created, 0);
+      else closePopover(id);
+    },
+    [activate, canWrite, closePopover, insertText],
+  );
+
+  // While writing, a block's quick settings close on Escape wherever focus
+  // is, and when focus moves on, to another row or out of the editor (Tab out
+  // of the popover).
+  useEffect(() => {
+    if (mode !== "write" || !selectedId) return;
+    const row = () => rootRef.current?.querySelector(`[data-block-id="${selectedId}"]`);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as Node | null;
+      if (target && target !== document.body && !rootRef.current?.contains(target))
+        return;
+      event.preventDefault();
+      closePopover(selectedId);
+    };
+    const onFocus = (event: FocusEvent) => {
+      const target = event.target as Element;
+      if (row()?.contains(target)) return;
+      // A dialog the quick edit opened, such as an image picker, keeps it.
+      if (!rootRef.current?.contains(target) && target.closest?.(DIALOGS)) return;
+      setSelectedId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("focusin", onFocus);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("focusin", onFocus);
+    };
+  }, [closePopover, mode, selectedId]);
+
+  // Undo and redo work wherever focus is, unless a field of its own (the
+  // subject, a settings input, the host's own inputs) should undo instead.
+  // Deleting a block from its popover leaves focus on the page, not in here.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable=true]")) return;
+      const inEditor = target ? rootRef.current?.contains(target) : false;
+      if (!inEditor && target !== document.body) return;
+      event.preventDefault();
+      if (key === "y" || event.shiftKey) redo();
+      else undo();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [redo, undo]);
+
+  // The quick settings popover opens under its block, which can be below the
+  // fold in a short window. Bring all of it into view.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the selection or mode changes
+  useEffect(() => {
+    if (mode !== "write" || !selectedId) return;
+    const timer = setTimeout(() => {
+      const popover = rootRef.current?.querySelector<HTMLElement>(".sle-pop");
+      popover?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      // Start on the block's first control, so Escape and Tab work too. A
+      // field's text is selected, so typing replaces a placeholder like
+      // "Click here" (a textarea's isn't: typing would wipe its code). Blocks
+      // without quick settings focus the popover itself.
+      const control = Array.from(
+        popover?.querySelectorAll<HTMLElement>("input, textarea, select, button") ?? [],
+      ).find(
+        (element) =>
+          !element.closest(".acts") && !(element as HTMLInputElement).disabled,
+      );
+      (control ?? popover)?.focus({ preventScroll: true });
+      if (control instanceof HTMLInputElement && control.type === "text")
+        control.select();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [selectedId, mode]);
+
+  const checklist = useMemo(
+    () => computeChecklist({ email, subject, canWrite }),
+    [email, subject, canWrite],
+  );
+
+  function jump(target: ChecklistItem["target"]) {
+    setMode("write");
+    setInsertAfterId(null);
+    setSelectedId(null);
+    setActiveId(null);
+    // Wait for the mode switch to render before moving focus.
+    setTimeout(() => {
+      if (target.type === "block") {
+        focusBlock(target.blockId);
+        rootRef.current
+          ?.querySelector(`[data-block-id="${target.blockId}"]`)
+          ?.scrollIntoView({ block: "center", behavior: "smooth" });
+        return;
+      }
+      const field = rootRef.current?.querySelector<HTMLElement>(
+        `[data-sle-field=${target.type}]`,
+      );
+      field?.scrollIntoView({ block: "center" });
+      field?.focus();
+    }, 30);
+  }
+
+  function switchMode(next: "write" | "style") {
+    const rowId = selectedId ?? activeId;
+    setMode(next);
+    setActiveId(null);
+    setInsertAfterId(null);
+    if (next === "style") {
+      // The selected item stands for its whole text block in Style.
+      const row = rowId
+        ? rowsOf(emailRef.current.content, "style").find((r) =>
+            emailRef.current.content.slice(r.start, r.end).some((b) => b.id === rowId),
+          )
+        : undefined;
+      setSelectedId(row?.id ?? null);
+      setInspectorTab(row ? "block" : "email");
+    } else {
+      const block = emailRef.current.content.find((b) => b.id === rowId);
+      setSelectedId(block && !isItem(block) ? block.id! : null);
+    }
+  }
+
+  /** "Edit in Write" from the Style panel. */
+  function editInWrite(id: string) {
+    setMode("write");
+    setSelectedId(null);
+    setTimeout(() => focusBlock(id), 0);
+  }
+
+  /** Focus the first control of the Style panel's open tab. */
+  function focusPanel() {
+    setTimeout(() => {
+      const panel = rootRef.current?.querySelector("[role=tabpanel]");
+      Array.from(
+        panel?.querySelectorAll<HTMLElement>(
+          "button, input, select, textarea, [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      )
+        .find((element) => !(element as HTMLButtonElement).disabled)
+        ?.focus();
+    }, 30);
+  }
+
+  function deselect() {
+    setActiveId(null);
+    setSelectedId(null);
+    setInsertAfterId(null);
+  }
+
+  function writeAtEnd() {
+    const content = emailRef.current.content;
+    const end =
+      resolveInsertionIndex("text", content.length, content, blockRegistry) ??
+      content.length;
+    const last = content[end - 1];
+    // Keep writing in an empty last item instead of stacking blanks.
+    if (isItem(last) && !parseItem(String(last.settings.content ?? "")).body.trim()) {
+      activate(last.id!, "end");
+      return;
+    }
+    const id = insertText(end, "");
+    if (id) focusBlock(id, 0);
+  }
+
+  function openInsert(id: string) {
+    setInsertPlacement(
+      placeMenu(rootRef.current?.querySelector(`[data-block-id="${id}"]`)),
+    );
+    setInsertAfterId((current) => (current === id ? null : id));
+  }
+
+  // ---- what the canvas shows ----------------------------------------------
+
+  const style = email.style;
+  const inStyle = mode === "style";
+  const shownStyle = inStyle && darkInbox ? darkStyle(style) : style;
+  const samples = useMemo(
+    () =>
+      new Map(
+        variables.flatMap((variable) =>
+          variable.sample
+            ? [[variable.tag.replace(/[{}]/g, "").trim(), variable.sample] as const]
+            : [],
+        ),
+      ),
+    [variables],
+  );
+  const rows = rowsOf(email.content, mode);
+  const rowBlocks = rows.map(
+    (row) => ({ ...row.block, id: row.id }) as Required<EmailBlock>,
+  );
+  const pageWidth = Number.parseInt(style.structure.page.width || "600", 10) || 600;
+  const mailWidth = inStyle && device === "mobile" ? MOBILE_WIDTH : pageWidth;
+  const words = email.content.reduce((sum, block) => sum + blockWords(block), 0);
+  const previewText = email.meta.previewText ?? "";
+  const section = style.structure.section.padding;
+
+  // A pinned last block (the footer) stays below the place to keep writing.
+  const lastRow = rows[rows.length - 1];
+  const pinnedIndex =
+    lastRow &&
+    getBlockCapabilities(lastRow.block.blockType, blockRegistry).placement === "last"
+      ? rows.length - 1
+      : -1;
+  const writeMore =
+    mode === "write" && canWrite ? (
+      <button
+        type="button"
+        className="sle-trail"
+        aria-label="Keep writing at the end"
+        onClick={writeAtEnd}
+      >
+        {activeId ? "" : "Keep writing, or press / for blocks"}
+      </button>
+    ) : null;
+
+  const rowEvents: RowEvents = {
+    onOpenInsert: openInsert,
+    onGripClick: (id) => focusBlock(id),
+    onMove: moveRow,
+    onRowKey: (id, event) => {
+      const key = event.key;
+      if (key !== "ArrowUp" && key !== "ArrowDown" && key !== "Escape") return;
+      event.preventDefault();
+      const up = key === "ArrowUp";
+      if (key === "Escape") {
+        // Style: Escape lets go of the selected block.
+        if (mode === "style")
+          setSelectedId((current) => (current === id ? null : current));
+      } else if (event.altKey && event.shiftKey) {
+        moveRow(id, up ? "up" : "down");
+      } else if (mode === "write") {
+        navigate(id, up ? "prev" : "next");
+      } else {
+        const ids = rows.map((row) => row.id);
+        const next = ids[ids.indexOf(id) + (up ? -1 : 1)];
+        if (next) focusRow(next);
+      }
+    },
+    onDragStart: (id) => {
+      setDragId(id);
+      setActiveId(null);
+      setInsertAfterId(null);
+    },
+    onDragOver: (id, edge) => {
+      if (id !== dragId) setDropAt({ id, edge });
+    },
+    onDrop: dropBlock,
+    onDragEnd: () => {
+      setDragId(null);
+      setDropAt(null);
+    },
+  };
+
+  function floatingFor(row: Row) {
+    if (insertAfterId === row.id) {
+      return (
+        <BlockMenu
+          choices={choices}
+          index={-1}
+          placement={insertPlacement}
+          header="Insert"
+          onClose={() => {
+            setInsertAfterId(null);
+            rootRef.current
+              ?.querySelector<HTMLElement>(
+                `[data-block-id="${row.id}"] [aria-label="Insert below"]`,
+              )
+              ?.focus();
+          }}
+          onPick={(choice) => {
+            setInsertAfterId(null);
+            insertChoice(choice, row.end);
+          }}
+          variables={variables}
+          onPickVariable={(variable) => {
+            setInsertAfterId(null);
+            const id = itemsOn
+              ? insertText(row.end, `${variable.tag} `)
+              : insertBlock("text", row.end, { content: `${variable.tag} ` });
+            if (id) focusBlock(id);
+          }}
+        />
+      );
+    }
+    const block = row.block;
+    const component = blockRegistry[block.blockType];
+    if (mode !== "write" || selectedId !== row.id || isItem(block) || !component)
+      return null;
+    const QuickEdit = component.quickEdit;
+    const column = component.quickEditLayout === "column";
+    return (
+      // biome-ignore lint/a11y/useSemanticElements: a toolbar of mixed inputs and buttons has no native element
       <div
-        className="email-body"
-        style={{
-          backgroundColor: email.style.colors.background,
-          color: email.style.colors.foreground,
-          paddingTop: email.style.structure.page.marginY,
-          paddingBottom: email.style.structure.page.marginY,
-          fontFamily: email.style.typography.text.fontFamily,
+        className={`sle-pop${column ? " col" : ""}`}
+        role="toolbar"
+        tabIndex={-1}
+        aria-label={`${labelOf(block, blockRegistry)} settings`}
+        style={{ maxHeight: popoverMax }}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          // Keys from a dialog the quick edit opened (it renders elsewhere but
+          // bubbles through here) belong to that dialog.
+          if (!event.currentTarget.contains(event.target as Node)) return;
+          event.stopPropagation();
+          if (event.key === "Escape") {
+            event.preventDefault();
+            closePopover(row.id);
+          }
+          // Enter in a one-line field means done: carry on writing below.
+          const field = event.target as HTMLElement;
+          if (
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            field.tagName === "INPUT" &&
+            !["checkbox", "radio", "file"].includes((field as HTMLInputElement).type)
+          ) {
+            event.preventDefault();
+            continueAfter(row.id);
+          }
         }}
       >
-        {/* Container equivalent - Apply container styles here */}
-        <div
-          className="email-container mx-auto"
-          style={{
-            width: "100%",
-            margin: `0px auto`,
-            backgroundColor: email.style.structure.page.background,
-            color:
-              email.style.structure.page.foreground || email.style.colors.foreground,
-            maxWidth: email.style.structure.page.width,
-            borderWidth: email.style.structure.page.borderWidth,
-            borderStyle: email.style.structure.page.borderStyle,
-            borderColor: email.style.colors.border,
-            borderRadius: "0px",
-            overflow: "hidden",
-          }}
-        >
-          {email.content.length === 0 && (
-            <div className="p-4 text-center">
-              <p className="mb-4 text-muted-foreground">Your email is empty.</p>
-              <AddBlockButton
-                position="below"
-                index={0}
-                addBlock={addBlock}
-                blockRegistry={blockRegistry}
-              />
-            </div>
+        {QuickEdit && (
+          <>
+            <QuickEdit
+              block={{ ...block, id: row.id } as Required<EmailBlock>}
+              style={style}
+              updateBlock={updateBlock}
+            />
+            {!column && <span className="sp" />}
+          </>
+        )}
+        <div className="acts">
+          <button
+            type="button"
+            className="sle-btn t"
+            style={{ height: 30, padding: "0 6px 0 10px" }}
+            title="Colours, spacing and layout"
+            onClick={() => switchMode("style")}
+          >
+            Style
+            <ChevronRight className="size-3.5" />
+          </button>
+          {canDuplicateBlock(block, blockRegistry) && (
+            <button
+              type="button"
+              className="sle-ib"
+              aria-label="Duplicate"
+              title="Duplicate"
+              onClick={() => duplicateBlock(row.id)}
+            >
+              <Copy className="size-4" />
+            </button>
           )}
-
-          <div>
-            {email.content.map((block, index) => (
-              <BlockWrapper
-                key={block.id}
-                block={block as Required<EmailBlock>}
-                index={index}
-                style={email.style}
-                blockRegistry={blockRegistry}
-                renderContext={renderContext}
-                selectedBlockId={selectedBlockId}
-                setSelectedBlockId={setSelectedBlockId}
-                deleteBlock={deleteBlock}
-                moveBlock={moveBlock}
-                duplicateBlock={duplicateBlock}
-                movingBlockId={movingBlockId}
-                addBlock={addBlock}
-                canDelete={canDeleteBlock(block, blockRegistry)}
-                canDuplicate={canDuplicateBlock(block, blockRegistry)}
-                canMoveUp={canMoveBlock(email.content, block.id!, "up", blockRegistry)}
-                canMoveDown={canMoveBlock(
-                  email.content,
-                  block.id!,
-                  "down",
-                  blockRegistry,
-                )}
-                canAddBelow={canInsertAfter(block, blockRegistry)}
-              />
-            ))}
-          </div>
+          {canDeleteBlock(block, blockRegistry) && (
+            <button
+              type="button"
+              className="sle-ib del"
+              aria-label="Delete"
+              title="Delete"
+              onClick={() => deleteBlock(row.id)}
+            >
+              <Trash2 className="size-4" />
+            </button>
+          )}
         </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  // Settings panel
-  const settingsPanel = (
-    <BlockSettingsPanel
-      blockId={selectedBlockId}
-      email={email}
-      setSelectedBlockId={setSelectedBlockId}
-      blockRegistry={blockRegistry}
-      updateEmail={updateEmail}
-      updateEmailStyle={updateEmailStyle}
-      updateBlock={updateBlock}
-    />
-  );
+  /** One paragraph, heading, list item or quote while writing. */
+  function renderItem(row: Row) {
+    const item = row.block;
+    const content = email.content;
+    const before = content[row.start - 1];
+    const after = content[row.start + 1];
+    const sameGroup = (other: EmailBlock | undefined) =>
+      isItem(other) && other?.group === item.group;
+    const runStart = !sameGroup(before);
+    const runEnd = !sameGroup(after);
+    const parsed = parseItem(String(item.settings.content ?? ""));
+    const listKind = (block: EmailBlock | undefined) => {
+      if (!sameGroup(block)) return null;
+      const kind = parseItem(String(block?.settings.content ?? "")).kind;
+      return kind === "li" || kind === "ol" ? kind : null;
+    };
+    // Numbered lists count up from their first item, as markdown does.
+    let number = Number.parseInt(parsed.prefix, 10) || 1;
+    if (parsed.kind === "ol") {
+      let start = row.start;
+      while (listKind(content[start - 1]) === "ol") start--;
+      number =
+        (Number.parseInt(
+          parseItem(String(content[start].settings.content)).prefix,
+          10,
+        ) || 1) +
+        (row.start - start);
+    }
+    const settings = item.settings;
+    return (
+      <ItemRow
+        id={row.id}
+        active={activeId === row.id}
+        dragging={dragId === row.id}
+        dropEdge={dropAt?.id === row.id ? dropAt.edge : null}
+        canAddBelow={canInsertAfter(item, blockRegistry)}
+        movable={getBlockCapabilities("text", blockRegistry).movable}
+        events={rowEvents}
+        floating={floatingFor(row)}
+        style={{
+          paddingTop: runStart ? settings.paddingTop || section?.y : 0,
+          paddingBottom: runEnd ? settings.paddingBottom || section?.y : 0,
+          paddingLeft: section?.x,
+          paddingRight: section?.x,
+          backgroundColor: settings.backgroundColor,
+          color: settings.foregroundColor || shownStyle.colors.foreground,
+        }}
+      >
+        <TextItem
+          content={String(settings.content ?? "")}
+          settings={settings}
+          style={shownStyle}
+          active={activeId === row.id}
+          caret={activeCaret}
+          number={number}
+          listEnd={listKind(after) !== parsed.kind}
+          variables={variables}
+          choices={choices}
+          onActivate={(caret) => activate(row.id, caret ?? "end")}
+          onChange={(markdown) => changeItem(row.id, markdown)}
+          onSplit={(a, b) => splitItem(row.id, a, b)}
+          onMergeBack={() => mergeBack(row.id)}
+          onNavigate={(direction) => navigate(row.id, direction)}
+          onInsertChoice={(choice) => insertChoice(choice, row.start, row.id)}
+          onPasteParagraphs={(parts, a, b) => pasteParagraphs(row.id, parts, a, b)}
+          onUndo={undo}
+          onRedo={redo}
+          onMove={(direction) => moveRow(row.id, direction)}
+          onExit={() => {
+            // Leave editing but stay here, on the paragraph.
+            setActiveId(null);
+            focusRow(row.id);
+          }}
+        />
+      </ItemRow>
+    );
+  }
+
+  function renderRow(row: Row) {
+    if (mode === "write" && isItem(row.block)) return renderItem(row);
+    const sampled = sample && inStyle ? withSamples(row.block, samples) : row.block;
+    const shown = (
+      inStyle && darkInbox ? darkBlock(sampled) : sampled
+    ) as Required<EmailBlock>;
+    const capabilities = getBlockCapabilities(row.block.blockType, blockRegistry);
+    return (
+      <BlockRow
+        block={{ ...shown, id: row.id }}
+        label={describeBlock(row.block, blockRegistry)}
+        style={shownStyle}
+        blockRegistry={blockRegistry}
+        renderContext={renderContext}
+        mode={mode}
+        selected={selectedId === row.id}
+        dragging={dragId === row.id}
+        dropEdge={dropAt?.id === row.id ? dropAt.edge : null}
+        capabilities={{
+          canDelete: canDeleteBlock(row.block, blockRegistry),
+          canDuplicate: canDuplicateBlock(row.block, blockRegistry),
+          canMoveUp: canMoveRow(rows, row.id, "up"),
+          canMoveDown: canMoveRow(rows, row.id, "down"),
+          canAddBelow: canInsertAfter(row.block, blockRegistry),
+          movable: capabilities.movable,
+        }}
+        floating={floatingFor(row)}
+        events={rowEvents}
+        onSelect={(id, keyboard) => {
+          select(id);
+          // In Style, Enter on a block goes on to its settings.
+          if (keyboard && mode === "style") focusPanel();
+        }}
+        onDelete={deleteBlock}
+        onDuplicate={duplicateBlock}
+      />
+    );
+  }
 
   return (
-    <EditorLayout
-      editor={editorContent}
-      settings={settingsPanel}
-      showSettings={showSettings}
-    />
+    <div ref={rootRef} className={`sle t-${theme}`}>
+      <div className={`sle-body ${mode}`}>
+        <div className="sle-wrap">
+          <div className="sle-mode">
+            <Checklist
+              items={checklist}
+              label={checklistLabel(checklist)}
+              onJump={jump}
+              onApplyFallback={applyFallback}
+            />
+            <fieldset className="sle-seg" aria-label="Mode">
+              <button
+                type="button"
+                className={mode === "write" ? "on" : undefined}
+                aria-pressed={mode === "write"}
+                onClick={() => switchMode("write")}
+              >
+                <PenLine className="size-3.5" />
+                Write
+              </button>
+              <button
+                type="button"
+                className={mode === "style" ? "on" : undefined}
+                aria-pressed={mode === "style"}
+                onClick={() => switchMode("style")}
+              >
+                <SlidersHorizontal className="size-3.5" />
+                Style
+              </button>
+            </fieldset>
+          </div>
+
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: clicking the canvas background clears the selection */}
+          <section className="sle-stage" aria-label="Email canvas" onClick={deselect}>
+            {inStyle && (
+              <>
+                <ControlsBar
+                  canUndo={historyRef.current.canUndo}
+                  canRedo={historyRef.current.canRedo}
+                  onUndo={undo}
+                  onRedo={redo}
+                  device={device}
+                  onDevice={setDevice}
+                  sample={sample}
+                  onSample={setSample}
+                  dark={darkInbox}
+                  onDark={setDarkInbox}
+                  words={words}
+                />
+                <InboxRow
+                  senderName={senderName}
+                  subject={subject ?? ""}
+                  previewText={previewText}
+                  width={`${mailWidth}px`}
+                />
+              </>
+            )}
+            <div
+              className="sle-canvas"
+              style={{ background: inStyle ? shownStyle.colors.background : undefined }}
+            >
+              {inStyle && (
+                <button
+                  type="button"
+                  className="sle-canvas-hit"
+                  aria-label="Email background and palette"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedId(null);
+                    setInspectorTab("email");
+                  }}
+                />
+              )}
+              {inStyle && <span className="sle-canvas-tag">Email background</span>}
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: keeps clicks on the email from clearing the selection */}
+              <div
+                className={`sle-mail${activeId ? " typing" : ""}`}
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  width: inStyle ? mailWidth : "100%",
+                  maxWidth: inStyle ? undefined : mailWidth,
+                  background: shownStyle.structure.page.background,
+                  color:
+                    shownStyle.structure.page.foreground ||
+                    shownStyle.colors.foreground,
+                  fontFamily: shownStyle.typography.text.fontFamily,
+                  borderColor: shownStyle.colors.border,
+                  borderWidth: inStyle ? shownStyle.structure.page.borderWidth : 0,
+                  borderStyle: shownStyle.structure.page.borderStyle,
+                  borderRadius: inStyle ? shownStyle.structure.page.borderRadius : 0,
+                }}
+              >
+                {mode === "write" && (
+                  <DocHeader
+                    paddingX={section?.x}
+                    subject={subject}
+                    onSubjectChange={onSubjectChange}
+                    onFieldFocus={deselect}
+                    previewText={previewText}
+                    onPreviewTextChange={(text) =>
+                      commitEmail(
+                        {
+                          ...emailRef.current,
+                          meta: { ...emailRef.current.meta, previewText: text },
+                        },
+                        "preview",
+                      )
+                    }
+                    senderName={senderName}
+                    inboxOpen={inboxOpen}
+                    onToggleInbox={() => setInboxOpen((open) => !open)}
+                    onEnter={() => {
+                      const first = email.content.find(isItem);
+                      if (first) activate(first.id!, 0);
+                      else if (canWrite) writeAtEnd();
+                    }}
+                  />
+                )}
+                {rows.map((row, index) => (
+                  <Fragment key={row.id}>
+                    {index === pinnedIndex && writeMore}
+                    {renderRow(row)}
+                  </Fragment>
+                ))}
+                {pinnedIndex === -1 && writeMore}
+              </div>
+            </div>
+            {mode === "write" && (
+              <p className="sle-cap">Switch to Style to see it as readers will.</p>
+            )}
+          </section>
+        </div>
+
+        {inStyle && (
+          <Inspector
+            email={{ ...email, content: rowBlocks }}
+            selectedId={selectedId}
+            blockRegistry={blockRegistry}
+            variables={variables}
+            tab={inspectorTab}
+            onTab={setInspectorTab}
+            updateEmail={updateEmail}
+            updateEmailStyle={updateEmailStyle}
+            onPalette={applyPalette}
+            updateBlock={updateBlock}
+            onEditInWrite={editInWrite}
+            onCopied={(tag) => flash(`Copied ${tag}`)}
+            onEscape={() => selectedId && focusRow(selectedId)}
+          />
+        )}
+      </div>
+      {toast && (
+        <div className="sle-toast" aria-hidden="true">
+          {toast}
+        </div>
+      )}
+      <div className="sle-sr" role="status">
+        {announcement}
+      </div>
+    </div>
   );
 }

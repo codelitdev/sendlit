@@ -51,7 +51,9 @@ unsubscribe footer and do not require a mailing address.
 3. API callers never provide `address` or `unsubscribe_link`.
 4. Marketing templates contain exactly one final `footer` block with
    SendLit-controlled address and unsubscribe content.
-5. Transactional templates cannot contain a `footer` block.
+5. Transactional templates cannot contain a `footer` block or a `conditional`
+   section (it reads the subscriber's tags, and a transactional send has no
+   subscriber).
 6. Missing unguarded transactional variables return a synchronous `422`; no
    transactional row or queue job is created.
 7. System templates are starters. They must be copied into a team-owned `tpl_`
@@ -164,7 +166,8 @@ The transactional path:
 5. Allows explicit optional values through a Liquid `default` filter or a
    guarded `{% if value %}` block.
 6. Does not inject `address`, `unsubscribe_link`, or `subscriber`.
-7. Rejects a `footer` block if one is submitted in transactional content.
+7. Rejects a `footer` block or a `conditional` block (`footer_not_allowed`,
+   `conditional_not_allowed`) if one is submitted in transactional content.
 
 When a transactional template is created or updated, reject reserved marketing
 variables with a validation error such as:

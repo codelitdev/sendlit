@@ -17,7 +17,7 @@ export const mediaSchema = z.object({
 });
 
 export const mediaReferenceSchema = z.object({
-  resourceType: z.enum(["TEMPLATE", "SEQUENCE_EMAIL"]),
+  resourceType: z.enum(["TEMPLATE", "SEQUENCE_EMAIL", "BROADCAST_WEB_PAGE"]),
   resourcePublicId: z.string(),
   parentResourcePublicId: z.string().nullable().optional(),
   createdAt: z.string().or(z.date()).nullable().optional(),

@@ -3,7 +3,12 @@ import { z } from "zod";
 import logger from "../services/log";
 import { serializeDates } from "../utils/serialize";
 import type { SendLitMcpContext, SendLitMcpTool } from "./context";
-import { authorizeMcpOperation, getRequiredScope, type McpOperationId } from "./policy";
+import {
+  authorizeMcpOperation,
+  authorizeTeamAuthority,
+  getRequiredScope,
+  type McpOperationId,
+} from "./policy";
 
 export type DedicatedToolDefinition<Args> = {
   name: string;
@@ -50,7 +55,9 @@ export function dedicatedTool<Args>(
     async handler({ context, args }) {
       const startedAt = performance.now();
       const log = { tool: tool.name, requiredScope, authKind: context.authKind };
-      const denied = authorizeMcpOperation(operationId, context);
+      const denied =
+        authorizeMcpOperation(operationId, context) ??
+        (await authorizeTeamAuthority(operationId, context));
       if (denied) {
         logger.warn(
           { ...log, scopeDecision: "denied" },

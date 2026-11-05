@@ -129,6 +129,33 @@ describe("SendLit footer block", () => {
     expect(html).toContain("footer_render_context_required");
   });
 
+  it("uses the email's text font, not one saved on the footer", async () => {
+    const email = emailWithFooter();
+    const html = await renderEmailToHtml({
+      email: {
+        ...email,
+        style: {
+          ...email.style,
+          typography: {
+            ...email.style.typography,
+            text: { ...email.style.typography.text, fontFamily: "Georgia, serif" },
+          },
+        },
+        content: [{ blockType: "footer", settings: { fontFamily: "Courier" } }],
+      },
+      blocks: [footer],
+      renderContext: {
+        footer: {
+          mailingAddress: "123 Main Street",
+          unsubscribeUrl: "https://example.com/unsubscribe/token",
+        },
+      },
+    });
+
+    expect(html).toContain("Georgia, serif");
+    expect(html).not.toContain("Courier");
+  });
+
   it("is a locked final-placement add-on", () => {
     expect(footer.capabilities).toEqual({
       insertable: false,

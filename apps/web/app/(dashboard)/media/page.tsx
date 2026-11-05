@@ -34,6 +34,12 @@ type MediaWithReferences = Media & { references: MediaReference[] };
 
 const PAGE_SIZE = 50;
 
+const REFERENCE_LABELS: Record<MediaReference["resourceType"], string> = {
+  TEMPLATE: "Template",
+  SEQUENCE_EMAIL: "Email",
+  BROADCAST_WEB_PAGE: "Web page of broadcast",
+};
+
 export default function MediaPage() {
   useSetBreadcrumb([{ label: "Media" }]);
   const [items, setItems] = useState<MediaWithReferences[] | null>(null);
@@ -319,7 +325,7 @@ function MediaDetailsDialog({
                     key={`${reference.resourceType}:${reference.resourcePublicId}`}
                     className="truncate"
                   >
-                    {reference.resourceType === "TEMPLATE" ? "Template" : "Email"}{" "}
+                    {REFERENCE_LABELS[reference.resourceType]}{" "}
                     {reference.parentResourcePublicId
                       ? `${reference.parentResourcePublicId} / `
                       : ""}

@@ -3,8 +3,8 @@ title: EmailEditor
 description: WYSIWYG editor for an email's content.
 ---
 
-`EmailEditor` edits an `Email`'s block content (text, separator, image, link
-by default) and reports changes via `onChange`; pass `blocks` to customize
+`EmailEditor` edits an `Email`'s block content (text, link, image, separator, spacer,
+columns, social, html and conditional by default) and reports changes via `onChange`; pass `blocks` to customize
 which block types are available.
 
 If all you need is the editor and renderer — no filters, triggers, or the
@@ -31,6 +31,90 @@ function Example() {
     return <EmailEditor email={email} onChange={setEmail} />;
 }
 ```
+
+### Writing, subject and merge tags
+
+The editor opens in **Write** mode: the subject and preview text sit above the
+email like a document title, text is written inline as markdown (select text for
+a format bar, type `/` for blocks, type `{{` for merge tags), and blocks can be
+dragged by their handle. **Style** mode shows the email as readers will see it
+(desktop or mobile, sample data, a dark inbox) with a panel for the palette,
+typography and the selected block. A "Before you send" checklist flags a missing
+subject or preview text, empty buttons and images without alt text.
+
+Pass the optional props below to turn those on:
+
+```tsx
+<EmailEditor
+    email={email}
+    onChange={setEmail}
+    subject={subject}
+    onSubjectChange={setSubject}
+    variables={[
+        {
+            tag: "{{ subscriber.name }}",
+            description: "The name of the subscriber",
+            sample: "Priya",
+        },
+    ]}
+    senderName="Acme"
+    theme="sendlit" // "sendlit" | "neutral" | "dark"
+/>
+```
+
+Without `subject` the subject field is hidden, so a host that edits it elsewhere
+keeps working. Saving the subject is up to the host. The editor's look is a set
+of `--sle-*` CSS variables on the `.sle` element (colours, radii, fonts), so it
+can be re-skinned without touching the components. Import
+`@sendlit/email-editor/styles.css` for the styles.
+
+### Keyboard
+
+The editor works without a mouse. Each row is one Tab stop, named after what
+it holds ("Paragraph: Thanks for joining", "Button block: Get started").
+
+| Key                       | Does                                                              |
+| ------------------------- | ----------------------------------------------------------------- |
+| Enter on a row            | Edits a paragraph, or opens a block's settings                    |
+| Escape                    | Stops editing or closes the settings, staying on the row          |
+| ↑ / ↓                     | Moves between paragraphs and blocks, and up to the preview text   |
+| Alt+Shift+↑ / ↓           | Moves the row up or down                                          |
+| `/`, `{{`                 | Opens the block menu or the merge tag menu                        |
+| Ctrl/⌘+B, I, K            | Bold, italic, link                                                |
+| Alt+F10                   | Moves to the format toolbar while text is selected                |
+| Ctrl/⌘+Z, Shift+Ctrl/⌘+Z  | Undo, redo                                                        |
+
+In Style mode, Enter on a block moves to its settings and Escape returns to the
+block; the arrow keys move between blocks.
+
+### Choosing blocks
+
+`blocks` replaces the default list, so a host can add its own blocks and leave
+out any of the built-in ones, including all of them. Custom blocks are stored
+and rendered exactly as given. Writing paragraph by paragraph (Enter starts a
+new paragraph, `#` makes a heading, `-` a list) applies to the built-in `text`
+block. Without it, or with a host block registered under the name `text`, the
+editor still works: blocks are inserted from the menu, selected, reordered and
+edited through their settings, and the "keep writing" prompt is hidden.
+
+### Built-in blocks
+
+| Block         | Settings                                                           |
+| ------------- | ------------------------------------------------------------------ |
+| `text`        | Markdown `content`: paragraphs, headings, lists and quotes         |
+| `link`        | A link, or a button when `isButton` is set                         |
+| `image`       | `src`, `alt`, size and alignment                                   |
+| `separator`   | A divider line                                                     |
+| `spacer`      | Empty `height`                                                     |
+| `columns`     | Two markdown columns, `ratio`, optional stacking on small screens  |
+| `social`      | `links`: `{ network, url }` buttons for your profiles              |
+| `html`        | Raw `code`, sent as written                                        |
+| `conditional` | Markdown `content` shown only to contacts with (or without) a tag  |
+
+A `conditional` section is rendered as a Liquid condition on
+`subscriber.tags`, so it only works where a subscriber exists (marketing sends).
+`renderEmailToHtml` keeps the condition by default; pass `showConditionals` for
+a preview that shows every section.
 
 ### Custom image uploader
 
@@ -116,6 +200,12 @@ compliance. Host applications can register add-on blocks with:
 - `insertable`, `deletable`, `duplicable`, and `movable` capabilities
 - `placement: "any" | "first" | "last"`
 - an optional `renderContext` supplied by the host
+
+- an optional `quickEdit` component (and `quickEditLayout: "row" | "column"`)
+  with the few fields worth editing while writing, such as a button's label and
+  link. Write mode shows it in a small popover under the selected block, with
+  Style, duplicate and delete; the full `settings` form stays in Style mode.
+  Without one, the popover offers just those three actions.
 
 Mutation handlers enforce these capabilities as well as hiding unavailable
 controls. The render context is passed to preview and HTML rendering but is

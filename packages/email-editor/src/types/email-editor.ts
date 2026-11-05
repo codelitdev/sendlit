@@ -77,6 +77,8 @@ export interface CommonBlockSettings {
 
 export interface EmailBlock<TSettings = Record<string, any>> {
   id?: string;
+  /** Editor-only: the text block an item came from. Never stored. */
+  group?: string;
   blockType: string;
   settings: TSettings;
 }
@@ -89,6 +91,9 @@ export interface BlockRenderProps<
   style?: EmailStyle;
   selectedBlockId?: string | null;
   renderContext?: TRenderContext;
+  /** Previews and the editor show conditional sections to everyone; the
+   * default (sending) wraps them in Liquid so only matching contacts get them. */
+  showConditionals?: boolean;
 }
 
 export type RuntimeEmailBlock<TSettings = Record<string, any>> = Required<

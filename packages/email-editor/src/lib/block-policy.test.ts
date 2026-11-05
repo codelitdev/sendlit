@@ -8,6 +8,7 @@ import {
   canMoveBlock,
   getDefaultBlockSettings,
   getInsertableBlocks,
+  reorderBlocks,
   resolveInsertionIndex,
 } from "./block-policy";
 
@@ -114,5 +115,41 @@ describe("block policy", () => {
     expect(canDeleteBlock(footerFree[1], registry)).toBe(true);
     expect(canMoveBlock(footerFree, "b", "up", registry)).toBe(true);
     expect(canInsertAfter(footerFree[1], registry)).toBe(true);
+  });
+});
+
+describe("reorderBlocks", () => {
+  const registry: BlockRegistry = {
+    text: createBlock("text"),
+    footer: createBlock("footer", {
+      capabilities: { placement: "last", movable: false },
+    }),
+  };
+  const content = [
+    { id: "a", blockType: "text", settings: {} },
+    { id: "b", blockType: "text", settings: {} },
+    { id: "c", blockType: "text", settings: {} },
+    { id: "f", blockType: "footer", settings: {} },
+  ];
+
+  it("moves a block to an insertion index", () => {
+    expect(reorderBlocks(content, "a", 3, registry)?.map((b) => b.id)).toEqual([
+      "b",
+      "c",
+      "a",
+      "f",
+    ]);
+    expect(reorderBlocks(content, "c", 0, registry)?.map((b) => b.id)).toEqual([
+      "c",
+      "a",
+      "b",
+      "f",
+    ]);
+  });
+
+  it("refuses no-op moves, the footer, and anything past the footer", () => {
+    expect(reorderBlocks(content, "a", 1, registry)).toBeNull();
+    expect(reorderBlocks(content, "f", 0, registry)).toBeNull();
+    expect(reorderBlocks(content, "a", 4, registry)).toBeNull();
   });
 });

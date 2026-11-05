@@ -66,6 +66,16 @@ falls back to another credential when one is invalid:
 MCP accepts an OAuth access token or a team API key; a browser session cookie is
 not an MCP credential and is ignored there.
 
+OAuth access tokens are issued for the MCP server only. The REST API refuses
+them with `401 invalid_token`, so a narrowly scoped MCP grant can never act with
+the user's full authority over REST. Use a team API key for REST integrations.
+
+A session cookie only works from the SendLit dashboard. Any write
+(`POST`, `PUT`, `PATCH`, `DELETE`) made with one must come from the dashboard's
+own origin and carry the `X-Sendlit-CSRF` token, otherwise it returns
+`403 csrf_origin_invalid` or `403 csrf_token_invalid`. API keys and bearer
+tokens are not affected.
+
 ## Dashboard sign-in
 
 The web dashboard uses email OTP sign-in. The session is separate from team API keys: use the dashboard session for interactive administration and an API key for server-to-server requests.

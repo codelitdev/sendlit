@@ -10,7 +10,6 @@ import type {
 
 export const DEFAULT_FOOTER_SETTINGS: FooterSettings = {
   alignment: "center",
-  fontFamily: "Arial, sans-serif",
   fontSize: "12px",
   foregroundColor: "#64748b",
   backgroundColor: "transparent",
@@ -40,7 +39,6 @@ export function createFooterBlock({
       docs: {
         settings: {
           alignment: "Footer content alignment.",
-          fontFamily: "Footer font family.",
           fontSize: "Footer font size in pixels.",
           foregroundColor: "Footer text and link color.",
           backgroundColor: "Footer background color.",

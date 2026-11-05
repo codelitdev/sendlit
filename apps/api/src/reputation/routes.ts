@@ -6,7 +6,7 @@ import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { captureError } from "../observability";
 import { consumeRateLimit } from "../services/rate-counter";
-import { getTeamMembership } from "../team/queries";
+import { isTeamAdminOrKey } from "../team/authority";
 import { verifyPixelToken } from "../utils/pixel-jwt";
 import {
   exchangeGoogleCode,
@@ -25,11 +25,7 @@ const s = initServer();
 
 /** Connecting accounts changes what the team shares with SendLit: team
  * admins and team API keys only. */
-async function canManage(req: any): Promise<boolean> {
-  if (req.authKind === "team_key") return true;
-  const membership = await getTeamMembership(req.teamId, req.userId);
-  return membership?.role === "admin";
-}
+const canManage = (req: any) => isTeamAdminOrKey(req);
 
 const FORBIDDEN = { status: 403 as const, body: { error: "team_admin_required" } };
 

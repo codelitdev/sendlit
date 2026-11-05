@@ -1,4 +1,5 @@
 import { createPlatformError, type PlatformError } from "@codelitdev/platform";
+import { canManageTeamEsp, isTeamAdminOrKey } from "../team/authority";
 import type { SendLitMcpContext } from "./context";
 
 export const MCP_SCOPES = {
@@ -167,6 +168,61 @@ const teamKeyDeniedOperations: ReadonlySet<string> = new Set<McpOperationId>([
   "teams.createKey",
   "teams.removeKey",
 ]);
+
+/**
+ * Operations REST reserves to team admins (or a team key), whatever scope the
+ * caller holds. A scope only says what a token may do for its user; it says
+ * nothing about the user's role in the team. Without this a plain member could
+ * consent to `esp:write` for their own client and repoint the team's ESP at a
+ * host they control.
+ */
+const teamAdminOperations: ReadonlySet<string> = new Set<McpOperationId>([
+  "reputation.connectGoogle",
+  "reputation.disconnectGoogle",
+  "reputation.connectSnds",
+  "reputation.disconnectSnds",
+  "settings.esps.create",
+  "settings.esps.update",
+  "settings.esps.remove",
+  "settings.esps.test",
+  "settings.esps.activate",
+  "settings.esps.retire",
+]);
+
+/** Of those, the ones that also need the organization to allow team ESPs. */
+const teamEspOperations: ReadonlySet<string> = new Set<McpOperationId>([
+  "settings.esps.create",
+  "settings.esps.update",
+  "settings.esps.remove",
+  "settings.esps.test",
+  "settings.esps.activate",
+  "settings.esps.retire",
+]);
+
+/** The role check REST applies, for the operations that have one. Run after
+ * `authorizeMcpOperation`; null when the caller may proceed. */
+export async function authorizeTeamAuthority(
+  operationId: string,
+  context: SendLitMcpContext,
+): Promise<PlatformError | null> {
+  if (!teamAdminOperations.has(operationId)) return null;
+  const caller = {
+    authKind: context.authKind,
+    teamId: context.teamId,
+    userId: context.user?.id ?? null,
+  };
+  const allowed = teamEspOperations.has(operationId)
+    ? await canManageTeamEsp(caller)
+    : await isTeamAdminOrKey(caller);
+  if (allowed) return null;
+  return createPlatformError("forbidden", {
+    safeDetails: {
+      reason: teamEspOperations.has(operationId)
+        ? "team_esp_disabled"
+        : "team_admin_required",
+    },
+  });
+}
 
 export function isMcpOperation(operationId: string): operationId is McpOperationId {
   return Object.hasOwn(operationScopes, operationId);
