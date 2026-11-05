@@ -22,6 +22,11 @@ const PROPERTY_ALLOWLIST = new Set([
   "sequence_id",
   "sequence_type",
   "sequence_status",
+  // Draft and publish (#184): how many emails a publish or discard covered,
+  // who got the changes (in_flight | new_entrants) and a restored version.
+  "emails_count",
+  "publish_scope",
+  "version_id",
   "ongoing_sequence_id",
   "template_id",
   "segment_id",

@@ -20,6 +20,12 @@ export function getMaxUploadSizeBytes() {
   return parsed > 0 ? parsed : DEFAULT_MAX_UPLOAD_SIZE_BYTES;
 }
 
+/** The MCP server AI assistants connect to: the API's `/mcp`, on the API
+ * origin browsers and clients outside the cluster use. */
+export function getMcpUrl(): string {
+  return `${API_PUBLIC_URL.replace(/\/+$/, "")}/mcp`;
+}
+
 /** Public status page linked from the dashboard ("System status"), e.g.
  * `https://status.sendlit.app`. Server-only, like the settings below; unset
  * hides the link. */

@@ -82,6 +82,29 @@ describe("sendSequenceEmailTest", () => {
     expect(result.lastTestSentAt).toBe(row.lastTestSentAt?.toISOString() ?? null);
   });
 
+  it("sends the unpublished draft, so it can be checked before publishing", async () => {
+    const { team, sequenceRow, email } = await seed();
+    await tdb
+      .update(sequenceEmails)
+      .set({
+        draftSubject: "Hello again",
+        draftContent: emailContent({ text: "Draft body" }),
+        draftUpdatedAt: new Date(),
+      })
+      .where(eq(sequenceEmails.id, email.id));
+
+    await sendSequenceEmailTest({
+      teamId: team.id,
+      sequenceId: sequenceRow.sequenceId,
+      emailId: email.emailId,
+      to: ["me@example.com"],
+    });
+
+    const sent = mockedSendMail.mock.calls[0][0];
+    expect(sent.subject).toBe("[Test] Hello again");
+    expect(sent.html).toContain("Draft body");
+  });
+
   it("links a web version of the email as tested, not later edits", async () => {
     const { team, sequenceRow, email } = await seed();
 

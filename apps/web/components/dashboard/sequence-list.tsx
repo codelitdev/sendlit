@@ -7,10 +7,13 @@ import {
   MoreHorizontal,
   Pause,
   Play,
+  Radio,
   Trash2,
+  Workflow,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AiAssistantHint } from "@/components/dashboard/ai-assistant-promo";
 import { ArchiveBroadcastDialog } from "@/components/dashboard/archive-broadcast-dialog";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
@@ -19,6 +22,7 @@ import { ListPagination } from "@/components/dashboard/list-pagination";
 import { Loading } from "@/components/dashboard/loading";
 import { NewSequenceDialog } from "@/components/dashboard/new-sequence-dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { UnpublishedChangesBadge } from "@/components/dashboard/publish-changes-dialog";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { Badge } from "@/components/ui/codelit/badge";
@@ -37,6 +41,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/codelit/select";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import {
   listSequences,
   pauseSequence,
@@ -197,11 +209,43 @@ export function SequenceListPage({
         <Loading />
       ) : sequences.length === 0 ? (
         <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground">
-            {type === "broadcast" && archived === "only"
-              ? "No archived broadcasts. Archive a sent broadcast to hide it from the list."
-              : "Nothing here yet."}
-          </CardContent>
+          {type === "broadcast" && archived === "only" ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Archive />
+                </EmptyMedia>
+                <EmptyTitle>No archived broadcasts</EmptyTitle>
+                <EmptyDescription>
+                  Archive a sent broadcast to hide it from the list.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  {type === "broadcast" ? <Radio /> : <Workflow />}
+                </EmptyMedia>
+                <EmptyTitle>
+                  {type === "broadcast" ? "No broadcasts yet" : "No sequences yet"}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {type === "broadcast"
+                    ? "Send one email to your contacts, now or at a time you pick."
+                    : "Send a series of emails automatically when a contact signs up or does something."}
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <NewSequenceDialog
+                  type={type}
+                  label={createLabel}
+                  onCreated={(sequenceId) => router.push(`${basePath}/${sequenceId}`)}
+                />
+                <AiAssistantHint />
+              </EmptyContent>
+            </Empty>
+          )}
         </Card>
       ) : (
         <Card>
@@ -226,20 +270,23 @@ export function SequenceListPage({
                       {sequence.title || "Untitled"}
                     </td>
                     <td className="px-4 py-3">
-                      {type === "broadcast" ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <Badge variant={presentBroadcastStatus(sequence).variant}>
-                            {presentBroadcastStatus(sequence).label}
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        {type === "broadcast" ? (
+                          <>
+                            <Badge variant={presentBroadcastStatus(sequence).variant}>
+                              {presentBroadcastStatus(sequence).label}
+                            </Badge>
+                            {sequence.archivedAt && (
+                              <Badge variant="outline">archived</Badge>
+                            )}
+                          </>
+                        ) : (
+                          <Badge variant={STATUS_VARIANT[sequence.status]}>
+                            {sequence.status}
                           </Badge>
-                          {sequence.archivedAt && (
-                            <Badge variant="outline">archived</Badge>
-                          )}
-                        </span>
-                      ) : (
-                        <Badge variant={STATUS_VARIANT[sequence.status]}>
-                          {sequence.status}
-                        </Badge>
-                      )}
+                        )}
+                        {sequence.hasUnpublishedChanges && <UnpublishedChangesBadge />}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {sequence.emails.length}

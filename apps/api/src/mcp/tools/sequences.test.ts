@@ -22,6 +22,10 @@ const mocks = {
   getWaitingContacts: vi.fn(),
   setBroadcastArchived: vi.fn(),
   sendSequenceEmailTest: vi.fn(),
+  publishEmailChanges: vi.fn(),
+  discardEmailChanges: vi.fn(),
+  listEmailVersions: vi.fn(),
+  restoreEmailVersion: vi.fn(),
 };
 
 class InvalidCursorError extends Error {}
@@ -48,6 +52,12 @@ mock.module("../../sequences/queries", () => ({
   getWaitingContacts: mocks.getWaitingContacts,
   setBroadcastArchived: mocks.setBroadcastArchived,
   InvalidCursorError,
+}));
+mock.module("../../sequences/publish", () => ({
+  publishEmailChanges: mocks.publishEmailChanges,
+  discardEmailChanges: mocks.discardEmailChanges,
+  listEmailVersions: mocks.listEmailVersions,
+  restoreEmailVersion: mocks.restoreEmailVersion,
 }));
 mock.module("../../sequences/test-send", () => ({
   sendSequenceEmailTest: mocks.sendSequenceEmailTest,
@@ -97,6 +107,10 @@ describe("MCP sequence tools", () => {
       "update_sequence",
       "add_sequence_email",
       "update_sequence_email",
+      "publish_sequence_changes",
+      "discard_sequence_changes",
+      "list_sequence_email_versions",
+      "restore_sequence_email_version",
       "send_sequence_email_test",
       "delete_sequence_email",
       "preview_sequence_deletion",
@@ -112,7 +126,11 @@ describe("MCP sequence tools", () => {
     ]);
     for (const tool of tools.values()) expect(tool.title).toBeTruthy();
     // Destructive tools advertise `confirm`, which the kit requires.
-    for (const name of ["delete_sequence", "delete_sequence_email"]) {
+    for (const name of [
+      "delete_sequence",
+      "delete_sequence_email",
+      "discard_sequence_changes",
+    ]) {
       const tool = tools.get(name)!;
       expect(tool.risk).toBe("destructive");
       expect((tool.inputSchema as any).shape.confirm).toBeDefined();
@@ -158,13 +176,101 @@ describe("MCP sequence tools", () => {
     ]);
     mocks.countSequences.mockResolvedValue(1);
     await expect(call("list_sequences", { type: "sequence" })).resolves.toEqual({
-      items: [{ sequenceId: "seq-1", emails: [{ emailId: "e1" }] }],
+      items: [
+        {
+          sequenceId: "seq-1",
+          emails: [{ emailId: "e1", draft: null, hasUnpublishedChanges: false }],
+          hasUnpublishedChanges: false,
+        },
+      ],
       total: 1,
     });
     expect(mocks.listSequences).toHaveBeenCalledWith(
       expect.objectContaining({ teamId: "team-1", type: "sequence" }),
     );
     expect(mocks.countSequences).toHaveBeenCalledWith("team-1", "sequence", undefined);
+  });
+
+  it("returns an email's draft separately from the published version", async () => {
+    mocks.getSequenceBySequenceId.mockResolvedValue({
+      sequenceId: "seq-1",
+      emails: [
+        {
+          emailId: "e1",
+          subject: "Live",
+          content: { content: [] },
+          draftSubject: "Edited",
+          draftContent: { content: [{ blockType: "text" }] },
+          draftUpdatedAt: new Date("2026-11-01T00:00:00Z"),
+        },
+      ],
+    });
+    const result: any = await call("get_sequence", { sequenceId: "seq-1" });
+    expect(result.hasUnpublishedChanges).toBe(true);
+    expect(result.emails[0]).toMatchObject({
+      subject: "Live",
+      draft: { subject: "Edited", content: { content: [{ blockType: "text" }] } },
+      hasUnpublishedChanges: true,
+    });
+    expect(result.emails[0].draftSubject).toBeUndefined();
+  });
+
+  it("publishes changes only through publish_sequence_changes", async () => {
+    mocks.publishEmailChanges.mockResolvedValue({ sequenceId: "seq-1", emails: [] });
+    await expect(
+      call("publish_sequence_changes", {
+        sequenceId: "seq-1",
+        emailIds: ["e1"],
+        scope: "new_entrants",
+      }),
+    ).resolves.toMatchObject({ sequenceId: "seq-1", hasUnpublishedChanges: false });
+    expect(mocks.publishEmailChanges).toHaveBeenCalledWith({
+      teamId: "team-1",
+      sequenceId: "seq-1",
+      emailIds: ["e1"],
+      scope: "new_entrants",
+    });
+
+    mocks.publishEmailChanges.mockRejectedValue(new Error("mail_already_sent"));
+    await expect(
+      call("publish_sequence_changes", { sequenceId: "seq-1" }),
+    ).resolves.toMatchObject({
+      error: { code: "conflict", safeDetails: { reason: "mail_already_sent" } },
+    });
+  });
+
+  it("lists and restores published versions", async () => {
+    mocks.listEmailVersions.mockResolvedValue([
+      {
+        versionId: "ver_1",
+        subject: "Live",
+        content: { content: [] },
+        publishedAt: new Date("2026-11-01T00:00:00Z"),
+        live: true,
+      },
+    ]);
+    await expect(
+      call("list_sequence_email_versions", { sequenceId: "seq-1", emailId: "e1" }),
+    ).resolves.toEqual({
+      items: [
+        {
+          versionId: "ver_1",
+          subject: "Live",
+          content: { content: [] },
+          publishedAt: "2026-11-01T00:00:00.000Z",
+          live: true,
+        },
+      ],
+    });
+
+    mocks.restoreEmailVersion.mockRejectedValue(new Error("version_not_found"));
+    await expect(
+      call("restore_sequence_email_version", {
+        sequenceId: "seq-1",
+        emailId: "e1",
+        versionId: "ver_x",
+      }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
   });
 
   it("checks sequence ownership before returning stats", async () => {

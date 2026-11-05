@@ -1,8 +1,9 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { ClipboardList, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AiAssistantHint } from "@/components/dashboard/ai-assistant-promo";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
@@ -25,6 +26,14 @@ import {
   DialogTitle,
 } from "@/components/ui/codelit/dialog";
 import { Textarea } from "@/components/ui/codelit/textarea";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import {
   Table,
   TableBody,
@@ -104,9 +113,25 @@ export default function SignupFormsPage() {
           {forms === null ? (
             <Loading className="p-6" />
           ) : forms.length === 0 ? (
-            <p className="p-6 text-sm text-muted-foreground">
-              No signup forms yet. Create one to start collecting subscribers.
-            </p>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <ClipboardList />
+                </EmptyMedia>
+                <EmptyTitle>No signup forms yet</EmptyTitle>
+                <EmptyDescription>
+                  Let people subscribe themselves from a hosted page or a form on your
+                  website.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button onClick={() => openEditor(null)}>
+                  <Plus className="size-4" />
+                  New form
+                </Button>
+                <AiAssistantHint action="create one" />
+              </EmptyContent>
+            </Empty>
           ) : (
             <Table>
               <TableHeader>

@@ -85,3 +85,32 @@ export async function getContentVersion(
     .limit(1);
   return row ?? null;
 }
+
+/**
+ * The version a contact gets of `email`: the one pinned for them when
+ * changes were published for new entrants only, otherwise the published
+ * one. A pin to a version that's gone falls back to the published one.
+ */
+export async function versionForContact<
+  T extends Pick<
+    typeof sequenceEmails.$inferSelect,
+    "id" | "emailId" | "subject" | "content"
+  >,
+>(email: T, pinnedVersions: Record<string, string> | null | undefined): Promise<T> {
+  const pinned = pinnedVersions?.[email.emailId];
+  if (!pinned) return email;
+  const [version] = await db
+    .select({
+      subject: emailContentVersions.subject,
+      content: emailContentVersions.content,
+    })
+    .from(emailContentVersions)
+    .where(
+      and(
+        eq(emailContentVersions.id, pinned),
+        eq(emailContentVersions.sequenceEmailId, email.id),
+      ),
+    )
+    .limit(1);
+  return version ? { ...email, ...version } : email;
+}

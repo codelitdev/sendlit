@@ -124,6 +124,10 @@ export interface SequenceEmail {
   lastTestSentAt?: string | null;
   /** Hosted content check: clean, review, blocked or approved. */
   contentScanVerdict?: string | null;
+  /** Unpublished edits saved while the broadcast or sequence is active; `subject` and
+   * `content` are the published version that sends use. */
+  draft?: { subject: string; content: Email; updatedAt: string | null } | null;
+  hasUnpublishedChanges?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -176,6 +180,8 @@ export interface Sequence {
   createdAt: string;
   updatedAt: string;
   emails: SequenceEmail[];
+  /** Whether any of its emails has unpublished changes. */
+  hasUnpublishedChanges?: boolean;
   /** Set while a new hosted account's broadcast is sent gradually. */
   pacing?: {
     reason: "new_account";

@@ -334,16 +334,24 @@ async function recordEntry(
 }
 
 export async function lockBroadcast(sequenceRowId: string, entrants: string[]) {
-  await db
-    .update(sequences)
-    .set({
-      entrants,
-      report: sql`jsonb_set(coalesce(${sequences.report}, '{}'::jsonb), '{broadcast}', ${JSON.stringify(
-        { lockedAt: Date.now(), sentAt: null },
-      )}::jsonb)`,
-      updatedAt: new Date(),
-    })
-    .where(eq(sequences.id, sequenceRowId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(sequences)
+      .set({
+        entrants,
+        report: sql`jsonb_set(coalesce(${sequences.report}, '{}'::jsonb), '{broadcast}', ${JSON.stringify(
+          { lockedAt: Date.now(), sentAt: null },
+        )}::jsonb)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(sequences.id, sequenceRowId));
+    // It sends its published version; unpublished changes can never go out
+    // now, so they're dropped rather than left looking publishable (#184).
+    await tx
+      .update(sequenceEmails)
+      .set({ draftSubject: null, draftContent: null, draftUpdatedAt: null })
+      .where(eq(sequenceEmails.sequenceId, sequenceRowId));
+  });
 }
 
 export async function markBroadcastSent(sequenceId: string) {

@@ -139,13 +139,22 @@ export async function ensureUploadedMedia({
   });
 }
 
+/**
+ * Seals the uploaded images in `content` into the media library, points the
+ * resource's media references at them and returns `content` with sealed
+ * URLs. Images in `alsoReferenced` (a resource's other copy, such as the
+ * published version of an email whose draft is being saved) stay
+ * referenced too, so the media library can't delete them while in use.
+ */
 export async function syncEmailContentMediaReferences({
   teamId,
   content,
+  alsoReferenced,
   resource,
 }: {
   teamId: string;
   content?: EmailContent | null;
+  alsoReferenced?: EmailContent | null;
   resource: MediaReferenceResource;
 }): Promise<EmailContent | null> {
   const mediaLitImages = extractMediaLitImagesFromEmailContent(content);
@@ -160,6 +169,15 @@ export async function syncEmailContentMediaReferences({
     });
     mediaRows.push(row);
     updateImageSrc(reconciledContent, image.mediaLitId, row.url);
+  }
+  for (const image of extractMediaLitImagesFromEmailContent(alsoReferenced)) {
+    mediaRows.push(
+      await ensureUploadedMedia({
+        teamId,
+        mediaLitId: image.mediaLitId,
+        alt: image.alt,
+      }),
+    );
   }
 
   await replaceMediaReferencesForResource({

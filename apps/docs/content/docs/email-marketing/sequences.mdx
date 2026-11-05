@@ -134,6 +134,49 @@ replayed when it is activated. Sequences pause themselves on high
 bounce or complaint rates like
 [broadcasts](/email-marketing/broadcasts#automatic-pause-on-bounces-and-complaints).
 
+## Edit a running sequence
+
+While a sequence is active, changes to an email's subject and
+content are saved as a draft. Contacts keep getting the published version,
+so a half-finished edit, a typo or a broken merge tag never reaches anyone.
+The sequences list, and each step with changes, shows **Unpublished
+changes**.
+**Send test** sends the draft, so you can check it first. Changes to a
+step's delay, its **Send this email** switch and its tag action apply right
+away.
+While a sequence is a draft or paused, nothing is sending, so edits are saved
+directly, including any unpublished changes left from while it was active.
+
+When the changes are ready, click **Publish changes** above the step's
+content, or in the email editor. When several steps have changes, **Publish
+all changes** at the top of the sequence page publishes them together. Then
+choose who gets them:
+
+- **Contacts already in the sequence too** (the default): contacts get the
+  new version at their next step.
+- **New entrants only**: contacts already in the sequence keep the version
+  they entered with; only contacts who enter from now on get the new one.
+
+**Discard** throws the draft away and shows the published version again.
+
+### Restore an earlier version
+
+Every version you publish is kept. Choose **Version history** in the **⋯**
+menu next to a step's **Edit content** to see them, newest first, and
+**Restore** one to load it into the draft. Publish it to roll back.
+
+### Over the API and MCP
+
+`PATCH /sequences/{sequenceId}/emails/{emailId}` saves to the draft; the
+email's `draft` holds it and `hasUnpublishedChanges` is set on the email and
+the sequence. Publish with `POST /sequences/{sequenceId}/publish-changes`
+(optional `emailIds` and `scope`: `in_flight` or `new_entrants`), discard
+with `POST /sequences/{sequenceId}/discard-changes`, list versions with
+`GET /sequences/{sequenceId}/emails/{emailId}/versions` and restore one with
+`POST .../versions/{versionId}/restore`. The MCP tools are
+`publish_sequence_changes`, `discard_sequence_changes`,
+`list_sequence_email_versions` and `restore_sequence_email_version`.
+
 ## Delete a sequence
 
 Delete a sequence from the **⋯** menu on the Sequences list, or with

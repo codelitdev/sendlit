@@ -117,12 +117,15 @@ import {
 import {
   addSequenceEmailBodySchema,
   createSequenceBodySchema,
+  discardSequenceChangesBodySchema,
   listSequencesQuerySchema,
   listSubscribersQuerySchema,
   listWaitingContactsQuerySchema,
+  publishSequenceChangesBodySchema,
   sendSequenceEmailTestBodySchema,
   sequenceDeletionPreviewSchema,
   sequenceEmailTestResultSchema,
+  sequenceEmailVersionSchema,
   sequenceScheduleSchema,
   sequenceSchema,
   sequenceStatsSchema,
@@ -626,7 +629,7 @@ const sequencesContract = c.router(
       },
       summary: "Update a broadcast or sequence",
       description:
-        "A broadcast's title is its email's subject, so once the broadcast has been sent, changing the title returns 400 with the error \"This broadcast has already been sent\". `viewInBrowser` can be changed at any time; turning it off also takes down the web versions linked from emails already sent.",
+        "A broadcast's title is its email's published subject. While it's scheduled, a new title is saved as the email's draft subject (see `draft`) and becomes the title when the changes are published. Once the broadcast has been sent, changing the title returns 400 with the error \"This broadcast has already been sent\". `viewInBrowser` can be changed at any time; turning it off also takes down the web versions linked from emails already sent.",
     },
     remove: {
       method: "DELETE",
@@ -688,7 +691,54 @@ const sequencesContract = c.router(
       },
       summary: "Update an email within a sequence",
       description:
-        "When templateId is supplied, it must identify a marketing template; transactional templates return 422 template_not_marketing. Edits to an active sequence's email apply to later sends only: the \"view in browser\" page of an email already sent keeps showing what was sent. A sent broadcast can't be edited; the request returns it unchanged.",
+        "When templateId is supplied, it must identify a marketing template; transactional templates return 422 template_not_marketing. While a broadcast or sequence is active (a running sequence or a scheduled broadcast), `subject` and `content` are saved as a draft (returned as the email's `draft`) and sends keep using the published version until the changes are published with POST /sequences/{sequenceId}/publish-changes. Otherwise nothing is sending, so they're saved directly, along with any open draft. Delay, published and tag action changes always apply right away. The \"view in browser\" page of an email already sent keeps showing what was sent. A sent broadcast can't be edited; the request returns it unchanged.",
+    },
+    publishChanges: {
+      method: "POST",
+      path: "/sequences/:sequenceId/publish-changes",
+      body: publishSequenceChangesBodySchema,
+      responses: {
+        200: sequenceSchema,
+        400: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+      },
+      summary: "Publish the unpublished changes of a broadcast or sequence",
+      description:
+        "Makes the drafts of the given emails (or all of them) the version that sends use. Emails without unpublished changes are left alone, so publishing twice changes nothing. For a sequence, `scope` says whether contacts already in it get the new version at their next step (`in_flight`, the default) or keep the version they entered with (`new_entrants`). Each published version is kept in the email's history (GET /sequences/{sequenceId}/emails/{emailId}/versions), including the one it replaces. On SendLit Cloud the content is checked first, as when a sequence starts. 404 `email_not_found` for an email the sequence doesn't have; 409 `mail_already_sent` for a broadcast that has started sending (its unpublished changes are dropped then); 409 `draft_changed` when the draft was edited during the publish (publish again).",
+    },
+    discardChanges: {
+      method: "POST",
+      path: "/sequences/:sequenceId/discard-changes",
+      body: discardSequenceChangesBodySchema,
+      responses: { 200: sequenceSchema, 404: errorSchema },
+      summary: "Discard the unpublished changes of a broadcast or sequence",
+      description:
+        "Deletes the drafts of the given emails (or all of them), so they show the published version again. A broadcast's title goes back to its published subject. Sends are not affected.",
+    },
+    emailVersions: {
+      method: "GET",
+      path: "/sequences/:sequenceId/emails/:emailId/versions",
+      responses: {
+        200: itemsList(sequenceEmailVersionSchema),
+        404: errorSchema,
+      },
+      summary: "List the published versions of a broadcast or sequence email",
+      description:
+        "The live version first, then the versions the email was published with before, newest first (at most 20). Restore one with POST /sequences/{sequenceId}/emails/{emailId}/versions/{versionId}/restore.",
+    },
+    restoreEmailVersion: {
+      method: "POST",
+      path: "/sequences/:sequenceId/emails/:emailId/versions/:versionId/restore",
+      body: c.noBody(),
+      responses: {
+        200: sequenceSchema,
+        404: errorSchema,
+        409: errorSchema,
+      },
+      summary: "Restore an earlier version of a broadcast or sequence email",
+      description:
+        "Loads a published version's subject and content into the email's draft; publish it to roll back. Unless the broadcast or sequence is active, it's restored directly. Restoring the live version discards the draft. A broadcast's title follows the restored subject once it's published. 404 `version_not_found` for a version that isn't one of this email's published versions; 409 `mail_already_sent` for a broadcast that has started sending.",
     },
     sendEmailTest: {
       method: "POST",
@@ -702,7 +752,7 @@ const sequencesContract = c.router(
       },
       summary: "Send a test of a broadcast or sequence email",
       description:
-        "Renders the email exactly like a real send (merge tags, footer, tracking) and sends it with a `[Test]` subject prefix through the delivery source the real send would use. Its \"view in browser\" link shows the email as it was when tested, not later edits. Merge tags use the recipient's contact data when they are a contact. Opens, clicks and the unsubscribe link in a test change nothing. Suppressed addresses are skipped. Every recipient counts as one test: by default a team can send 100 test emails in any 24 hours (50 in any 3 hours) and 20 per email per 24 hours, after which this returns 429 `test_send_limit_reached` or `test_send_email_limit_reached`. Tests through an organization's shared mailbox also count against the team's shared-delivery quota (429 `organization_team_quota_exhausted` or `organization_quota_exhausted`).",
+        "Renders the email exactly like a real send (merge tags, footer, tracking) and sends it with a `[Test]` subject prefix through the delivery source the real send would use. When the email has unpublished changes, the test sends the draft, so they can be checked before they're published. Its \"view in browser\" link shows the email as it was when tested, not later edits. Merge tags use the recipient's contact data when they are a contact. Opens, clicks and the unsubscribe link in a test change nothing. Suppressed addresses are skipped. Every recipient counts as one test: by default a team can send 100 test emails in any 24 hours (50 in any 3 hours) and 20 per email per 24 hours, after which this returns 429 `test_send_limit_reached` or `test_send_email_limit_reached`. Tests through an organization's shared mailbox also count against the team's shared-delivery quota (429 `organization_team_quota_exhausted` or `organization_quota_exhausted`).",
     },
     removeEmail: {
       method: "DELETE",

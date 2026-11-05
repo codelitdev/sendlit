@@ -7932,6 +7932,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -7951,6 +8003,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
@@ -8316,6 +8371,58 @@
                                   "type": "string",
                                   "nullable": true
                                 },
+                                "draft": {
+                                  "type": "object",
+                                  "properties": {
+                                    "subject": {
+                                      "type": "string"
+                                    },
+                                    "content": {
+                                      "type": "object",
+                                      "properties": {
+                                        "style": {
+                                          "type": "object",
+                                          "additionalProperties": {
+                                            "nullable": true
+                                          }
+                                        },
+                                        "meta": {
+                                          "type": "object",
+                                          "additionalProperties": {
+                                            "nullable": true
+                                          }
+                                        },
+                                        "content": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                              "nullable": true
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "style",
+                                        "meta",
+                                        "content"
+                                      ]
+                                    },
+                                    "updatedAt": {
+                                      "type": "string",
+                                      "nullable": true
+                                    }
+                                  },
+                                  "required": [
+                                    "subject",
+                                    "content",
+                                    "updatedAt"
+                                  ],
+                                  "nullable": true
+                                },
+                                "hasUnpublishedChanges": {
+                                  "type": "boolean"
+                                },
                                 "createdAt": {
                                   "type": "string",
                                   "nullable": true
@@ -8335,6 +8442,9 @@
                                 "updatedAt"
                               ]
                             }
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
                           },
                           "pacing": {
                             "type": "object",
@@ -8637,6 +8747,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -8656,6 +8818,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
@@ -8747,7 +8912,7 @@
         ]
       },
       "patch": {
-        "description": "A broadcast's title is its email's subject, so once the broadcast has been sent, changing the title returns 400 with the error \"This broadcast has already been sent\". `viewInBrowser` can be changed at any time; turning it off also takes down the web versions linked from emails already sent.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "description": "A broadcast's title is its email's published subject. While it's scheduled, a new title is saved as the email's draft subject (see `draft`) and becomes the title when the changes are published. Once the broadcast has been sent, changing the title returns 400 with the error \"This broadcast has already been sent\". `viewInBrowser` can be changed at any time; turning it off also takes down the web versions linked from emails already sent.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
         "summary": "Update a broadcast or sequence",
         "tags": [
           "Sequences"
@@ -9536,6 +9701,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -9555,6 +9772,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
@@ -10056,6 +10276,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -10075,6 +10347,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
@@ -10403,6 +10678,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -10422,6 +10749,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
@@ -10751,6 +11081,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -10770,6 +11152,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
@@ -10899,7 +11284,7 @@
     },
     "/sequences/{sequenceId}/emails/{emailId}": {
       "patch": {
-        "description": "When templateId is supplied, it must identify a marketing template; transactional templates return 422 template_not_marketing. Edits to an active sequence's email apply to later sends only: the \"view in browser\" page of an email already sent keeps showing what was sent. A sent broadcast can't be edited; the request returns it unchanged.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "description": "When templateId is supplied, it must identify a marketing template; transactional templates return 422 template_not_marketing. While a broadcast or sequence is active (a running sequence or a scheduled broadcast), `subject` and `content` are saved as a draft (returned as the email's `draft`) and sends keep using the published version until the changes are published with POST /sequences/{sequenceId}/publish-changes. Otherwise nothing is sending, so they're saved directly, along with any open draft. Delay, published and tag action changes always apply right away. The \"view in browser\" page of an email already sent keeps showing what was sent. A sent broadcast can't be edited; the request returns it unchanged.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
         "summary": "Update an email within a sequence",
         "tags": [
           "Sequences"
@@ -11750,6 +12135,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -11769,6 +12206,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
@@ -12121,6 +12561,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -12140,6 +12632,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
@@ -12246,9 +12741,1418 @@
         ]
       }
     },
+    "/sequences/{sequenceId}/publish-changes": {
+      "post": {
+        "description": "Makes the drafts of the given emails (or all of them) the version that sends use. Emails without unpublished changes are left alone, so publishing twice changes nothing. For a sequence, `scope` says whether contacts already in it get the new version at their next step (`in_flight`, the default) or keep the version they entered with (`new_entrants`). Each published version is kept in the email's history (GET /sequences/{sequenceId}/emails/{emailId}/versions), including the one it replaces. On SendLit Cloud the content is checked first, as when a sequence starts. 404 `email_not_found` for an email the sequence doesn't have; 409 `mail_already_sent` for a broadcast that has started sending (its unpublished changes are dropped then); 409 `draft_changed` when the draft was edited during the publish (publish again).\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "summary": "Publish the unpublished changes of a broadcast or sequence",
+        "tags": [
+          "Sequences"
+        ],
+        "parameters": [
+          {
+            "name": "sequenceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "emailIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "description": "The emails to act on; omit for every email with unpublished changes"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "in_flight",
+                      "new_entrants"
+                    ],
+                    "description": "Sequences only. in_flight (default): contacts already in the sequence get the new version at their next step. new_entrants: they keep the version they entered with; only contacts who enter from now on get the new one."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sequenceId": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "deliverySource": {
+                      "discriminator": {
+                        "propertyName": "type"
+                      },
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "organization"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "team"
+                              ]
+                            },
+                            "espId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        }
+                      ],
+                      "nullable": true
+                    },
+                    "triggerType": {
+                      "type": "string",
+                      "enum": [
+                        "subscriber:added",
+                        "tag:added",
+                        "tag:removed",
+                        "date:occurred",
+                        "event:custom",
+                        "contact:property_changed"
+                      ],
+                      "nullable": true
+                    },
+                    "triggerData": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "triggerFilter": {
+                      "nullable": true
+                    },
+                    "reentry": {
+                      "type": "string",
+                      "enum": [
+                        "every_time",
+                        "once",
+                        "once_per_period"
+                      ]
+                    },
+                    "reentryPeriodDays": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "filter": {
+                      "nullable": true
+                    },
+                    "excludeFilter": {
+                      "nullable": true
+                    },
+                    "entrantsCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "emailsOrder": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "entrants": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "report": {
+                      "nullable": true
+                    },
+                    "viewInBrowser": {
+                      "type": "boolean"
+                    },
+                    "archivedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "emails": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emailId": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "object",
+                            "properties": {
+                              "style": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "nullable": true
+                                }
+                              },
+                              "meta": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "nullable": true
+                                }
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "nullable": true
+                                  }
+                                }
+                              }
+                            },
+                            "required": [
+                              "style",
+                              "meta",
+                              "content"
+                            ]
+                          },
+                          "delayInMillis": {
+                            "type": "number"
+                          },
+                          "published": {
+                            "type": "boolean"
+                          },
+                          "templateId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actionType": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actionData": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "nullable": true
+                            },
+                            "nullable": true
+                          },
+                          "lastTestSentAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "contentScanVerdict": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "emailId",
+                          "subject",
+                          "content",
+                          "delayInMillis",
+                          "published",
+                          "createdAt",
+                          "updatedAt"
+                        ]
+                      }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
+                    },
+                    "pacing": {
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "new_account"
+                          ]
+                        },
+                        "hourlyLimit": {
+                          "type": "integer"
+                        },
+                        "dailyLimit": {
+                          "type": "integer"
+                        },
+                        "remaining": {
+                          "type": "integer"
+                        },
+                        "estimatedCompletionAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "reason",
+                        "hourlyLimit",
+                        "dailyLimit",
+                        "remaining",
+                        "estimatedCompletionAt"
+                      ],
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "sequenceId",
+                    "type",
+                    "title",
+                    "status",
+                    "deliverySource",
+                    "emailsOrder",
+                    "entrants",
+                    "viewInBrowser",
+                    "createdAt",
+                    "updatedAt",
+                    "emails"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400\n\nOr `credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "teamApiKey": []
+          },
+          {
+            "teamApiKeyStandardHeader": []
+          },
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          }
+        ]
+      }
+    },
+    "/sequences/{sequenceId}/discard-changes": {
+      "post": {
+        "description": "Deletes the drafts of the given emails (or all of them), so they show the published version again. A broadcast's title goes back to its published subject. Sends are not affected.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "summary": "Discard the unpublished changes of a broadcast or sequence",
+        "tags": [
+          "Sequences"
+        ],
+        "parameters": [
+          {
+            "name": "sequenceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "emailIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "description": "The emails to act on; omit for every email with unpublished changes"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sequenceId": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "deliverySource": {
+                      "discriminator": {
+                        "propertyName": "type"
+                      },
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "organization"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "team"
+                              ]
+                            },
+                            "espId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        }
+                      ],
+                      "nullable": true
+                    },
+                    "triggerType": {
+                      "type": "string",
+                      "enum": [
+                        "subscriber:added",
+                        "tag:added",
+                        "tag:removed",
+                        "date:occurred",
+                        "event:custom",
+                        "contact:property_changed"
+                      ],
+                      "nullable": true
+                    },
+                    "triggerData": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "triggerFilter": {
+                      "nullable": true
+                    },
+                    "reentry": {
+                      "type": "string",
+                      "enum": [
+                        "every_time",
+                        "once",
+                        "once_per_period"
+                      ]
+                    },
+                    "reentryPeriodDays": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "filter": {
+                      "nullable": true
+                    },
+                    "excludeFilter": {
+                      "nullable": true
+                    },
+                    "entrantsCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "emailsOrder": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "entrants": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "report": {
+                      "nullable": true
+                    },
+                    "viewInBrowser": {
+                      "type": "boolean"
+                    },
+                    "archivedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "emails": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emailId": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "object",
+                            "properties": {
+                              "style": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "nullable": true
+                                }
+                              },
+                              "meta": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "nullable": true
+                                }
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "nullable": true
+                                  }
+                                }
+                              }
+                            },
+                            "required": [
+                              "style",
+                              "meta",
+                              "content"
+                            ]
+                          },
+                          "delayInMillis": {
+                            "type": "number"
+                          },
+                          "published": {
+                            "type": "boolean"
+                          },
+                          "templateId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actionType": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actionData": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "nullable": true
+                            },
+                            "nullable": true
+                          },
+                          "lastTestSentAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "contentScanVerdict": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "emailId",
+                          "subject",
+                          "content",
+                          "delayInMillis",
+                          "published",
+                          "createdAt",
+                          "updatedAt"
+                        ]
+                      }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
+                    },
+                    "pacing": {
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "new_account"
+                          ]
+                        },
+                        "hourlyLimit": {
+                          "type": "integer"
+                        },
+                        "dailyLimit": {
+                          "type": "integer"
+                        },
+                        "remaining": {
+                          "type": "integer"
+                        },
+                        "estimatedCompletionAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "reason",
+                        "hourlyLimit",
+                        "dailyLimit",
+                        "remaining",
+                        "estimatedCompletionAt"
+                      ],
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "sequenceId",
+                    "type",
+                    "title",
+                    "status",
+                    "deliverySource",
+                    "emailsOrder",
+                    "entrants",
+                    "viewInBrowser",
+                    "createdAt",
+                    "updatedAt",
+                    "emails"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "teamApiKey": []
+          },
+          {
+            "teamApiKeyStandardHeader": []
+          },
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          }
+        ]
+      }
+    },
+    "/sequences/{sequenceId}/emails/{emailId}/versions": {
+      "get": {
+        "description": "The live version first, then the versions the email was published with before, newest first (at most 20). Restore one with POST /sequences/{sequenceId}/emails/{emailId}/versions/{versionId}/restore.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "summary": "List the published versions of a broadcast or sequence email",
+        "tags": [
+          "Sequences"
+        ],
+        "parameters": [
+          {
+            "name": "sequenceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "emailId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "versionId": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "object",
+                            "properties": {
+                              "style": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "nullable": true
+                                }
+                              },
+                              "meta": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "nullable": true
+                                }
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "nullable": true
+                                  }
+                                }
+                              }
+                            },
+                            "required": [
+                              "style",
+                              "meta",
+                              "content"
+                            ]
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "description": "When this version last went live"
+                          },
+                          "live": {
+                            "type": "boolean",
+                            "description": "Whether sends use this version now"
+                          }
+                        },
+                        "required": [
+                          "versionId",
+                          "subject",
+                          "content",
+                          "publishedAt",
+                          "live"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "teamApiKey": []
+          },
+          {
+            "teamApiKeyStandardHeader": []
+          },
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          }
+        ]
+      }
+    },
+    "/sequences/{sequenceId}/emails/{emailId}/versions/{versionId}/restore": {
+      "post": {
+        "description": "Loads a published version's subject and content into the email's draft; publish it to roll back. Unless the broadcast or sequence is active, it's restored directly. Restoring the live version discards the draft. A broadcast's title follows the restored subject once it's published. 404 `version_not_found` for a version that isn't one of this email's published versions; 409 `mail_already_sent` for a broadcast that has started sending.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "summary": "Restore an earlier version of a broadcast or sequence email",
+        "tags": [
+          "Sequences"
+        ],
+        "parameters": [
+          {
+            "name": "sequenceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "emailId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sequenceId": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "deliverySource": {
+                      "discriminator": {
+                        "propertyName": "type"
+                      },
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "organization"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "team"
+                              ]
+                            },
+                            "espId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        }
+                      ],
+                      "nullable": true
+                    },
+                    "triggerType": {
+                      "type": "string",
+                      "enum": [
+                        "subscriber:added",
+                        "tag:added",
+                        "tag:removed",
+                        "date:occurred",
+                        "event:custom",
+                        "contact:property_changed"
+                      ],
+                      "nullable": true
+                    },
+                    "triggerData": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "triggerFilter": {
+                      "nullable": true
+                    },
+                    "reentry": {
+                      "type": "string",
+                      "enum": [
+                        "every_time",
+                        "once",
+                        "once_per_period"
+                      ]
+                    },
+                    "reentryPeriodDays": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "filter": {
+                      "nullable": true
+                    },
+                    "excludeFilter": {
+                      "nullable": true
+                    },
+                    "entrantsCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "emailsOrder": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "entrants": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "report": {
+                      "nullable": true
+                    },
+                    "viewInBrowser": {
+                      "type": "boolean"
+                    },
+                    "archivedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "emails": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emailId": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "object",
+                            "properties": {
+                              "style": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "nullable": true
+                                }
+                              },
+                              "meta": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "nullable": true
+                                }
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "nullable": true
+                                  }
+                                }
+                              }
+                            },
+                            "required": [
+                              "style",
+                              "meta",
+                              "content"
+                            ]
+                          },
+                          "delayInMillis": {
+                            "type": "number"
+                          },
+                          "published": {
+                            "type": "boolean"
+                          },
+                          "templateId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actionType": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "actionData": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "nullable": true
+                            },
+                            "nullable": true
+                          },
+                          "lastTestSentAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "contentScanVerdict": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "emailId",
+                          "subject",
+                          "content",
+                          "delayInMillis",
+                          "published",
+                          "createdAt",
+                          "updatedAt"
+                        ]
+                      }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
+                    },
+                    "pacing": {
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "new_account"
+                          ]
+                        },
+                        "hourlyLimit": {
+                          "type": "integer"
+                        },
+                        "dailyLimit": {
+                          "type": "integer"
+                        },
+                        "remaining": {
+                          "type": "integer"
+                        },
+                        "estimatedCompletionAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "reason",
+                        "hourlyLimit",
+                        "dailyLimit",
+                        "remaining",
+                        "estimatedCompletionAt"
+                      ],
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "sequenceId",
+                    "type",
+                    "title",
+                    "status",
+                    "deliverySource",
+                    "emailsOrder",
+                    "entrants",
+                    "viewInBrowser",
+                    "createdAt",
+                    "updatedAt",
+                    "emails"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "teamApiKey": []
+          },
+          {
+            "teamApiKeyStandardHeader": []
+          },
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          }
+        ]
+      }
+    },
     "/sequences/{sequenceId}/emails/{emailId}/test": {
       "post": {
-        "description": "Renders the email exactly like a real send (merge tags, footer, tracking) and sends it with a `[Test]` subject prefix through the delivery source the real send would use. Its \"view in browser\" link shows the email as it was when tested, not later edits. Merge tags use the recipient's contact data when they are a contact. Opens, clicks and the unsubscribe link in a test change nothing. Suppressed addresses are skipped. Every recipient counts as one test: by default a team can send 100 test emails in any 24 hours (50 in any 3 hours) and 20 per email per 24 hours, after which this returns 429 `test_send_limit_reached` or `test_send_email_limit_reached`. Tests through an organization's shared mailbox also count against the team's shared-delivery quota (429 `organization_team_quota_exhausted` or `organization_quota_exhausted`).\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "description": "Renders the email exactly like a real send (merge tags, footer, tracking) and sends it with a `[Test]` subject prefix through the delivery source the real send would use. When the email has unpublished changes, the test sends the draft, so they can be checked before they're published. Its \"view in browser\" link shows the email as it was when tested, not later edits. Merge tags use the recipient's contact data when they are a contact. Opens, clicks and the unsubscribe link in a test change nothing. Suppressed addresses are skipped. Every recipient counts as one test: by default a team can send 100 test emails in any 24 hours (50 in any 3 hours) and 20 per email per 24 hours, after which this returns 429 `test_send_limit_reached` or `test_send_email_limit_reached`. Tests through an organization's shared mailbox also count against the team's shared-delivery quota (429 `organization_team_quota_exhausted` or `organization_quota_exhausted`).\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
         "summary": "Send a test of a broadcast or sequence email",
         "tags": [
           "Sequences"
@@ -12643,6 +14547,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -12662,6 +14618,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
@@ -12987,6 +14946,58 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "draft": {
+                            "type": "object",
+                            "properties": {
+                              "subject": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "style": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "meta": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "nullable": true
+                                    }
+                                  },
+                                  "content": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "style",
+                                  "meta",
+                                  "content"
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "subject",
+                              "content",
+                              "updatedAt"
+                            ],
+                            "nullable": true
+                          },
+                          "hasUnpublishedChanges": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "nullable": true
@@ -13006,6 +15017,9 @@
                           "updatedAt"
                         ]
                       }
+                    },
+                    "hasUnpublishedChanges": {
+                      "type": "boolean"
                     },
                     "pacing": {
                       "type": "object",
