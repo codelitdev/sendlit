@@ -22,7 +22,7 @@
     "@types/express": "4.17.25",
     "@types/node": "22.20.0",
     "mdast-util-to-markdown": "2.1.2",
-    "next": "16.4.1",
+    "next": "16.4.5",
     "qs": "6.17.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -32,7 +32,10 @@
     "postcss-selector-parser@>=6.0.0 <7.0.0": "6.1.5",
     "systeminformation@>=5.0.0 <6.0.0": "5.33.18",
     "body-parser@>=2.0.0 <3.0.0": "2.4.0",
-    "fast-uri@>=3.0.0 <4.0.0": "3.1.9"
+    "fast-uri@>=3.0.0 <4.0.0": "3.1.9",
+    "@hono/node-server@>=2.0.0 <3.0.0": "2.1.6",
+    "zod@>=4.0.0 <5.0.0": "4.6.7",
+    "hono@>=4.0.0 <5.0.0": "4.13.11"
   },
   "scripts": {
     "dev:api": "bun --filter @sendlit/api dev",
