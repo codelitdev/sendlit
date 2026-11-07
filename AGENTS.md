@@ -1,7 +1,7 @@
 ## Development Tips
 
 - Don't duplicate stuff over and over. Re-use existing code and libraries.
-- While making changes to the `apps/api` directory, make sure the REST API documentation and MCP server are updated as well.
+- While making changes to the `apps/api` directory, make sure the REST API documentation and MCP server are updated as well. After changing the API contract, run `bun --filter @sendlit/api openapi:generate` and commit `apps/api/openapi.json` (FrontLit publishes the API reference from it; CI fails if it is stale).
 - For UI components, use shadcn/ui exclusively. Always use Shadcn CLI for installing components. Never hand roll standard Shadcn components. Prefer shadcn/ui components over browser-native components.
 - When dealing with a large change, work through it in layers: money-path correctness first, then enforcement, then dashboard/self-serve, then ops and docs.
 - If you are a Grok model, make sure you run the linter and tests before declaring any task done.

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AiAssistantSettings } from "@/components/dashboard/ai-assistant-settings";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
@@ -84,7 +85,7 @@ import { presentDeliverySourceError } from "@/lib/delivery-source";
 import { espProviderLabel } from "@/lib/esp-providers";
 import { getTeamIdFromCookie } from "@/lib/tokens";
 
-const SETTINGS_TABS = ["general", "esp", "api-keys", "web"] as const;
+const SETTINGS_TABS = ["general", "esp", "api-keys", "ai", "web"] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 function isSettingsTab(value: string | null): value is SettingsTab {
@@ -372,6 +373,7 @@ export default function SettingsPage() {
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="esp">Email service providers (ESP)</TabsTrigger>
             <TabsTrigger value="api-keys">API keys</TabsTrigger>
+            <TabsTrigger value="ai">AI assistants</TabsTrigger>
             <TabsTrigger value="web">Web archive</TabsTrigger>
           </TabsList>
 
@@ -417,6 +419,10 @@ export default function SettingsPage() {
               </Card>
               <TrackingDomainSettings />
             </div>
+          </TabsContent>
+
+          <TabsContent value="ai">
+            <AiAssistantSettings />
           </TabsContent>
 
           <TabsContent value="web">

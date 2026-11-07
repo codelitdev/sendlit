@@ -24,7 +24,9 @@
     "test:conformance": "bun run build:deps && bun test --timeout 30000 src/platform-conformance.test.ts src/mcp/parity.test.ts",
     "lint": "biome lint .",
     "build:deps": "bun --filter @sendlit/email-editor build && bun --filter @sendlit/email-blocks build",
-    "disposable-domains:update": "bun scripts/update-disposable-domains.ts"
+    "disposable-domains:update": "bun scripts/update-disposable-domains.ts",
+    "openapi:generate": "bun scripts/openapi.ts",
+    "openapi:check": "bun scripts/openapi.ts --check"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

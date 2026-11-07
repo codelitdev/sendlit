@@ -6,9 +6,10 @@ import {
   type EmailTemplate,
   TemplateChooser,
 } from "@sendlit/email-blocks";
-import { Check, Copy, CopyPlus, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, CopyPlus, Mail, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AiAssistantHint } from "@/components/dashboard/ai-assistant-promo";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
@@ -35,6 +36,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/codelit/tooltip";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import {
   deleteTemplate,
   duplicateTemplate,
@@ -143,9 +152,32 @@ export default function TemplatesPage() {
         <Loading />
       ) : visibleTemplates.length === 0 ? (
         <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground">
-            No templates yet. Create one for campaigns or API-triggered email.
-          </CardContent>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Mail />
+              </EmptyMedia>
+              <EmptyTitle>
+                {purposeFilter === "all"
+                  ? "No templates yet"
+                  : `No ${purposeFilter} templates yet`}
+              </EmptyTitle>
+              <EmptyDescription>
+                {purposeFilter === "transactional"
+                  ? "Reusable content for email your app sends through the API, like receipts and password resets."
+                  : purposeFilter === "marketing"
+                    ? "Reusable content to start broadcasts and sequences from."
+                    : "Reusable content for broadcasts and sequences, or for email your app sends through the API."}
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button onClick={() => setChooserOpen(true)}>
+                <Plus className="size-4" />
+                New template
+              </Button>
+              <AiAssistantHint />
+            </EmptyContent>
+          </Empty>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -16,6 +16,13 @@ import {
   WebPublishingError,
 } from "../web/queries";
 import { broadcastArchiveErrors, isSequenceDeleteBlocker } from "./delete-blockers";
+import { sequenceHasUnpublishedChanges, toPublicSequenceEmail } from "./drafts";
+import {
+  discardEmailChanges,
+  listEmailVersions,
+  publishEmailChanges,
+  restoreEmailVersion,
+} from "./publish";
 import {
   addMailToSequence,
   countSequences,
@@ -69,10 +76,22 @@ function toBody(sequence: HydratedSequence): any {
       "webNoindex",
       "webCanonicalUrl",
     ]),
-    emails: sequence.emails.map((email) =>
-      omitInternal(email, ["sequenceId", "contentScanHash", "contentScanReasons"]),
-    ),
+    emails: sequence.emails.map(toPublicSequenceEmail),
+    hasUnpublishedChanges: sequenceHasUnpublishedChanges(sequence),
   });
+}
+
+/** The draft and publish operations' known failures: 404 for an email or
+ * version the sequence doesn't have, 409 when a publish can't go ahead. */
+function draftError(err: unknown) {
+  const error = err instanceof Error ? err.message : "";
+  if (error === "email_not_found" || error === "version_not_found") {
+    return { status: 404 as const, body: { error } };
+  }
+  if (error === "mail_already_sent" || error === "draft_changed") {
+    return { status: 409 as const, body: { error } };
+  }
+  return null;
 }
 
 const impl = s.router(contract.sequences, {
@@ -168,6 +187,61 @@ const impl = s.router(contract.sequences, {
         };
       }
       return { status: 400, body: { error: err.message } };
+    }
+  },
+  publishChanges: async ({ params, body, req }) => {
+    try {
+      const sequence = await publishEmailChanges({
+        teamId: (req as any).teamId,
+        sequenceId: params.sequenceId,
+        emailIds: body.emailIds,
+        scope: body.scope,
+      });
+      if (!sequence) return { status: 404, body: { error: "Sequence not found" } };
+      return { status: 200, body: toBody(sequence) };
+    } catch (err: any) {
+      // Content checks (`content_blocked`, `content_held_for_review`).
+      return draftError(err) ?? { status: 400, body: { error: err.message } };
+    }
+  },
+  discardChanges: async ({ params, body, req }) => {
+    try {
+      const sequence = await discardEmailChanges({
+        teamId: (req as any).teamId,
+        sequenceId: params.sequenceId,
+        emailIds: body.emailIds,
+      });
+      if (!sequence) return { status: 404, body: { error: "Sequence not found" } };
+      return { status: 200, body: toBody(sequence) };
+    } catch (err) {
+      const known = draftError(err);
+      if (known?.status === 404) return known;
+      throw err;
+    }
+  },
+  emailVersions: async ({ params, req }) => {
+    const versions = await listEmailVersions({
+      teamId: (req as any).teamId,
+      sequenceId: params.sequenceId,
+      emailId: params.emailId,
+    });
+    if (!versions) return { status: 404, body: { error: "Email not found" } };
+    return { status: 200, body: { items: serializeDates(versions) as any[] } };
+  },
+  restoreEmailVersion: async ({ params, req }) => {
+    try {
+      const sequence = await restoreEmailVersion({
+        teamId: (req as any).teamId,
+        sequenceId: params.sequenceId,
+        emailId: params.emailId,
+        versionId: params.versionId,
+      });
+      if (!sequence) return { status: 404, body: { error: "Email not found" } };
+      return { status: 200, body: toBody(sequence) };
+    } catch (err) {
+      const known = draftError(err);
+      if (known) return known;
+      throw err;
     }
   },
   sendEmailTest: async ({ params, body, req }) => {

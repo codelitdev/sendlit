@@ -18,6 +18,7 @@
       "!**/next-env.d.ts",
       "!**/*.generated.ts",
       "!apps/api/drizzle",
+      "!apps/api/openapi.json",
       "!.codelit-platform.json",
       "!.github/workflows/platform-conformance.yml"
     ]

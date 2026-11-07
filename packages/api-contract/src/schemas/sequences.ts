@@ -47,6 +47,18 @@ export const sequenceEmailSchema = z.object({
   /** Hosted content check: `clean`, `review` (held for SendLit's review),
    * `blocked`, or `approved` after review; `null` when not scanned. */
   contentScanVerdict: z.string().nullable().optional(),
+  /** Unpublished edits saved while the broadcast or sequence is active. `subject` and
+   * `content` above are the published version that sends use. */
+  draft: z
+    .object({
+      subject: z.string(),
+      content: emailContentSchema,
+      updatedAt: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
+  /** Whether `draft` holds changes that aren't published yet. */
+  hasUnpublishedChanges: z.boolean().optional(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
 });
@@ -171,6 +183,8 @@ export const sequenceSchema = z.object({
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
   emails: z.array(sequenceEmailSchema),
+  /** Whether any of its emails has unpublished changes. */
+  hasUnpublishedChanges: z.boolean().optional(),
   /** Set while a running broadcast of a new hosted organization is sent
    * gradually (`get` only). */
   pacing: z
@@ -268,6 +282,39 @@ export const updateSequenceEmailBodySchema = z.object({
   actionData: z.record(z.any()).optional(),
   published: z.boolean().optional(),
 });
+
+export const publishScopes = ["in_flight", "new_entrants"] as const;
+export type PublishScope = (typeof publishScopes)[number];
+
+const emailIdsSchema = z
+  .array(z.string())
+  .min(1)
+  .optional()
+  .describe("The emails to act on; omit for every email with unpublished changes");
+
+export const publishSequenceChangesBodySchema = z.object({
+  emailIds: emailIdsSchema,
+  scope: z
+    .enum(publishScopes)
+    .optional()
+    .describe(
+      "Sequences only. in_flight (default): contacts already in the sequence get the new version at their next step. new_entrants: they keep the version they entered with; only contacts who enter from now on get the new one.",
+    ),
+});
+
+export const discardSequenceChangesBodySchema = z.object({
+  emailIds: emailIdsSchema,
+});
+
+export const sequenceEmailVersionSchema = z.object({
+  versionId: z.string(),
+  subject: z.string(),
+  content: emailContentSchema,
+  publishedAt: z.string().describe("When this version last went live"),
+  live: z.boolean().describe("Whether sends use this version now"),
+});
+
+export type SequenceEmailVersion = z.infer<typeof sequenceEmailVersionSchema>;
 
 export const sendSequenceEmailTestBodySchema = z.object({
   to: z

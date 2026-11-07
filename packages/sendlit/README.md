@@ -63,7 +63,7 @@ new SendLit({
 | `sendlit.contacts`       | `create`, `list`, `listAll`, `get`, `update`, `remove`, `addTag`, `removeTag`, `deliveries`, `events`                                                                |
 | `sendlit.segments`       | `create`, `list`, `get`, `update`, `remove`                                                                                                                          |
 | `sendlit.templates`      | `list`, `listSystem`, `get`, `create`, `update`, `duplicate`, `remove`                                                                                               |
-| `sendlit.sequences`      | Broadcasts and sequences: `create`, `list`, `listAll`, `get`, `update`, `remove`, `addEmail`, `updateEmail`, `removeEmail`, `start`, `pause`, `stats`, `subscribers` |
+| `sendlit.sequences`      | Broadcasts and sequences: `create`, `list`, `listAll`, `get`, `update`, `remove`, `addEmail`, `updateEmail`, `publishChanges`, `discardChanges`, `emailVersions`, `restoreEmailVersion`, `removeEmail`, `start`, `pause`, `stats`, `subscribers` |
 | `sendlit.emails`         | Transactional email: `send`, `get`, `list`, `listAll`                                                                                                                |
 | `sendlit.events`         | Custom events: `track`, and `definitions.list`, `definitions.get`, `definitions.create`, `definitions.update`, `definitions.delete`                                  |
 | `sendlit.provisioning`   | Organization key only: `provisionTeam`, `getTeam`, `updateTeam`, `createTeamKey`, `suspendTeam`, `resumeTeam`, `archiveTeam`, `getTeamUsage`                         |
@@ -228,6 +228,19 @@ await sendlit.sequences.start(broadcast.sequenceId);
 Starting a broadcast or sequence requires a mailing address in the team's
 settings (set it with `mailingAddress` when provisioning) and a way to send
 email: either an organization delivery grant or the team's own ESP.
+
+While a broadcast or sequence is active, `updateEmail` saves subject and
+content changes as a draft; contacts keep getting the published version until
+you publish:
+
+```ts
+await sendlit.sequences.updateEmail(sequenceId, emailId, { subject: "Updated" });
+await sendlit.sequences.publishChanges(sequenceId, {
+    emailIds: [emailId],
+    // Sequences: "in_flight" (default) or "new_entrants".
+    scope: "new_entrants",
+});
+```
 
 ## License
 

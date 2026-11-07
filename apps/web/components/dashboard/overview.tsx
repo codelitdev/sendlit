@@ -3,6 +3,7 @@
 import { Activity, ArrowRight, Circle, Mail, Workflow } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AiAssistantPromoCard } from "@/components/dashboard/ai-assistant-promo";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ReputationCard } from "@/components/dashboard/reputation-card";
 import { Card, CardContent } from "@/components/ui/card";
@@ -122,6 +123,7 @@ export function OverviewDashboard() {
           </CardContent>
         </Card>
       )}
+      <AiAssistantPromoCard />
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric
           icon={Workflow}
