@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@happy-dom/global-registrator": "21.0.3"
+    "@happy-dom/global-registrator": "21.0.4"
   },
   "devDependencies": {
     "@types/bun": "1.4.1",
