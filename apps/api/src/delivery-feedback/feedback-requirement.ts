@@ -34,6 +34,19 @@ export async function getFeedbackRequirement(
   };
 }
 
+/** The requirement for the organization a team belongs to; null for an
+ * unknown team. */
+export async function getFeedbackRequirementForTeam(
+  teamId: string,
+): Promise<FeedbackRequirement | null> {
+  const [team] = await db
+    .select({ organizationId: teams.organizationId })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  return team ? getFeedbackRequirement(team.organizationId) : null;
+}
+
 /** The organization's active team ESPs without a healthy feedback
  * connection: the ones `assertSendingEligibility` stops past the test
  * volume. */

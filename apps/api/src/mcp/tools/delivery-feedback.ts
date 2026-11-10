@@ -18,7 +18,7 @@ import {
   feedbackConnectionInputError,
   toPublicFeedbackConnection,
 } from "../../delivery-feedback/feedback-connection-shape";
-import { getFeedbackRequirement } from "../../delivery-feedback/feedback-requirement";
+import { getFeedbackRequirementForTeam } from "../../delivery-feedback/feedback-requirement";
 import { getOutboundMessagesByIds } from "../../delivery-feedback/outbound-queries";
 import {
   addOrStrengthenSuppression,
@@ -29,7 +29,6 @@ import {
   type Suppression,
 } from "../../delivery-feedback/suppression-queries";
 import { getEspConfigByEspId, listEspConfigs } from "../../settings/esp/queries";
-import { getTeam } from "../../team/queries";
 import type { SendLitMcpTool } from "../context";
 import { dedicatedTool } from "../tool";
 import { notFound, toolError } from "./responses";
@@ -114,9 +113,7 @@ export const deliveryFeedbackTools = (): SendLitMcpTool[] => [
     outputSchema: feedbackRequirementSchema,
     annotations: { idempotentHint: true, openWorldHint: false },
     async handler({ context }) {
-      const team = await getTeam(context.teamId);
-      if (!team) return notFound();
-      return getFeedbackRequirement(team.organizationId);
+      return (await getFeedbackRequirementForTeam(context.teamId)) ?? notFound();
     },
   }),
 

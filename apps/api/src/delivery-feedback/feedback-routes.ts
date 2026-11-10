@@ -6,7 +6,6 @@ import { requireTeam } from "../auth/require-team";
 import { feedbackCapableProviders } from "../config/constants";
 import { captureEvent } from "../observability";
 import { getEspConfigByEspId } from "../settings/esp/queries";
-import { getTeam } from "../team/queries";
 import {
   disableFeedbackConnection,
   feedbackConnectionReadinessError,
@@ -18,7 +17,7 @@ import {
   feedbackConnectionInputError,
   toPublicFeedbackConnection,
 } from "./feedback-connection-shape";
-import { getFeedbackRequirement } from "./feedback-requirement";
+import { getFeedbackRequirementForTeam } from "./feedback-requirement";
 
 const router = Router();
 router.use("/settings/esps/:espId/feedback", requireAuth, requireTeam);
@@ -28,9 +27,9 @@ const s = initServer();
 
 const impl = s.router(contract.feedback, {
   requirement: async ({ req }) => {
-    const team = await getTeam((req as any).teamId);
-    if (!team) throw new Error("team_not_found");
-    return { status: 200, body: await getFeedbackRequirement(team.organizationId) };
+    const requirement = await getFeedbackRequirementForTeam((req as any).teamId);
+    if (!requirement) throw new Error("team_not_found");
+    return { status: 200, body: requirement };
   },
   get: async ({ params, req }) => {
     const teamId = (req as any).teamId;
