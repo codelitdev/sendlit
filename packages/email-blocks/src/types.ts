@@ -140,14 +140,16 @@ export interface SequenceReport {
     failed?: string[];
   };
   /** Set when SendLit paused a running send because of its bounce or
-   * complaint rate, failures, an ESP error, or an email it couldn't build. */
+   * complaint rate, failures, an ESP error, an email it couldn't build, or an
+   * organization-wide sending stop the team has to fix. */
   autoPause?: {
     reason:
       | "bounce_rate"
       | "complaint_rate"
       | "consecutive_failures"
       | "esp_error"
-      | "render_error";
+      | "render_error"
+      | "sending_blocked";
     at: number;
     bounceRate?: number;
     complaintRate?: number;

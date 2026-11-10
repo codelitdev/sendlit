@@ -232,6 +232,39 @@ export async function revokeSendingDomain(
   return Boolean(updated);
 }
 
+/** How many emails an organization can send on SendLit Cloud before each
+ * ESP it sends through needs a healthy bounce/complaint feedback connection. */
+export function testVolumeThreshold(): number {
+  const thresholdRaw = process.env.BILLING_TEST_VOLUME_THRESHOLD;
+  const threshold =
+    thresholdRaw === undefined || thresholdRaw === "" ? 100 : Number(thresholdRaw);
+  if (!Number.isSafeInteger(threshold) || threshold <= 0)
+    throw new Error("BILLING_TEST_VOLUME_THRESHOLD_invalid");
+  return threshold;
+}
+
+/** Whether the feedback requirement applies (cloud only). */
+export function feedbackRequirementApplies(): boolean {
+  return process.env.SENDLIT_DEPLOYMENT_MODE === "cloud";
+}
+
+/** Emails the organization's ESPs have accepted, across all its teams. */
+export async function organizationAcceptedSends(
+  organizationId: string,
+): Promise<number> {
+  const [usage] = await db
+    .select({ value: count() })
+    .from(outboundMessages)
+    .innerJoin(teams, eq(teams.id, outboundMessages.teamId))
+    .where(
+      and(
+        eq(teams.organizationId, organizationId),
+        gte(outboundMessages.acceptedAt, new Date(0)),
+      ),
+    );
+  return Number(usage?.value ?? 0);
+}
+
 /**
  * Cloud test volume is intentionally small, but once crossed we require an
  * exact verified From domain. This check is performed at the delivery-source
@@ -243,7 +276,7 @@ export async function assertSendingEligibility(
   teamId?: string,
   espConfigId?: string,
 ): Promise<void> {
-  if (process.env.SENDLIT_DEPLOYMENT_MODE !== "cloud") return;
+  if (!feedbackRequirementApplies()) return;
   const [owner] = await db
     .select({ id: organizationMembers.id })
     .from(organizationMembers)
@@ -262,22 +295,7 @@ export async function assertSendingEligibility(
       reason: "verified_owner_email_required",
     });
 
-  const thresholdRaw = process.env.BILLING_TEST_VOLUME_THRESHOLD;
-  const threshold =
-    thresholdRaw === undefined || thresholdRaw === "" ? 100 : Number(thresholdRaw);
-  if (!Number.isSafeInteger(threshold) || threshold <= 0)
-    throw new Error("BILLING_TEST_VOLUME_THRESHOLD_invalid");
-  const [usage] = await db
-    .select({ value: count() })
-    .from(outboundMessages)
-    .innerJoin(teams, eq(teams.id, outboundMessages.teamId))
-    .where(
-      and(
-        eq(teams.organizationId, organizationId),
-        gte(outboundMessages.acceptedAt, new Date(0)),
-      ),
-    );
-  if (Number(usage?.value ?? 0) < threshold) return;
+  if ((await organizationAcceptedSends(organizationId)) < testVolumeThreshold()) return;
 
   if (teamId && espConfigId) {
     const [feedback] = await db

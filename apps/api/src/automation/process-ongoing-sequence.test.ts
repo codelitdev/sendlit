@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, type Mock, mock, vi } from "bun:test";
+import { beforeEach, describe, expect, it, type Mock, mock, spyOn, vi } from "bun:test";
 import { waitFor } from "@sendlit/test-utils";
 import { eq } from "drizzle-orm";
 
@@ -19,11 +19,15 @@ const {
   outboundMessages,
   sequenceEmails,
   sequences,
+  teamSendingControls,
 } = await import("../db/schema");
 const { addOrStrengthenSuppression } = await import(
   "../delivery-feedback/suppression-queries"
 );
 const { sendMail } = await import("../mail/send");
+const deliveryQueries = await import("../delivery/queries");
+const billingNotifications = await import("../billing/notifications");
+const { PlanGateError } = await import("../billing/errors");
 const { SendDeferredError } = await import("../mail/rate-limit");
 const { seedTeamAndContact, truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
@@ -608,10 +612,11 @@ describe("processOngoingSequence", () => {
       .select()
       .from(ongoingSequences)
       .where(eq(ongoingSequences.id, row.id));
-    // The ESP-existence guard throws before the retry-tracking path, so
-    // the row is left untouched rather than treated as a transient send
-    // failure — never silently retried through a different transport.
+    // Never retried through a different transport: it backs off and stays
+    // pinned, instead of failing again on every scheduler tick.
     expect(after.retryCount).toBe(0);
+    expect(after.processingStartedAt).toBeNull();
+    expect(after.nextEmailScheduledTime).toBeGreaterThan(Date.now() + 4 * 60_000);
   });
 
   it("cascade-deletes the ongoing_sequences row when its contact is deleted", async () => {
@@ -671,6 +676,162 @@ describe("processOngoingSequence", () => {
     expect(after.processingStartedAt).toBeNull();
     expect(after.nextEmailScheduledTime).toBeGreaterThanOrEqual(before + 60_000);
     expect(after.sentEmailIds).toEqual([]);
+  });
+
+  it("keeps deliveries queued, without failing, while the team's sending is paused", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const row = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+    await tdb
+      .insert(teamSendingControls)
+      .values({ teamId: team.id, status: "marketing_paused" });
+    const before = Date.now();
+
+    await expect(processOngoingSequence(row.id)).resolves.toBeUndefined();
+
+    expect(mockedSendMail).not.toHaveBeenCalled();
+    const [after] = await tdb
+      .select()
+      .from(ongoingSequences)
+      .where(eq(ongoingSequences.id, row.id));
+    expect(after.retryCount).toBe(0);
+    expect(after.processingStartedAt).toBeNull();
+    expect(after.sentEmailIds).toEqual([]);
+    // Not due again on the next scheduler tick.
+    expect(after.nextEmailScheduledTime).toBeGreaterThanOrEqual(before + 15 * 60_000);
+  });
+
+  it("pauses and emails the owners once when sending is blocked until the team fixes it", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const second = await tdb
+      .insert(contacts)
+      .values({
+        teamId: team.id,
+        email: `second-${crypto.randomUUID()}@inbox.sendlit.app`,
+        unsubscribeToken: crypto.randomUUID(),
+      })
+      .returning();
+    const rows = [
+      await seedOngoingSequence(tdb, {
+        teamId: team.id,
+        sequenceId: sequenceRow.id,
+        contactId: contact.id,
+      }),
+      await seedOngoingSequence(tdb, {
+        teamId: team.id,
+        sequenceId: sequenceRow.id,
+        contactId: second[0].id,
+      }),
+    ];
+    const resolve = spyOn(
+      deliveryQueries,
+      "resolvePinnedDeliverySource",
+    ).mockRejectedValue(
+      new PlanGateError("sending_paused", { reason: "feedback_connection_required" }),
+    );
+    const notify = spyOn(billingNotifications, "notifyOrganizationOwners")
+      .mockClear()
+      .mockResolvedValue(undefined);
+    try {
+      await Promise.all(rows.map((row) => processOngoingSequence(row.id)));
+      // Picked up again after the pause: still nothing sent, nothing failed.
+      await processOngoingSequence(rows[0].id);
+    } finally {
+      resolve.mockRestore();
+    }
+
+    expect(mockedSendMail).not.toHaveBeenCalled();
+    const [seqAfter] = await tdb
+      .select()
+      .from(sequences)
+      .where(eq(sequences.id, sequenceRow.id));
+    expect(seqAfter.status).toBe("paused");
+    expect((seqAfter.report as any).autoPause).toMatchObject({
+      reason: "sending_blocked",
+      error: "feedback_connection_required",
+    });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0][2]).toContain("bounces and spam complaints");
+    notify.mockRestore();
+    const remaining = await tdb
+      .select()
+      .from(ongoingSequences)
+      .where(eq(ongoingSequences.sequenceId, sequenceRow.id));
+    expect(remaining).toHaveLength(2);
+    expect(remaining.every((row) => row.retryCount === 0)).toBe(true);
+    expect(remaining.every((row) => row.processingStartedAt === null)).toBe(true);
+  });
+
+  it("pauses and emails the owners once when an error keeps failing every delivery before the send", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const rows = [];
+    for (let i = 0; i < 6; i++) {
+      const [c] = await tdb
+        .insert(contacts)
+        .values({
+          teamId: team.id,
+          email: `r${i}-${crypto.randomUUID()}@inbox.sendlit.app`,
+          unsubscribeToken: crypto.randomUUID(),
+        })
+        .returning();
+      rows.push(
+        await seedOngoingSequence(tdb, {
+          teamId: team.id,
+          sequenceId: sequenceRow.id,
+          contactId: c.id,
+        }),
+      );
+    }
+    const resolve = spyOn(
+      deliveryQueries,
+      "resolvePinnedDeliverySource",
+    ).mockRejectedValue(new Error("delivery_source_unavailable"));
+    const notify = spyOn(billingNotifications, "notifyOrganizationOwners")
+      .mockClear()
+      .mockResolvedValue(undefined);
+    let attempts: number;
+    try {
+      for (const row of rows) {
+        await processOngoingSequence(row.id).catch(() => undefined);
+      }
+      // Every row is now waiting or the sequence is paused: nothing is due.
+      for (const row of rows) await processOngoingSequence(row.id);
+      attempts = resolve.mock.calls.length;
+    } finally {
+      resolve.mockRestore();
+    }
+
+    // Five failed attempts, then the pause stops the rest.
+    expect(attempts).toBe(5);
+    const [seqAfter] = await tdb
+      .select()
+      .from(sequences)
+      .where(eq(sequences.id, sequenceRow.id));
+    expect(seqAfter.status).toBe("paused");
+    expect((seqAfter.report as any).autoPause.reason).toBe("consecutive_failures");
+    expect(notify).toHaveBeenCalledTimes(1);
+    notify.mockRestore();
+    const remaining = await tdb
+      .select()
+      .from(ongoingSequences)
+      .where(eq(ongoingSequences.sequenceId, sequenceRow.id));
+    expect(remaining).toHaveLength(6);
+    expect(remaining.every((row) => row.retryCount === 0)).toBe(true);
   });
 
   it("waits for an exhausted organization quota instead of failing", async () => {

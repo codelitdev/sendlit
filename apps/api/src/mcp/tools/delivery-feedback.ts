@@ -1,3 +1,4 @@
+import { feedbackRequirementSchema } from "@sendlit/api-contract";
 import { z } from "zod";
 import { feedbackCapableProviders } from "../../config/constants";
 import {
@@ -17,6 +18,7 @@ import {
   feedbackConnectionInputError,
   toPublicFeedbackConnection,
 } from "../../delivery-feedback/feedback-connection-shape";
+import { getFeedbackRequirement } from "../../delivery-feedback/feedback-requirement";
 import { getOutboundMessagesByIds } from "../../delivery-feedback/outbound-queries";
 import {
   addOrStrengthenSuppression,
@@ -27,6 +29,7 @@ import {
   type Suppression,
 } from "../../delivery-feedback/suppression-queries";
 import { getEspConfigByEspId, listEspConfigs } from "../../settings/esp/queries";
+import { getTeam } from "../../team/queries";
 import type { SendLitMcpTool } from "../context";
 import { dedicatedTool } from "../tool";
 import { notFound, toolError } from "./responses";
@@ -100,6 +103,23 @@ async function toPublicEvents(teamId: string, events: DeliveryEvent[]) {
  * (`feedbackCapableProviders`) can be configured.
  */
 export const deliveryFeedbackTools = (): SendLitMcpTool[] => [
+  dedicatedTool({
+    name: "get_feedback_requirement",
+    operationId: "feedback.requirement",
+    title: "Get Feedback Requirement",
+    risk: "read",
+    description:
+      "Whether ESPs need a healthy bounce/complaint feedback connection to keep sending (SendLit Cloud, once the organization has sent `requiredAfterSends` emails), and how many emails it has sent so far. `required` is false on self-hosted SendLit.",
+    inputSchema: z.object({}),
+    outputSchema: feedbackRequirementSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context }) {
+      const team = await getTeam(context.teamId);
+      if (!team) return notFound();
+      return getFeedbackRequirement(team.organizationId);
+    },
+  }),
+
   dedicatedTool({
     name: "get_esp_feedback_connection",
     operationId: "feedback.get",

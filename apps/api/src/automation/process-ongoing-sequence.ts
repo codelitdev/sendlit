@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { ParseError, RenderError, TokenizationError } from "liquidjs";
 import { recordPacedSend } from "../abuse/telemetry";
 import { commitSendReservation, releaseSendReservation } from "../billing/entitlements";
+import { isPlanGateError } from "../billing/errors";
 import { sequenceBounceLimit } from "../config/constants";
 import {
   addTagToContact,
@@ -17,6 +18,7 @@ import {
 } from "../db/schema";
 import { resolvePinnedDeliverySource } from "../delivery/queries";
 import { commitQuotaForOutbound } from "../delivery/quota";
+import { notifyFeedbackMilestones } from "../delivery-feedback/feedback-requirement";
 import { markOutboundAccepted } from "../delivery-feedback/outbound-queries";
 import {
   createPinnedOutboundMessage,
@@ -58,6 +60,7 @@ import {
   readSendingHealthConfig,
   recordSendFailure,
   recordSendSuccess,
+  teamFixableSendingStop,
 } from "./sending-health";
 
 /** Reports (doesn't stop) a sequence's first email that went out before its
@@ -100,6 +103,29 @@ function reportEarlySend(
  * queued for when it resumes. */
 class SequencePausedError extends Error {}
 
+/** How long to wait before checking a stopped organization or team again. */
+const SENDING_PAUSED_RECHECK_MS = 15 * 60 * 1000;
+
+/** Sending is stopped for the whole organization or team (an unpaid plan
+ * past its grace period, a reputation or abuse stop). That lifts by itself,
+ * not per recipient, so keep the delivery queued and check again later
+ * instead of failing it or retrying on every tick. Stops the team has to fix
+ * pause the sequence instead (see `teamFixableSendingStop`). */
+function sendingPausedDeferral(error: unknown): SendDeferredError | null {
+  if (!isPlanGateError(error) || error.code !== "sending_paused") return null;
+  return new SendDeferredError(
+    SENDING_PAUSED_RECHECK_MS + Math.floor(Math.random() * 300_000),
+    "sending_paused",
+  );
+}
+
+async function deferOngoingSequence(id: string, deferral: SendDeferredError) {
+  await db
+    .update(ongoingSequences)
+    .set({ nextEmailScheduledTime: Date.now() + deferral.retryAfterMs })
+    .where(eq(ongoingSequences.id, id));
+}
+
 type OngoingSequenceRow = typeof ongoingSequences.$inferSelect;
 type SequenceEmailRow = typeof sequenceEmails.$inferSelect;
 
@@ -114,9 +140,11 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
   const ongoingSequence = await claimOngoingSequence(ongoingSequenceId);
   if (!ongoingSequence) return;
 
+  let sequenceRow: Awaited<ReturnType<typeof getSequenceRowById>> | undefined;
+  let contact: Awaited<ReturnType<typeof getContactById>> | undefined;
   try {
-    const sequenceRow = await getSequenceRowById(ongoingSequence.sequenceId);
-    const contact = await getContactById(ongoingSequence.contactId);
+    sequenceRow = await getSequenceRowById(ongoingSequence.sequenceId);
+    contact = await getContactById(ongoingSequence.contactId);
     const team = await getTeam(ongoingSequence.teamId);
 
     if (!sequenceRow || !contact || !team) {
@@ -200,6 +228,20 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
     // Rate limited (the row was rescheduled) or the sequence was just paused:
     // not a job failure.
     if (err instanceof SequencePausedError) return;
+    // The stop check before the send (resolving the delivery source) runs
+    // outside attemptMailSending's rescheduling, so defer it here.
+    const pausedDeferral = sendingPausedDeferral(err);
+    if (pausedDeferral) {
+      await deferOngoingSequence(ongoingSequenceId, pausedDeferral);
+      logger.info(
+        {
+          ongoing_sequence_id: ongoingSequenceId,
+          retry_after_ms: pausedDeferral.retryAfterMs,
+        },
+        "send deferred while sending is paused",
+      );
+      return;
+    }
     if (err instanceof SendDeferredError) {
       logger.info(
         { ongoing_sequence_id: ongoingSequenceId, retry_after_ms: err.retryAfterMs },
@@ -207,10 +249,35 @@ export async function processOngoingSequence(ongoingSequenceId: string) {
       );
       return;
     }
-    logger.error(
-      { error: err.message, ongoing_sequence_id: ongoingSequenceId },
-      "processOngoingSequence failed",
-    );
+    // A failure before the send itself (resolving the ESP, loading the
+    // email) counts like a failed send, so it backs off, and a run of them
+    // pauses the sequence and tells the owners, instead of the same error
+    // being retried and logged on every scheduler tick.
+    if (!countedFailures.has(err)) {
+      logger.error(
+        { error: err?.message, ongoing_sequence_id: ongoingSequenceId },
+        "processOngoingSequence failed",
+      );
+      try {
+        if (sequenceRow && contact) {
+          await recordFailedAttempt({
+            sequence: sequenceRow,
+            ongoingSequence,
+            contactId: contact.contactId,
+            err,
+            beforeSend: true,
+          });
+        } else {
+          await db
+            .update(ongoingSequences)
+            .set({ nextEmailScheduledTime: Date.now() + failedAttemptBackoffMs(1) })
+            .where(eq(ongoingSequences.id, ongoingSequence.id));
+        }
+      } catch (pauseErr) {
+        if (pauseErr instanceof SequencePausedError) return;
+        throw pauseErr;
+      }
+    }
     throw err;
   }
 }
@@ -268,6 +335,18 @@ async function attemptMailSending({
     espConfigId: sequence.outboxId,
     espGrantId: sequence.espGrantId,
     purpose: "marketing",
+  }).catch(async (err) => {
+    // A stop only the team can lift: pause and tell the owners (once, as
+    // only the first delivery to see it pauses the sequence), keeping
+    // everyone queued for when it is resumed.
+    const stop = teamFixableSendingStop(err);
+    if (!stop) throw err;
+    const paused = await autoPauseSequence(sequence, "sending_blocked", {
+      error: stop,
+    });
+    if (paused || (await isSequencePaused(sequence.id)))
+      throw new SequencePausedError();
+    throw err;
   });
   const from = getEmailFrom({
     name: pin.fromName,
@@ -477,6 +556,7 @@ async function attemptMailSending({
     });
     await commitQuotaForOutbound(outbound.id);
     await commitSendReservation(outbound.id);
+    await notifyFeedbackMilestones(team.id);
     if ((sequence.report as { health?: unknown } | null)?.health) {
       await recordSendSuccess(sequence.id);
     }
@@ -484,7 +564,9 @@ async function attemptMailSending({
   } catch (err: any) {
     if (err instanceof SequencePausedError) throw err;
     const deferral =
-      err instanceof SendDeferredError ? err : quotaExhaustionDeferral(err);
+      err instanceof SendDeferredError
+        ? err
+        : (quotaExhaustionDeferral(err) ?? sendingPausedDeferral(err));
     if (deferral) {
       if (
         deferral.message === "marketing_hourly_pacing" ||
@@ -500,53 +582,16 @@ async function attemptMailSending({
       // Try again once the ESP has capacity (rate limit, daily warm-up cap
       // or quota). Not a failed attempt, so the retry count (which
       // eventually marks the contact failed) stays put.
-      await db
-        .update(ongoingSequences)
-        .set({ nextEmailScheduledTime: Date.now() + deferral.retryAfterMs })
-        .where(eq(ongoingSequences.id, ongoingSequence.id));
+      await deferOngoingSequence(ongoingSequence.id, deferral);
       throw deferral;
     }
-    // Five failures in a row, or the ESP refusing outright, pause the whole
-    // sequence instead of failing every remaining recipient.
-    const failures = await recordSendFailure(sequence.id);
-    const fatal = isFatalEspError(err);
-    if (fatal || failures >= readSendingHealthConfig().consecutiveFailures) {
-      await autoPauseSequence(sequence, fatal ? "esp_error" : "consecutive_failures", {
-        error: String(err?.message ?? err).slice(0, 300),
-        failures,
-      });
-      throw new SequencePausedError();
-    }
-    const retryCount = ongoingSequence.retryCount + 1;
-    if (retryCount >= sequenceBounceLimit) {
-      if (outboundForReservation) {
-        await releaseSendReservation(outboundForReservation.id).catch(() => undefined);
-      }
-      await db
-        .update(sequences)
-        .set({
-          report: {
-            ...(sequence.report as any),
-            sequence: {
-              ...(sequence.report as any)?.sequence,
-              failed: [
-                ...((sequence.report as any)?.sequence?.failed || []),
-                contact.contactId,
-              ],
-            },
-          },
-        })
-        .where(eq(sequences.id, sequence.id));
-      await deleteOngoingSequence(ongoingSequence.id);
-    } else {
-      // Keep the reservation through a transient retry. It expires and
-      // is reopened atomically by reserveSend, preventing a retry from
-      // bypassing the monthly quota.
-      await db
-        .update(ongoingSequences)
-        .set({ retryCount })
-        .where(eq(ongoingSequences.id, ongoingSequence.id));
-    }
+    await recordFailedAttempt({
+      sequence,
+      ongoingSequence,
+      contactId: contact.contactId,
+      err,
+      outboundId: outboundForReservation?.id,
+    });
     logger.error(
       {
         error: err.message,
@@ -555,8 +600,80 @@ async function attemptMailSending({
       },
       "attemptMailSending failed",
     );
+    if (err && typeof err === "object") countedFailures.add(err);
     throw err;
   }
+}
+
+/** Errors already counted by `recordFailedAttempt`, so the caller doesn't
+ * count them twice. */
+const countedFailures = new WeakSet<object>();
+
+/** Wait before retrying a failed attempt: 5 minutes, doubling, at most an
+ * hour, so a persistent error isn't retried on every scheduler tick. */
+export function failedAttemptBackoffMs(retryCount: number): number {
+  return Math.min(5 * 60_000 * 2 ** Math.max(0, retryCount - 1), 60 * 60_000);
+}
+
+/**
+ * Counts a failed attempt to send a sequence's email. Five in a row, or the
+ * ESP refusing outright, pause the whole sequence and tell the owners
+ * (throws `SequencePausedError`) instead of failing every remaining
+ * recipient. Otherwise the delivery is retried after a backoff. A failed
+ * send uses up one of the recipient's retries (marking them failed once
+ * they run out); a failure before the send (`beforeSend`: loading data,
+ * resolving the ESP) isn't theirs, so it only waits.
+ */
+async function recordFailedAttempt({
+  sequence,
+  ongoingSequence,
+  contactId,
+  err,
+  outboundId,
+  beforeSend = false,
+}: {
+  sequence: typeof sequences.$inferSelect;
+  ongoingSequence: OngoingSequenceRow;
+  contactId: string;
+  err: any;
+  outboundId?: string;
+  beforeSend?: boolean;
+}): Promise<void> {
+  const failures = await recordSendFailure(sequence.id);
+  const fatal = isFatalEspError(err);
+  if (fatal || failures >= readSendingHealthConfig().consecutiveFailures) {
+    await autoPauseSequence(sequence, fatal ? "esp_error" : "consecutive_failures", {
+      error: String(err?.message ?? err).slice(0, 300),
+      failures,
+    });
+    throw new SequencePausedError();
+  }
+  if (beforeSend) {
+    await db
+      .update(ongoingSequences)
+      .set({ nextEmailScheduledTime: Date.now() + failedAttemptBackoffMs(1) })
+      .where(eq(ongoingSequences.id, ongoingSequence.id));
+    return;
+  }
+  const retryCount = ongoingSequence.retryCount + 1;
+  if (retryCount >= sequenceBounceLimit) {
+    if (outboundId) {
+      await releaseSendReservation(outboundId).catch(() => undefined);
+    }
+    await recordRecipientFailed(sequence.id, contactId);
+    await deleteOngoingSequence(ongoingSequence.id);
+    return;
+  }
+  // Keep any send reservation through a transient retry. It expires and is
+  // reopened atomically by reserveSend, preventing a retry from bypassing
+  // the monthly quota.
+  await db
+    .update(ongoingSequences)
+    .set({
+      retryCount,
+      nextEmailScheduledTime: Date.now() + failedAttemptBackoffMs(retryCount),
+    })
+    .where(eq(ongoingSequences.id, ongoingSequence.id));
 }
 
 /** Whether a render error comes from the email's content or the team's footer

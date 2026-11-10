@@ -23,6 +23,27 @@ function renderErrorReason(code: string): string {
   }
 }
 
+/** Mirrors `sendingBlockedReason` in the API's automation/sending-health.ts. */
+function sendingBlockedReason(code: string): { why: string; next: string } {
+  switch (code) {
+    case "feedback_connection_required":
+      return {
+        why: "Your email provider isn't reporting bounces and spam complaints back to SendLit, which is required after your first 100 emails.",
+        next: "Connect bounce and complaint feedback for the provider in Settings → Email service providers (ESP)",
+      };
+    case "verified_owner_email_required":
+      return {
+        why: "The organization's owner hasn't verified their email address.",
+        next: "Verify the owner's email address",
+      };
+    default:
+      return {
+        why: `Sending is blocked for the organization (${code}).`,
+        next: "Check your organization's settings",
+      };
+  }
+}
+
 /** Why SendLit paused a running broadcast or sequence (#25), with a way to
  * resume once the team has dealt with it. */
 export function AutoPauseBanner({
@@ -45,11 +66,15 @@ export function AutoPauseBanner({
           ? "Several emails in a row failed to send."
           : pause.reason === "render_error"
             ? renderErrorReason(pause.error ?? "")
-            : `Your email provider refused to send: ${pause.error ?? "unknown error"}.`;
+            : pause.reason === "sending_blocked"
+              ? sendingBlockedReason(pause.error ?? "").why
+              : `Your email provider refused to send: ${pause.error ?? "unknown error"}.`;
   const next =
     pause.reason === "render_error"
       ? "Check your mailing address in Settings and the email's content"
-      : "Clean your list or fix your email provider";
+      : pause.reason === "sending_blocked"
+        ? sendingBlockedReason(pause.error ?? "").next
+        : "Clean your list or fix your email provider";
   return (
     <Banner variant="warning" className="mb-4 flex items-center justify-between gap-3">
       <span>

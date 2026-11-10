@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "feedback_notice_percent" integer DEFAULT 0 NOT NULL;

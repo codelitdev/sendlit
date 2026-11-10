@@ -73,6 +73,7 @@ import {
 } from "./schemas/events";
 import {
   feedbackConnectionSchema,
+  feedbackRequirementSchema,
   testFeedbackConnectionResponseSchema,
   upsertFeedbackConnectionBodySchema,
 } from "./schemas/feedback";
@@ -2011,6 +2012,14 @@ const overviewContract = c.router(
  */
 const feedbackContract = c.router(
   {
+    requirement: {
+      method: "GET",
+      path: "/settings/feedback-requirement",
+      responses: { 200: feedbackRequirementSchema },
+      summary: "Get when ESPs need a delivery-feedback connection",
+      description:
+        "On SendLit Cloud, once the organization has sent `requiredAfterSends` emails, SendLit only sends through ESPs with a healthy bounce/complaint feedback connection. `required` is false on self-hosted SendLit.",
+    },
     get: {
       method: "GET",
       path: "/settings/esps/:espId/feedback",

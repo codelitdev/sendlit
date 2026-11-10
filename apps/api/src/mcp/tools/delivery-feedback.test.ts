@@ -95,6 +95,7 @@ beforeEach(() => {
 describe("MCP delivery-feedback tools", () => {
   it("serves every feedback, delivery-event and suppression tool, each with a title", () => {
     expect([...tools.keys()]).toEqual([
+      "get_feedback_requirement",
       "get_esp_feedback_connection",
       "upsert_esp_feedback_connection",
       "test_esp_feedback_connection",
