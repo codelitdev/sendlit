@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { ParseError, RenderError, TokenizationError } from "liquidjs";
 import { recordPacedSend } from "../abuse/telemetry";
+import { testVolumeThreshold } from "../billing/domains";
 import { commitSendReservation, releaseSendReservation } from "../billing/entitlements";
 import { isPlanGateError } from "../billing/errors";
 import { sequenceBounceLimit } from "../config/constants";
@@ -343,6 +344,7 @@ async function attemptMailSending({
     if (!stop) throw err;
     const paused = await autoPauseSequence(sequence, "sending_blocked", {
       error: stop,
+      threshold: testVolumeThreshold(),
     });
     if (paused || (await isSequencePaused(sequence.id)))
       throw new SequencePausedError();

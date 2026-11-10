@@ -24,11 +24,14 @@ function renderErrorReason(code: string): string {
 }
 
 /** Mirrors `sendingBlockedReason` in the API's automation/sending-health.ts. */
-function sendingBlockedReason(code: string): { why: string; next: string } {
+function sendingBlockedReason(
+  code: string,
+  threshold?: number,
+): { why: string; next: string } {
   switch (code) {
     case "feedback_connection_required":
       return {
-        why: "Your email provider isn't reporting bounces and spam complaints back to SendLit, which is required after your first 100 emails.",
+        why: `Your email provider isn't reporting bounces and spam complaints back to SendLit, which is required after your organization's first ${threshold ?? "few"} emails.`,
         next: "Connect bounce and complaint feedback for the provider in Settings → Email service providers (ESP)",
       };
     case "verified_owner_email_required":
@@ -67,13 +70,13 @@ export function AutoPauseBanner({
           : pause.reason === "render_error"
             ? renderErrorReason(pause.error ?? "")
             : pause.reason === "sending_blocked"
-              ? sendingBlockedReason(pause.error ?? "").why
+              ? sendingBlockedReason(pause.error ?? "", pause.threshold).why
               : `Your email provider refused to send: ${pause.error ?? "unknown error"}.`;
   const next =
     pause.reason === "render_error"
       ? "Check your mailing address in Settings and the email's content"
       : pause.reason === "sending_blocked"
-        ? sendingBlockedReason(pause.error ?? "").next
+        ? sendingBlockedReason(pause.error ?? "", pause.threshold).next
         : "Clean your list or fix your email provider";
   return (
     <Banner variant="warning" className="mb-4 flex items-center justify-between gap-3">

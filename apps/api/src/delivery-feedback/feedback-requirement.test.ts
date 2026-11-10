@@ -111,6 +111,25 @@ describe("feedback requirement", () => {
     }
   });
 
+  it("tries a warning again on the next send when emailing the owners fails", async () => {
+    const { team, esp } = await setup();
+    const notify = spyOn(notifications, "notifyOrganizationOwners")
+      .mockRejectedValueOnce(new Error("smtp down"))
+      .mockResolvedValue(undefined);
+    try {
+      await accept(team.id, esp.id, 5);
+      await notifyFeedbackMilestones(team.id);
+      expect(notify).toHaveBeenCalledTimes(1);
+
+      await accept(team.id, esp.id, 1);
+      await notifyFeedbackMilestones(team.id);
+      expect(notify).toHaveBeenCalledTimes(2);
+      expect(notify.mock.calls[1][1]).toContain("6 of 10");
+    } finally {
+      notify.mockRestore();
+    }
+  });
+
   it("doesn't email when every ESP already has healthy feedback", async () => {
     const { team, esp } = await setup();
     await tdb.insert(schema.espFeedbackConnections).values({

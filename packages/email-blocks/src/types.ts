@@ -154,6 +154,9 @@ export interface SequenceReport {
     bounceRate?: number;
     complaintRate?: number;
     error?: string;
+    /** For `sending_blocked`: the emails an organization could send before
+     * its ESPs needed delivery feedback. */
+    threshold?: number;
   };
 }
 

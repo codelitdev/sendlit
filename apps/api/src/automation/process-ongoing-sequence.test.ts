@@ -743,12 +743,19 @@ describe("processOngoingSequence", () => {
     const notify = spyOn(billingNotifications, "notifyOrganizationOwners")
       .mockClear()
       .mockResolvedValue(undefined);
+    const previousThreshold = process.env.BILLING_TEST_VOLUME_THRESHOLD;
+    process.env.BILLING_TEST_VOLUME_THRESHOLD = "250";
     try {
       await Promise.all(rows.map((row) => processOngoingSequence(row.id)));
       // Picked up again after the pause: still nothing sent, nothing failed.
       await processOngoingSequence(rows[0].id);
     } finally {
       resolve.mockRestore();
+      if (previousThreshold === undefined) {
+        delete process.env.BILLING_TEST_VOLUME_THRESHOLD;
+      } else {
+        process.env.BILLING_TEST_VOLUME_THRESHOLD = previousThreshold;
+      }
     }
 
     expect(mockedSendMail).not.toHaveBeenCalled();
@@ -763,6 +770,9 @@ describe("processOngoingSequence", () => {
     });
     expect(notify).toHaveBeenCalledTimes(1);
     expect(notify.mock.calls[0][2]).toContain("bounces and spam complaints");
+    // The configured volume, not a hard-coded 100.
+    expect(notify.mock.calls[0][2]).toContain("first 250 emails");
+    expect((seqAfter.report as any).autoPause.threshold).toBe(250);
     notify.mockRestore();
     const remaining = await tdb
       .select()

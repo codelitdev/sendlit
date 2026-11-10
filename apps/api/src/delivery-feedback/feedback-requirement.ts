@@ -137,7 +137,21 @@ export async function notifyFeedbackMilestones(teamId: string): Promise<void> {
       threshold,
       missing.map((esp) => esp.name),
     );
-    await notifyOrganizationOwners(org.id, subject, text);
+    try {
+      await notifyOrganizationOwners(org.id, subject, text);
+    } catch (error) {
+      // Release the claim so a later send tries this warning again.
+      await db
+        .update(organizations)
+        .set({ feedbackNoticePercent: org.noticePercent })
+        .where(
+          and(
+            eq(organizations.id, org.id),
+            eq(organizations.feedbackNoticePercent, reached),
+          ),
+        );
+      throw error;
+    }
     logger.info(
       { organization_id: org.id, notice_percent: reached },
       "feedback connection reminder sent",
