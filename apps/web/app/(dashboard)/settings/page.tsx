@@ -22,6 +22,7 @@ import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirma
 import { DomainAuthenticationDialog } from "@/components/dashboard/domain-authentication-dialog";
 import { EspConfigurationDialog } from "@/components/dashboard/esp-configuration-dialog";
 import { EspFeedbackDialog } from "@/components/dashboard/esp-feedback-dialog";
+import { FeedbackRequirementNotice } from "@/components/dashboard/feedback-requirement-notice";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
@@ -68,8 +69,10 @@ import {
   deleteEsp,
   deleteTeamKey,
   type EspConfig,
+  type FeedbackRequirement,
   feedbackCapableProviders,
   type GeneralSettings,
+  getFeedbackRequirement,
   getGeneralSettings,
   getTeamDeliverySettings,
   listEsps,
@@ -106,6 +109,8 @@ export default function SettingsPage() {
   const [mailingAddress, setMailingAddress] = useState("");
   const [esps, setEsps] = useState<EspConfig[] | null>(null);
   const [defaultTeamEspId, setDefaultTeamEspId] = useState<string | null>(null);
+  const [feedbackRequirement, setFeedbackRequirement] =
+    useState<FeedbackRequirement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingGeneral, setSavingGeneral] = useState(false);
   const [generalSaved, setGeneralSaved] = useState(false);
@@ -129,6 +134,10 @@ export default function SettingsPage() {
   const [apiKeyPendingDelete, setApiKeyPendingDelete] = useState<ApiKey | null>(null);
 
   async function load() {
+    // Informational only: the page works without it.
+    getFeedbackRequirement()
+      .then(setFeedbackRequirement)
+      .catch(() => setFeedbackRequirement(null));
     try {
       const [general, { items }, deliverySettings] = await Promise.all([
         getGeneralSettings(),
@@ -561,6 +570,10 @@ export default function SettingsPage() {
                 require one.
               </Banner>
             )}
+            <FeedbackRequirementNotice
+              requirement={feedbackRequirement}
+              className="mb-4"
+            />
             <div className="mb-4 flex items-start justify-between gap-4">
               <p className="max-w-lg text-sm text-muted-foreground">
                 Configure one or more sending identities. One is the team&apos;s
@@ -776,6 +789,7 @@ export default function SettingsPage() {
               open={espFormOpen}
               onOpenChange={setEspFormOpen}
               esp={editingEsp}
+              feedbackRequirement={feedbackRequirement}
               onSubmit={async (input) => {
                 if (editingEsp) {
                   await updateEsp(editingEsp.espId, input);

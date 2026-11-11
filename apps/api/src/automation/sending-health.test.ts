@@ -170,7 +170,7 @@ describe("auto-pause (#25)", () => {
     expect((await sequenceById(sequenceRow.id)).status).toBe("completed");
   });
 
-  it("retries a transient error while rendering without pausing or counting it", async () => {
+  it("retries a transient error while rendering later, without pausing or using up a retry", async () => {
     const { sequenceRow, rows } = await broadcastTo(1);
     const spy = spyOn(generalSettings, "getTeamSettingsRow").mockRejectedValueOnce(
       new Error("Connection terminated unexpectedly"),
@@ -187,7 +187,13 @@ describe("auto-pause (#25)", () => {
     const [row] = await tdb.select().from(schema.ongoingSequences);
     expect(row.retryCount).toBe(0);
     expect(row.processingStartedAt).toBeNull();
+    // Waits instead of being retried on every scheduler tick.
+    expect(row.nextEmailScheduledTime).toBeGreaterThan(Date.now() + 4 * 60_000);
     // Recovered: the next attempt sends normally.
+    await tdb
+      .update(schema.ongoingSequences)
+      .set({ nextEmailScheduledTime: Date.now() - 1 })
+      .where(eq(schema.ongoingSequences.id, row.id));
     await processOngoingSequence(rows[0].id);
     expect(mockedSendMail).toHaveBeenCalledTimes(1);
   });

@@ -17,13 +17,20 @@ import {
   feedbackConnectionInputError,
   toPublicFeedbackConnection,
 } from "./feedback-connection-shape";
+import { getFeedbackRequirementForTeam } from "./feedback-requirement";
 
 const router = Router();
 router.use("/settings/esps/:espId/feedback", requireAuth, requireTeam);
+router.use("/settings/feedback-requirement", requireAuth, requireTeam);
 
 const s = initServer();
 
 const impl = s.router(contract.feedback, {
+  requirement: async ({ req }) => {
+    const requirement = await getFeedbackRequirementForTeam((req as any).teamId);
+    if (!requirement) throw new Error("team_not_found");
+    return { status: 200, body: requirement };
+  },
   get: async ({ params, req }) => {
     const teamId = (req as any).teamId;
     const esp = await getEspConfigByEspId(teamId, params.espId);

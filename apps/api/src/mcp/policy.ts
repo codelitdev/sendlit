@@ -147,6 +147,7 @@ const operationScopes = {
   "teams.listKeys": MCP_SCOPES.apiKeysRead,
   "teams.createKey": MCP_SCOPES.apiKeysWrite,
   "teams.removeKey": MCP_SCOPES.apiKeysWrite,
+  "feedback.requirement": MCP_SCOPES.feedbackRead,
   "feedback.get": MCP_SCOPES.feedbackRead,
   "feedback.upsert": MCP_SCOPES.feedbackWrite,
   "feedback.test": MCP_SCOPES.feedbackWrite,

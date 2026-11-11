@@ -7,6 +7,7 @@ import {
 } from "@sendlit/api-contract";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
+import { FeedbackRequirementNotice } from "@/components/dashboard/feedback-requirement-notice";
 import { Button } from "@/components/ui/codelit/button";
 import {
   Dialog,
@@ -25,7 +26,12 @@ import {
   SelectValue,
 } from "@/components/ui/codelit/select";
 import { Switch } from "@/components/ui/codelit/switch";
-import type { EspConfig, EspConnectionInput, EspProvider } from "@/lib/api";
+import type {
+  EspConfig,
+  EspConnectionInput,
+  EspProvider,
+  FeedbackRequirement,
+} from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { ESP_PROVIDERS } from "@/lib/esp-providers";
 import { portForTls, tlsPortMismatch } from "@/lib/smtp";
@@ -94,6 +100,7 @@ export function EspConfigurationDialog({
   createLabel = "Create ESP",
   saveLabel = "Save ESP",
   namePlaceholder = "e.g. Marketing SMTP",
+  feedbackRequirement,
 }: {
   open: boolean;
   esp: EspConfig | null;
@@ -104,6 +111,8 @@ export function EspConfigurationDialog({
   createLabel?: string;
   saveLabel?: string;
   namePlaceholder?: string;
+  /** Explains, while creating an ESP, when it will need delivery feedback. */
+  feedbackRequirement?: FeedbackRequirement | null;
 }) {
   const [form, setForm] = useState<FormState>(emptyForm);
   const providerDefaultRate = defaultMaxSendRates[form.provider];
@@ -202,6 +211,7 @@ export function EspConfigurationDialog({
             {esp ? (editTitle?.(esp) ?? `Edit ${esp.name}`) : createTitle}
           </DialogTitle>
         </DialogHeader>
+        {!esp && <FeedbackRequirementNotice requirement={feedbackRequirement} newEsp />}
         {error && <Banner>{error}</Banner>}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">

@@ -308,6 +308,7 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   ),
 
   // User ESP delivery feedback
+  required("feedback.requirement", "get_feedback_requirement", "read"),
   required("feedback.get", "get_esp_feedback_connection", "read"),
   required("feedback.upsert", "upsert_esp_feedback_connection", "write"),
   restOnly(
