@@ -157,6 +157,9 @@ export interface SequenceReport {
     /** For `sending_blocked`: the emails an organization could send before
      * its ESPs needed delivery feedback. */
     threshold?: number;
+    /** For `sending_blocked` by `domain_verification_required`: the
+     * unverified From domain. */
+    domain?: string;
   };
 }
 
