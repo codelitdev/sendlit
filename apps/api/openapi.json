@@ -31205,6 +31205,64 @@
         ]
       }
     },
+    "/settings/feedback-requirement": {
+      "get": {
+        "description": "On SendLit Cloud, once the organization has sent `requiredAfterSends` emails, SendLit only sends through ESPs with a healthy bounce/complaint feedback connection. `required` is false on self-hosted SendLit.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "summary": "Get when ESPs need a delivery-feedback connection",
+        "tags": [
+          "Settings"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "requiredAfterSends": {
+                      "type": "integer"
+                    },
+                    "sentSoFar": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "required",
+                    "requiredAfterSends",
+                    "sentSoFar"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          }
+        },
+        "security": [
+          {
+            "teamApiKey": []
+          },
+          {
+            "teamApiKeyStandardHeader": []
+          },
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          }
+        ]
+      }
+    },
     "/settings/esps/{espId}/feedback": {
       "get": {
         "description": "Returns null when feedback hasn't been configured for this ESP yet.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",

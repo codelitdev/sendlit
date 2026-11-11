@@ -1,4 +1,5 @@
 import { and, count, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { isPlanGateError } from "../billing/errors";
 import { notifyOrganizationOwners } from "../billing/notifications";
 import { positiveInt } from "../billing/reputation-config";
 import { db } from "../db/client";
@@ -26,7 +27,8 @@ export type AutoPauseReason =
   | "complaint_rate"
   | "consecutive_failures"
   | "esp_error"
-  | "render_error";
+  | "render_error"
+  | "sending_blocked";
 
 export type SequenceDeliveryRates = {
   sent: number;
@@ -114,6 +116,55 @@ export function renderErrorReason(code: string): string {
   }
 }
 
+/** Organization-wide sending stops only the team can lift (see
+ * `assertSendingEligibility` in billing/domains.ts). Sends hitting one pause
+ * the sequence and tell the owners, instead of waiting for a fix nobody
+ * knows is needed. Other stops (billing, abuse review) lift by themselves or
+ * notify on their own, so their sends just wait. */
+const TEAM_FIXABLE_SENDING_STOPS = new Set([
+  "feedback_connection_required",
+  "verified_owner_email_required",
+]);
+
+/** The team-fixable stop behind a `sending_paused` error, if it is one. */
+export function teamFixableSendingStop(error: unknown): string | null {
+  if (!isPlanGateError(error) || error.code !== "sending_paused") return null;
+  const reason = error.details.reason;
+  return typeof reason === "string" && TEAM_FIXABLE_SENDING_STOPS.has(reason)
+    ? reason
+    : null;
+}
+
+/** Why a `sending_blocked` auto-pause happened and what to do, in words for
+ * the team. */
+export function sendingBlockedReason(
+  code: string,
+  /** The cloud test volume when the pause happened (`testVolumeThreshold`). */
+  threshold?: number,
+): { why: string; next: string } {
+  switch (code) {
+    case "feedback_connection_required":
+      return {
+        why: `its email provider isn't reporting bounces and spam complaints back to SendLit, which is required after your organization's first ${threshold ?? "few"} emails`,
+        next: "Connect bounce and complaint feedback for the provider in Settings → Email service providers (ESP)",
+      };
+    case "verified_owner_email_required":
+      return {
+        why: "the organization's owner hasn't verified their email address",
+        next: "Verify the owner's email address",
+      };
+    default:
+      return {
+        why: `sending is blocked for the organization (${code})`,
+        next: "Check your organization's settings",
+      };
+  }
+}
+
+function blockedThreshold(details: Record<string, unknown>): number | undefined {
+  return typeof details.threshold === "number" ? details.threshold : undefined;
+}
+
 export async function autoPauseSequence(
   sequence: Pick<
     typeof sequences.$inferSelect,
@@ -160,11 +211,18 @@ export async function autoPauseSequence(
             ? "several emails in a row failed to send"
             : reason === "render_error"
               ? renderErrorReason(String(details.error ?? ""))
-              : `your email provider refused to send (${String(details.error ?? "")})`;
+              : reason === "sending_blocked"
+                ? sendingBlockedReason(
+                    String(details.error ?? ""),
+                    blockedThreshold(details),
+                  ).why
+                : `your email provider refused to send (${String(details.error ?? "")})`;
     const next =
       reason === "render_error"
         ? "Check your mailing address in Settings and the email's content, then resume it from SendLit"
-        : "Sending more would hurt your sender reputation. Check your list and your email provider, then resume it from SendLit";
+        : reason === "sending_blocked"
+          ? `${sendingBlockedReason(String(details.error ?? ""), blockedThreshold(details)).next}, then resume it from SendLit`
+          : "Sending more would hurt your sender reputation. Check your list and your email provider, then resume it from SendLit";
     await notifyOrganizationOwners(
       team.organizationId,
       `Paused: "${sequence.title}"`,

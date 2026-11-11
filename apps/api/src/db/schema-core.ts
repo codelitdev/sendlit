@@ -67,6 +67,10 @@ export const organizations = pgTable(
     /** Name of the first team, created once a `pending_payment`
      * organization's checkout is paid. */
     pendingTeamName: text("pending_team_name"),
+    /** The last warning (50, 90 or 100 percent of the cloud test volume)
+     * emailed to the owners about connecting bounce/complaint feedback, so
+     * each goes out once. */
+    feedbackNoticePercent: integer("feedback_notice_percent").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

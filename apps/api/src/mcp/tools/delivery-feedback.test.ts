@@ -17,6 +17,7 @@ const mocks = {
   countSuppressions: vi.fn(),
   getSuppressionBySuppressionId: vi.fn(),
   releaseSuppression: vi.fn(),
+  getFeedbackRequirementForTeam: vi.fn(),
 };
 
 mock.module("../../settings/esp/queries", () => ({
@@ -38,6 +39,9 @@ mock.module("../../delivery-feedback/delivery-event-queries", () => ({
 }));
 mock.module("../../delivery-feedback/outbound-queries", () => ({
   getOutboundMessagesByIds: mocks.getOutboundMessagesByIds,
+}));
+mock.module("../../delivery-feedback/feedback-requirement", () => ({
+  getFeedbackRequirementForTeam: mocks.getFeedbackRequirementForTeam,
 }));
 mock.module("../../delivery-feedback/suppression-queries", () => ({
   addOrStrengthenSuppression: mocks.addOrStrengthenSuppression,
@@ -95,6 +99,7 @@ beforeEach(() => {
 describe("MCP delivery-feedback tools", () => {
   it("serves every feedback, delivery-event and suppression tool, each with a title", () => {
     expect([...tools.keys()]).toEqual([
+      "get_feedback_requirement",
       "get_esp_feedback_connection",
       "upsert_esp_feedback_connection",
       "test_esp_feedback_connection",
@@ -110,6 +115,18 @@ describe("MCP delivery-feedback tools", () => {
     const remove = tools.get("delete_esp_feedback_connection")!;
     expect(remove.risk).toBe("destructive");
     expect((remove.inputSchema as any).shape.confirm).toBeDefined();
+  });
+
+  it("reports the team's feedback requirement, or not_found for an unknown team", async () => {
+    const requirement = { required: true, requiredAfterSends: 100, sentSoFar: 37 };
+    mocks.getFeedbackRequirementForTeam.mockResolvedValueOnce(requirement);
+    await expect(call("get_feedback_requirement", {})).resolves.toEqual(requirement);
+    expect(mocks.getFeedbackRequirementForTeam).toHaveBeenCalledWith("team-1");
+
+    mocks.getFeedbackRequirementForTeam.mockResolvedValueOnce(null);
+    await expect(call("get_feedback_requirement", {})).resolves.toMatchObject({
+      error: { code: "not_found" },
+    });
   });
 
   it("needs the suppressions:write scope over OAuth", async () => {

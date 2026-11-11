@@ -8,6 +8,7 @@ import { evaluateTeamReputation } from "../billing/reputation";
 import { db } from "../db/client";
 import { resolvePinnedDeliverySource } from "../delivery/queries";
 import { commitQuotaForOutbound, releaseQuotaForOutbound } from "../delivery/quota";
+import { notifyFeedbackMilestones } from "../delivery-feedback/feedback-requirement";
 import {
   getOutboundMessageByTransactionalEmailId,
   markOutboundAccepted,
@@ -201,6 +202,7 @@ async function processTransactionalJob(job: Job, token?: string) {
       });
       await commitQuotaForOutbound(outbound.id);
       await commitSendReservation(outbound.id);
+      await notifyFeedbackMilestones(row.teamId);
     }
   } catch (err: any) {
     if (err instanceof SendDeferredError && token) {

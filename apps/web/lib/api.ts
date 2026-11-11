@@ -1008,6 +1008,18 @@ export interface FeedbackConnectionInput {
   expectedTopicArn?: string;
 }
 
+/** SendLit Cloud's rule that each ESP needs a healthy feedback connection
+ * once the organization has sent `requiredAfterSends` emails. */
+export interface FeedbackRequirement {
+  required: boolean;
+  requiredAfterSends: number;
+  sentSoFar: number;
+}
+
+export function getFeedbackRequirement() {
+  return unwrap<FeedbackRequirement>(client.feedback.requirement());
+}
+
 export function getEspFeedback(espId: string) {
   return unwrap<FeedbackConnection | null>(client.feedback.get({ params: { espId } }));
 }

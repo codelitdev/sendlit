@@ -64,3 +64,14 @@ export const testFeedbackConnectionResponseSchema = z.object({
   success: z.boolean(),
   error: z.string().optional(),
 });
+
+/** SendLit Cloud's rule that, once an organization has sent its first
+ * emails, each ESP it sends through needs a healthy feedback connection. */
+export const feedbackRequirementSchema = z.object({
+  /** False on self-hosted SendLit, where the rule doesn't apply. */
+  required: z.boolean(),
+  /** Emails the organization can send before the rule applies. */
+  requiredAfterSends: z.number().int(),
+  /** Emails the organization has sent so far, across all its teams. */
+  sentSoFar: z.number().int(),
+});
