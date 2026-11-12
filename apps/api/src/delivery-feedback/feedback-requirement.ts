@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt } from "drizzle-orm";
+import { and, eq, inArray, lt, or } from "drizzle-orm";
 import {
   feedbackRequirementApplies,
   normalizeSendingDomain,
@@ -57,21 +57,35 @@ export async function getFeedbackRequirementForTeam(
 
 /** What `assertSendingEligibility` will stop past the test volume: the
  * organization's active team ESPs without a healthy feedback connection, and
- * their From domains the organization hasn't verified. */
+ * the From domains of its active ESPs (team and organization-owned) that it
+ * hasn't verified. */
 async function unmetSendingRequirements(organizationId: string) {
-  const esps = await db
+  const all = await db
     .select({
       id: espConfigs.id,
       teamId: espConfigs.teamId,
+      ownerScope: espConfigs.ownerScope,
       name: espConfigs.name,
       fromEmail: espConfigs.fromEmail,
     })
     .from(espConfigs)
-    .innerJoin(teams, eq(teams.id, espConfigs.teamId))
+    .leftJoin(teams, eq(teams.id, espConfigs.teamId))
     .where(
-      and(eq(teams.organizationId, organizationId), eq(espConfigs.status, "active")),
+      and(
+        eq(espConfigs.status, "active"),
+        or(
+          eq(teams.organizationId, organizationId),
+          and(
+            eq(espConfigs.ownerScope, "organization"),
+            eq(espConfigs.organizationId, organizationId),
+          ),
+        ),
+      ),
     );
-  if (esps.length === 0) return { esps: [], domains: [] };
+  if (all.length === 0) return { esps: [], domains: [] };
+  // Feedback for a shared organization ESP is checked per sending team, so
+  // only team ESPs are listed for feedback here.
+  const esps = all.filter((esp) => esp.ownerScope === "team");
   const [healthy, verified] = await Promise.all([
     db
       .select({
@@ -83,7 +97,7 @@ async function unmetSendingRequirements(organizationId: string) {
         and(
           inArray(
             espFeedbackConnections.espConfigId,
-            esps.map((esp) => esp.id),
+            all.map((esp) => esp.id),
           ),
           eq(espFeedbackConnections.status, "healthy"),
         ),
@@ -100,7 +114,7 @@ async function unmetSendingRequirements(organizationId: string) {
   ]);
   const verifiedDomains = new Set(verified.map((row) => row.domain));
   const domains = new Set<string>();
-  for (const esp of esps) {
+  for (const esp of all) {
     const domain = fromDomain(esp.fromEmail);
     if (domain && !verifiedDomains.has(domain)) domains.add(domain);
   }

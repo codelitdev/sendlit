@@ -190,6 +190,38 @@ describe("feedback requirement", () => {
     }
   });
 
+  it("warns about the From domain of a shared organization ESP", async () => {
+    const { organization, team, esp } = await setup();
+    await verifyDomain(organization.id, "example.com");
+    await tdb.insert(schema.espFeedbackConnections).values({
+      teamId: team.id,
+      espConfigId: esp.id,
+      ownerScope: "team",
+      provider: "postmark",
+      encryptedCredentials: encryptSecret("webhook-secret"),
+      status: "healthy",
+    });
+    await tdb.insert(schema.espConfigs).values({
+      ownerScope: "organization",
+      organizationId: organization.id,
+      name: "Shared",
+      host: "smtp.example.net",
+      fromEmail: "news@shared.example.org",
+      status: "active",
+    });
+    const notify = spyOn(notifications, "notifyOrganizationOwners").mockResolvedValue(
+      undefined,
+    );
+    try {
+      await accept(team.id, esp.id, 5);
+      await notifyFeedbackMilestones(team.id);
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify.mock.calls[0][2]).toContain("Verify shared.example.org");
+    } finally {
+      notify.mockRestore();
+    }
+  });
+
   it("does nothing on self-hosted SendLit", async () => {
     process.env.SENDLIT_DEPLOYMENT_MODE = "oss";
     const { team, esp } = await setup();
