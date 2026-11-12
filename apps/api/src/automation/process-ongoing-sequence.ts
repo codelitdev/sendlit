@@ -343,7 +343,8 @@ async function attemptMailSending({
     const stop = teamFixableSendingStop(err);
     if (!stop) throw err;
     const paused = await autoPauseSequence(sequence, "sending_blocked", {
-      error: stop,
+      error: stop.code,
+      ...(stop.domain ? { domain: stop.domain } : {}),
       threshold: testVolumeThreshold(),
     });
     if (paused || (await isSequencePaused(sequence.id)))

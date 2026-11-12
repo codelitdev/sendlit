@@ -69,6 +69,7 @@ const PROPERTY_ALLOWLIST = new Set([
   // Feedback connection reminders (delivery-feedback/feedback-requirement.ts).
   "notice_percent",
   "esp_count",
+  "domain_count",
   // Custom events (docs/custom_events.md#observability). Event names and
   // properties are customer-defined and never sent.
   "duplicate",

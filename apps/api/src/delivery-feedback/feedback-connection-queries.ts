@@ -320,12 +320,17 @@ export async function disableOrganizationFeedbackConnection(
  * Never promotes a `retiring`/`disabled` connection back to `healthy` — a
  * late grace-period event is still accepted and processed, but the
  * connection's lifecycle state shouldn't imply it's taking new sends again. */
-export async function recordFeedbackConnectionVerified(id: string): Promise<void> {
+export async function recordFeedbackConnectionVerified(
+  id: string,
+  /** A real event was received, not just the manual test; only then does
+   * "last event" change. */
+  { event = false }: { event?: boolean } = {},
+): Promise<void> {
   await db
     .update(espFeedbackConnections)
     .set({
       status: "healthy",
-      lastReceivedAt: new Date(),
+      ...(event ? { lastReceivedAt: new Date() } : {}),
       lastVerifiedAt: new Date(),
       lastErrorCode: null,
       updatedAt: new Date(),

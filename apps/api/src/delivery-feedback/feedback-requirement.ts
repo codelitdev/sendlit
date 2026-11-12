@@ -1,17 +1,25 @@
-import { and, eq, inArray, lt } from "drizzle-orm";
+import { and, eq, inArray, lt, or } from "drizzle-orm";
 import {
   feedbackRequirementApplies,
+  normalizeSendingDomain,
   organizationAcceptedSends,
   testVolumeThreshold,
 } from "../billing/domains";
 import { notifyOrganizationOwners } from "../billing/notifications";
 import { db } from "../db/client";
-import { espConfigs, espFeedbackConnections, organizations, teams } from "../db/schema";
+import {
+  espConfigs,
+  espFeedbackConnections,
+  organizations,
+  sendingDomains,
+  teams,
+} from "../db/schema";
 import { captureError, captureEvent } from "../observability";
 import logger from "../services/log";
 
 /** Warnings, in percent of the cloud test volume, emailed to the owners
- * while an ESP still has no feedback connection. */
+ * while an ESP still has no feedback connection or a From domain isn't
+ * verified. */
 const NOTICE_PERCENTS = [50, 90, 100] as const;
 
 export type FeedbackRequirement = {
@@ -47,37 +55,89 @@ export async function getFeedbackRequirementForTeam(
   return team ? getFeedbackRequirement(team.organizationId) : null;
 }
 
-/** The organization's active team ESPs without a healthy feedback
- * connection: the ones `assertSendingEligibility` stops past the test
- * volume. */
-async function espsWithoutFeedback(organizationId: string) {
-  const esps = await db
-    .select({ id: espConfigs.id, teamId: espConfigs.teamId, name: espConfigs.name })
-    .from(espConfigs)
-    .innerJoin(teams, eq(teams.id, espConfigs.teamId))
-    .where(
-      and(eq(teams.organizationId, organizationId), eq(espConfigs.status, "active")),
-    );
-  if (esps.length === 0) return [];
-  const healthy = await db
+/** What `assertSendingEligibility` will stop past the test volume: the
+ * organization's active team ESPs without a healthy feedback connection, and
+ * the From domains of its active ESPs (team and organization-owned) that it
+ * hasn't verified. */
+async function unmetSendingRequirements(organizationId: string) {
+  const all = await db
     .select({
-      teamId: espFeedbackConnections.teamId,
-      espConfigId: espFeedbackConnections.espConfigId,
+      id: espConfigs.id,
+      teamId: espConfigs.teamId,
+      ownerScope: espConfigs.ownerScope,
+      name: espConfigs.name,
+      fromEmail: espConfigs.fromEmail,
     })
-    .from(espFeedbackConnections)
+    .from(espConfigs)
+    .leftJoin(teams, eq(teams.id, espConfigs.teamId))
     .where(
       and(
-        inArray(
-          espFeedbackConnections.espConfigId,
-          esps.map((esp) => esp.id),
+        eq(espConfigs.status, "active"),
+        or(
+          eq(teams.organizationId, organizationId),
+          and(
+            eq(espConfigs.ownerScope, "organization"),
+            eq(espConfigs.organizationId, organizationId),
+          ),
         ),
-        eq(espFeedbackConnections.status, "healthy"),
       ),
     );
-  return esps.filter(
-    (esp) =>
-      !healthy.some((row) => row.espConfigId === esp.id && row.teamId === esp.teamId),
-  );
+  if (all.length === 0) return { esps: [], domains: [] };
+  // Feedback for a shared organization ESP is checked per sending team, so
+  // only team ESPs are listed for feedback here.
+  const esps = all.filter((esp) => esp.ownerScope === "team");
+  const [healthy, verified] = await Promise.all([
+    db
+      .select({
+        teamId: espFeedbackConnections.teamId,
+        espConfigId: espFeedbackConnections.espConfigId,
+      })
+      .from(espFeedbackConnections)
+      .where(
+        and(
+          inArray(
+            espFeedbackConnections.espConfigId,
+            all.map((esp) => esp.id),
+          ),
+          eq(espFeedbackConnections.status, "healthy"),
+        ),
+      ),
+    db
+      .select({ domain: sendingDomains.domain })
+      .from(sendingDomains)
+      .where(
+        and(
+          eq(sendingDomains.organizationId, organizationId),
+          eq(sendingDomains.status, "verified"),
+        ),
+      ),
+  ]);
+  const verifiedDomains = new Set(verified.map((row) => row.domain));
+  const domains = new Set<string>();
+  for (const esp of all) {
+    const domain = fromDomain(esp.fromEmail);
+    if (domain && !verifiedDomains.has(domain)) domains.add(domain);
+  }
+  return {
+    esps: esps
+      .filter(
+        (esp) =>
+          !healthy.some(
+            (row) => row.espConfigId === esp.id && row.teamId === esp.teamId,
+          ),
+      )
+      .map((esp) => esp.name),
+    domains: [...domains],
+  };
+}
+
+function fromDomain(fromEmail: string | null): string | null {
+  if (!fromEmail) return null;
+  try {
+    return normalizeSendingDomain(fromEmail.slice(fromEmail.lastIndexOf("@") + 1));
+  } catch {
+    return null;
+  }
 }
 
 function noticeText(
@@ -85,27 +145,37 @@ function noticeText(
   organizationName: string,
   sent: number,
   threshold: number,
-  espNames: string[],
+  unmet: { esps: string[]; domains: string[] },
 ): { subject: string; text: string } {
-  const esps = espNames.map((name) => `"${name}"`).join(", ");
-  const how =
-    "Connect bounce and complaint feedback for it in Settings → Email service providers (ESP), using the feedback button next to the provider.";
+  const quoted = (names: string[]) => names.map((name) => `"${name}"`).join(", ");
+  const todo = [
+    ...(unmet.esps.length
+      ? [
+          `Connect bounce and complaint feedback for ${quoted(unmet.esps)} in Settings → Email service providers (ESP), using the feedback button next to each provider.`,
+        ]
+      : []),
+    ...(unmet.domains.length
+      ? [`Verify ${unmet.domains.join(", ")} in Organizations → Sending domains.`]
+      : []),
+  ].join(" ");
+  const rule =
+    "SendLit only sends through email providers that report bounces and spam complaints back, and from From domains your organization has verified, so it can protect your sender reputation.";
   if (percent === 100) {
     return {
-      subject: `Sending stopped for ${organizationName}: connect bounce and complaint feedback`,
-      text: `${organizationName} has sent ${sent} emails, so SendLit now needs your email provider to report bounces and spam complaints back before it sends more. Sending through ${esps} is stopped until it does; running sequences and broadcasts are paused and keep their queued emails. ${how} Then resume them.`,
+      subject: `Sending stopped for ${organizationName}: finish setting up sending`,
+      text: `${organizationName} has sent ${sent} emails. From here, ${rule} Sending is stopped until that's done; running sequences and broadcasts are paused and keep their queued emails. ${todo} Then resume them.`,
     };
   }
   return {
-    subject: `${organizationName} has sent ${sent} of ${threshold} emails: connect bounce and complaint feedback`,
-    text: `${organizationName} has sent ${sent} of its first ${threshold} emails. After ${threshold}, SendLit only sends through an email provider that reports bounces and spam complaints back, so it can protect your sender reputation, and ${esps} doesn't yet. ${how} Without it, sending through it stops after ${threshold} emails.`,
+    subject: `${organizationName} has sent ${sent} of ${threshold} emails: finish setting up sending`,
+    text: `${organizationName} has sent ${sent} of its first ${threshold} emails. After ${threshold}, ${rule} Still to do: ${todo} Without this, sending stops after ${threshold} emails.`,
   };
 }
 
 /**
  * Emails the organization's owners when it reaches 50%, 90% and 100% of the
- * cloud test volume while one of its ESPs has no feedback connection, so
- * they can connect it before sending stops. Each warning goes out once; it
+ * cloud test volume while one of its ESPs has no feedback connection or a
+ * From domain isn't verified, so they can finish before sending stops. Each warning goes out once; it
  * runs after every accepted send, and costs nothing once all three are past.
  * Never throws: the email it follows has already gone out.
  */
@@ -141,15 +211,9 @@ export async function notifyFeedbackMilestones(teamId: string): Promise<void> {
       )
       .returning({ id: organizations.id });
     if (!claimed) return;
-    const missing = await espsWithoutFeedback(org.id);
-    if (missing.length === 0) return;
-    const { subject, text } = noticeText(
-      reached,
-      org.name,
-      sent,
-      threshold,
-      missing.map((esp) => esp.name),
-    );
+    const unmet = await unmetSendingRequirements(org.id);
+    if (unmet.esps.length === 0 && unmet.domains.length === 0) return;
+    const { subject, text } = noticeText(reached, org.name, sent, threshold, unmet);
     try {
       await notifyOrganizationOwners(org.id, subject, text);
     } catch (error) {
@@ -173,7 +237,11 @@ export async function notifyFeedbackMilestones(teamId: string): Promise<void> {
       event: "feedback_connection_reminder_sent",
       source: "delivery_feedback.requirement",
       teamId,
-      properties: { notice_percent: reached, esp_count: missing.length },
+      properties: {
+        notice_percent: reached,
+        esp_count: unmet.esps.length,
+        domain_count: unmet.domains.length,
+      },
     });
   } catch (error) {
     captureError({
