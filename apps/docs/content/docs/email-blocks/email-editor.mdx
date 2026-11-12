@@ -219,7 +219,8 @@ final block and provide the real address and unsubscribe URL:
 import { EmailEditor } from "@sendlit/email-editor";
 import { createFooterBlock } from "@sendlit/email-blocks/footer";
 
-const footer = createFooterBlock({ labels });
+// English labels by default; pass `{ labels }` to translate them.
+const footer = createFooterBlock();
 
 <EmailEditor
     email={email}
@@ -231,6 +232,23 @@ const footer = createFooterBlock({ labels });
             unsubscribeUrl: "#unsubscribe-preview",
         },
     }}
+/>;
+```
+
+Before an email is sent there's no real address or link, so editors and
+previews can use `marketingPreviewContext()` from the same entry point. Pass
+the broadcast's or sequence's `viewInBrowser` setting so the preview shows the
+"View in browser" link only when sent emails will have it:
+
+```tsx
+import { marketingPreviewContext } from "@sendlit/email-blocks/footer";
+
+<EmailEditor
+    blocks={[Text, Separator, Link, ImageBlock, footer]}
+    renderContext={marketingPreviewContext({
+        viewInBrowser: sequence.viewInBrowser,
+    })}
+    {...rest}
 />;
 ```
 

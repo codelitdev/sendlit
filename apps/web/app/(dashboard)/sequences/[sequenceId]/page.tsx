@@ -12,6 +12,7 @@ import {
   type SequenceEmail,
   SequenceEmailList,
   type SequenceStats,
+  sequenceStatsMetrics,
   TagEditor,
 } from "@sendlit/email-blocks";
 import { Check, Pause, Pencil, Play, Trash2 } from "lucide-react";
@@ -74,7 +75,6 @@ import {
   isDeletedDeliverySource,
   presentDeliverySourceError,
 } from "@/lib/delivery-source";
-import { sequenceStatsMetrics } from "@/lib/stats";
 
 interface SequenceMeta {
   title: string;
@@ -406,6 +406,7 @@ export default function SequenceEditorPage({
           <SequenceAnalytics
             className="mb-6"
             metrics={sequenceStatsMetrics(stats, schedule?.waiting)}
+            onRefresh={async () => setStats(await getSequenceStats(sequenceId))}
           />
         )}
 
