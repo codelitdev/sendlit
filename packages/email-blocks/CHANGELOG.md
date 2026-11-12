@@ -1,5 +1,12 @@
 # @sendlit/email-blocks
 
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies [bf1a80b]
+  - @sendlit/email-editor@0.3.1
+
 ## 0.5.1
 
 ### Patch Changes
