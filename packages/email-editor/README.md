@@ -200,12 +200,21 @@ the components:
 For the `neutral` and `dark` themes, use `.sle.t-neutral` or `.sle.t-dark` as
 the selector instead.
 
-If your app already uses Tailwind CSS and you'd rather it built the styles,
-point it at the package instead:
+If your app already uses Tailwind CSS, don't load `styles.css`: it carries its
+own Tailwind build, base reset and theme variables, which would restyle the
+rest of your app. Instead, let your Tailwind build the editor's utility classes
+and load only the editor's own stylesheet:
+
+```ts
+import "@sendlit/email-editor/editor.css";
+```
 
 - **Tailwind v4:** add `@source "./node_modules/@sendlit/email-editor";` to your CSS.
 - **Tailwind v3:** add `"./node_modules/@sendlit/email-editor"` to `content` in
   your Tailwind config.
+
+`editor.css` only styles the editor (its rules are scoped to `.sle`), so it is
+safe to load next to your own styles.
 
 ## Built with
 
