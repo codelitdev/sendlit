@@ -463,7 +463,10 @@ export function ContactFilterBuilder({
               <span className="sr-only">{segmentTriggerSrLabel}</span>
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-80 p-2">
+          <PopoverContent
+            align="start"
+            className="w-80 p-2 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+          >
             <div className="px-2 py-2">
               <p className="text-sm font-semibold">{segmentsHeading}</p>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -533,7 +536,10 @@ export function ContactFilterBuilder({
               {filtersButtonLabel}
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-80">
+          <PopoverContent
+            align="start"
+            className="w-80 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+          >
             {!activeDefinition ? (
               <div className="space-y-1">
                 <p
