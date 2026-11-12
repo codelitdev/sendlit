@@ -1,5 +1,11 @@
 # @sendlit/email-blocks
 
+## 0.5.3
+
+### Patch Changes
+
+- 7b0fc95: `TemplateChooser` keeps template cards the same width in every section. A section with only one or two templates, such as "Your templates", no longer stretches its cards across the whole row.
+
 ## 0.5.2
 
 ### Patch Changes
