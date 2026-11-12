@@ -39,5 +39,6 @@ export interface FooterLabels {
 }
 
 export interface FooterBlockConfig {
-  labels: FooterLabels;
+  /** Defaults to `DEFAULT_FOOTER_LABELS` (English). */
+  labels?: FooterLabels;
 }

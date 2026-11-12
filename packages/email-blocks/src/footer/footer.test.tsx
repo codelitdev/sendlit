@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { defaultEmail, type Email, renderEmailToHtml } from "@sendlit/email-editor";
-import { createFooterBlock, createFooterEmailBlock } from ".";
+import {
+  createFooterBlock,
+  createFooterEmailBlock,
+  DEFAULT_FOOTER_LABELS,
+  marketingPreviewContext,
+} from ".";
 
 function labelsFor(viewInBrowser?: string) {
   return {
@@ -171,5 +176,32 @@ describe("SendLit footer block", () => {
         fontSize: "12px",
       }),
     });
+  });
+});
+
+describe("marketingPreviewContext", () => {
+  it("shows placeholder footer values with the view-in-browser link", () => {
+    expect(marketingPreviewContext().footer).toEqual({
+      mailingAddress: "Your mailing address",
+      unsubscribeUrl: "#unsubscribe-preview",
+      viewInBrowserUrl: "#view-in-browser-preview",
+    });
+  });
+
+  it("leaves the link out when view in browser is off", () => {
+    const footer = marketingPreviewContext({
+      mailingAddress: "1 Main St",
+      viewInBrowser: false,
+    }).footer;
+    expect(footer?.viewInBrowserUrl).toBeUndefined();
+    expect(footer?.mailingAddress).toBe("1 Main St");
+  });
+});
+
+describe("createFooterBlock defaults", () => {
+  it("uses the English labels when none are given", () => {
+    expect(createFooterBlock().metadata.displayName).toBe(
+      DEFAULT_FOOTER_LABELS.displayName,
+    );
   });
 });

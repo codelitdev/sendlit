@@ -50,3 +50,46 @@ function Example() {
     return <SequenceAnalytics metrics={analyticsMetrics} />;
 }
 ```
+
+## Building the metrics
+
+`sequenceStatsMetrics` turns a sequence's or broadcast's `SequenceStats` into
+these metrics, with the same labels and help text SendLit uses. Pass the number
+of contacts waiting for their next email to add a "Waiting" metric.
+
+```tsx
+import { SequenceAnalytics, sequenceStatsMetrics } from "@sendlit/email-blocks";
+
+<SequenceAnalytics metrics={sequenceStatsMetrics(stats, schedule?.waiting)} />;
+```
+
+## Refreshing
+
+Pass `onRefresh` to show a refresh button in the header. It spins until the
+promise you return settles, so the numbers update without reloading the page.
+
+```tsx
+<SequenceAnalytics
+    title="Performance"
+    metrics={sequenceStatsMetrics(stats)}
+    onRefresh={async () => setStats(await getSequenceStats(sequenceId))}
+/>;
+```
+
+## View in browser
+
+`ViewInBrowserSetting` is the switch for a broadcast's or sequence's
+`viewInBrowser` setting, with its explanation. It saves as soon as it's
+flipped: give it an async `onCheckedChange` that saves the value, and a
+rejection is shown under the switch.
+
+```tsx
+import { ViewInBrowserSetting } from "@sendlit/email-blocks";
+
+<ViewInBrowserSetting
+    checked={sequence.viewInBrowser}
+    onCheckedChange={async (viewInBrowser) => {
+        setSequence(await updateSequence(sequence.sequenceId, { viewInBrowser }));
+    }}
+/>;
+```

@@ -28,6 +28,7 @@ export type {
 export { SequenceAnalytics } from "./sequence-analytics";
 export type { SequenceEmailListProps } from "./sequence-email-list";
 export { SequenceEmailList } from "./sequence-email-list";
+export { sequenceStatsMetrics } from "./sequence-stats";
 export type {
   SubscriberListItem,
   SubscriberListProps,
@@ -52,3 +53,5 @@ export { defaultTriggerPickerLabels, TriggerPicker } from "./trigger-picker";
 export * from "./types";
 export type { ValueComboboxProps } from "./value-combobox";
 export { ValueCombobox } from "./value-combobox";
+export type { ViewInBrowserSettingProps } from "./view-in-browser-setting";
+export { ViewInBrowserSetting } from "./view-in-browser-setting";
