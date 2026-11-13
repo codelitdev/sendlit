@@ -160,7 +160,7 @@
     },
     "packages/email-blocks": {
       "name": "@sendlit/email-blocks",
-      "version": "0.4.0",
+      "version": "0.6.0",
       "dependencies": {
         "@radix-ui/react-alert-dialog": "^1.1.18",
         "@radix-ui/react-avatar": "^1.2.1",
@@ -199,7 +199,7 @@
     },
     "packages/email-editor": {
       "name": "@sendlit/email-editor",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "dependencies": {
         "@radix-ui/react-dialog": "^1.1.18",
         "@radix-ui/react-label": "^2.1.11",
@@ -237,7 +237,7 @@
     },
     "packages/sendlit": {
       "name": "sendlit",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
         "@ts-rest/core": "3.52.1",
         "zod": "3.25.76",
@@ -288,7 +288,7 @@
     },
     "fast-xml-parser": "5.12.0",
     "hono@>=4.0.0 <5.0.0": {
-      ".": "4.13.11",
+      ".": "4.13.16",
     },
     "mdast-util-to-markdown": "2.1.2",
     "next": "16.4.5",
@@ -1521,7 +1521,7 @@
 
     "hastscript": ["hastscript@9.0.1", "", { "dependencies": { "@types/hast": "^3.0.0", "comma-separated-tokens": "^2.0.0", "hast-util-parse-selector": "^4.0.0", "property-information": "^7.0.0", "space-separated-tokens": "^2.0.0" } }, "sha512-g7df9rMFX/SPi34tyGCyUBREQoKkapwdY/T04Qn9TDWfHhAYt4/I0gMVirzK5wEzeUqIjEB+LXC/ypb7Aqno5w=="],
 
-    "hono": ["hono@4.13.11", "", {}, "sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg=="],
+    "hono": ["hono@4.13.16", "", {}, "sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A=="],
 
     "html-encoding-sniffer": ["html-encoding-sniffer@4.0.0", "", { "dependencies": { "whatwg-encoding": "^3.1.1" } }, "sha512-Y22oTqIU4uuPgEemfz7NDJz6OeKf12Lsu+QC+s3BVpda64lTiMYCyGwg5ki4vFxkMwQdeZDl2adZoqUgdFuTgQ=="],
 
