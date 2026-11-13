@@ -5,6 +5,7 @@ import type { TemplatePurpose } from "@sendlit/api-contract";
 import { type Email, EmailEditor } from "@sendlit/email-blocks";
 import {
   createFooterBlock,
+  marketingPreviewContext,
   type SendLitEmailRenderContext,
 } from "@sendlit/email-blocks/footer";
 import { normalizeEmail } from "@sendlit/email-editor";
@@ -105,24 +106,7 @@ const BASE_EMAIL_EDITOR_BLOCKS = [
   HtmlSnippet,
 ];
 
-const SENDLIT_FOOTER_BLOCK = createFooterBlock({
-  labels: {
-    displayName: "Footer",
-    description: "Required mailing address and unsubscribe footer",
-    unsubscribe: "Unsubscribe",
-    viewInBrowser: "View in browser",
-    alignment: "Alignment",
-    alignmentLeft: "Left",
-    alignmentCenter: "Center",
-    alignmentRight: "Right",
-    foregroundColor: "Text color",
-    backgroundColor: "Background color",
-    fontSize: "Font size",
-    paddingTop: "Top padding",
-    paddingBottom: "Bottom padding",
-    paddingX: "Horizontal padding",
-  },
-});
+const SENDLIT_FOOTER_BLOCK = createFooterBlock();
 
 // Conditional sections read the subscriber's tags, which only marketing sends have.
 export const MARKETING_EMAIL_EDITOR_BLOCKS = [
@@ -132,23 +116,7 @@ export const MARKETING_EMAIL_EDITOR_BLOCKS = [
 ];
 export const TRANSACTIONAL_EMAIL_EDITOR_BLOCKS = BASE_EMAIL_EDITOR_BLOCKS;
 
-/** What a marketing email's managed footer shows in previews. The "View in
- * browser" link is left out when the sequence has it turned off. */
-export function marketingPreviewContext({
-  mailingAddress = "Your workspace mailing address",
-  viewInBrowser = true,
-}: {
-  mailingAddress?: string;
-  viewInBrowser?: boolean;
-} = {}): SendLitEmailRenderContext {
-  return {
-    footer: {
-      mailingAddress,
-      unsubscribeUrl: "#unsubscribe-preview",
-      ...(viewInBrowser && { viewInBrowserUrl: "#view-in-browser-preview" }),
-    },
-  };
-}
+export { marketingPreviewContext };
 
 /**
  * Full-screen email editing screen — the only place `EmailEditor` is rendered,

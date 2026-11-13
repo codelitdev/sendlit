@@ -15,6 +15,7 @@ const {
   feedbackConnectionReadinessError,
   getActiveFeedbackConnectionForEspConfig,
   getFeedbackConnectionByConnectionId,
+  recordFeedbackConnectionVerified,
   recordFeedbackControlOutcome,
   retireActiveFeedbackConnection,
   upsertFeedbackConnection,
@@ -284,6 +285,36 @@ describe("SES feedback connections", () => {
     });
     expect(moved.connectionId).toBe(created.connectionId);
     expect(moved.subscriptionConfirmedAt).toBeNull();
+  });
+
+  it("goes healthy on a manual test without counting it as an event", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const [esp] = await tdb
+      .select()
+      .from(espConfigs)
+      .where(eq(espConfigs.teamId, team.id));
+    const created = await upsertFeedbackConnection({
+      teamId: team.id,
+      espConfigId: esp.id,
+      provider: "ses",
+      expectedTopicArn: topicArn,
+    });
+
+    await recordFeedbackConnectionVerified(created.id);
+    const tested = await getFeedbackConnectionByConnectionId(
+      created.connectionId,
+      "ses",
+    );
+    expect(tested?.status).toBe("healthy");
+    expect(tested?.lastVerifiedAt).toBeTruthy();
+    expect(tested?.lastReceivedAt).toBeNull();
+
+    await recordFeedbackConnectionVerified(created.id, { event: true });
+    const received = await getFeedbackConnectionByConnectionId(
+      created.connectionId,
+      "ses",
+    );
+    expect(received?.lastReceivedAt).toBeTruthy();
   });
 
   it("flags an unsubscribed connection", async () => {

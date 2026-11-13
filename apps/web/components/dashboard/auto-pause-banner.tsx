@@ -27,8 +27,14 @@ function renderErrorReason(code: string): string {
 function sendingBlockedReason(
   code: string,
   threshold?: number,
+  domain?: string,
 ): { why: string; next: string } {
   switch (code) {
+    case "domain_verification_required":
+      return {
+        why: `Its From domain${domain ? ` ${domain}` : ""} isn't verified for your organization, which is required after your organization's first ${threshold ?? "few"} emails.`,
+        next: "Verify the domain in Organizations → Sending domains",
+      };
     case "feedback_connection_required":
       return {
         why: `Your email provider isn't reporting bounces and spam complaints back to SendLit, which is required after your organization's first ${threshold ?? "few"} emails.`,
@@ -70,13 +76,14 @@ export function AutoPauseBanner({
           : pause.reason === "render_error"
             ? renderErrorReason(pause.error ?? "")
             : pause.reason === "sending_blocked"
-              ? sendingBlockedReason(pause.error ?? "", pause.threshold).why
+              ? sendingBlockedReason(pause.error ?? "", pause.threshold, pause.domain)
+                  .why
               : `Your email provider refused to send: ${pause.error ?? "unknown error"}.`;
   const next =
     pause.reason === "render_error"
       ? "Check your mailing address in Settings and the email's content"
       : pause.reason === "sending_blocked"
-        ? sendingBlockedReason(pause.error ?? "", pause.threshold).next
+        ? sendingBlockedReason(pause.error ?? "", pause.threshold, pause.domain).next
         : "Clean your list or fix your email provider";
   return (
     <Banner variant="warning" className="mb-4 flex items-center justify-between gap-3">

@@ -42,6 +42,16 @@ async function setup() {
   return { organization, team, esp };
 }
 
+async function verifyDomain(organizationId: string, domain: string) {
+  await tdb.insert(schema.sendingDomains).values({
+    organizationId,
+    domain,
+    challengeTokenHash: "0".repeat(64),
+    status: "verified",
+    verifiedAt: new Date(),
+  });
+}
+
 async function accept(teamId: string, espConfigId: string, count: number) {
   for (let i = 0; i < count; i++) {
     const recipient = `r${crypto.randomUUID()}@example.com`;
@@ -102,6 +112,7 @@ describe("feedback requirement", () => {
       expect(notify).toHaveBeenCalledTimes(3);
       expect(notify.mock.calls[2][1]).toContain("Sending stopped");
       expect(notify.mock.calls[2][2]).toContain(esp.name);
+      expect(notify.mock.calls[2][2]).toContain("Verify example.com");
 
       await accept(team.id, esp.id, 5);
       await notifyFeedbackMilestones(team.id);
@@ -130,8 +141,9 @@ describe("feedback requirement", () => {
     }
   });
 
-  it("doesn't email when every ESP already has healthy feedback", async () => {
-    const { team, esp } = await setup();
+  it("doesn't email when every ESP has healthy feedback and a verified domain", async () => {
+    const { organization, team, esp } = await setup();
+    await verifyDomain(organization.id, "example.com");
     await tdb.insert(schema.espFeedbackConnections).values({
       teamId: team.id,
       espConfigId: esp.id,
@@ -147,6 +159,64 @@ describe("feedback requirement", () => {
       await accept(team.id, esp.id, 10);
       await notifyFeedbackMilestones(team.id);
       expect(notify).not.toHaveBeenCalled();
+    } finally {
+      notify.mockRestore();
+    }
+  });
+
+  it("warns about an unverified From domain even when feedback is connected", async () => {
+    const { team, esp } = await setup();
+    await tdb.insert(schema.espFeedbackConnections).values({
+      teamId: team.id,
+      espConfigId: esp.id,
+      ownerScope: "team",
+      provider: "postmark",
+      encryptedCredentials: encryptSecret("webhook-secret"),
+      status: "healthy",
+    });
+    const notify = spyOn(notifications, "notifyOrganizationOwners").mockResolvedValue(
+      undefined,
+    );
+    try {
+      await accept(team.id, esp.id, 5);
+      await notifyFeedbackMilestones(team.id);
+      expect(notify).toHaveBeenCalledTimes(1);
+      const text = notify.mock.calls[0][2];
+      expect(text).toContain("Verify example.com in Organizations → Sending domains.");
+      // Feedback is connected, so it isn't listed as a step.
+      expect(text).not.toContain("Connect bounce and complaint feedback");
+    } finally {
+      notify.mockRestore();
+    }
+  });
+
+  it("warns about the From domain of a shared organization ESP", async () => {
+    const { organization, team, esp } = await setup();
+    await verifyDomain(organization.id, "example.com");
+    await tdb.insert(schema.espFeedbackConnections).values({
+      teamId: team.id,
+      espConfigId: esp.id,
+      ownerScope: "team",
+      provider: "postmark",
+      encryptedCredentials: encryptSecret("webhook-secret"),
+      status: "healthy",
+    });
+    await tdb.insert(schema.espConfigs).values({
+      ownerScope: "organization",
+      organizationId: organization.id,
+      name: "Shared",
+      host: "smtp.example.net",
+      fromEmail: "news@shared.example.org",
+      status: "active",
+    });
+    const notify = spyOn(notifications, "notifyOrganizationOwners").mockResolvedValue(
+      undefined,
+    );
+    try {
+      await accept(team.id, esp.id, 5);
+      await notifyFeedbackMilestones(team.id);
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify.mock.calls[0][2]).toContain("Verify shared.example.org");
     } finally {
       notify.mockRestore();
     }

@@ -1,6 +1,7 @@
-import type { SequenceAnalyticsMetric, SequenceStats } from "@sendlit/email-blocks";
+import type { SequenceAnalyticsMetric } from "./sequence-analytics";
+import type { SequenceStats } from "./types";
 
-/** Maps sequence/broadcast stats to `SequenceAnalytics` metrics. Pass
+/** Maps sequence or broadcast stats to `SequenceAnalytics` metrics. Pass
  * `waiting` (from the schedule) to show contacts still waiting for an email. */
 export function sequenceStatsMetrics(
   stats: SequenceStats,

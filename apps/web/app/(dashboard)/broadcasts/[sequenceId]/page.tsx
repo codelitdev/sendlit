@@ -8,6 +8,7 @@ import {
   type Sequence,
   SequenceAnalytics,
   type SequenceStats,
+  sequenceStatsMetrics,
 } from "@sendlit/email-blocks";
 import {
   Archive,
@@ -84,7 +85,6 @@ import {
   presentDeliverySourceError,
   sendingOptionFor,
 } from "@/lib/delivery-source";
-import { sequenceStatsMetrics } from "@/lib/stats";
 import { useSegments } from "@/lib/use-segments";
 
 interface BroadcastMeta {
@@ -544,7 +544,11 @@ export default function BroadcastEditorPage({
         )}
 
         {stats && (
-          <SequenceAnalytics className="mb-6" metrics={sequenceStatsMetrics(stats)} />
+          <SequenceAnalytics
+            className="mb-6"
+            metrics={sequenceStatsMetrics(stats)}
+            onRefresh={async () => setStats(await getSequenceStats(sequenceId))}
+          />
         )}
 
         <div className="space-y-6">

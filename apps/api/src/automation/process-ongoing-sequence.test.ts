@@ -708,6 +708,56 @@ describe("processOngoingSequence", () => {
     expect(after.nextEmailScheduledTime).toBeGreaterThanOrEqual(before + 15 * 60_000);
   });
 
+  it("pauses and names the domain when the From domain isn't verified", async () => {
+    const { team, contact } = await seedTeamAndContact(tdb);
+    const { sequenceRow } = await seedSequence(tdb, {
+      teamId: team.id,
+      emails: [{ emailId: "email_e1" }],
+    });
+    const row = await seedOngoingSequence(tdb, {
+      teamId: team.id,
+      sequenceId: sequenceRow.id,
+      contactId: contact.id,
+    });
+    const resolve = spyOn(
+      deliveryQueries,
+      "resolvePinnedDeliverySource",
+    ).mockRejectedValue(
+      new PlanGateError("domain_verification_required", { domain: "mail.example.com" }),
+    );
+    const notify = spyOn(billingNotifications, "notifyOrganizationOwners")
+      .mockClear()
+      .mockResolvedValue(undefined);
+    try {
+      await expect(processOngoingSequence(row.id)).resolves.toBeUndefined();
+    } finally {
+      resolve.mockRestore();
+    }
+
+    expect(mockedSendMail).not.toHaveBeenCalled();
+    const [seqAfter] = await tdb
+      .select()
+      .from(sequences)
+      .where(eq(sequences.id, sequenceRow.id));
+    expect(seqAfter.status).toBe("paused");
+    expect((seqAfter.report as any).autoPause).toMatchObject({
+      reason: "sending_blocked",
+      error: "domain_verification_required",
+      domain: "mail.example.com",
+    });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0][2]).toContain(
+      "From domain mail.example.com isn't verified",
+    );
+    expect(notify.mock.calls[0][2]).toContain("Organizations → Sending domains");
+    notify.mockRestore();
+    const [after] = await tdb
+      .select()
+      .from(ongoingSequences)
+      .where(eq(ongoingSequences.id, row.id));
+    expect(after.retryCount).toBe(0);
+  });
+
   it("pauses and emails the owners once when sending is blocked until the team fixes it", async () => {
     const { team, contact } = await seedTeamAndContact(tdb);
     const { sequenceRow } = await seedSequence(tdb, {

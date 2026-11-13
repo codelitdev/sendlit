@@ -126,12 +126,23 @@ const TEAM_FIXABLE_SENDING_STOPS = new Set([
   "verified_owner_email_required",
 ]);
 
-/** The team-fixable stop behind a `sending_paused` error, if it is one. */
-export function teamFixableSendingStop(error: unknown): string | null {
-  if (!isPlanGateError(error) || error.code !== "sending_paused") return null;
+/** The team-fixable stop behind a send error, if it is one: a
+ * `sending_paused` reason above, or an unverified From domain. */
+export function teamFixableSendingStop(
+  error: unknown,
+): { code: string; domain?: string } | null {
+  if (!isPlanGateError(error)) return null;
+  if (error.code === "domain_verification_required") {
+    const domain = error.details.domain;
+    return {
+      code: "domain_verification_required",
+      ...(typeof domain === "string" ? { domain } : {}),
+    };
+  }
+  if (error.code !== "sending_paused") return null;
   const reason = error.details.reason;
   return typeof reason === "string" && TEAM_FIXABLE_SENDING_STOPS.has(reason)
-    ? reason
+    ? { code: reason }
     : null;
 }
 
@@ -141,8 +152,15 @@ export function sendingBlockedReason(
   code: string,
   /** The cloud test volume when the pause happened (`testVolumeThreshold`). */
   threshold?: number,
+  /** The unverified From domain, for `domain_verification_required`. */
+  domain?: string,
 ): { why: string; next: string } {
   switch (code) {
+    case "domain_verification_required":
+      return {
+        why: `its From domain${domain ? ` ${domain}` : ""} isn't verified for your organization, which is required after your organization's first ${threshold ?? "few"} emails`,
+        next: "Verify the domain in Organizations → Sending domains",
+      };
     case "feedback_connection_required":
       return {
         why: `its email provider isn't reporting bounces and spam complaints back to SendLit, which is required after your organization's first ${threshold ?? "few"} emails`,
@@ -161,8 +179,13 @@ export function sendingBlockedReason(
   }
 }
 
-function blockedThreshold(details: Record<string, unknown>): number | undefined {
-  return typeof details.threshold === "number" ? details.threshold : undefined;
+/** `sendingBlockedReason` for a `sending_blocked` pause's details. */
+function blockedReason(details: Record<string, unknown>) {
+  return sendingBlockedReason(
+    String(details.error ?? ""),
+    typeof details.threshold === "number" ? details.threshold : undefined,
+    typeof details.domain === "string" ? details.domain : undefined,
+  );
 }
 
 export async function autoPauseSequence(
@@ -212,16 +235,13 @@ export async function autoPauseSequence(
             : reason === "render_error"
               ? renderErrorReason(String(details.error ?? ""))
               : reason === "sending_blocked"
-                ? sendingBlockedReason(
-                    String(details.error ?? ""),
-                    blockedThreshold(details),
-                  ).why
+                ? blockedReason(details).why
                 : `your email provider refused to send (${String(details.error ?? "")})`;
     const next =
       reason === "render_error"
         ? "Check your mailing address in Settings and the email's content, then resume it from SendLit"
         : reason === "sending_blocked"
-          ? `${sendingBlockedReason(String(details.error ?? ""), blockedThreshold(details)).next}, then resume it from SendLit`
+          ? `${blockedReason(details).next}, then resume it from SendLit`
           : "Sending more would hurt your sender reputation. Check your list and your email provider, then resume it from SendLit";
     await notifyOrganizationOwners(
       team.organizationId,

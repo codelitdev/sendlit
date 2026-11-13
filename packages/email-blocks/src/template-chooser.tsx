@@ -136,7 +136,7 @@ function TemplateGrid({
   previewRenderContext?: unknown;
 }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-4">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-4">
       {items.map((item) => (
         <button
           key={item.templateId}

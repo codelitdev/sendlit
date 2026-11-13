@@ -1,5 +1,41 @@
 # @sendlit/email-blocks
 
+## 0.6.0
+
+### Minor Changes
+
+- c546673: Share more of the dashboard's mail building blocks so hosts don't re-implement them:
+
+  - `SequenceAnalytics` takes `onRefresh` and shows a refresh button in its header.
+  - `sequenceStatsMetrics` maps `SequenceStats` to `SequenceAnalytics` metrics.
+  - `ViewInBrowserSetting` is the "View in browser" switch for a broadcast or sequence.
+  - `@sendlit/email-blocks/footer` exports `marketingPreviewContext`, which leaves the "View in browser" link out of previews when the setting is off, and `DEFAULT_FOOTER_LABELS`; `createFooterBlock()` uses those labels when none are given.
+
+## 0.5.3
+
+### Patch Changes
+
+- 7b0fc95: `TemplateChooser` keeps template cards the same width in every section. A section with only one or two templates, such as "Your templates", no longer stretches its cards across the whole row.
+
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies [bf1a80b]
+  - @sendlit/email-editor@0.3.1
+
+## 0.5.1
+
+### Patch Changes
+
+- 5eafaa3: The contact filter builder's segment and filter popovers now stay on screen. They are capped to the space left in the viewport and scroll, so a long list of filters no longer runs off the edge.
+
+## 0.5.0
+
+### Minor Changes
+
+- 3ff09da: Draft and publish for broadcast and sequence emails. While a broadcast or sequence is active (a running sequence or a scheduled broadcast), `sequences.updateEmail` saves subject and content changes as a draft (the email's `draft`, with `hasUnpublishedChanges` on the email and the sequence) and sends keep using the published version. New methods: `sequences.publishChanges` (with `scope: "in_flight" | "new_entrants"` for sequences), `sequences.discardChanges`, `sequences.emailVersions` and `sequences.restoreEmailVersion`. `@sendlit/email-blocks` adds `draft` and `hasUnpublishedChanges` to its sequence types.
+
 ## 0.4.0
 
 ### Minor Changes

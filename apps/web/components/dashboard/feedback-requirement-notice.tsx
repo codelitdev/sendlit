@@ -1,9 +1,9 @@
 import { Banner } from "@/components/dashboard/banner";
 import type { FeedbackRequirement } from "@/lib/api";
 
-/** Explains SendLit Cloud's rule that each ESP needs bounce and complaint
- * feedback once the organization has sent its first emails, with how close
- * it is. Owners are also emailed at 50%, 90% and 100% (see the API's
+/** Explains SendLit Cloud's rule that, once the organization has sent its
+ * first emails, each ESP needs bounce and complaint feedback and a verified
+ * From domain, with how close it is. Owners are also emailed at 50%, 90% and 100% (see the API's
  * delivery-feedback/feedback-requirement.ts). Renders nothing when the rule
  * doesn't apply. */
 export function FeedbackRequirementNotice({
@@ -28,11 +28,12 @@ export function FeedbackRequirementNotice({
       className={className}
     >
       After your organization&apos;s first {limit} emails, SendLit only sends through
-      providers that report bounces and spam complaints back, to protect your sender
-      reputation. {progress}{" "}
+      providers that report bounces and spam complaints back, and from From domains your
+      organization has verified, to protect your sender reputation. {progress}{" "}
       {newEsp
-        ? "Once you've saved this ESP, set up its delivery feedback from the ESP list."
-        : "Set up delivery feedback for each ESP with its feedback button below."}
+        ? "Once you've saved this ESP, set up its delivery feedback from the ESP list"
+        : "Set up delivery feedback for each ESP with its feedback button below"}
+      , and verify its From domain in Organizations → Sending domains.
     </Banner>
   );
 }

@@ -200,6 +200,14 @@ export function EspFeedbackDialog({
         ? await testOrganizationEspFeedback(organizationId, esp.espId)
         : await testEspFeedback(esp.espId);
       setTestResult(result);
+      // A passing test makes the connection healthy: show its new status.
+      if (result.success) {
+        setConnection(
+          await (organizationId
+            ? getOrganizationEspFeedback(organizationId, esp.espId)
+            : getEspFeedback(esp.espId)),
+        );
+      }
     } catch (err) {
       setTestResult({
         success: false,
@@ -316,6 +324,11 @@ export function EspFeedbackDialog({
                 {connection.lastReceivedAt && (
                   <span className="text-muted-foreground">
                     Last event: {new Date(connection.lastReceivedAt).toLocaleString()}
+                  </span>
+                )}
+                {!connection.lastReceivedAt && connection.lastVerifiedAt && (
+                  <span className="text-muted-foreground">
+                    Tested: {new Date(connection.lastVerifiedAt).toLocaleString()}
                   </span>
                 )}
                 {connection.lastErrorCode && (

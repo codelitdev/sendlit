@@ -108,7 +108,7 @@ export async function processWebhookReceipt(receiptId: string): Promise<void> {
     });
     // A fully-processed authenticated receipt is the PRD's definition
     // of a healthy connection — not just the manual "test" action.
-    await recordFeedbackConnectionVerified(receipt.connectionId);
+    await recordFeedbackConnectionVerified(receipt.connectionId, { event: true });
   }
 }
 
