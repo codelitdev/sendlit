@@ -37,6 +37,20 @@ export { SubscriberList } from "./subscriber-list";
 export type { TagEditorProps } from "./tag-editor";
 export { TagEditor } from "./tag-editor";
 export type {
+  TagManagerLinkProps,
+  TagManagerProps,
+  TagManagerSequence,
+} from "./tag-manager";
+export { TagManager } from "./tag-manager";
+// Hosts implement TagManager's callbacks against their own API with these.
+export type {
+  DeleteTagResult,
+  RenameTagResult,
+  TagReferences,
+  TagSequenceUsage,
+  TagSummary,
+} from "./tag-manager-types";
+export type {
   SystemTemplateSummary,
   TemplateChooserProps,
 } from "./template-chooser";
