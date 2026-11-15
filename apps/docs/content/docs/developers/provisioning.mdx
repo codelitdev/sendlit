@@ -52,7 +52,7 @@ one team's contacts and email APIs. Keep these credentials separate.
       configure its own provider later using its team key or the dashboard.
 3. Create an organization API key and store its plaintext value in your
    backend secret manager. It is displayed only once. For a team-provisioning
-   integration, use `organization:read`, `teams:provision`, and `teams:read`;
+   integration, use `organization:read`, `teams:provision`, `teams:read`, `teams:manage`, `teams:keys`, and `usage:read`;
    do not give its runtime key delivery administration scopes.
 
 Use the minimum scopes your integration needs:

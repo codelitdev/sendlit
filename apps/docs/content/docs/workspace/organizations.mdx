@@ -164,7 +164,7 @@ guide:
 2. Add, test, and activate a shared mailbox.
 3. Set the default-delivery policy and any quotas.
 4. Create a runtime organization API key with `organization:read`,
-   `teams:provision`, and `teams:read`. Store it in your platform’s server-side
+   `teams:provision`, `teams:read`, `teams:manage`, `teams:keys`, and `usage:read`. Store it in your platform’s server-side
    secret manager and do not include delivery-administration scopes.
 5. On each customer signup, your backend calls `POST /provisioning/teams` with
    `Authorization: Bearer <organization key>`, a stable `externalId`, and the
