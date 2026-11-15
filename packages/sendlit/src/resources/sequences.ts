@@ -17,6 +17,8 @@ export type DiscardSequenceChangesInput = Body<typeof routes.discardChanges>;
 export type SequenceEmailVersion = Ok<typeof routes.emailVersions>["items"][number];
 export type ListSequencesQuery = Query<typeof routes.list>;
 export type ListSequenceSubscribersQuery = Query<typeof routes.subscribers>;
+export type SendSequenceEmailTestInput = Body<typeof routes.sendEmailTest>;
+export type SequenceEmailTestResult = Ok<typeof routes.sendEmailTest>;
 
 export class Sequences {
   constructor(private readonly http: HttpClient) {}
@@ -155,6 +157,23 @@ export class Sequences {
   async stats(sequenceId: string): Promise<SequenceStats> {
     return this.http.request(routes.stats, {
       params: { sequenceId: assertId(sequenceId, "sequenceId") },
+    });
+  }
+
+  /** Sends a test of one broadcast or sequence email, rendered like a real
+   * send with a `[Test]` subject prefix. Tests count against the team's test
+   * limits (429 `test_send_limit_reached` / `test_send_email_limit_reached`). */
+  async sendEmailTest(
+    sequenceId: string,
+    emailId: string,
+    input: SendSequenceEmailTestInput,
+  ): Promise<SequenceEmailTestResult> {
+    return this.http.request(routes.sendEmailTest, {
+      params: {
+        sequenceId: assertId(sequenceId, "sequenceId"),
+        emailId: assertId(emailId, "emailId"),
+      },
+      body: input,
     });
   }
 

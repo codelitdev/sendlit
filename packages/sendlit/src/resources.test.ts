@@ -270,6 +270,43 @@ const cases: Case[] = [
     },
   ],
   [
+    "sequences.sendEmailTest",
+    (s) => s.sequences.sendEmailTest("seq_1", "eml_1", { to: ["ada@example.com"] }),
+    {
+      method: "POST",
+      path: "/sequences/seq_1/emails/eml_1/test",
+      body: { to: ["ada@example.com"] },
+    },
+  ],
+  ["tags.list", (s) => s.tags.list(), { method: "GET", path: "/tags" }],
+  [
+    "tags.references",
+    (s) => s.tags.references("early bird"),
+    { method: "GET", path: "/tags/early%20bird/references" },
+  ],
+  [
+    "tags.rename",
+    (s) => s.tags.rename("vip", { name: "VIP" }),
+    { method: "PATCH", path: "/tags/vip", body: { name: "VIP" } },
+  ],
+  ["tags.remove", (s) => s.tags.remove("vip"), { method: "DELETE", path: "/tags/vip" }],
+  [
+    "settings.general.get",
+    (s) => s.settings.general.get(),
+    { method: "GET", path: "/settings/general" },
+  ],
+  [
+    "settings.general.update",
+    (s) => s.settings.general.update({ mailingAddress: "1 Main St" }),
+    { method: "PUT", path: "/settings/general", body: { mailingAddress: "1 Main St" } },
+  ],
+  ["overview.get", (s) => s.overview.get(), { method: "GET", path: "/overview" }],
+  [
+    "overview.get with range",
+    (s) => s.overview.get({ rangeDays: 30 }),
+    { method: "GET", path: "/overview", query: "?rangeDays=30" },
+  ],
+  [
     "emails.send",
     (s) =>
       s.emails.send({
