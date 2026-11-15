@@ -37,7 +37,14 @@ export async function createInitialOrganizationOwnerIfMissing(): Promise<void> {
     {
       secret: process.env.BOOTSTRAP_TEAM_PROVISIONING_API_KEY?.trim(),
       name: "[Auto-generated] Team Provisioning",
-      scopes: ["organization:read", "teams:provision", "teams:read"],
+      scopes: [
+        "organization:read",
+        "teams:provision",
+        "teams:read",
+        "teams:manage",
+        "teams:keys",
+        "usage:read",
+      ],
     },
   ].flatMap((key) => {
     const secret = key.secret?.trim();
@@ -87,6 +94,8 @@ export async function createInitialOrganizationOwnerIfMissing(): Promise<void> {
         key.scopes,
         key.secret,
         identity.id,
+        // Bootstrap owns these keys' scopes, so a release can widen them.
+        { reconcileScopes: true },
       );
       registeredKeys.push({
         name: key.name,
