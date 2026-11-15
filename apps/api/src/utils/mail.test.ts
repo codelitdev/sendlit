@@ -18,6 +18,18 @@ describe("mail utils", () => {
     );
   });
 
+  it("quotes a display name that holds RFC 5322 specials", () => {
+    expect(getEmailFrom({ name: "Smith, J. & Co", email: "a@example.com" })).toBe(
+      '"Smith, J. & Co" <a@example.com>',
+    );
+    expect(getEmailFrom({ name: 'The "Best" School', email: "a@example.com" })).toBe(
+      '"The \\"Best\\" School" <a@example.com>',
+    );
+    expect(getEmailFrom({ name: "Yoga & Co", email: "a@example.com" })).toBe(
+      "Yoga & Co <a@example.com>",
+    );
+  });
+
   it("builds site and unsubscribe URLs from env", () => {
     process.env.PROTOCOL = "https";
     process.env.DOMAIN = "app.sendlit.test";

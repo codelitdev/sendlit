@@ -15908,6 +15908,10 @@
                       "nullable": true
                     }
                   },
+                  "fromName": {
+                    "description": "The From name for this email, instead of the delivery source's. The address stays the delivery source's.",
+                    "type": "string"
+                  },
                   "replyTo": {
                     "type": "string",
                     "format": "email"

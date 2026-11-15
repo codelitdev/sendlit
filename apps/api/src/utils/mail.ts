@@ -1,5 +1,11 @@
+/** RFC 5322 specials: a display name holding any of them must be quoted. */
+const DISPLAY_NAME_SPECIALS = /[()<>[\]:;@\\,."]/;
+
 export function getEmailFrom({ name, email }: { name: string; email: string }) {
-  return `${name} <${email}>`;
+  const display = DISPLAY_NAME_SPECIALS.test(name)
+    ? `"${name.replace(/[\\"]/g, "\\$&")}"`
+    : name;
+  return `${display} <${email}>`;
 }
 
 export function getSiteUrl(): string {
