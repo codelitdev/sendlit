@@ -4,10 +4,13 @@ import { Contacts } from "./resources/contacts";
 import { DeliveryEvents } from "./resources/delivery-events";
 import { Emails } from "./resources/emails";
 import { Events } from "./resources/events";
+import { OverviewResource } from "./resources/overview";
 import { Provisioning } from "./resources/provisioning";
 import { Segments } from "./resources/segments";
 import { Sequences } from "./resources/sequences";
+import { Settings } from "./resources/settings";
 import { Suppressions } from "./resources/suppressions";
+import { Tags } from "./resources/tags";
 import { Templates } from "./resources/templates";
 import { assertId } from "./validate";
 
@@ -62,6 +65,12 @@ export class SendLit {
   readonly provisioning: Provisioning;
   readonly suppressions: Suppressions;
   readonly deliveryEvents: DeliveryEvents;
+  /** Tags across the team's contacts: list, rename and delete them. */
+  readonly tags: Tags;
+  /** Team settings, such as the mailing address. */
+  readonly settings: Settings;
+  /** The team's dashboard numbers. */
+  readonly overview: OverviewResource;
 
   constructor(options: SendLitOptions = {}) {
     const g = globalThis as { window?: { document?: unknown } };
@@ -121,5 +130,8 @@ export class SendLit {
     this.provisioning = new Provisioning(http);
     this.suppressions = new Suppressions(http);
     this.deliveryEvents = new DeliveryEvents(http);
+    this.tags = new Tags(http);
+    this.settings = new Settings(http);
+    this.overview = new OverviewResource(http);
   }
 }
