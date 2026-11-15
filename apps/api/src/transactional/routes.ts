@@ -75,6 +75,7 @@ const impl = s.router(contract.transactional, {
         html: body.html,
         text: body.text,
         variables: body.variables,
+        fromName: body.fromName,
         replyTo: body.replyTo,
         headers: body.headers,
         idempotencyKey: body.idempotencyKey,
@@ -120,6 +121,15 @@ const impl = s.router(contract.transactional, {
                 "Header names/values must not contain CR/LF; " +
                 "From, To, Subject and Content-Type are set " +
                 "by the send pipeline",
+            },
+          };
+        case "invalid_from_name":
+          return {
+            status: 400,
+            body: {
+              error:
+                "fromName must be 1-100 characters, without control or " +
+                "invisible formatting characters, <, > or @",
             },
           };
         case "template_not_found":
