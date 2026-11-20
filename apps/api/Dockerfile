@@ -1,4 +1,8 @@
-FROM oven/bun:1.4.1 AS packages
+# The workspace packages are built on the build machine's own platform
+# ($BUILDPLATFORM): their dist is JavaScript, the same for every target, and
+# emulating arm64 on an x86 builder (or the reverse) is several times slower.
+# The runner, and its production install, run as the target platform.
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.1 AS packages
 WORKDIR /app
 
 COPY package.json bun.lock ./
