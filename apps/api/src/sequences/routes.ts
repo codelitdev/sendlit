@@ -6,6 +6,7 @@ import { requireAuth } from "../auth/middleware";
 import { requireTeam } from "../auth/require-team";
 import { sequenceDeliveryRates } from "../automation/sending-health";
 import { planGateHttp } from "../billing/errors";
+import { listSequenceDeliveries } from "../delivery-feedback/delivery-outcomes";
 import { captureEvent } from "../observability";
 import { MAILING_ADDRESS_REQUIRED } from "../settings/general/constants";
 import { omitInternal } from "../utils/public";
@@ -426,6 +427,21 @@ const impl = s.router(contract.sequences, {
         bounceRate: rates.bounceRate,
         complaintRate: rates.complaintRate,
       },
+    };
+  },
+  deliveries: async ({ params, query, req }) => {
+    const teamId = (req as any).teamId;
+    const sequence = await getSequenceBySequenceId(teamId, params.sequenceId);
+    if (!sequence) return { status: 404, body: { error: "Sequence not found" } };
+    return {
+      status: 200,
+      body: await listSequenceDeliveries({
+        teamId,
+        sequenceId: sequence.id,
+        outcome: query.outcome,
+        offset: query.offset,
+        rowsPerPage: query.itemsPerPage,
+      }),
     };
   },
   schedule: async ({ params, req }) => {

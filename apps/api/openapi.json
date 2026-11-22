@@ -2708,8 +2708,8 @@
     },
     "/contacts/{contactId}/deliveries": {
       "get": {
-        "description": "**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
-        "summary": "List broadcasts/sequence emails delivered to a contact",
+        "description": "Newest first. Each send has its `outcome`: sent (accepted by the ESP, no report yet), delivered, bounced, complained (marked as spam) or failed; null for sends from before the outbound message log.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "summary": "List broadcasts/sequence emails sent to a contact",
         "tags": [
           "Contacts"
         ],
@@ -15484,6 +15484,228 @@
           },
           "400": {
             "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "teamApiKey": []
+          },
+          {
+            "teamApiKeyStandardHeader": []
+          },
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          }
+        ]
+      }
+    },
+    "/sequences/{sequenceId}/deliveries": {
+      "get": {
+        "description": "One row per email sent (accepted by the ESP), most recent outcome first, with the recipient, the outcome (sent, delivered, bounced, complained, failed), the bounce type and the ESP's reason when it reported one, and the address's active suppression if any. `outcome=bounced` and `outcome=complained` list exactly the sends counted by the `bounceRate` and `complaintRate` of GET /sequences/{sequenceId}/stats. Pages hold `itemsPerPage` sends (default 10, at most 100); `offset` is the page number. Sends whose contact was deleted are not listed.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "summary": "List the sends of a sequence or broadcast and what happened to each",
+        "tags": [
+          "Sequences"
+        ],
+        "parameters": [
+          {
+            "name": "sequenceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "description": "bounced: sends the ESP reported as bounced. complained: sends the recipient marked as spam. Omit for every send.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bounced",
+                "complained"
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page number (default 1)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "itemsPerPage",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "messageId": {
+                            "type": "string",
+                            "description": "Public `msg_...` id of the send"
+                          },
+                          "contactId": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string",
+                            "description": "The address the email was sent to"
+                          },
+                          "emailId": {
+                            "type": "string",
+                            "description": "Which email of the sequence or broadcast it was"
+                          },
+                          "outcome": {
+                            "type": "string",
+                            "enum": [
+                              "sent",
+                              "delivered",
+                              "bounced",
+                              "complained",
+                              "failed"
+                            ]
+                          },
+                          "bounceType": {
+                            "type": "string",
+                            "enum": [
+                              "hard",
+                              "soft"
+                            ],
+                            "description": "hard: permanent (the address doesn't exist or refuses mail). soft: temporary (mailbox full, server down). null when the send didn't bounce or the ESP didn't say",
+                            "nullable": true
+                          },
+                          "reason": {
+                            "type": "string",
+                            "description": "The ESP's reason or diagnostic for the bounce or complaint, if it sent one",
+                            "nullable": true
+                          },
+                          "smtpCode": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "enhancedStatusCode": {
+                            "type": "string",
+                            "description": "e.g. 5.1.1",
+                            "nullable": true
+                          },
+                          "occurredAt": {
+                            "type": "string",
+                            "description": "When the outcome happened (ISO 8601): the complaint, bounce, delivery or send",
+                            "nullable": true
+                          },
+                          "suppression": {
+                            "type": "object",
+                            "properties": {
+                              "suppressionId": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string",
+                                "enum": [
+                                  "hard_bounce",
+                                  "complaint",
+                                  "repeated_soft_bounce",
+                                  "provider_suppression",
+                                  "manual"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "suppressionId",
+                              "reason"
+                            ],
+                            "description": "The address's active suppression, if SendLit no longer mails it",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "messageId",
+                          "contactId",
+                          "email",
+                          "emailId",
+                          "outcome",
+                          "bounceType",
+                          "reason",
+                          "smtpCode",
+                          "enhancedStatusCode",
+                          "occurredAt",
+                          "suppression"
+                        ]
+                      }
+                    },
+                    "total": {
+                      "type": "number",
+                      "description": "Every matching send, across all pages"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400\n\nOr `credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           },
           "404": {
             "description": "404",

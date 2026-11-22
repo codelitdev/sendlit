@@ -9,6 +9,7 @@ import {
   contactFilterSchema,
   contract,
   type DeleteTagResult,
+  type DeliveryOutcome,
   type DomainAuthentication,
   type EspWarmup,
   type EventDefinitionDetail,
@@ -19,6 +20,8 @@ import {
   type RenameTagResult,
   type Reputation,
   type SequenceDeletionPreview,
+  type SequenceDeliveriesPage,
+  type SequenceDeliveryOutcomeFilter,
   type SequenceEmailVersion,
   type SequenceSchedule,
   type SignupForm,
@@ -310,6 +313,9 @@ export interface ContactDelivery {
   sequenceType: MailType;
   emailId: string;
   createdAt: string;
+  messageId: string | null;
+  /** null for sends from before the outbound message log. */
+  outcome: DeliveryOutcome | null;
 }
 
 export function getContactDeliveries(contactId: string) {
@@ -804,6 +810,27 @@ export function listWaitingContacts(
     client.sequences.waitingContacts({
       params: { sequenceId, emailId },
       query: { after, limit, q: q || undefined },
+    }),
+  );
+}
+
+/** The sends of a broadcast or sequence, e.g. the recipients who bounced. */
+export function listSequenceDeliveries(
+  sequenceId: string,
+  {
+    outcome,
+    page = 1,
+    itemsPerPage = 20,
+  }: {
+    outcome?: SequenceDeliveryOutcomeFilter;
+    page?: number;
+    itemsPerPage?: number;
+  } = {},
+) {
+  return unwrap<SequenceDeliveriesPage>(
+    client.sequences.deliveries({
+      params: { sequenceId },
+      query: { outcome, offset: page, itemsPerPage },
     }),
   );
 }
@@ -1915,6 +1942,14 @@ export interface Suppression {
   releasedAt?: string | null;
   releaseReason?: string | null;
 }
+
+export const SUPPRESSION_REASON_LABEL: Record<SuppressionReason, string> = {
+  hard_bounce: "Hard bounce",
+  complaint: "Spam complaint",
+  repeated_soft_bounce: "Repeated soft bounce",
+  provider_suppression: "Provider suppression",
+  manual: "Manual",
+};
 
 const ownerReleasableSuppressionReasons: SuppressionReason[] = [
   "hard_bounce",

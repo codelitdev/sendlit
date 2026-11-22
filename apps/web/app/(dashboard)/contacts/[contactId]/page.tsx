@@ -8,6 +8,7 @@ import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { ContactEventsCard } from "@/components/dashboard/contact-events-card";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
+import { DeliveryOutcomeBadge } from "@/components/dashboard/delivery-outcome-badge";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
@@ -211,7 +212,7 @@ export default function ContactDetailPage({
             <CardContent>
               {!deliveries || deliveries.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No broadcasts or sequence emails delivered yet.
+                  No broadcasts or sequence emails sent yet.
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -232,6 +233,9 @@ export default function ContactDetailPage({
                             : ""}
                         </p>
                       </div>
+                      {delivery.outcome && (
+                        <DeliveryOutcomeBadge outcome={delivery.outcome} />
+                      )}
                       <Badge variant="secondary">{delivery.sequenceType}</Badge>
                     </li>
                   ))}

@@ -28,7 +28,7 @@ export type {
 export { SequenceAnalytics } from "./sequence-analytics";
 export type { SequenceEmailListProps } from "./sequence-email-list";
 export { SequenceEmailList } from "./sequence-email-list";
-export { sequenceStatsMetrics } from "./sequence-stats";
+export { type SequenceStatsActions, sequenceStatsMetrics } from "./sequence-stats";
 export type {
   SubscriberListItem,
   SubscriberListProps,

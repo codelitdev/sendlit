@@ -26,6 +26,7 @@ const mocks = {
   discardEmailChanges: vi.fn(),
   listEmailVersions: vi.fn(),
   restoreEmailVersion: vi.fn(),
+  listSequenceDeliveries: vi.fn(),
 };
 
 class InvalidCursorError extends Error {}
@@ -65,6 +66,10 @@ mock.module("../../sequences/test-send", () => ({
 mock.module("../../abuse/pacing-status", () => ({ broadcastPacing: async () => null }));
 mock.module("../../automation/sending-health", () => ({
   sequenceDeliveryRates: async () => ({ bounceRate: 0, complaintRate: 0 }),
+}));
+
+mock.module("../../delivery-feedback/delivery-outcomes", () => ({
+  listSequenceDeliveries: mocks.listSequenceDeliveries,
 }));
 
 const { sequenceTools } = await import("./sequences");
@@ -121,6 +126,7 @@ describe("MCP sequence tools", () => {
       "pause_sequence",
       "get_sequence_stats",
       "get_sequence_schedule",
+      "list_sequence_deliveries",
       "list_sequence_email_waiting_contacts",
       "get_sequence_subscribers",
     ]);
@@ -298,6 +304,53 @@ describe("MCP sequence tools", () => {
       subscribersCount: 3,
       bounceRate: 0,
       complaintRate: 0,
+    });
+  });
+
+  it("lists a sequence's bounced sends by its internal id", async () => {
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce(null);
+    await expect(
+      call("list_sequence_deliveries", { sequenceId: "seq-1", outcome: "bounced" }),
+    ).resolves.toMatchObject({ error: { code: "not_found" } });
+    expect(mocks.listSequenceDeliveries).not.toHaveBeenCalled();
+
+    mocks.getSequenceBySequenceId.mockResolvedValueOnce({
+      id: "s1",
+      sequenceId: "seq-1",
+    });
+    const page = {
+      items: [
+        {
+          messageId: "msg_1",
+          contactId: "cnt_1",
+          email: "ada@example.com",
+          emailId: "eml_1",
+          outcome: "bounced",
+          bounceType: "hard",
+          reason: "550 5.1.1 user unknown",
+          smtpCode: 550,
+          enhancedStatusCode: "5.1.1",
+          occurredAt: "2026-11-01T00:00:00.000Z",
+          suppression: { suppressionId: "sup_1", reason: "hard_bounce" },
+        },
+      ],
+      total: 1,
+    };
+    mocks.listSequenceDeliveries.mockResolvedValue(page);
+    await expect(
+      call("list_sequence_deliveries", {
+        sequenceId: "seq-1",
+        outcome: "bounced",
+        offset: 2,
+        itemsPerPage: 25,
+      }),
+    ).resolves.toEqual(page);
+    expect(mocks.listSequenceDeliveries).toHaveBeenCalledWith({
+      teamId: "team-1",
+      sequenceId: "s1",
+      outcome: "bounced",
+      offset: 2,
+      rowsPerPage: 25,
     });
   });
 

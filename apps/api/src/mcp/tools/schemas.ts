@@ -1,10 +1,12 @@
 import {
+  contactDeliverySchema,
   contactFilterSchema,
   sequenceEmailSchema as contractSequenceEmailSchema,
   sequenceSchema as contractSequenceSchema,
   customFieldsSchema,
   emailContentSchema,
   espWarmupSchema,
+  sequenceDeliveriesPageSchema,
   sequenceScheduleSchema,
   waitingContactsPageSchema,
 } from "@sendlit/api-contract";
@@ -28,14 +30,6 @@ export const contactSchema = z.object({
 export const contactListSchema = z.object({
   items: z.array(contactSchema),
   total: z.number(),
-});
-
-const contactDeliverySchema = z.object({
-  sequenceId: z.string(),
-  sequenceTitle: z.string(),
-  sequenceType: z.string(),
-  emailId: z.string(),
-  createdAt: z.string().nullable(),
 });
 
 export const contactDeliveryListSchema = z.object({
@@ -143,7 +137,11 @@ export const sequenceStatsSchema = z.object({
 });
 
 // The REST contract's shapes, so MCP output can't drift from REST.
-export { sequenceScheduleSchema, waitingContactsPageSchema as waitingContactsSchema };
+export {
+  sequenceDeliveriesPageSchema,
+  sequenceScheduleSchema,
+  waitingContactsPageSchema as waitingContactsSchema,
+};
 
 export const successMessageSchema = z.object({
   message: z.string(),
