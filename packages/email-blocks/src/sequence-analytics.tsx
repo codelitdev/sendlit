@@ -10,6 +10,10 @@ export interface SequenceAnalyticsMetric {
   label: string;
   value: string | number;
   helpText?: string;
+  /** Opens what's behind the number, e.g. the recipients who bounced. When
+   * set, the value renders as a button labelled `selectLabel`. */
+  onSelect?: () => void;
+  selectLabel?: string;
 }
 
 export interface SequenceAnalyticsProps {
@@ -58,7 +62,20 @@ export function SequenceAnalytics({
                 </Tooltip>
               )}
             </div>
-            <p className="truncate text-2xl font-bold">{metric.value}</p>
+            {metric.onSelect ? (
+              <button
+                type="button"
+                className="max-w-full truncate rounded-sm text-2xl font-bold underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 hover:decoration-solid focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                // Keep the number in the accessible name, not just the action.
+                aria-label={`${metric.label} ${metric.value}: ${metric.selectLabel ?? `view ${metric.label.toLowerCase()}`}`}
+                title={metric.selectLabel ?? `View ${metric.label.toLowerCase()}`}
+                onClick={metric.onSelect}
+              >
+                {metric.value}
+              </button>
+            ) : (
+              <p className="truncate text-2xl font-bold">{metric.value}</p>
+            )}
           </div>
         ))}
       </div>

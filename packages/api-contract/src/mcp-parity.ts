@@ -164,6 +164,7 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   required("sequences.start", "start_sequence", "write"),
   required("sequences.pause", "pause_sequence", "write"),
   required("sequences.stats", "get_sequence_stats", "read"),
+  required("sequences.deliveries", "list_sequence_deliveries", "read"),
   required("sequences.schedule", "get_sequence_schedule", "read"),
   required("sequences.waitingContacts", "list_sequence_email_waiting_contacts", "read"),
   required("sequences.getWeb", "get_broadcast_web_publishing", "read"),

@@ -1,4 +1,8 @@
-import type { CustomFields, CustomFieldValue } from "@sendlit/api-contract";
+import type {
+  CustomFields,
+  CustomFieldValue,
+  DeliveryOutcome,
+} from "@sendlit/api-contract";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { fireEvent } from "../automation/fire-event";
 import { reserveSubscribedContactSlot } from "../billing/entitlements";
@@ -8,10 +12,12 @@ import {
   contactCustomFieldValues,
   contacts,
   emailDeliveries,
+  outboundMessages,
   sequenceEmails,
   sequences,
   teams,
 } from "../db/schema";
+import { deliveryOutcome } from "../delivery-feedback/delivery-outcomes";
 import { getActiveSuppressionReasons } from "../delivery-feedback/suppression-queries";
 import { captureEvent } from "../observability";
 import { normalizeEmail } from "../utils/email";
@@ -532,6 +538,8 @@ export interface ContactDelivery {
   sequenceType: string;
   emailId: string;
   createdAt: Date | null;
+  messageId: string | null;
+  outcome: DeliveryOutcome | null;
 }
 
 /** The broadcasts/sequence emails a contact has actually received, most
@@ -548,13 +556,26 @@ export async function getDeliveriesByContact(
       createdAt: emailDeliveries.createdAt,
       sequenceTitle: sequences.title,
       sequenceType: sequences.type,
+      messageId: outboundMessages.messageId,
+      deliveryStatus: outboundMessages.deliveryStatus,
+      feedbackStatus: outboundMessages.feedbackStatus,
     })
     .from(emailDeliveries)
     .innerJoin(sequences, eq(sequences.id, emailDeliveries.sequenceId))
     .innerJoin(sequenceEmails, eq(sequenceEmails.id, emailDeliveries.emailId))
+    .leftJoin(
+      outboundMessages,
+      eq(outboundMessages.campaignDeliveryId, emailDeliveries.id),
+    )
     .where(
       and(eq(emailDeliveries.teamId, teamId), eq(emailDeliveries.contactId, contactId)),
     )
     .orderBy(desc(emailDeliveries.createdAt));
-  return rows;
+  return rows.map(({ deliveryStatus, feedbackStatus, ...row }) => ({
+    ...row,
+    outcome:
+      deliveryStatus && feedbackStatus
+        ? deliveryOutcome(deliveryStatus, feedbackStatus)
+        : null,
+  }));
 }

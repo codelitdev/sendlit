@@ -2051,6 +2051,11 @@ export const outboundMessages = pgTable(
       table.feedbackConnectionId,
       table.providerMessageId,
     ),
+    // Joins a send's `email_deliveries` row to its ledger row: a contact's
+    // delivery history and a sequence's bounced/complained recipients.
+    campaignDeliveryIdx: index("outbound_messages_campaign_delivery_id_idx").on(
+      table.campaignDeliveryId,
+    ),
     recipientHistoryIdx: index("outbound_messages_team_id_recipient_created_at_idx").on(
       table.teamId,
       table.normalizedRecipient,

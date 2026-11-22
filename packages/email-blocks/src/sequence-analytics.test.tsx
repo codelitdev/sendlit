@@ -29,4 +29,27 @@ describe("SequenceAnalytics", () => {
     expect(elements.some((element) => element.type === "h3")).toBe(true);
     expect(elements.some((element) => element.type === RefreshButton)).toBe(false);
   });
+
+  it("renders a selectable metric's value as a button", () => {
+    const onSelect = () => {};
+    const elements = elementsIn(
+      SequenceAnalytics({
+        metrics: [
+          {
+            label: "Bounce rate",
+            value: "3.0%",
+            onSelect,
+            selectLabel: "View bounces",
+          },
+          { label: "Sent", value: 10 },
+        ],
+      }),
+    );
+    const buttons = elements.filter(
+      (element) => element.type === "button" && element.props.onClick === onSelect,
+    );
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].props["aria-label"]).toBe("Bounce rate 3.0%: View bounces");
+    expect(buttons[0].props.children).toBe("3.0%");
+  });
 });

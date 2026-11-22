@@ -8,6 +8,8 @@ const routes = contract.sequences;
  * `type`. */
 export type Sequence = Ok<typeof routes.get>;
 export type SequenceStats = Ok<typeof routes.stats>;
+export type SequenceDelivery = Ok<typeof routes.deliveries>["items"][number];
+export type ListSequenceDeliveriesQuery = Query<typeof routes.deliveries>;
 export type CreateSequenceInput = Body<typeof routes.create>;
 export type UpdateSequenceInput = Body<typeof routes.update>;
 export type AddSequenceEmailInput = Body<typeof routes.addEmail>;
@@ -158,6 +160,26 @@ export class Sequences {
     return this.http.request(routes.stats, {
       params: { sequenceId: assertId(sequenceId, "sequenceId") },
     });
+  }
+
+  /** The emails a broadcast or sequence sent and what happened to each.
+   * `outcome: "bounced"` or `"complained"` lists the recipients behind the
+   * stats' bounce and complaint rates. */
+  async deliveries(
+    sequenceId: string,
+    query: ListSequenceDeliveriesQuery = {},
+  ): Promise<Ok<typeof routes.deliveries>> {
+    return this.http.request(routes.deliveries, {
+      params: { sequenceId: assertId(sequenceId, "sequenceId") },
+      query,
+    });
+  }
+
+  listAllDeliveries(
+    sequenceId: string,
+    query: Omit<ListSequenceDeliveriesQuery, "offset"> = {},
+  ): AsyncGenerator<SequenceDelivery, void, undefined> {
+    return paginate((offset) => this.deliveries(sequenceId, { ...query, offset }));
   }
 
   /** Sends a test of one broadcast or sequence email, rendered like a real

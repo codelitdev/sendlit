@@ -219,7 +219,7 @@ export const contactTools = (): SendLitMcpTool[] => [
     operationId: "contacts.deliveries",
     risk: "read",
     description:
-      "Returns the broadcasts and sequence emails a contact has received, newest first.",
+      "Returns the broadcasts and sequence emails a contact has received, newest first, each with what happened to it: sent, delivered, bounced, complained (marked as spam) or failed.",
     inputSchema: z.object({ contactId: z.string().describe("Contact ID") }),
     outputSchema: contactDeliveryListSchema,
     annotations: { idempotentHint: true, openWorldHint: false },

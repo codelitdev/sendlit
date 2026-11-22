@@ -5,6 +5,7 @@ import {
   emailContentInputSchema,
   publishSequenceChangesBodySchema,
   sequenceDeletionPreviewSchema,
+  sequenceDeliveryOutcomeFilter,
   sequenceEmailTestResultSchema,
   sequenceEmailVersionSchema,
   updateSequenceBodySchema,
@@ -14,6 +15,7 @@ import { broadcastPacing } from "../../abuse/pacing-status";
 import { sequenceDeliveryRates } from "../../automation/sending-health";
 import { emailActionTypes, mailTypes } from "../../config/constants";
 import { responses } from "../../config/strings";
+import { listSequenceDeliveries } from "../../delivery-feedback/delivery-outcomes";
 import {
   broadcastArchiveErrors,
   sequenceDeleteBlockerMessages,
@@ -66,6 +68,7 @@ import {
   toolError,
 } from "./responses";
 import {
+  sequenceDeliveriesPageSchema,
   sequenceListSchema,
   sequenceScheduleSchema,
   sequenceSchema,
@@ -699,6 +702,34 @@ export const sequenceTools = (): SendLitMcpTool[] => [
       const sequence = await getSequenceBySequenceId(context.teamId, args.sequenceId);
       if (!sequence) return notFound();
       return getSequenceSchedule(sequence);
+    },
+  }),
+
+  dedicatedTool({
+    name: "list_sequence_deliveries",
+    title: "List Sequence Deliveries",
+    operationId: "sequences.deliveries",
+    risk: "read",
+    description:
+      "Lists the emails a broadcast or sequence sent and what happened to each (sent, delivered, bounced, complained, failed), most recent outcome first, with the recipient, hard or soft bounce, the ESP's reason, and the address's active suppression. outcome=bounced or outcome=complained lists exactly the sends behind get_sequence_stats' bounceRate and complaintRate. Paginated: offset is the page number, itemsPerPage at most 100.",
+    inputSchema: z.object({
+      sequenceId: z.string().describe("Sequence or broadcast ID"),
+      outcome: z.enum(sequenceDeliveryOutcomeFilter).optional(),
+      offset: z.number().int().min(1).optional().describe("Page number (default: 1)"),
+      itemsPerPage: z.number().int().min(1).max(100).optional(),
+    }),
+    outputSchema: sequenceDeliveriesPageSchema,
+    annotations: { idempotentHint: true, openWorldHint: false },
+    async handler({ context, args }) {
+      const sequence = await getSequenceBySequenceId(context.teamId, args.sequenceId);
+      if (!sequence) return notFound();
+      return listSequenceDeliveries({
+        teamId: context.teamId,
+        sequenceId: sequence.id,
+        outcome: args.outcome,
+        offset: args.offset,
+        rowsPerPage: args.itemsPerPage,
+      });
     },
   }),
 

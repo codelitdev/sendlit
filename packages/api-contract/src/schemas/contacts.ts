@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { customFieldsSchema } from "./custom-fields";
+import { deliveryOutcome } from "./delivery-events";
 import { contactFilterSchema } from "./sequences";
 
 export function parseContactFilterQueryParam(value: string) {
@@ -66,6 +67,15 @@ export const contactDeliverySchema = z.object({
   sequenceType: z.string(),
   emailId: z.string(),
   createdAt: z.string().nullable(),
+  /** Public `msg_...` id of the send; null for sends from before the
+   * outbound message log. */
+  messageId: z.string().nullable(),
+  outcome: z
+    .enum(deliveryOutcome)
+    .nullable()
+    .describe(
+      "What happened to the send: sent (accepted by the ESP, no report yet), delivered, bounced, complained (marked as spam) or failed. null for sends from before the outbound message log.",
+    ),
 });
 
 export const importContactRowSchema = z.object({

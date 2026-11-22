@@ -261,6 +261,15 @@ const cases: Case[] = [
     { method: "GET", path: "/sequences/seq_1/stats" },
   ],
   [
+    "sequences.deliveries",
+    (s) => s.sequences.deliveries("seq_1", { outcome: "bounced", itemsPerPage: 25 }),
+    {
+      method: "GET",
+      path: "/sequences/seq_1/deliveries",
+      query: "?outcome=bounced&itemsPerPage=25",
+    },
+  ],
+  [
     "sequences.subscribers",
     (s) => s.sequences.subscribers("seq_1", { page: 1, limit: 20 }),
     {

@@ -63,6 +63,22 @@ the web versions behind links already sent stop working. Turning it back on
 restores them. It doesn't affect a broadcast's
 [public page](/email-marketing/web-archive), which you publish separately.
 
+## See who bounced or complained
+
+On a broadcast's or sequence's page, **Bounce rate** and **Spam complaints**
+in Email Performance open the recipients behind the number once it is above
+zero. Each row shows the address, whether it was a hard bounce (the address
+doesn't exist or never accepts mail) or a soft one (temporary, such as a full
+mailbox), your email provider's reason, when it happened, and whether the
+address is now on your [suppression list](/email-marketing/delivery-feedback).
+Reasons appear once your provider reports the bounce or complaint, so
+[connect its feedback webhook](/email-marketing/delivery-feedback) to get them.
+
+A contact's page shows the same outcome for every email it was sent
+(delivered, bounced, spam complaint) under **Delivery history**. Through the
+API, use `GET /sequences/{sequenceId}/deliveries?outcome=bounced` (or
+`complained`); over MCP, `list_sequence_deliveries`.
+
 ## Automatic pause on bounces and complaints
 
 While a broadcast or sequence sends, SendLit watches its bounce and spam
