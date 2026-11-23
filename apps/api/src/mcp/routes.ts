@@ -1,3 +1,8 @@
+import {
+  AI_CATALOG_PATH,
+  createAiCatalogHandler,
+  type McpKitResponse,
+} from "@codelitdev/mcp-server-kit";
 import { createMcpOAuthDiscoveryRoutes } from "@codelitdev/oauth-server-kit/mcp";
 import { createPlatformError, toPublicHttpError } from "@codelitdev/platform";
 import express, {
@@ -77,9 +82,29 @@ const jsonBody = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
+function sendKitResponse(res: Response, result: McpKitResponse) {
+  for (const [name, value] of Object.entries(result.headers))
+    res.setHeader(name, value);
+  res.status(result.status);
+  if (result.body === null) res.end();
+  else res.json(result.body);
+}
+
 export function createMcpRoutes(): Router {
   const router = Router();
   const mcp = createSendLitMcp();
+  const aiCatalog = createAiCatalogHandler(mcp.serverCard ? [mcp.serverCard] : []);
+
+  // Discovery documents are public and static: no auth, no MCP rate limit.
+  router.all("/mcp/server-card", (req, res) =>
+    sendKitResponse(
+      res,
+      mcp.handleServerCard({ method: req.method, headers: req.headers }),
+    ),
+  );
+  router.all(AI_CATALOG_PATH, (req, res) =>
+    sendKitResponse(res, aiCatalog({ method: req.method, headers: req.headers })),
+  );
 
   router.use(
     createMcpOAuthDiscoveryRoutes({

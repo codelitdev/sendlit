@@ -1,4 +1,5 @@
 import { createMcpServerKit, type McpServerKit } from "@codelitdev/mcp-server-kit";
+import { mcpProtectedResourceMetadataUrl, mcpResourceUrl } from "../auth/better-auth";
 import { captureError } from "../observability";
 import {
   authenticateMcpRequest,
@@ -65,5 +66,16 @@ export function createSendLitMcp(): McpServerKit<SendLitMcpContext> {
     resolveContext: resolveMcpContext,
     onError: ({ error, source }) => captureError({ error, source }),
     tools: sendLitMcpTools(),
+    // Public discovery card (SEP-2127), served at /mcp/server-card and listed
+    // by /.well-known/ai-catalog.json (see mcp/routes.ts).
+    serverCard: {
+      name: "dev.codelit/sendlit",
+      title: "SendLit",
+      description:
+        "Compose, send and automate email for a SendLit team: contacts, templates, broadcasts, sequences.",
+      endpoint: mcpResourceUrl,
+      websiteUrl: "https://sendlit.app",
+      protectedResourceMetadataUrl: mcpProtectedResourceMetadataUrl,
+    },
   });
 }

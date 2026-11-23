@@ -116,14 +116,14 @@ const impl = s.router(contract.account, {
       throw error;
     }
     // The session row is gone; clear the browser's cookie too.
-    for (const name of [SESSION_COOKIE_NAME, `__Secure-${SESSION_COOKIE_NAME}`]) {
-      res.clearCookie(name, {
-        path: "/",
-        ...(process.env.AUTH_COOKIE_DOMAIN
-          ? { domain: process.env.AUTH_COOKIE_DOMAIN }
-          : {}),
-      });
-    }
+    // `__Host-`/`__Secure-` cookies are only replaced by a Secure Set-Cookie.
+    res.clearCookie(SESSION_COOKIE_NAME, {
+      path: "/",
+      ...(SESSION_COOKIE_NAME.startsWith("__") ? { secure: true } : {}),
+      ...(process.env.AUTH_COOKIE_DOMAIN
+        ? { domain: process.env.AUTH_COOKIE_DOMAIN }
+        : {}),
+    });
     return { status: 204, body: undefined };
   },
 });

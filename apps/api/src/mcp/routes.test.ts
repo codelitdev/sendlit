@@ -34,6 +34,11 @@ mock.module("./server", async () => {
       createMcpServerKit({
         name: "SendLit Test",
         version: "0.0.0",
+        serverCard: {
+          name: "dev.codelit/sendlit",
+          description: "SendLit test server",
+          endpoint: "http://localhost:5000/mcp",
+        },
         authenticate: authenticateMcpRequest,
         resolveContext: resolveMcpContext,
         tools: [
@@ -127,6 +132,36 @@ const listTools = (base: string, headers: Record<string, string>) =>
   });
 
 describe("MCP route", () => {
+  it("serves a public server card listed by the AI catalog, without authenticating", async () => {
+    const base = await origin();
+    const card = await fetch(`${base}/mcp/server-card`, {
+      headers: { accept: "application/mcp-server-card+json" },
+    });
+    expect(card.status).toBe(200);
+    expect(card.headers.get("content-type")).toContain(
+      "application/mcp-server-card+json",
+    );
+    expect(card.headers.get("access-control-allow-origin")).toBe("*");
+    expect(await card.json()).toMatchObject({
+      name: "dev.codelit/sendlit",
+      remotes: [{ type: "streamable-http", url: "http://localhost:5000/mcp" }],
+    });
+    expect(mocks.resolveAuth).not.toHaveBeenCalled();
+
+    const catalog = await fetch(`${base}/.well-known/ai-catalog.json`);
+    expect(catalog.status).toBe(200);
+    expect(await catalog.json()).toEqual({
+      specVersion: "1.0",
+      entries: [
+        {
+          identifier: "urn:air:codelit.dev:mcp:sendlit",
+          type: "application/mcp-server-card+json",
+          url: "http://localhost:5000/mcp/server-card",
+        },
+      ],
+    });
+  });
+
   it("publishes protected-resource metadata with every enforced scope", async () => {
     const base = await origin();
     const response = await fetch(`${base}/.well-known/oauth-protected-resource/mcp`);
