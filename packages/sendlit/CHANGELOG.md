@@ -1,5 +1,12 @@
 # sendlit
 
+## 0.5.0
+
+### Minor Changes
+
+- 7371201: Add `tags` (list, references, rename, remove), `settings.general` (get, update), `overview.get`, and `sequences.sendEmailTest`, so platforms can manage tags, set the mailing address, show dashboard numbers and send test emails without calling the API by hand.
+- bc370d1: `emails.send` takes an optional `fromName`, the From name for that email instead of the delivery source's. The address stays the delivery source's verified one.
+
 ## 0.4.0
 
 ### Minor Changes

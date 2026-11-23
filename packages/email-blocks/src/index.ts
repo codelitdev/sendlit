@@ -28,7 +28,7 @@ export type {
 export { SequenceAnalytics } from "./sequence-analytics";
 export type { SequenceEmailListProps } from "./sequence-email-list";
 export { SequenceEmailList } from "./sequence-email-list";
-export { sequenceStatsMetrics } from "./sequence-stats";
+export { type SequenceStatsActions, sequenceStatsMetrics } from "./sequence-stats";
 export type {
   SubscriberListItem,
   SubscriberListProps,
@@ -36,6 +36,20 @@ export type {
 export { SubscriberList } from "./subscriber-list";
 export type { TagEditorProps } from "./tag-editor";
 export { TagEditor } from "./tag-editor";
+export type {
+  TagManagerLinkProps,
+  TagManagerProps,
+  TagManagerSequence,
+} from "./tag-manager";
+export { TagManager } from "./tag-manager";
+// Hosts implement TagManager's callbacks against their own API with these.
+export type {
+  DeleteTagResult,
+  RenameTagResult,
+  TagReferences,
+  TagSequenceUsage,
+  TagSummary,
+} from "./tag-manager-types";
 export type {
   SystemTemplateSummary,
   TemplateChooserProps,

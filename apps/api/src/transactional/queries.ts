@@ -1,3 +1,4 @@
+import { isValidSenderName } from "@sendlit/api-contract";
 import type { Email as EmailContent } from "@sendlit/email-editor";
 import { and, count, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { reserveSend } from "../billing/entitlements";
@@ -184,7 +185,7 @@ export async function countTransactionalEmails(
  * never goes through that schema).
  *
  * Throws a plain `Error` whose `message` is one of: `invalid_content`,
- * `invalid_headers`, `marketing_variables_not_allowed`,
+ * `invalid_headers`, `invalid_from_name`, `marketing_variables_not_allowed`,
  * `template_not_found`, `render_failed`,
  * `esp_not_configured`, `esp_not_found`, `recipient_suppressed` — callers
  * map these to the PRD's `400`/`422` responses (see
@@ -199,6 +200,7 @@ export async function createTransactionalEmail({
   html,
   text,
   variables = {},
+  fromName,
   replyTo,
   headers,
   idempotencyKey,
@@ -214,6 +216,8 @@ export async function createTransactionalEmail({
   /** Plain-text part, sent verbatim; generated from the HTML when omitted. */
   text?: string;
   variables?: Record<string, unknown>;
+  /** The From name for this send only; the address stays the pinned one. */
+  fromName?: string;
   replyTo?: string;
   headers?: Record<string, string>;
   idempotencyKey?: string;
@@ -245,6 +249,9 @@ export async function createTransactionalEmail({
   // names are owned by the pipeline (sender identity is resolved
   // server-side — see the PRD's validation notes).
   assertValidHeaders(headers);
+  if (fromName !== undefined && !isValidSenderName(fromName)) {
+    throw new Error("invalid_from_name");
+  }
 
   if (idempotencyKey) {
     const existing = await findTransactionalEmailByIdempotencyKey(
@@ -321,7 +328,7 @@ export async function createTransactionalEmail({
   }
 
   const from = getEmailFrom({
-    name: pin.fromName,
+    name: fromName?.trim() ?? pin.fromName,
     email: pin.fromEmail,
   });
 

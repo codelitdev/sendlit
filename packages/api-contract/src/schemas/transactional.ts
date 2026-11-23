@@ -41,6 +41,34 @@ export const transactionalEmailDetailSchema = transactionalEmailSchema.extend({
   text: z.string().nullable().optional(),
 });
 
+/** A sender name a caller may set for one send. Only the display name: the
+ * address is always the delivery source's verified one. Refused, so the name
+ * can't break the From header or pass for an address:
+ * - control characters (`Cc`), which include line breaks;
+ * - invisible formatting characters (`Cf`), such as right-to-left overrides
+ *   and zero-width spaces, which can make a name read as something else;
+ * - `<`, `>` and `@`.
+ * Anything else is quoted when the header is built. */
+export const MAX_SENDER_NAME_LENGTH = 100;
+
+export function isValidSenderName(name: string): boolean {
+  const trimmed = name.trim();
+  return (
+    trimmed.length > 0 &&
+    trimmed.length <= MAX_SENDER_NAME_LENGTH &&
+    !/[\p{Cc}\p{Cf}<>@]/u.test(trimmed)
+  );
+}
+
+export const senderNameSchema = z
+  .string()
+  .refine(isValidSenderName, {
+    message: `1-${MAX_SENDER_NAME_LENGTH} characters, without control or invisible formatting characters, <, > or @`,
+  })
+  .describe(
+    "The From name for this email, instead of the delivery source's. The address stays the delivery source's.",
+  );
+
 /** Headers the send pipeline owns — caller-supplied values would spoof the
  * resolved sender identity or corrupt the MIME envelope. */
 const reservedHeaders = ["from", "to", "subject", "content-type"] as const;
@@ -75,6 +103,7 @@ export const sendEmailBodySchema = z
         "Plain-text part, sent verbatim. When omitted it is generated from the HTML.",
       ),
     variables: z.record(z.any()).optional(),
+    fromName: senderNameSchema.optional(),
     replyTo: z.string().email().optional(),
     headers: emailHeadersSchema.optional(),
     idempotencyKey: z.string().min(1).max(256).optional(),

@@ -473,6 +473,52 @@ describe("createTransactionalEmail happy paths", () => {
     expect(row.html).toBe("<p>Hello {{ not_a_liquid_tag }}</p>");
   });
 
+  it("uses the caller's sender name with the pinned address", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    const pinned = await createTransactionalEmail({
+      teamId: team.id,
+      to: "buyer@example.com",
+      subject: "Your receipt",
+      html: "<p>hi</p>",
+    });
+    const address = pinned.fromEmail!.match(/<([^>]+)>$/)![1];
+
+    const row = await createTransactionalEmail({
+      teamId: team.id,
+      to: "buyer@example.com",
+      subject: "Your receipt",
+      html: "<p>hi</p>",
+      fromName: "  Yoga, with Nalini ",
+    });
+
+    expect(row.fromEmail).toBe(`"Yoga, with Nalini" <${address}>`);
+  });
+
+  it("rejects a sender name that could break or fake the From header", async () => {
+    const { team } = await seedTeamAndContact(tdb);
+    for (const fromName of [
+      "",
+      "   ",
+      "Evil\r\nBcc: x@example.com",
+      "PayPal <a@b.c>",
+      "support@paypal.com",
+      "Shop \u202Emoc.lapyap",
+      "Pay\u200BPal",
+      "x".repeat(101),
+    ]) {
+      await expect(
+        createTransactionalEmail({
+          teamId: team.id,
+          to: "a@example.com",
+          subject: "Hi",
+          html: "<p>hi</p>",
+          fromName,
+        }),
+      ).rejects.toThrow("invalid_from_name");
+    }
+    expect(queue.addTransactionalMailJob).not.toHaveBeenCalled();
+  });
+
   it("accepts transactional sends without a workspace mailing address", async () => {
     const { team } = await seedTeamAndContact(tdb, {
       settings: { mailingAddress: null },

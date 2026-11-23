@@ -232,6 +232,13 @@
       "when": 1794334080587,
       "tag": "0032_organization_feedback_notice",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795335657730,
+      "tag": "0033_outbound_campaign_delivery_index",
+      "breakpoints": true
     }
   ]
 }

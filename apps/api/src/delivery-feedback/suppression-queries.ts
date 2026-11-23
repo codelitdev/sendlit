@@ -35,24 +35,31 @@ export async function isRecipientSuppressed(
   return Boolean(row);
 }
 
-/** Active suppression reasons for many recipients at once, keyed by
- * normalized email. Recipients that aren't suppressed are absent. */
-export async function getActiveSuppressionReasons(
+/** Active suppressions for many recipients at once, keyed by normalized
+ * email. Recipients that aren't suppressed are absent. */
+export async function getActiveSuppressions(
   teamId: string,
   emails: string[],
   /** Pass the caller's transaction when there is one. */
   executor: Pick<typeof db, "select"> = db,
-): Promise<Map<string, SuppressionReason>> {
+): Promise<Map<string, { suppressionId: string; reason: SuppressionReason }>> {
   const byHash = new Map(
     emails.map((email) => {
       const normalized = normalizeEmail(email);
       return [hashRecipient(normalized), normalized] as const;
     }),
   );
-  const reasons = new Map<string, SuppressionReason>();
-  if (byHash.size === 0) return reasons;
+  const suppressions = new Map<
+    string,
+    { suppressionId: string; reason: SuppressionReason }
+  >();
+  if (byHash.size === 0) return suppressions;
   const rows = await executor
-    .select({ hash: emailSuppressions.recipientHash, reason: emailSuppressions.reason })
+    .select({
+      hash: emailSuppressions.recipientHash,
+      suppressionId: emailSuppressions.suppressionId,
+      reason: emailSuppressions.reason,
+    })
     .from(emailSuppressions)
     .where(
       and(
@@ -63,9 +70,26 @@ export async function getActiveSuppressionReasons(
     );
   for (const row of rows) {
     const email = byHash.get(row.hash);
-    if (email) reasons.set(email, row.reason as SuppressionReason);
+    if (email) {
+      suppressions.set(email, {
+        suppressionId: row.suppressionId,
+        reason: row.reason as SuppressionReason,
+      });
+    }
   }
-  return reasons;
+  return suppressions;
+}
+
+/** Active suppression reasons for many recipients at once, keyed by
+ * normalized email. Recipients that aren't suppressed are absent. */
+export async function getActiveSuppressionReasons(
+  teamId: string,
+  emails: string[],
+  /** Pass the caller's transaction when there is one. */
+  executor: Pick<typeof db, "select"> = db,
+): Promise<Map<string, SuppressionReason>> {
+  const suppressions = await getActiveSuppressions(teamId, emails, executor);
+  return new Map([...suppressions].map(([email, { reason }]) => [email, reason]));
 }
 
 export async function getActiveSuppression(

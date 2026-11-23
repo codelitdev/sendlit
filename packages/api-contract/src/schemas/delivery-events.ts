@@ -46,3 +46,16 @@ export const listDeliveryEventsQuerySchema = z.object({
   offset: z.coerce.number().int().min(1).optional(),
   itemsPerPage: z.coerce.number().int().min(1).optional(),
 });
+
+/** What happened to one sent email, from the outbound message ledger:
+ * `complained` when the recipient marked it as spam (even if it was
+ * delivered), else `bounced`, `delivered`, `failed`, or `sent` when the ESP
+ * accepted it and hasn't reported back yet. */
+export const deliveryOutcome = [
+  "sent",
+  "delivered",
+  "bounced",
+  "complained",
+  "failed",
+] as const;
+export type DeliveryOutcome = (typeof deliveryOutcome)[number];

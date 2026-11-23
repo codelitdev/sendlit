@@ -63,12 +63,15 @@ new SendLit({
 | `sendlit.contacts`       | `create`, `list`, `listAll`, `get`, `update`, `remove`, `addTag`, `removeTag`, `deliveries`, `events`                                                                |
 | `sendlit.segments`       | `create`, `list`, `get`, `update`, `remove`                                                                                                                          |
 | `sendlit.templates`      | `list`, `listSystem`, `get`, `create`, `update`, `duplicate`, `remove`                                                                                               |
-| `sendlit.sequences`      | Broadcasts and sequences: `create`, `list`, `listAll`, `get`, `update`, `remove`, `addEmail`, `updateEmail`, `publishChanges`, `discardChanges`, `emailVersions`, `restoreEmailVersion`, `removeEmail`, `start`, `pause`, `stats`, `subscribers` |
+| `sendlit.sequences`      | Broadcasts and sequences: `create`, `list`, `listAll`, `get`, `update`, `remove`, `addEmail`, `updateEmail`, `publishChanges`, `discardChanges`, `emailVersions`, `restoreEmailVersion`, `removeEmail`, `start`, `pause`, `stats`, `deliveries`, `listAllDeliveries`, `subscribers`, `sendEmailTest` |
 | `sendlit.emails`         | Transactional email: `send`, `get`, `list`, `listAll`                                                                                                                |
 | `sendlit.events`         | Custom events: `track`, and `definitions.list`, `definitions.get`, `definitions.create`, `definitions.update`, `definitions.delete`                                  |
 | `sendlit.provisioning`   | Organization key only: `provisionTeam`, `getTeam`, `updateTeam`, `createTeamKey`, `suspendTeam`, `resumeTeam`, `archiveTeam`, `getTeamUsage`                         |
 | `sendlit.suppressions`   | `list`, `listAll`, `get`, `release`                                                                                                                                  |
 | `sendlit.deliveryEvents` | `list`, `listAll`, `get`                                                                                                                                             |
+| `sendlit.tags`           | `list`, `references`, `rename`, `remove`                                                                                                                             |
+| `sendlit.settings`       | `general.get`, `general.update` (the mailing address broadcasts and sequences need)                                                                                  |
+| `sendlit.overview`       | `get`: the team's dashboard numbers, optionally for `rangeDays` 1, 3, 7 or 30                                                                                        |
 
 Request and response types are exported too, for example `Contact`,
 `CreateContactInput`, `Sequence`, and `SendEmailInput`.

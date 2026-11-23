@@ -1,5 +1,7 @@
 "use client";
 
+import type { SequenceDeliveryOutcomeFilter } from "@sendlit/api-contract";
+
 import {
   ContactFilterBuilder,
   type ContactFilterWithAggregator,
@@ -29,6 +31,7 @@ import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { BroadcastWebDialog } from "@/components/dashboard/broadcast-web-dialog";
 import { DeleteSequenceDialog } from "@/components/dashboard/delete-sequence-dialog";
+import { DeliveryRecipientsDialog } from "@/components/dashboard/delivery-recipients-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import {
   EmailMoreMenu,
@@ -127,6 +130,8 @@ export default function BroadcastEditorPage({
   const [meta, setMeta] = useState<BroadcastMeta | null>(null);
   const [email, setEmail] = useState<BroadcastEmailDraft | null>(null);
   const [stats, setStats] = useState<SequenceStats | null>(null);
+  const [recipientsOutcome, setRecipientsOutcome] =
+    useState<SequenceDeliveryOutcomeFilter | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -454,6 +459,11 @@ export default function BroadcastEditorPage({
           </div>
         </div>
 
+        <DeliveryRecipientsDialog
+          sequenceId={sequenceId}
+          outcome={recipientsOutcome}
+          onOpenChange={(open) => !open && setRecipientsOutcome(null)}
+        />
         <DeleteSequenceDialog
           sequence={deleteOpen ? sequence : null}
           type="broadcast"
@@ -546,7 +556,10 @@ export default function BroadcastEditorPage({
         {stats && (
           <SequenceAnalytics
             className="mb-6"
-            metrics={sequenceStatsMetrics(stats)}
+            metrics={sequenceStatsMetrics(stats, undefined, {
+              onViewBounced: () => setRecipientsOutcome("bounced"),
+              onViewComplained: () => setRecipientsOutcome("complained"),
+            })}
             onRefresh={async () => setStats(await getSequenceStats(sequenceId))}
           />
         )}

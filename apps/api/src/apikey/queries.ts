@@ -1,6 +1,7 @@
 import { and, eq, gt, isNull, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { organizationApiKeys, teamApiKeys } from "../db/schema";
+import logger from "../services/log";
 import {
   displayPrefix,
   generateApiKeySecret,
@@ -96,14 +97,19 @@ export async function createOrganizationApiKey(
 
 /** Register an operator-supplied organization key without ever returning or
  * logging its plaintext. Re-running bootstrap with the same secret and role
- * is a no-op; a revoked, expired, cross-organization, or differently scoped
- * key fails closed instead of being silently repaired. */
+ * is a no-op; a revoked, expired, or cross-organization key fails closed
+ * instead of being silently repaired. A key whose stored scopes differ also
+ * fails closed, unless the caller passes `reconcileScopes` and the key carries
+ * the same `name`: bootstrap owns the scopes of the keys it registers, so a
+ * newer release can widen them on restart. A key created for another role, or
+ * by hand, whose secret ends up in that setting still fails closed. */
 export async function registerConfiguredOrganizationApiKey(
   organizationId: string,
   name: string,
   scopes: string[],
   secret: string,
   createdByUserId?: string,
+  options: { reconcileScopes?: boolean } = {},
 ): Promise<{ apiKey: OrganizationApiKey; created: boolean }> {
   if (!isOrganizationApiKeySecret(secret)) {
     throw new Error("configured_organization_api_key_invalid");
@@ -111,9 +117,9 @@ export async function registerConfiguredOrganizationApiKey(
 
   const keyHash = hashApiKeySecret(secret);
   const expectedScopes = [...new Set(scopes)].sort();
-  const validateExisting = (
+  const validateExisting = async (
     apiKey: OrganizationApiKey,
-  ): { apiKey: OrganizationApiKey; created: false } => {
+  ): Promise<{ apiKey: OrganizationApiKey; created: false }> => {
     if (apiKey.organizationId !== organizationId) {
       throw new Error("configured_organization_api_key_org_mismatch");
     }
@@ -125,7 +131,27 @@ export async function registerConfiguredOrganizationApiKey(
     }
     const actualScopes = [...new Set(apiKey.scopes)].sort();
     if (JSON.stringify(actualScopes) !== JSON.stringify(expectedScopes)) {
-      throw new Error("configured_organization_api_key_scope_mismatch");
+      if (!options.reconcileScopes || apiKey.name !== name) {
+        throw new Error("configured_organization_api_key_scope_mismatch");
+      }
+      const [updated] = await db
+        .update(organizationApiKeys)
+        .set({ scopes: expectedScopes })
+        .where(eq(organizationApiKeys.id, apiKey.id))
+        .returning();
+      logger.info(
+        {
+          organizationId,
+          keyName: apiKey.name,
+          previousScopes: actualScopes,
+          scopes: expectedScopes,
+        },
+        "Reconciled configured organization API key scopes",
+      );
+      return {
+        apiKey: updated ?? { ...apiKey, scopes: expectedScopes },
+        created: false,
+      };
     }
     return { apiKey, created: false };
   };
@@ -135,7 +161,7 @@ export async function registerConfiguredOrganizationApiKey(
     .from(organizationApiKeys)
     .where(eq(organizationApiKeys.keyHash, keyHash))
     .limit(1);
-  if (existing) return validateExisting(existing);
+  if (existing) return await validateExisting(existing);
 
   const [created] = await db
     .insert(organizationApiKeys)
@@ -160,7 +186,7 @@ export async function registerConfiguredOrganizationApiKey(
   if (!raced) {
     throw new Error("configured_organization_api_key_registration_conflict");
   }
-  return validateExisting(raced);
+  return await validateExisting(raced);
 }
 
 export async function getOrganizationApiKeys(

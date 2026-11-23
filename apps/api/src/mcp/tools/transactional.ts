@@ -1,5 +1,6 @@
 import {
   emailHeadersSchema,
+  senderNameSchema,
   transactionalEmailDetailSchema,
   transactionalEmailSchema,
   transactionalEmailStatus,
@@ -35,6 +36,10 @@ const SEND_ERRORS: Record<string, [Parameters<typeof toolError>[0], string]> = {
   invalid_headers: [
     "validation_failed",
     "Header names/values must not contain CR/LF; From, To, Subject and Content-Type are set by the send pipeline",
+  ],
+  invalid_from_name: [
+    "validation_failed",
+    "fromName must be 1-100 characters, without control or invisible formatting characters, <, > or @",
   ],
   template_not_transactional: [
     "validation_failed",
@@ -90,6 +95,7 @@ export const transactionalTools = (): SendLitMcpTool[] => [
         .describe(
           "Liquid merge variables; requires `templateId`. Provide every unguarded merge tag; use `{% if %}` or `default` in the template for optional values.",
         ),
+      fromName: senderNameSchema.optional(),
       replyTo: z.string().email().optional(),
       headers: emailHeadersSchema
         .optional()

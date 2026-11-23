@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "outbound_messages_campaign_delivery_id_idx" ON "outbound_messages" USING btree ("campaign_delivery_id");

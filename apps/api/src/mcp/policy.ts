@@ -102,6 +102,7 @@ const operationScopes = {
   "sequences.start": MCP_SCOPES.sequencesWrite,
   "sequences.pause": MCP_SCOPES.sequencesWrite,
   "sequences.stats": MCP_SCOPES.sequencesRead,
+  "sequences.deliveries": MCP_SCOPES.sequencesRead,
   "sequences.schedule": MCP_SCOPES.sequencesRead,
   "sequences.waitingContacts": MCP_SCOPES.sequencesRead,
   "sequences.getWeb": MCP_SCOPES.sequencesRead,

@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { emailContentInputSchema, emailContentSchema } from "./common";
 import { deliverySourceSelectionSchema } from "./delivery";
+import { deliveryOutcome } from "./delivery-events";
 import { eventPropertyFilterSchema, propertyChangeFilterSchema } from "./events";
+import { suppressionReason } from "./suppressions";
 
 export const mailTypes = ["broadcast", "sequence"] as const;
 export const sequenceStatus = ["draft", "active", "paused", "completed"] as const;
@@ -392,6 +394,61 @@ export const waitingContactsPageSchema = z.object({
     .describe("Pass as `after` for the next page; null on the last page"),
 });
 
+/** Outcomes `GET /sequences/{sequenceId}/deliveries` can filter by: the
+ * sends behind the stats' bounce rate and spam complaint rate. */
+export const sequenceDeliveryOutcomeFilter = ["bounced", "complained"] as const;
+
+export const listSequenceDeliveriesQuerySchema = z.object({
+  outcome: z
+    .enum(sequenceDeliveryOutcomeFilter)
+    .optional()
+    .describe(
+      "bounced: sends the ESP reported as bounced. complained: sends the recipient marked as spam. Omit for every send.",
+    ),
+  offset: z.coerce.number().int().min(1).optional().describe("Page number (default 1)"),
+  itemsPerPage: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export const sequenceDeliverySchema = z.object({
+  messageId: z.string().describe("Public `msg_...` id of the send"),
+  contactId: z.string(),
+  email: z.string().describe("The address the email was sent to"),
+  emailId: z.string().describe("Which email of the sequence or broadcast it was"),
+  outcome: z.enum(deliveryOutcome),
+  bounceType: z
+    .enum(["hard", "soft"])
+    .nullable()
+    .describe(
+      "hard: permanent (the address doesn't exist or refuses mail). soft: temporary (mailbox full, server down). null when the send didn't bounce or the ESP didn't say",
+    ),
+  reason: z
+    .string()
+    .nullable()
+    .describe(
+      "The ESP's reason or diagnostic for the bounce or complaint, if it sent one",
+    ),
+  smtpCode: z.number().nullable(),
+  enhancedStatusCode: z.string().nullable().describe("e.g. 5.1.1"),
+  occurredAt: z
+    .string()
+    .nullable()
+    .describe(
+      "When the outcome happened (ISO 8601): the complaint, bounce, delivery or send",
+    ),
+  suppression: z
+    .object({
+      suppressionId: z.string(),
+      reason: z.enum(suppressionReason),
+    })
+    .nullable()
+    .describe("The address's active suppression, if SendLit no longer mails it"),
+});
+
+export const sequenceDeliveriesPageSchema = z.object({
+  items: z.array(sequenceDeliverySchema),
+  total: z.number().describe("Every matching send, across all pages"),
+});
+
 export const sequenceDeletionPreviewSchema = z.object({
   status: z.string().describe("The broadcast or sequence's current status"),
   blocker: z
@@ -414,6 +471,10 @@ export type SequenceDeletionPreview = z.infer<typeof sequenceDeletionPreviewSche
 export type SequenceSchedule = z.infer<typeof sequenceScheduleSchema>;
 export type WaitingContact = z.infer<typeof waitingContactSchema>;
 export type WaitingContactsPage = z.infer<typeof waitingContactsPageSchema>;
+export type SequenceDelivery = z.infer<typeof sequenceDeliverySchema>;
+export type SequenceDeliveriesPage = z.infer<typeof sequenceDeliveriesPageSchema>;
+export type SequenceDeliveryOutcomeFilter =
+  (typeof sequenceDeliveryOutcomeFilter)[number];
 
 export const listSubscribersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),

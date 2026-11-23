@@ -184,7 +184,8 @@ revoked, expired, belongs to another organization, or has different scopes.
 Use separate keys: the short-lived delivery setup key has
 `organization:read`, `esps:read`, `esps:manage`, `delivery:read`, and
 `delivery:manage`; the runtime team provisioning key has only
-`organization:read`, `teams:provision`, and `teams:read`. `delivery:manage`
+`organization:read`, `teams:provision`, `teams:read`,
+`teams:manage`, `teams:keys`, and `usage:read`. `delivery:manage`
 also authorizes quota and team-delivery policy fields, so revoke it after
 one-time setup if it is no longer needed. Compose passes both keys only to
 `init` and clears them from the long-running API and web containers. Configure

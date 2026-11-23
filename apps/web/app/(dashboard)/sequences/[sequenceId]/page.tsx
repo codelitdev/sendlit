@@ -1,6 +1,9 @@
 "use client";
 
-import type { SequenceSchedule } from "@sendlit/api-contract";
+import type {
+  SequenceDeliveryOutcomeFilter,
+  SequenceSchedule,
+} from "@sendlit/api-contract";
 import {
   type Email,
   type EmailActionType,
@@ -23,6 +26,7 @@ import { AutoPauseBanner } from "@/components/dashboard/auto-pause-banner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteSequenceDialog } from "@/components/dashboard/delete-sequence-dialog";
+import { DeliveryRecipientsDialog } from "@/components/dashboard/delivery-recipients-dialog";
 import { DeliverySourcePicker } from "@/components/dashboard/delivery-source-picker";
 import {
   EmailMoreMenu,
@@ -131,6 +135,8 @@ export default function SequenceEditorPage({
   const [stats, setStats] = useState<SequenceStats | null>(null);
   const [schedule, setSchedule] = useState<SequenceSchedule | null>(null);
   const [waitingEmailId, setWaitingEmailId] = useState<string | null>(null);
+  const [recipientsOutcome, setRecipientsOutcome] =
+    useState<SequenceDeliveryOutcomeFilter | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingMeta, setSavingMeta] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
@@ -386,6 +392,14 @@ export default function SequenceEditorPage({
           })()}
           onOpenChange={(open) => !open && setWaitingEmailId(null)}
         />
+        <DeliveryRecipientsDialog
+          sequenceId={sequenceId}
+          outcome={recipientsOutcome}
+          emailSubjects={Object.fromEntries(
+            sequence.emails.map((email) => [email.emailId, email.subject]),
+          )}
+          onOpenChange={(open) => !open && setRecipientsOutcome(null)}
+        />
         <DeleteSequenceDialog
           sequence={deleteOpen ? sequence : null}
           onOpenChange={setDeleteOpen}
@@ -405,7 +419,10 @@ export default function SequenceEditorPage({
         {stats && (
           <SequenceAnalytics
             className="mb-6"
-            metrics={sequenceStatsMetrics(stats, schedule?.waiting)}
+            metrics={sequenceStatsMetrics(stats, schedule?.waiting, {
+              onViewBounced: () => setRecipientsOutcome("bounced"),
+              onViewComplained: () => setRecipientsOutcome("complained"),
+            })}
             onRefresh={async () => setStats(await getSequenceStats(sequenceId))}
           />
         )}

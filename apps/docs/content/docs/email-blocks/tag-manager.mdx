@@ -1,0 +1,53 @@
+---
+title: TagManager
+description: List, rename and delete the tags your contacts carry.
+---
+
+`TagManager` lists every tag on your contacts with how many carry it. People
+can rename a tag everywhere it's used, or delete it from every contact. Before
+a delete it shows the segments, broadcasts, sequences and signup forms that
+still name the tag, since those keep the old name. It's the same screen as
+SendLit's **Contacts → Tags** page.
+
+## Usage
+
+Give it one function for each of SendLit's tag endpoints. Hosts call them
+through their own backend, which holds the team's API key.
+
+```tsx
+import { TagManager } from "@sendlit/email-blocks";
+import Link from "next/link";
+
+function TagsPage() {
+    return (
+        <TagManager
+            listTags={async () => (await api.get("/tags")).items}
+            getTagReferences={(tag) => api.get(`/tags/${encodeURIComponent(tag)}/references`)}
+            renameTag={(tag, name) =>
+                api.patch(`/tags/${encodeURIComponent(tag)}`, { name })
+            }
+            deleteTag={(tag) => api.delete(`/tags/${encodeURIComponent(tag)}`)}
+            sequenceHref={(sequence) =>
+                `/${sequence.type === "broadcast" ? "broadcasts" : "sequences"}/${sequence.sequenceId}`
+            }
+            linkComponent={Link}
+        />
+    );
+}
+```
+
+## Props
+
+| Prop | Description |
+| --- | --- |
+| `listTags` | Returns every tag with its `contactCount` (`GET /tags`). |
+| `getTagReferences` | Returns what still names a tag (`GET /tags/:tag/references`). Called when the delete dialog opens. |
+| `renameTag` | Renames a tag everywhere (`PATCH /tags/:tag`). Renaming to an existing tag merges the two. |
+| `deleteTag` | Removes a tag from every contact (`DELETE /tags/:tag`). |
+| `sequenceHref` | Optional. Where a broadcast or sequence that uses the tag is edited. Without it they aren't linked. |
+| `linkComponent` | Optional. The link to render those with, such as Next.js `Link`. A plain anchor by default. |
+| `loadingIndicator` | Optional. Shown while tags or references load. Skeleton rows by default. |
+| `errorMessage` | Optional. `(error, fallback) => string` for failed calls. Defaults to the error's message. |
+
+The `TagSummary`, `TagReferences`, `RenameTagResult` and `DeleteTagResult`
+types are exported too, for typing those functions.

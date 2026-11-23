@@ -29,4 +29,29 @@ describe("sequenceStatsMetrics", () => {
     expect(labels).toContainEqual(["Bounce rate", "1.5%"]);
     expect(labels).toContainEqual(["Spam complaints", "0.04%"]);
   });
+
+  it("mentions the 100-email minimum before sending pauses", () => {
+    const metrics = sequenceStatsMetrics({ ...stats, bounceRate: 0, complaintRate: 0 });
+    for (const label of ["Bounce rate", "Spam complaints"]) {
+      expect(metrics.find((m) => m.label === label)?.helpText).toContain(
+        "once 100 emails have gone out",
+      );
+    }
+  });
+
+  it("opens the recipients behind a rate only when it is above zero", () => {
+    const onViewBounced = () => {};
+    const onViewComplained = () => {};
+    const metrics = sequenceStatsMetrics(
+      { ...stats, bounceRate: 0.05, complaintRate: 0 },
+      undefined,
+      { onViewBounced, onViewComplained },
+    );
+    expect(metrics.find((m) => m.label === "Bounce rate")?.onSelect).toBe(
+      onViewBounced,
+    );
+    expect(
+      metrics.find((m) => m.label === "Spam complaints")?.onSelect,
+    ).toBeUndefined();
+  });
 });

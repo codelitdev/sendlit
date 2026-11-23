@@ -743,7 +743,7 @@ Supported Phase 1 scopes:
 - `usage:read`
 
 The CourseLit runtime key should use only `organization:read`,
-`teams:provision`, and `teams:read`. A one-time delivery setup key may use
+`teams:provision`, `teams:read`, `teams:manage`, `teams:keys`, and `usage:read`. A one-time delivery setup key may use
 `organization:read`, `esps:read`, `esps:manage`, `delivery:read`, and
 `delivery:manage`. The last scope authorizes every field in the delivery
 policy schema, including quota and team-delivery controls, so revoke that key

@@ -119,12 +119,14 @@ import {
   addSequenceEmailBodySchema,
   createSequenceBodySchema,
   discardSequenceChangesBodySchema,
+  listSequenceDeliveriesQuerySchema,
   listSequencesQuerySchema,
   listSubscribersQuerySchema,
   listWaitingContactsQuerySchema,
   publishSequenceChangesBodySchema,
   sendSequenceEmailTestBodySchema,
   sequenceDeletionPreviewSchema,
+  sequenceDeliveriesPageSchema,
   sequenceEmailTestResultSchema,
   sequenceEmailVersionSchema,
   sequenceScheduleSchema,
@@ -332,7 +334,9 @@ const contactsContract = c.router(
         200: c.type<z.infer<typeof contactDeliverySchema>[]>(),
         404: errorSchema,
       },
-      summary: "List broadcasts/sequence emails delivered to a contact",
+      summary: "List broadcasts/sequence emails sent to a contact",
+      description:
+        "Newest first. Each send has its `outcome`: sent (accepted by the ESP, no report yet), delivered, bounced, complained (marked as spam) or failed; null for sends from before the outbound message log.",
     },
     events: {
       method: "GET",
@@ -812,6 +816,19 @@ const sequencesContract = c.router(
       path: "/sequences/:sequenceId/stats",
       responses: { 200: sequenceStatsSchema, 404: errorSchema },
       summary: "Delivery / open-rate / click-through-rate stats for a sequence",
+    },
+    deliveries: {
+      method: "GET",
+      path: "/sequences/:sequenceId/deliveries",
+      query: listSequenceDeliveriesQuerySchema,
+      responses: {
+        200: sequenceDeliveriesPageSchema,
+        400: errorSchema,
+        404: errorSchema,
+      },
+      summary: "List the sends of a sequence or broadcast and what happened to each",
+      description:
+        "One row per email sent (accepted by the ESP), most recent outcome first, with the recipient, the outcome (sent, delivered, bounced, complained, failed), the bounce type and the ESP's reason when it reported one, and the address's active suppression if any. `outcome=bounced` and `outcome=complained` list exactly the sends counted by the `bounceRate` and `complaintRate` of GET /sequences/{sequenceId}/stats. Pages hold `itemsPerPage` sends (default 10, at most 100); `offset` is the page number. Sends whose contact was deleted are not listed.",
     },
     schedule: {
       method: "GET",

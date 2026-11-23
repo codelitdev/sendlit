@@ -105,14 +105,23 @@ describe("initial organization owner bootstrap", () => {
       ],
       setupSecret,
       "existing",
+      { reconcileScopes: true },
     );
     expect(bootstrapMocks.registerConfiguredOrganizationApiKey).toHaveBeenNthCalledWith(
       2,
       "org-internal",
       "[Auto-generated] Team Provisioning",
-      ["organization:read", "teams:provision", "teams:read"],
+      [
+        "organization:read",
+        "teams:provision",
+        "teams:read",
+        "teams:manage",
+        "teams:keys",
+        "usage:read",
+      ],
       runtimeSecret,
       "existing",
+      { reconcileScopes: true },
     );
     const logged = JSON.stringify(bootstrapMocks.info.mock.calls);
     expect(logged).not.toContain(setupSecret);

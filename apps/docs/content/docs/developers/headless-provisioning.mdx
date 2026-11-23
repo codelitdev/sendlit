@@ -21,7 +21,7 @@ mobile code.
 | Key               | Bootstrap display name              | Scopes                                                                              | Use                                            |
 | ----------------- | ----------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------- |
 | Delivery setup    | `[Auto-generated] Delivery Setup` | `organization:read`, `esps:read`, `esps:manage`, `delivery:read`, `delivery:manage` | One-time ESP and delivery-policy configuration |
-| Team provisioning | `[Auto-generated] Team Provisioning` | `organization:read`, `teams:provision`, `teams:read`                                | Ongoing server-to-server team provisioning     |
+| Team provisioning | `[Auto-generated] Team Provisioning` | `organization:read`, `teams:provision`, `teams:read`, `teams:manage`, `teams:keys`, `usage:read`                                | Ongoing server-to-server team provisioning     |
 
 `delivery:manage` authorizes every field in the delivery-policy update schema,
 including shared quotas and team-delivery controls—not only the default ESP

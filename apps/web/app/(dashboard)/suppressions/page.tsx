@@ -41,6 +41,7 @@ import {
   isSuppressionOwnerReleasable,
   listSuppressions,
   releaseSuppression,
+  SUPPRESSION_REASON_LABEL,
   type Suppression,
   type SuppressionReason,
 } from "@/lib/api";
@@ -50,20 +51,11 @@ const PAGE_SIZE = 25;
 
 const REASON_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "All reasons" },
-  { value: "hard_bounce", label: "Hard bounce" },
-  { value: "complaint", label: "Spam complaint" },
-  { value: "repeated_soft_bounce", label: "Repeated soft bounce" },
-  { value: "provider_suppression", label: "Provider suppression" },
-  { value: "manual", label: "Manual" },
+  ...Object.entries(SUPPRESSION_REASON_LABEL).map(([value, label]) => ({
+    value,
+    label,
+  })),
 ];
-
-const REASON_LABEL: Record<SuppressionReason, string> = {
-  hard_bounce: "Hard bounce",
-  complaint: "Spam complaint",
-  repeated_soft_bounce: "Repeated soft bounce",
-  provider_suppression: "Provider suppression",
-  manual: "Manual",
-};
 
 const REASON_BADGE_VARIANT: Record<
   SuppressionReason,
@@ -227,7 +219,7 @@ export default function SuppressionsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={REASON_BADGE_VARIANT[item.reason]}>
-                        {REASON_LABEL[item.reason]}
+                        {SUPPRESSION_REASON_LABEL[item.reason]}
                       </Badge>
                     </TableCell>
                     <TableCell>

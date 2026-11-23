@@ -8,6 +8,8 @@ const routes = contract.sequences;
  * `type`. */
 export type Sequence = Ok<typeof routes.get>;
 export type SequenceStats = Ok<typeof routes.stats>;
+export type SequenceDelivery = Ok<typeof routes.deliveries>["items"][number];
+export type ListSequenceDeliveriesQuery = Query<typeof routes.deliveries>;
 export type CreateSequenceInput = Body<typeof routes.create>;
 export type UpdateSequenceInput = Body<typeof routes.update>;
 export type AddSequenceEmailInput = Body<typeof routes.addEmail>;
@@ -17,6 +19,8 @@ export type DiscardSequenceChangesInput = Body<typeof routes.discardChanges>;
 export type SequenceEmailVersion = Ok<typeof routes.emailVersions>["items"][number];
 export type ListSequencesQuery = Query<typeof routes.list>;
 export type ListSequenceSubscribersQuery = Query<typeof routes.subscribers>;
+export type SendSequenceEmailTestInput = Body<typeof routes.sendEmailTest>;
+export type SequenceEmailTestResult = Ok<typeof routes.sendEmailTest>;
 
 export class Sequences {
   constructor(private readonly http: HttpClient) {}
@@ -155,6 +159,43 @@ export class Sequences {
   async stats(sequenceId: string): Promise<SequenceStats> {
     return this.http.request(routes.stats, {
       params: { sequenceId: assertId(sequenceId, "sequenceId") },
+    });
+  }
+
+  /** The emails a broadcast or sequence sent and what happened to each.
+   * `outcome: "bounced"` or `"complained"` lists the recipients behind the
+   * stats' bounce and complaint rates. */
+  async deliveries(
+    sequenceId: string,
+    query: ListSequenceDeliveriesQuery = {},
+  ): Promise<Ok<typeof routes.deliveries>> {
+    return this.http.request(routes.deliveries, {
+      params: { sequenceId: assertId(sequenceId, "sequenceId") },
+      query,
+    });
+  }
+
+  listAllDeliveries(
+    sequenceId: string,
+    query: Omit<ListSequenceDeliveriesQuery, "offset"> = {},
+  ): AsyncGenerator<SequenceDelivery, void, undefined> {
+    return paginate((offset) => this.deliveries(sequenceId, { ...query, offset }));
+  }
+
+  /** Sends a test of one broadcast or sequence email, rendered like a real
+   * send with a `[Test]` subject prefix. Tests count against the team's test
+   * limits (429 `test_send_limit_reached` / `test_send_email_limit_reached`). */
+  async sendEmailTest(
+    sequenceId: string,
+    emailId: string,
+    input: SendSequenceEmailTestInput,
+  ): Promise<SequenceEmailTestResult> {
+    return this.http.request(routes.sendEmailTest, {
+      params: {
+        sequenceId: assertId(sequenceId, "sequenceId"),
+        emailId: assertId(emailId, "emailId"),
+      },
+      body: input,
     });
   }
 

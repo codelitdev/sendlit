@@ -151,6 +151,50 @@ describe("api key queries (integration)", () => {
     expect(await getOrganizationApiKeyBySecret(secret)).toBeNull();
   });
 
+  it("reconciles an existing configured key's scopes to the configured list", async () => {
+    const { organization } = await seedTeamAndContact(tdb);
+    const secret = generateOrganizationApiKeySecret();
+    const oldScopes = ["organization:read", "teams:provision", "teams:read"];
+    const newScopes = [...oldScopes, "teams:manage", "teams:keys", "usage:read"];
+    const created = await registerConfiguredOrganizationApiKey(
+      organization.id,
+      "Team Provisioning",
+      oldScopes,
+      secret,
+    );
+
+    const upgraded = await registerConfiguredOrganizationApiKey(
+      organization.id,
+      "Team Provisioning",
+      newScopes,
+      secret,
+      undefined,
+      { reconcileScopes: true },
+    );
+    expect(upgraded.created).toBe(false);
+    expect(upgraded.apiKey.id).toBe(created.apiKey.id);
+    expect([...upgraded.apiKey.scopes].sort()).toEqual([...newScopes].sort());
+    const [stored] = await tdb
+      .select()
+      .from(organizationApiKeys)
+      .where(eq(organizationApiKeys.id, created.apiKey.id));
+    expect([...stored.scopes].sort()).toEqual([...newScopes].sort());
+    expect((await getOrganizationApiKeyBySecret(secret))?.scopes.sort()).toEqual(
+      [...newScopes].sort(),
+    );
+
+    // Narrowing the configured list also reconciles.
+    const narrowed = await registerConfiguredOrganizationApiKey(
+      organization.id,
+      "Team Provisioning",
+      oldScopes,
+      secret,
+      undefined,
+      { reconcileScopes: true },
+    );
+    expect([...narrowed.apiKey.scopes].sort()).toEqual([...oldScopes].sort());
+  });
+
   it("does not allow a generated key with a different role to impersonate a configured key", async () => {
     const { organization } = await seedTeamAndContact(tdb);
     const { secret } = await createOrganizationApiKey(organization.id, "Existing key", [
@@ -166,6 +210,66 @@ describe("api key queries (integration)", () => {
         secret,
       ),
     ).rejects.toThrow("configured_organization_api_key_scope_mismatch");
+    // Reconciling is only for the key bootstrap registered under that name.
+    await expect(
+      registerConfiguredOrganizationApiKey(
+        organization.id,
+        "[Auto-generated] Team Provisioning",
+        ["organization:read", "teams:provision", "teams:read"],
+        secret,
+        undefined,
+        { reconcileScopes: true },
+      ),
+    ).rejects.toThrow("configured_organization_api_key_scope_mismatch");
+  });
+
+  it("keeps failing closed on a scope change unless the caller reconciles", async () => {
+    const { organization } = await seedTeamAndContact(tdb);
+    const secret = generateOrganizationApiKeySecret();
+    await registerConfiguredOrganizationApiKey(
+      organization.id,
+      "Team Provisioning",
+      ["organization:read"],
+      secret,
+    );
+    await expect(
+      registerConfiguredOrganizationApiKey(
+        organization.id,
+        "Team Provisioning",
+        ["organization:read", "teams:manage"],
+        secret,
+      ),
+    ).rejects.toThrow("configured_organization_api_key_scope_mismatch");
+  });
+
+  it("does not reconcile scopes of a revoked configured key", async () => {
+    const { organization } = await seedTeamAndContact(tdb);
+    const secret = generateOrganizationApiKeySecret();
+    const created = await registerConfiguredOrganizationApiKey(
+      organization.id,
+      "Team Provisioning",
+      ["organization:read"],
+      secret,
+    );
+    await revokeOrganizationApiKey(
+      organization.id,
+      created.apiKey.organizationApiKeyId,
+    );
+    await expect(
+      registerConfiguredOrganizationApiKey(
+        organization.id,
+        "Team Provisioning",
+        ["organization:read", "teams:manage"],
+        secret,
+        undefined,
+        { reconcileScopes: true },
+      ),
+    ).rejects.toThrow("configured_organization_api_key_revoked");
+    const [stored] = await tdb
+      .select()
+      .from(organizationApiKeys)
+      .where(eq(organizationApiKeys.id, created.apiKey.id));
+    expect(stored.scopes).toEqual(["organization:read"]);
   });
 
   it("fails closed when a configured key is expired", async () => {
