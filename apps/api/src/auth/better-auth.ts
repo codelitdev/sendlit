@@ -1,7 +1,13 @@
 import { cimd } from "@better-auth/cimd";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
-import { createOAuthProviderOptions } from "@codelitdev/oauth-server-kit/better-auth";
+import {
+  createOAuthProviderOptions,
+  secureCookieOptions,
+  secureEmailAndPasswordOptions,
+  secureSessionOptions,
+  sessionCookieName,
+} from "@codelitdev/oauth-server-kit/better-auth";
 import type {
   HostedLoginCaptcha,
   HostedLoginMethod,
@@ -92,8 +98,22 @@ export const mcpResourceUrl = `${authBaseUrl}/mcp`;
 /** Product-specific Better Auth cookie prefix (Platform AGENTS.md), so SendLit
  * and other CodeLit products on one hostname keep separate sessions. */
 export const AUTH_COOKIE_PREFIX = "sendlit";
-/** Session cookie name; Better Auth adds `__Secure-` over HTTPS. */
-export const SESSION_COOKIE_NAME = `${AUTH_COOKIE_PREFIX}.session_token`;
+/** Hardened cookie settings from the Platform kit. With `AUTH_COOKIE_DOMAIN`
+ * (QA, production) the session cookie is `__Secure-sendlit.session_token`,
+ * shared across subdomains as before; over https without it, it is
+ * `__Host-sendlit.session_token`; over http, plain `sendlit.session_token`.
+ * Better Auth reads the client IP only from `CLIENT_IP_HEADER`, which
+ * `app.ts` sets from the trusted `req.ip`, never from `X-Forwarded-For`. */
+const advancedCookieOptions = secureCookieOptions({
+  baseURL: authBaseUrl,
+  cookiePrefix: AUTH_COOKIE_PREFIX,
+  clientIpHeader: CLIENT_IP_HEADER,
+  ...(authCookieDomain
+    ? { crossSubDomainCookies: { enabled: true, domain: authCookieDomain } }
+    : {}),
+});
+/** The exact session cookie name Better Auth sets with the options above. */
+export const SESSION_COOKIE_NAME = sessionCookieName(advancedCookieOptions);
 export const validOAuthAudiences = [authBaseUrl, mcpResourceUrl];
 export const OAUTH_CLIENT_DEFAULT_SCOPES = ["openid", "profile", "email"] as const;
 export const OAUTH_CLIENT_REQUESTABLE_SCOPES = [
@@ -202,17 +222,9 @@ export const auth = betterAuth({
     schema,
   }),
   trustedOrigins: [webClientUrl, authBaseUrl],
-  advanced: {
-    cookiePrefix: AUTH_COOKIE_PREFIX,
-    ...(authCookieDomain
-      ? {
-          crossSubDomainCookies: {
-            enabled: true,
-            domain: authCookieDomain,
-          },
-        }
-      : {}),
-  },
+  advanced: { ...advancedCookieOptions },
+  // Sign-in is email code, Google, or OAuth; password sign-up stays off.
+  emailAndPassword: secureEmailAndPasswordOptions(),
   user: {
     additionalFields: {
       defaultOrganizationId: {
@@ -230,6 +242,8 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
+    // No cookie cache: a revoked session stops working on the next request.
+    ...secureSessionOptions(),
   },
   socialProviders:
     googleClientId && googleClientSecret

@@ -560,6 +560,7 @@ describe("OpenAPI authentication metadata", () => {
     expect(openApiDocument.components?.securitySchemes).toMatchObject({
       dashboardSession: { type: "apiKey", in: "cookie" },
       dashboardSecureSession: { type: "apiKey", in: "cookie" },
+      dashboardHostSession: { type: "apiKey", in: "cookie" },
     });
     expect(organizationKeyScopes).toEqual(
       expect.arrayContaining(["delivery:read", "delivery:manage"]),
@@ -582,11 +583,13 @@ describe("OpenAPI authentication metadata", () => {
       { userAccessToken: [] },
       { dashboardSession: [] },
       { dashboardSecureSession: [] },
+      { dashboardHostSession: [] },
     ]);
     expect(openApiDocument.paths["/teams"]?.get?.security).toEqual([
       { userAccessToken: [] },
       { dashboardSession: [] },
       { dashboardSecureSession: [] },
+      { dashboardHostSession: [] },
     ]);
     expect(openApiDocument.paths["/provisioning/teams"]?.post?.security).toEqual([
       { organizationApiKey: [] },
@@ -597,12 +600,14 @@ describe("OpenAPI authentication metadata", () => {
       { userAccessToken: [] },
       { dashboardSession: [] },
       { dashboardSecureSession: [] },
+      { dashboardHostSession: [] },
       { organizationApiKey: [] },
     ]);
     expect(openApiDocument.paths["/organizations"]?.post?.security).toEqual([
       { userAccessToken: [] },
       { dashboardSession: [] },
       { dashboardSecureSession: [] },
+      { dashboardHostSession: [] },
     ]);
     expect(
       openApiDocument.paths["/organizations/{organizationId}"]?.get?.security,
@@ -610,6 +615,7 @@ describe("OpenAPI authentication metadata", () => {
       { userAccessToken: [] },
       { dashboardSession: [] },
       { dashboardSecureSession: [] },
+      { dashboardHostSession: [] },
       { organizationApiKey: [] },
     ]);
     expect(openApiDocument.paths["/provisioning/organization"]?.get?.security).toEqual([
@@ -622,6 +628,7 @@ describe("OpenAPI authentication metadata", () => {
       { userAccessToken: [] },
       { dashboardSession: [] },
       { dashboardSecureSession: [] },
+      { dashboardHostSession: [] },
       { organizationApiKey: [] },
     ]);
     expect(
@@ -631,6 +638,7 @@ describe("OpenAPI authentication metadata", () => {
       { userAccessToken: [] },
       { dashboardSession: [] },
       { dashboardSecureSession: [] },
+      { dashboardHostSession: [] },
       { organizationApiKey: [] },
     ]);
     expect(
@@ -650,6 +658,7 @@ describe("OpenAPI authentication metadata", () => {
       { userAccessToken: [] },
       { dashboardSession: [] },
       { dashboardSecureSession: [] },
+      { dashboardHostSession: [] },
     ]);
     expect(openApiDocument.paths["/billing/catalog"]?.get?.security).toEqual([]);
     expect(openApiDocument.paths["/provisioning/teams"]?.post?.description).toContain(

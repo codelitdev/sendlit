@@ -209,6 +209,15 @@ The exact configuration shape depends on the MCP client. For clients that suppor
 
 Prefer the client’s secure secret-store or environment-variable mechanism. Do not paste a live API key into a checked-in configuration file.
 
+## Discovery
+
+Clients that support [MCP Server Cards](https://modelcontextprotocol.io/seps/2127-mcp-server-cards) can find SendLit from the API domain alone. Both documents are public and need no credentials:
+
+- `GET https://api.sendlit.app/.well-known/ai-catalog.json` lists SendLit's MCP server.
+- `GET https://api.sendlit.app/mcp/server-card` describes it: name (`dev.codelit/sendlit`), version, endpoint and transport, and names CodeLit as the operator.
+
+The card does not list tools. Clients still read the tool catalog through `tools/list` after authenticating.
+
 ## Operational limits
 
 The MCP endpoint is rate limited to 60 requests per minute. High-impact tools such as sending email, tracking events (`track_event`), activating sequences, testing ESPs, managing API keys, deleting teams, deleting contacts in bulk (`delete_contacts`), and releasing suppressions are limited to 20 requests per minute. A missing or invalid credential returns HTTP 401 with a `WWW-Authenticate` challenge, a missing OAuth scope returns a `forbidden` tool error with reason `insufficient_scope`, an unsupported protocol revision is rejected, and a non-JSON request returns HTTP 415. Because requests are stateless, retry only operations that are safe to repeat.

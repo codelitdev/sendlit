@@ -9,7 +9,7 @@ const { makeTestDb } = await import("../test/db");
 const testDb = await makeTestDb();
 mock.module("../db/client", () => ({ db: testDb, pool: {} }));
 
-const { sendLitMcpTools } = await import("./server");
+const { createSendLitMcp, sendLitMcpTools } = await import("./server");
 const { authorizeMcpOperation, listMcpOperationScopes, MCP_SCOPES } = await import(
   "./policy"
 );
@@ -98,5 +98,16 @@ describe("SendLit MCP catalog and policy", () => {
       code: "forbidden",
       safeDetails: { reason: "not_mcp_operation" },
     });
+  });
+
+  it("publishes a valid discovery card naming CodeLit and the MCP endpoint", async () => {
+    const { mcpResourceUrl } = await import("../auth/better-auth");
+    const mcp = createSendLitMcp();
+    expect(mcp.serverCard).toMatchObject({
+      name: "dev.codelit/sendlit",
+      remotes: [{ type: "streamable-http", url: mcpResourceUrl }],
+      _meta: { "dev.codelit/provider": { name: "CodeLit" } },
+    });
+    await mcp.shutdown();
   });
 });
