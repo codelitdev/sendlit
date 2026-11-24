@@ -999,7 +999,7 @@ Provision request:
         "dailyLimit": 500,
         "monthlyLimit": 10000,
     },
-    "mailingAddress": "...",
+    "postalAddress": { "line1": "...", "city": "...", "country": "GB" },
 }
 ```
 

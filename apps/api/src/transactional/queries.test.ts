@@ -521,7 +521,7 @@ describe("createTransactionalEmail happy paths", () => {
 
   it("accepts transactional sends without a workspace mailing address", async () => {
     const { team } = await seedTeamAndContact(tdb, {
-      settings: { mailingAddress: null },
+      settings: { postalAddress: null },
     });
 
     const row = await createTransactionalEmail({

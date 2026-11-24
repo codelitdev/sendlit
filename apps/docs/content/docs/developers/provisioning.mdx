@@ -95,7 +95,13 @@ curl --request POST "$SENDLIT_API_URL/provisioning/teams" \
       "fromName": "Acme",
       "replyTo": "hello@acme.example"
     },
-    "mailingAddress": "123 Main Street, Bengaluru, Karnataka 560001, India",
+    "postalAddress": {
+      "line1": "123 Main Street",
+      "city": "Bengaluru",
+      "region": "Karnataka",
+      "postalCode": "560001",
+      "country": "IN"
+    },
     "delivery": {
       "useOrganizationDefault": true,
       "teamEspEnabled": false,
@@ -112,7 +118,11 @@ curl --request POST "$SENDLIT_API_URL/provisioning/teams" \
 
 - `sender.fromName` and `sender.replyTo` configure the team's organization
   delivery grant.
-- `mailingAddress` is the physical address used in managed marketing footers.
+- `postalAddress` is the physical address used in managed marketing footers:
+  `line1` (street), optional `line2`, `city`, `region` and `postalCode`, and
+  `country` as an uppercase ISO 3166-1 alpha-2 code. An unknown country is
+  `400 postal_country_invalid`. The lifecycle `PATCH` takes the same object, or
+  `null` to clear it.
 - `delivery.useOrganizationDefault` grants the active default organization
   mailbox and selects it for delivery. This requires an active default mailbox.
   If this property is omitted, the organization's automatic-grant policy

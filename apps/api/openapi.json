@@ -14495,7 +14495,7 @@
     },
     "/sequences/{sequenceId}/start": {
       "post": {
-        "description": "Requires a non-empty mailing address in the team's general settings. On SendLit Cloud, a new organization's first broadcast to 1,000 or more contacts through its own ESP is reviewed once before it can start (400 `broadcast_held_for_review`); start it again once approved.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "description": "Requires a postal address in the team's general settings. On SendLit Cloud, a new organization's first broadcast to 1,000 or more contacts through its own ESP is reviewed once before it can start (400 `broadcast_held_for_review`); start it again once approved.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
         "summary": "Start a broadcast or activate a sequence",
         "tags": [
           "Sequences"
@@ -16282,7 +16282,7 @@
     },
     "/emails": {
       "post": {
-        "description": "Requires a non-empty mailing address in the team's general settings. `templateId` must identify a team-owned transactional template; marketing templates return 422 template_not_transactional. Unguarded Liquid variables must be supplied in `variables`, or the API returns 422 missing_template_variables without creating a row or queue job. Inline `html` is sent verbatim without Liquid rendering. address, unsubscribe_link, and subscriber are marketing-only server-owned values and are unavailable to transactional templates.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "description": "Requires a postal address in the team's general settings. `templateId` must identify a team-owned transactional template; marketing templates return 422 template_not_transactional. Unguarded Liquid variables must be supplied in `variables`, or the API returns 422 missing_template_variables without creating a row or queue job. Inline `html` is sent verbatim without Liquid rendering. address, unsubscribe_link, and subscriber are marketing-only server-owned values and are unavailable to transactional templates.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
         "summary": "Send a transactional email",
         "tags": [
           "Transactional Emails"
@@ -19449,7 +19449,7 @@
     },
     "/settings/esps/{espId}/test": {
       "post": {
-        "description": "Requires a non-empty mailing address in the team's general settings.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "description": "Requires a postal address in the team's general settings.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
         "summary": "Send a test email through a user-managed ESP",
         "tags": [
           "Settings"
@@ -20690,8 +20690,43 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "mailingAddress": {
-                      "type": "string",
+                    "postalAddress": {
+                      "type": "object",
+                      "properties": {
+                        "line1": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "description": "Street address"
+                        },
+                        "line2": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "Apartment, suite, building and so on"
+                        },
+                        "city": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "region": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "description": "State, province or region"
+                        },
+                        "postalCode": {
+                          "type": "string",
+                          "maxLength": 20
+                        },
+                        "country": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$",
+                          "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                        }
+                      },
+                      "required": [
+                        "line1",
+                        "country"
+                      ],
                       "nullable": true
                     },
                     "updatedAt": {
@@ -20700,7 +20735,7 @@
                     }
                   },
                   "required": [
-                    "mailingAddress"
+                    "postalAddress"
                   ]
                 }
               }
@@ -20732,7 +20767,7 @@
         ]
       },
       "put": {
-        "description": "Omitted fields are left unchanged; send an empty string to clear a field.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "description": "Omit `postalAddress` to keep it; `null` clears it. 400 `postal_country_invalid` when its country isn't a current ISO 3166-1 alpha-2 code.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
         "summary": "Update the team's general settings",
         "tags": [
           "Settings"
@@ -20745,8 +20780,44 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "mailingAddress": {
-                    "type": "string"
+                  "postalAddress": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "description": "Street address"
+                      },
+                      "line2": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Apartment, suite, building and so on"
+                      },
+                      "city": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "region": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "description": "State, province or region"
+                      },
+                      "postalCode": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "country": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{2}$",
+                        "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                      }
+                    },
+                    "required": [
+                      "line1",
+                      "country"
+                    ],
+                    "nullable": true
                   }
                 }
               }
@@ -20761,8 +20832,43 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "mailingAddress": {
-                      "type": "string",
+                    "postalAddress": {
+                      "type": "object",
+                      "properties": {
+                        "line1": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "description": "Street address"
+                        },
+                        "line2": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "Apartment, suite, building and so on"
+                        },
+                        "city": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "region": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "description": "State, province or region"
+                        },
+                        "postalCode": {
+                          "type": "string",
+                          "maxLength": 20
+                        },
+                        "country": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$",
+                          "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                        }
+                      },
+                      "required": [
+                        "line1",
+                        "country"
+                      ],
                       "nullable": true
                     },
                     "updatedAt": {
@@ -20771,14 +20877,29 @@
                     }
                   },
                   "required": [
-                    "mailingAddress"
+                    "postalAddress"
                   ]
                 }
               }
             }
           },
           "400": {
-            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+            "description": "400\n\nOr `credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -30451,7 +30572,7 @@
     },
     "/provisioning/teams": {
       "post": {
-        "description": "Server-to-server endpoint for multi-tenant consumers (e.g. CourseLit) to provision one SendLit team per tenant. Requires a scoped organization key as a Bearer token.\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "description": "Server-to-server endpoint for multi-tenant consumers (e.g. CourseLit) to provision one SendLit team per tenant. Requires a scoped organization key as a Bearer token. `postalAddress` sets the team's footer address; 400 `postal_country_invalid` when its country isn't a current ISO 3166-1 alpha-2 code.\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
         "summary": "Find-or-create a team for a consumer-supplied tenant id",
         "tags": [
           "Teams"
@@ -30485,9 +30606,43 @@
                       }
                     }
                   },
-                  "mailingAddress": {
-                    "type": "string",
-                    "minLength": 1
+                  "postalAddress": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "description": "Street address"
+                      },
+                      "line2": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Apartment, suite, building and so on"
+                      },
+                      "city": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "region": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "description": "State, province or region"
+                      },
+                      "postalCode": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "country": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{2}$",
+                        "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                      }
+                    },
+                    "required": [
+                      "line1",
+                      "country"
+                    ]
                   },
                   "delivery": {
                     "type": "object",
@@ -30808,8 +30963,43 @@
                         "archived"
                       ]
                     },
-                    "mailingAddress": {
-                      "type": "string",
+                    "postalAddress": {
+                      "type": "object",
+                      "properties": {
+                        "line1": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "description": "Street address"
+                        },
+                        "line2": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "Apartment, suite, building and so on"
+                        },
+                        "city": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "region": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "description": "State, province or region"
+                        },
+                        "postalCode": {
+                          "type": "string",
+                          "maxLength": 20
+                        },
+                        "country": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$",
+                          "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                        }
+                      },
+                      "required": [
+                        "line1",
+                        "country"
+                      ],
                       "nullable": true
                     },
                     "teamEspEnabled": {
@@ -30833,7 +31023,7 @@
                     "name",
                     "deliverySource",
                     "status",
-                    "mailingAddress",
+                    "postalAddress",
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
@@ -30890,7 +31080,7 @@
         ]
       },
       "patch": {
-        "description": "**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "description": "Omitted fields are left unchanged. `postalAddress: null` clears the team's postal address; 400 `postal_country_invalid` when its country isn't a current ISO 3166-1 alpha-2 code.\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
         "summary": "Update a provisioned team's sender, limits, or settings",
         "tags": [
           "Teams"
@@ -30931,9 +31121,43 @@
                       }
                     }
                   },
-                  "mailingAddress": {
-                    "type": "string",
-                    "minLength": 1,
+                  "postalAddress": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "description": "Street address"
+                      },
+                      "line2": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Apartment, suite, building and so on"
+                      },
+                      "city": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "region": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "description": "State, province or region"
+                      },
+                      "postalCode": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "country": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{2}$",
+                        "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                      }
+                    },
+                    "required": [
+                      "line1",
+                      "country"
+                    ],
                     "nullable": true
                   },
                   "delivery": {
@@ -31006,8 +31230,43 @@
                         "archived"
                       ]
                     },
-                    "mailingAddress": {
-                      "type": "string",
+                    "postalAddress": {
+                      "type": "object",
+                      "properties": {
+                        "line1": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "description": "Street address"
+                        },
+                        "line2": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "Apartment, suite, building and so on"
+                        },
+                        "city": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "region": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "description": "State, province or region"
+                        },
+                        "postalCode": {
+                          "type": "string",
+                          "maxLength": 20
+                        },
+                        "country": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$",
+                          "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                        }
+                      },
+                      "required": [
+                        "line1",
+                        "country"
+                      ],
                       "nullable": true
                     },
                     "teamEspEnabled": {
@@ -31031,7 +31290,7 @@
                     "name",
                     "deliverySource",
                     "status",
-                    "mailingAddress",
+                    "postalAddress",
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
@@ -31042,7 +31301,22 @@
             }
           },
           "400": {
-            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+            "description": "400\n\nOr `credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           },
           "403": {
             "description": "403",
@@ -31358,8 +31632,43 @@
                         "archived"
                       ]
                     },
-                    "mailingAddress": {
-                      "type": "string",
+                    "postalAddress": {
+                      "type": "object",
+                      "properties": {
+                        "line1": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "description": "Street address"
+                        },
+                        "line2": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "Apartment, suite, building and so on"
+                        },
+                        "city": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "region": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "description": "State, province or region"
+                        },
+                        "postalCode": {
+                          "type": "string",
+                          "maxLength": 20
+                        },
+                        "country": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$",
+                          "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                        }
+                      },
+                      "required": [
+                        "line1",
+                        "country"
+                      ],
                       "nullable": true
                     },
                     "teamEspEnabled": {
@@ -31383,7 +31692,7 @@
                     "name",
                     "deliverySource",
                     "status",
-                    "mailingAddress",
+                    "postalAddress",
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
@@ -31514,8 +31823,43 @@
                         "archived"
                       ]
                     },
-                    "mailingAddress": {
-                      "type": "string",
+                    "postalAddress": {
+                      "type": "object",
+                      "properties": {
+                        "line1": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "description": "Street address"
+                        },
+                        "line2": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "Apartment, suite, building and so on"
+                        },
+                        "city": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "region": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "description": "State, province or region"
+                        },
+                        "postalCode": {
+                          "type": "string",
+                          "maxLength": 20
+                        },
+                        "country": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$",
+                          "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                        }
+                      },
+                      "required": [
+                        "line1",
+                        "country"
+                      ],
                       "nullable": true
                     },
                     "teamEspEnabled": {
@@ -31539,7 +31883,7 @@
                     "name",
                     "deliverySource",
                     "status",
-                    "mailingAddress",
+                    "postalAddress",
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",

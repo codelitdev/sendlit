@@ -139,7 +139,7 @@ describe("auto-pause (#25)", () => {
     // A team-wide problem: every recipient's footer fails the same way.
     await tdb
       .update(schema.settings)
-      .set({ mailingAddress: "" })
+      .set({ postalAddress: null })
       .where(eq(schema.settings.teamId, team.id));
 
     await processOngoingSequence(rows[0].id);
@@ -162,7 +162,7 @@ describe("auto-pause (#25)", () => {
     // Fixed and resumed: everyone gets the email and the broadcast completes.
     await tdb
       .update(schema.settings)
-      .set({ mailingAddress: "1 Test St, Testville" })
+      .set({ postalAddress: { line1: "1 Test St", city: "Testville", country: "US" } })
       .where(eq(schema.settings.teamId, team.id));
     await startSequence({ teamId: team.id, sequenceId: sequenceRow.sequenceId });
     for (const row of rows) await processOngoingSequence(row.id);

@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader } from "@codelitdev/design-system";
-import type { TemplatePurpose } from "@sendlit/api-contract";
+import type { PostalAddress, TemplatePurpose } from "@sendlit/api-contract";
 import { type Email, EmailEditor } from "@sendlit/email-blocks";
 import {
   createFooterBlock,
@@ -191,9 +191,7 @@ export function EmailEditorScreen({
   const unsaved = () => contentChanged.current || otherChangesUnsaved;
   const unsavedRef = useRef(unsaved);
   unsavedRef.current = unsaved;
-  const [mailingAddress, setMailingAddress] = useState(
-    "Set your mailing address in Settings",
-  );
+  const [postalAddress, setPostalAddress] = useState<PostalAddress | null>(null);
 
   // A real external content change (for example, navigating to another
   // template without unmounting this screen) remains the source of truth.
@@ -204,11 +202,7 @@ export function EmailEditorScreen({
   useEffect(() => {
     if (purpose !== "marketing") return;
     getGeneralSettings()
-      .then((settings) => {
-        if (settings.mailingAddress?.trim()) {
-          setMailingAddress(settings.mailingAddress);
-        }
-      })
+      .then((settings) => setPostalAddress(settings.postalAddress))
       .catch(() => {
         // The API remains authoritative. A preview placeholder keeps
         // editing available while settings are temporarily unavailable.
@@ -218,9 +212,13 @@ export function EmailEditorScreen({
   const renderContext = useMemo<SendLitEmailRenderContext | undefined>(
     () =>
       purpose === "marketing"
-        ? marketingPreviewContext({ mailingAddress, viewInBrowser })
+        ? marketingPreviewContext({
+            postalAddress,
+            mailingAddress: "Set your mailing address in Settings",
+            viewInBrowser,
+          })
         : undefined,
-    [mailingAddress, purpose, viewInBrowser],
+    [postalAddress, purpose, viewInBrowser],
   );
   const variables =
     purpose === "marketing"

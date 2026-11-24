@@ -16,6 +16,10 @@ import { recordOrganizationAuditEvent } from "../organization/audit";
 import { getOrganization } from "../organization/queries";
 import logger from "../services/log";
 import {
+  normalizePostalAddress,
+  POSTAL_COUNTRY_INVALID,
+} from "../settings/general/address";
+import {
   archiveTeam,
   findOrCreateTeamByExternalId,
   getProvisionedTeamView,
@@ -73,7 +77,7 @@ function serializeProvisionedView(
     name: view.team.name,
     deliverySource: { type: "organization" as const },
     status: view.team.status as "active" | "sending_suspended" | "archived",
-    mailingAddress: view.general?.mailingAddress ?? null,
+    postalAddress: view.general?.postalAddress ?? null,
     teamEspEnabled: view.delivery?.teamEspEnabled ?? true,
     teamCanChangeDefault: view.delivery?.teamCanChangeDefault ?? true,
     createdAt: view.team.createdAt?.toISOString() ?? null,
@@ -151,6 +155,8 @@ const impl = s.router(contract.provisioning, {
     }
 
     try {
+      // Reject an unknown country before anything is created.
+      if (body.postalAddress) normalizePostalAddress(body.postalAddress);
       const provisioningRequestHash = createHash("sha256")
         .update(JSON.stringify(body))
         .digest("hex");
@@ -160,7 +166,7 @@ const impl = s.router(contract.provisioning, {
         name: body.name,
         provisioningRequestHash,
         sender: body.sender,
-        mailingAddress: body.mailingAddress,
+        postalAddress: body.postalAddress,
         delivery: body.delivery,
         quota: body.quota,
         createdBy: {
@@ -207,6 +213,9 @@ const impl = s.router(contract.provisioning, {
     } catch (err: any) {
       const gated = planGateHttp(err);
       if (gated) return gated as any;
+      if (err.message === POSTAL_COUNTRY_INVALID) {
+        return { status: 400, body: { error: POSTAL_COUNTRY_INVALID } };
+      }
       if (err.message === "provisioning_conflict") {
         return {
           status: 409,
@@ -257,6 +266,9 @@ const impl = s.router(contract.provisioning, {
     } catch (error: any) {
       const gated = planGateHttp(error);
       if (gated) return gated as any;
+      if (error.message === POSTAL_COUNTRY_INVALID) {
+        return { status: 400, body: { error: POSTAL_COUNTRY_INVALID } };
+      }
       return { status: 409, body: { error: error.message } };
     }
   },

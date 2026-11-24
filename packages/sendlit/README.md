@@ -70,7 +70,7 @@ new SendLit({
 | `sendlit.suppressions`   | `list`, `listAll`, `get`, `release`                                                                                                                                  |
 | `sendlit.deliveryEvents` | `list`, `listAll`, `get`                                                                                                                                             |
 | `sendlit.tags`           | `list`, `references`, `rename`, `remove`                                                                                                                             |
-| `sendlit.settings`       | `general.get`, `general.update` (the mailing address broadcasts and sequences need)                                                                                  |
+| `sendlit.settings`       | `general.get`, `general.update` (the `postalAddress` broadcasts and sequences need)                                                                                  |
 | `sendlit.overview`       | `get`: the team's dashboard numbers, optionally for `rangeDays` 1, 3, 7 or 30                                                                                        |
 
 Request and response types are exported too, for example `Contact`,
@@ -190,7 +190,12 @@ const platform = new SendLit({ apiKey: process.env.SENDLIT_ORG_API_KEY });
 const team = await platform.provisioning.provisionTeam({
     externalId: school.id, // an immutable ID from your database
     name: school.name,
-    mailingAddress: school.address,
+    postalAddress: {
+        line1: school.street,
+        city: school.city,
+        postalCode: school.postalCode,
+        country: school.country, // ISO 3166-1 alpha-2, such as "GB"
+    },
 });
 if (team.created) {
     // The plaintext key is only returned once. Encrypt and store it now.
@@ -229,7 +234,7 @@ await sendlit.sequences.start(broadcast.sequenceId);
 ```
 
 Starting a broadcast or sequence requires a mailing address in the team's
-settings (set it with `mailingAddress` when provisioning) and a way to send
+settings (set it with `postalAddress` when provisioning) and a way to send
 email: either an organization delivery grant or the team's own ESP.
 
 While a broadcast or sequence is active, `updateEmail` saves subject and

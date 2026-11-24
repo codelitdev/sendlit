@@ -352,4 +352,57 @@ describe("headless organization provisioning", () => {
     });
     expect(inactiveUpdate.status).toBe(422);
   });
+
+  it("provisions and updates a team's postal address", async () => {
+    const owner = await insertUser("Owner");
+    const org = await createOrganization(owner.id, "Acme");
+    authState.organizationId = org.id;
+    authState.organizationScopes = ["teams:provision", "teams:read", "teams:manage"];
+    const bristol = {
+      line1: "18 Harbour Lane",
+      city: "Bristol",
+      postalCode: "BS1 4RN",
+      country: "GB",
+    };
+    const send = (method: string, path: string, body?: unknown) =>
+      requestApp(app(), path, {
+        method,
+        headers: { "content-type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+
+    const invalid = await send("POST", "/provisioning/teams", {
+      externalId: "courselit:school-1",
+      name: "School 1",
+      postalAddress: { ...bristol, country: "UK" },
+    });
+    expect(invalid.status).toBe(400);
+    expect(invalid.json()).toEqual({ error: "postal_country_invalid" });
+    expect(await tdb.select().from(teams)).toHaveLength(0);
+
+    const created = await send("POST", "/provisioning/teams", {
+      externalId: "courselit:school-1",
+      name: "School 1",
+      postalAddress: { ...bristol, line2: " " },
+    });
+    expect(created.status).toBe(200);
+    const path = `/provisioning/teams/${created.json().teamId}`;
+    const team = await send("GET", path);
+    expect(team.json()).toMatchObject({ postalAddress: bristol });
+    expect(team.json()).not.toHaveProperty("mailingAddress");
+
+    const badUpdate = await send("PATCH", path, {
+      postalAddress: { ...bristol, country: "XK" },
+    });
+    expect(badUpdate.status).toBe(400);
+    expect(badUpdate.json()).toEqual({ error: "postal_country_invalid" });
+
+    const moved = { line1: "1 Main St", city: "Springfield", country: "US" };
+    expect((await send("PATCH", path, { postalAddress: moved })).json()).toMatchObject({
+      postalAddress: moved,
+    });
+    expect((await send("PATCH", path, { postalAddress: null })).json()).toMatchObject({
+      postalAddress: null,
+    });
+  });
 });

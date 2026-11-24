@@ -196,6 +196,17 @@ describe("marketingPreviewContext", () => {
     expect(footer?.viewInBrowserUrl).toBeUndefined();
     expect(footer?.mailingAddress).toBe("1 Main St");
   });
+
+  it("formats a postal address the way sent emails show it", () => {
+    expect(
+      marketingPreviewContext({
+        postalAddress: { line1: "18 Harbour Lane", city: "Bristol", country: "GB" },
+      }).footer?.mailingAddress,
+    ).toBe("18 Harbour Lane\nBristol\nUnited Kingdom");
+    expect(
+      marketingPreviewContext({ postalAddress: null }).footer?.mailingAddress,
+    ).toBe("Your mailing address");
+  });
 });
 
 describe("createFooterBlock defaults", () => {

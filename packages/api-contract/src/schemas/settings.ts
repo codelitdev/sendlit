@@ -1,18 +1,40 @@
 import { z } from "zod";
 
+/** A team's physical postal address (CAN-SPAM/GDPR) as separate fields. The
+ * email footer shows it as text formatted with `formatPostalAddress` from
+ * `@sendlit/email-blocks/postal-address`. */
+export const postalAddressSchema = z.object({
+  line1: z.string().trim().min(1).max(200).describe("Street address"),
+  line2: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .describe("Apartment, suite, building and so on"),
+  city: z.string().trim().max(100).optional(),
+  region: z.string().trim().max(100).optional().describe("State, province or region"),
+  postalCode: z.string().trim().max(20).optional(),
+  country: z
+    .string()
+    .regex(/^[A-Z]{2}$/)
+    .describe("ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"),
+});
+
+export type PostalAddress = z.infer<typeof postalAddressSchema>;
+
 /** General (non-ESP) per-team workspace settings — a per-team singleton
  * (get/upsert, never a list), addressed via `/settings/general` like the ESP
  * settings, so no id fields are exposed. */
 export const generalSettingsSchema = z.object({
-  /** Physical postal address rendered in email footers
-   * (CAN-SPAM/GDPR requirement). */
-  mailingAddress: z.string().nullable(),
+  /** The physical postal address shown in marketing email footers; required
+   * for broadcasts and sequences. `null` until it is set. */
+  postalAddress: postalAddressSchema.nullable(),
   updatedAt: z.string().nullable().optional(),
 });
 
 export const updateGeneralSettingsBodySchema = z.object({
-  /** Send an empty string to clear the mailing address. */
-  mailingAddress: z.string().optional(),
+  /** Omit to keep the address; `null` clears it. */
+  postalAddress: postalAddressSchema.nullable().optional(),
 });
 
 export const trackingDomainStatuses = ["pending", "verified", "failed"] as const;

@@ -58,6 +58,15 @@ you can localize or reword anything without forking the component.
   full, so this one dependency covers both composing flows and
   editing/rendering the emails inside them.
 
+## Postal addresses
+
+`@sendlit/email-blocks/postal-address` is a React-free helper for the
+managed footer's mailing address: `PostalAddress` (street lines, city,
+region, postal code and an ISO 3166-1 alpha-2 `country`),
+`POSTAL_COUNTRY_CODES`, `postalCountryName(code, locale?)`,
+`isPostalCountryCode(code)` and `formatPostalAddress(address)`, which turns
+an address into the same footer text SendLit stores and sends.
+
 All components are built on `@sendlit/email-editor` and vendored shadcn/ui
 primitives (Button, Input, Select, Switch, Dialog, AlertDialog, Command,
 Popover, Avatar, etc.), following shadcn conventions throughout.

@@ -65,7 +65,7 @@ beforeEach(() => {
   mock.clearAllMocks();
   mocks.editorProps = null;
   mocks.getGeneralSettings.mockResolvedValue({
-    mailingAddress: "123 Main Street",
+    postalAddress: { line1: "123 Main Street", city: "Springfield", country: "US" },
   });
 });
 
@@ -214,7 +214,7 @@ describe("EmailEditorScreen", () => {
     await waitFor(() =>
       expect(mocks.editorProps.renderContext).toEqual({
         footer: {
-          mailingAddress: "123 Main Street",
+          mailingAddress: "123 Main Street\nSpringfield\nUnited States",
           unsubscribeUrl: "#unsubscribe-preview",
           viewInBrowserUrl: "#view-in-browser-preview",
         },
