@@ -1992,7 +1992,6 @@ export function releaseSuppression(suppressionId: string, explanation?: string) 
 // ---- General settings -----------------------------------------------------
 
 export interface GeneralSettings {
-  mailingAddress: string | null;
   postalAddress: PostalAddress | null;
   updatedAt?: string | null;
 }
@@ -2001,9 +2000,7 @@ export function getGeneralSettings() {
   return unwrap<GeneralSettings>(client.settings.general.get());
 }
 
-export function updateGeneralSettings(
-  input: { mailingAddress: string } | { postalAddress: PostalAddress | null },
-) {
+export function updateGeneralSettings(input: { postalAddress: PostalAddress | null }) {
   return unwrap<GeneralSettings>(client.settings.general.update({ body: input }));
 }
 

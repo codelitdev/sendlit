@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  defaultPostalCountry,
   EMPTY_POSTAL_ADDRESS_FORM,
   isPostalAddressFormEmpty,
   postalAddressFromForm,
@@ -31,6 +32,18 @@ describe("postal address form", () => {
         country: "US",
       }),
     ).toEqual({ line1: "1 Main St", postalCode: "62701", country: "US" });
+  });
+
+  it("starts an empty form in the browser's country", () => {
+    expect(postalAddressToForm(null)).toEqual({
+      ...EMPTY_POSTAL_ADDRESS_FORM,
+      country: defaultPostalCountry(),
+    });
+    expect(defaultPostalCountry("en-GB")).toBe("GB");
+    expect(defaultPostalCountry("de")).toBe("DE");
+    expect(defaultPostalCountry("en-001")).toBe("");
+    expect(defaultPostalCountry("not a locale!")).toBe("");
+    expect(defaultPostalCountry("")).toBe("");
   });
 
   it("knows an empty form", () => {

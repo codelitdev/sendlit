@@ -159,7 +159,7 @@ export default function SettingsPage() {
       setDefaultTeamEspId(deliverySettings.defaultTeamEspId);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load settings");
-      setGeneralSettings({ mailingAddress: null, postalAddress: null });
+      setGeneralSettings({ postalAddress: null });
       setEsps([]);
     }
   }
@@ -401,7 +401,7 @@ export default function SettingsPage() {
 
           <TabsContent value="general">
             <div>
-              {generalSettings && !generalSettings.mailingAddress?.trim() && (
+              {generalSettings && !generalSettings.postalAddress && (
                 <Banner className="mb-4">
                   Add and save a mailing address to enable broadcasts and sequences.
                   Transactional email and ESP test sends do not require one.
@@ -421,18 +421,6 @@ export default function SettingsPage() {
                       footer for broadcasts and sequences.
                     </p>
                   </div>
-                  {generalSettings?.mailingAddress?.trim() &&
-                    !generalSettings.postalAddress && (
-                      <div className="space-y-1.5 rounded-md border bg-muted/40 p-3">
-                        <p className="text-sm font-medium">Current address</p>
-                        <p className="whitespace-pre-line text-sm">
-                          {generalSettings.mailingAddress}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Fill in the fields below to replace it.
-                        </p>
-                      </div>
-                    )}
                   <PostalAddressFields value={addressForm} onChange={setAddressForm} />
                 </CardContent>
                 <CardFooter>
@@ -579,7 +567,7 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="esp">
-            {generalSettings && !generalSettings.mailingAddress?.trim() && (
+            {generalSettings && !generalSettings.postalAddress && (
               <Banner className="mb-4">
                 A mailing address is required for campaigns; ESP test sends do not
                 require one.
