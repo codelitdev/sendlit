@@ -168,6 +168,26 @@ Starting a broadcast or sequence requires a mailing address in the team's
 settings and a way to send email: an organization delivery grant or the
 team's own ESP.
 
+Save the address as separate fields with `postalAddress`; SendLit formats the
+footer's `mailingAddress` from them, and `get()` returns both, so you can show
+the fields again for editing:
+
+```ts
+await sendlit.settings.general.update({
+    postalAddress: {
+        line1: "18 Harbour Lane",
+        city: "Bristol",
+        postalCode: "BS1 4RN",
+        country: "GB", // ISO 3166-1 alpha-2
+    },
+});
+// mailingAddress: "18 Harbour Lane\nBristol, BS1 4RN\nUnited Kingdom"
+```
+
+Sending free text in `mailingAddress` instead clears `postalAddress`; sending
+both is a 400, and so is a country code that isn't a current ISO 3166-1
+alpha-2 code.
+
 While a broadcast or sequence is active, `updateEmail` saves subject and
 content changes as a draft, and contacts keep getting the published version
 until you call `sendlit.sequences.publishChanges(sequenceId)`. See

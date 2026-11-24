@@ -254,3 +254,33 @@ import { marketingPreviewContext } from "@sendlit/email-blocks/footer";
 
 The independently hosted editor remains generic: omit this add-on and context
 for ordinary or transactional designs.
+
+### Postal addresses
+
+`@sendlit/email-blocks/postal-address` formats a structured address into the
+footer text exactly as SendLit does when a team saves `postalAddress` in its
+general settings. It doesn't depend on React, so servers can use it too:
+
+```ts
+import {
+    formatPostalAddress,
+    isPostalCountryCode,
+    POSTAL_COUNTRY_CODES,
+    postalCountryName,
+    type PostalAddress,
+} from "@sendlit/email-blocks/postal-address";
+
+formatPostalAddress({
+    line1: "18 Harbour Lane",
+    city: "Bristol",
+    postalCode: "BS1 4RN",
+    country: "GB",
+});
+// "18 Harbour Lane\nBristol, BS1 4RN\nUnited Kingdom"
+
+postalCountryName("DE", "de"); // "Deutschland"
+isPostalCountryCode("UK"); // false: the code is GB
+```
+
+`POSTAL_COUNTRY_CODES` lists all 249 current ISO 3166-1 alpha-2 codes for a
+country picker.
