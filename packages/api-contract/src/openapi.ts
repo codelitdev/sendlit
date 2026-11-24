@@ -16,18 +16,25 @@ const securityByAuthMode: Record<AuthMode, Array<Record<string, string[]>>> = {
     { userAccessToken: [] },
     { dashboardSession: [] },
     { dashboardSecureSession: [] },
+    { dashboardHostSession: [] },
   ],
   user: [
     { userAccessToken: [] },
     { dashboardSession: [] },
     { dashboardSecureSession: [] },
+    { dashboardHostSession: [] },
   ],
-  dashboardSession: [{ dashboardSession: [] }, { dashboardSecureSession: [] }],
+  dashboardSession: [
+    { dashboardSession: [] },
+    { dashboardSecureSession: [] },
+    { dashboardHostSession: [] },
+  ],
   organization: [{ organizationApiKey: [] }],
   userOrOrganization: [
     { userAccessToken: [] },
     { dashboardSession: [] },
     { dashboardSecureSession: [] },
+    { dashboardHostSession: [] },
     { organizationApiKey: [] },
   ],
   public: [],
@@ -231,7 +238,15 @@ export const openApiDocument = generateOpenApi(
           type: "apiKey",
           in: "cookie",
           name: "__Secure-sendlit.session_token",
-          description: "Better Auth dashboard session cookie used over HTTPS.",
+          description:
+            "Better Auth dashboard session cookie used over HTTPS when the API shares a cookie domain with the dashboard (AUTH_COOKIE_DOMAIN).",
+        },
+        dashboardHostSession: {
+          type: "apiKey",
+          in: "cookie",
+          name: "__Host-sendlit.session_token",
+          description:
+            "Better Auth dashboard session cookie used over HTTPS on a single host, without AUTH_COOKIE_DOMAIN.",
         },
         organizationApiKey: {
           type: "http",
