@@ -221,7 +221,9 @@ export function listContacts(
     filter?: ContactFilterWithAggregator;
     /** Contacts matching this filter are left out. */
     excludeFilter?: ContactFilterWithAggregator;
+    /** Page number, 1-indexed. */
     offset?: number;
+    rowsPerPage?: number;
   } = {},
 ) {
   const filter = toApiContactFilter(params.filter);
@@ -234,6 +236,7 @@ export function listContacts(
         filter: filter ? JSON.stringify(filter) : undefined,
         excludeFilter: excludeFilter ? JSON.stringify(excludeFilter) : undefined,
         offset: params.offset,
+        rowsPerPage: params.rowsPerPage,
       },
     }),
   );

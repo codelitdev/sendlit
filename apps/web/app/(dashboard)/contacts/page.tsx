@@ -17,6 +17,7 @@ import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
 import { DeleteContactsDialog } from "@/components/dashboard/delete-contacts-dialog";
 import { ImportContactsDialog } from "@/components/dashboard/import-contacts-dialog";
+import { ListPagination } from "@/components/dashboard/list-pagination";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
@@ -53,6 +54,7 @@ import {
   listContacts,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
+import { ITEMS_PER_PAGE } from "@/lib/pagination";
 import { useSegments } from "@/lib/use-segments";
 
 const emptyFilter: ContactFilterWithAggregator = {
@@ -63,6 +65,8 @@ const emptyFilter: ContactFilterWithAggregator = {
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loadingPage, setLoadingPage] = useState(false);
   const [filter, setFilter] = useState(emptyFilter);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -102,15 +106,29 @@ export default function ContactsPage() {
     }
   }
 
-  async function load(nextFilter: ContactFilterWithAggregator = filter) {
+  async function load(
+    nextFilter: ContactFilterWithAggregator = filter,
+    pageToLoad = page,
+  ): Promise<void> {
+    setLoadingPage(true);
     try {
       const { items, total } = await listContacts({
         filter: nextFilter.filters.length > 0 ? nextFilter : undefined,
+        offset: pageToLoad,
+        rowsPerPage: ITEMS_PER_PAGE,
       });
+      // Deleting the last rows of the last page leaves it empty: step back.
+      const lastPage = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
+      if (items.length === 0 && pageToLoad > lastPage) {
+        return load(nextFilter, lastPage);
+      }
       setContacts(items);
       setTotal(total);
+      setPage(pageToLoad);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load contacts");
+    } finally {
+      setLoadingPage(false);
     }
   }
 
@@ -122,7 +140,7 @@ export default function ContactsPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: load is recreated every render; reload only when the filter changes
   useEffect(() => {
     resetSelection();
-    load(filter);
+    load(filter, 1);
   }, [filter]);
 
   // Polls a background deletion until it finishes, then reloads the list.
@@ -400,6 +418,19 @@ export default function ContactsPage() {
           )}
         </CardContent>
       </Card>
+
+      {contacts !== null && (
+        <ListPagination
+          page={page}
+          total={total}
+          itemsPerPage={ITEMS_PER_PAGE}
+          disabled={loadingPage}
+          onPageChange={(nextPage) => {
+            resetSelection();
+            void load(filter, nextPage);
+          }}
+        />
+      )}
     </ScrollablePage>
   );
 }

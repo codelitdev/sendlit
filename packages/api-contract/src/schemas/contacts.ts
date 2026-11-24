@@ -56,8 +56,18 @@ export const listContactsQuerySchema = z.object({
     .describe(
       "Serialized ContactFilterWithAggregator JSON; contacts matching it are left out",
     ),
-  offset: z.coerce.number().int().min(1).optional(),
-  rowsPerPage: z.coerce.number().int().min(1).optional(),
+  offset: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("Page number, 1-indexed (default: 1)"),
+  rowsPerPage: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("Contacts per page (default: 10)"),
 });
 
 export const contactDeliverySchema = z.object({
