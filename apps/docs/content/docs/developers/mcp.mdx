@@ -164,12 +164,10 @@ send. Broadcast and sequence tools accept only marketing templates and report
 - `list_esps`, `create_esp`, `get_esp`, `update_esp`, `delete_esp`, `test_esp`
 - `check_esp_domain_authentication` (live SPF, DKIM and DMARC check of the From domain, with the records to add)
 
-`update_general_settings` takes the footer's mailing address either as
-separate fields in `postalAddress` (`line1`, optional `line2`, `city`, `region`
-and `postalCode`, and an uppercase ISO 3166-1 alpha-2 `country`), which SendLit
-formats into `mailingAddress`, or as free text in `mailingAddress`, which
-clears `postalAddress`. Send one or the other: both at once is
-`postal_address_conflict`, and an unknown country is `postal_country_invalid`.
+`update_general_settings` takes the footer's mailing address as
+`postalAddress`: `line1`, optional `line2`, `city`, `region` and `postalCode`,
+and an uppercase ISO 3166-1 alpha-2 `country`. SendLit formats it into the
+footer. An unknown country is `postal_country_invalid`, and
 `postalAddress: null` clears the address.
 
 The ESP tools manage the team’s sending providers and default provider. Secrets are accepted for writes but are not returned in read responses.

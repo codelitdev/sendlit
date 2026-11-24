@@ -257,9 +257,10 @@ for ordinary or transactional designs.
 
 ### Postal addresses
 
-`@sendlit/email-blocks/postal-address` formats a structured address into the
-footer text exactly as SendLit does when a team saves `postalAddress` in its
-general settings. It doesn't depend on React, so servers can use it too:
+`@sendlit/email-blocks/postal-address` formats a team's `postalAddress` into
+the footer text exactly as SendLit does when it sends. It doesn't depend on
+React, so servers can use it too. `marketingPreviewContext({ postalAddress })`
+uses it to show the address in previews:
 
 ```ts
 import {

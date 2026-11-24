@@ -255,7 +255,7 @@ curl --fail-with-body --request POST \
     "externalId": "school:school-123",
     "name": "School 123",
     "sender": { "fromName": "School 123" },
-    "mailingAddress": "123 Example Street, Example City",
+    "postalAddress": { "line1": "123 Example Street", "city": "Example City", "country": "US" },
     "delivery": { "useOrganizationDefault": true }
   }'
 ```
