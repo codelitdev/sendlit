@@ -37,29 +37,26 @@ beforeEach(async () => {
 });
 
 describe("MCP general settings tools", () => {
-  it("accepts a postal address and returns it with its formatted text", async () => {
+  it("sets, returns and clears the postal address", async () => {
     await expect(
       call("update_general_settings", { postalAddress: bristol }),
-    ).resolves.toMatchObject({
-      mailingAddress: "18 Harbour Lane\nBristol, BS1 4RN\nUnited Kingdom",
-      postalAddress: bristol,
-    });
+    ).resolves.toEqual({ postalAddress: bristol, updatedAt: expect.any(String) });
     await expect(call("get_general_settings")).resolves.toMatchObject({
       postalAddress: bristol,
     });
     await expect(
-      call("update_general_settings", { mailingAddress: "PO Box 7" }),
-    ).resolves.toMatchObject({ mailingAddress: "PO Box 7", postalAddress: null });
+      call("update_general_settings", { postalAddress: null }),
+    ).resolves.toMatchObject({ postalAddress: null });
   });
 
-  it("maps REST's address errors to validation_failed", async () => {
-    for (const [args, reason] of [
-      [{ mailingAddress: "x", postalAddress: bristol }, "postal_address_conflict"],
-      [{ postalAddress: { ...bristol, country: "UK" } }, "postal_country_invalid"],
-    ] as const) {
-      await expect(call("update_general_settings", args)).resolves.toMatchObject({
-        error: { code: "validation_failed", safeDetails: { reason } },
-      });
-    }
+  it("maps an unknown country to validation_failed, as REST's 400", async () => {
+    await expect(
+      call("update_general_settings", { postalAddress: { ...bristol, country: "UK" } }),
+    ).resolves.toMatchObject({
+      error: {
+        code: "validation_failed",
+        safeDetails: { reason: "postal_country_invalid" },
+      },
+    });
   });
 });

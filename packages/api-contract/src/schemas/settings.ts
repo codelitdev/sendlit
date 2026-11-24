@@ -1,10 +1,7 @@
 import { z } from "zod";
 
-/** General (non-ESP) per-team workspace settings — a per-team singleton
- * (get/upsert, never a list), addressed via `/settings/general` like the ESP
- * settings, so no id fields are exposed. */
-/** A physical postal address as separate fields. SendLit turns it into the
- * footer's `mailingAddress` text with `formatPostalAddress` from
+/** A team's physical postal address (CAN-SPAM/GDPR) as separate fields. The
+ * email footer shows it as text formatted with `formatPostalAddress` from
  * `@sendlit/email-blocks/postal-address`. */
 export const postalAddressSchema = z.object({
   line1: z.string().trim().min(1).max(200).describe("Street address"),
@@ -29,31 +26,16 @@ export type PostalAddress = z.infer<typeof postalAddressSchema>;
  * (get/upsert, never a list), addressed via `/settings/general` like the ESP
  * settings, so no id fields are exposed. */
 export const generalSettingsSchema = z.object({
-  /** Physical postal address rendered in email footers
-   * (CAN-SPAM/GDPR requirement). */
-  mailingAddress: z.string().nullable(),
-  /** The same address as separate fields, when it was saved that way;
-   * `null` when it was saved as free text or isn't set. */
+  /** The physical postal address shown in marketing email footers; required
+   * for broadcasts and sequences. `null` until it is set. */
   postalAddress: postalAddressSchema.nullable(),
   updatedAt: z.string().nullable().optional(),
 });
 
-export const updateGeneralSettingsObjectSchema = z.object({
-  /** Free-text address. Send an empty string to clear the address. Clears
-   * `postalAddress`, since its fields no longer describe it. */
-  mailingAddress: z.string().optional(),
-  /** The address as separate fields; SendLit formats `mailingAddress` from
-   * it. `null` clears the address. Can't be sent with `mailingAddress`. */
+export const updateGeneralSettingsBodySchema = z.object({
+  /** Omit to keep the address; `null` clears it. */
   postalAddress: postalAddressSchema.nullable().optional(),
 });
-
-export const GENERAL_SETTINGS_ADDRESS_CONFLICT =
-  "Send either mailingAddress or postalAddress, not both";
-
-export const updateGeneralSettingsBodySchema = updateGeneralSettingsObjectSchema.refine(
-  (body) => body.mailingAddress === undefined || body.postalAddress === undefined,
-  { message: GENERAL_SETTINGS_ADDRESS_CONFLICT, path: ["postalAddress"] },
-);
 
 export const trackingDomainStatuses = ["pending", "verified", "failed"] as const;
 

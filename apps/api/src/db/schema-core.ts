@@ -1290,7 +1290,7 @@ export const teamDeliverySettings = pgTable(
 
 /** Per-team general workspace settings ("settings.general") — a per-team
  * singleton like `esp_configs`, addressed via the team (`/settings/general`),
- * so no public `<domain>_id` is needed. `mailingAddress` is the physical
+ * so no public `<domain>_id` is needed. `postalAddress` is the physical
  * postal address rendered in email footers (CAN-SPAM/GDPR requirement). */
 export const settings = pgTable("settings", {
   id: uuid("id").$defaultFn(genId).primaryKey(),
@@ -1298,10 +1298,8 @@ export const settings = pgTable("settings", {
     .notNull()
     .unique()
     .references(() => teams.id, { onDelete: "cascade" }),
-  mailingAddress: text("mailing_address"),
-  /** The same address as separate fields when it was saved that way
-   * (`mailingAddress` is then its formatted text); null when it was saved
-   * as free text. */
+  /** The physical postal address shown in marketing email footers,
+   * formatted with `formatPostalAddress` where it is used. */
   postalAddress: jsonb("postal_address").$type<PostalAddress>(),
   /** Hosted web pages for published broadcasts: the archive at
    * `/w/<webHandle>` and one page per issue. */

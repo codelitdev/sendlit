@@ -210,7 +210,6 @@ export const espConfigListSchema = z.object({
 
 /** General (non-ESP) per-team settings singleton — see settings/general. */
 export const generalSettingsSchema = z.object({
-  mailingAddress: z.string().nullable(),
   postalAddress: postalAddressSchema.nullable(),
   updatedAt: z.string().nullable().optional(),
 });

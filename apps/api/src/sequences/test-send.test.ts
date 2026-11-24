@@ -105,6 +105,33 @@ describe("sendSequenceEmailTest", () => {
     expect(sent.html).toContain("Draft body");
   });
 
+  it("puts the team's postal address, formatted, in the footer", async () => {
+    const { team, sequenceRow, email } = await seed();
+    await tdb
+      .update(settings)
+      .set({
+        postalAddress: {
+          line1: "18 Harbour Lane",
+          city: "Bristol",
+          postalCode: "BS1 4RN",
+          country: "GB",
+        },
+      })
+      .where(eq(settings.teamId, team.id));
+
+    await sendSequenceEmailTest({
+      teamId: team.id,
+      sequenceId: sequenceRow.sequenceId,
+      emailId: email.emailId,
+      to: ["me@example.com"],
+    });
+
+    const { html } = mockedSendMail.mock.calls[0][0];
+    expect(html.replace(/\s+/g, " ")).toContain(
+      "18 Harbour Lane<br>Bristol, BS1 4RN<br>United Kingdom",
+    );
+  });
+
   it("links a web version of the email as tested, not later edits", async () => {
     const { team, sequenceRow, email } = await seed();
 
@@ -226,7 +253,7 @@ describe("sendSequenceEmailTest", () => {
     const { team, sequenceRow, email } = await seed();
     await tdb
       .update(settings)
-      .set({ mailingAddress: null })
+      .set({ postalAddress: null })
       .where(eq(settings.teamId, team.id));
 
     await expect(

@@ -43,7 +43,7 @@ Content-Type: application/json
     "fromName": "Acme",
     "replyTo": "hello@acme.example"
   },
-  "mailingAddress": "...",
+  "postalAddress": { "line1": "...", "city": "...", "country": "GB" },
   "delivery": {
     "useOrganizationDefault": false,
     "teamEspEnabled": true,

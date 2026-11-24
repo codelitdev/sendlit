@@ -1,5 +1,5 @@
 {
-  "id": "2379cde1-c066-483f-b9ba-78c045933ca3",
+  "id": "cb6ba03f-c3aa-493b-bb39-ab589344bbe3",
   "prevId": "5c38a50f-451f-4d17-87d8-efc7d99751db",
   "version": "7",
   "dialect": "postgresql",
@@ -8134,12 +8134,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "mailing_address": {
-          "name": "mailing_address",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "postal_address": {
           "name": "postal_address",

@@ -7,8 +7,8 @@ const routes = contract.settings.general;
  * and sequences need before they can send. */
 export type GeneralSettings = Ok<typeof routes.get>;
 export type UpdateGeneralSettingsInput = Body<typeof routes.update>;
-/** A mailing address as separate fields; SendLit formats the footer's
- * `mailingAddress` text from it. */
+/** The team's postal address as separate fields; SendLit formats it into
+ * the marketing email footer. */
 export type PostalAddress = NonNullable<GeneralSettings["postalAddress"]>;
 
 export class GeneralSettingsResource {

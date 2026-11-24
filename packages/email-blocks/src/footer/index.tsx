@@ -1,5 +1,6 @@
 import type { BlockComponent, EmailBlock } from "@sendlit/email-editor";
 import { LockKeyhole } from "lucide-react";
+import { formatPostalAddress, type PostalAddress } from "../postal-address";
 import { FooterBlock } from "./block";
 import { FooterSettingsPanel } from "./settings";
 import type {
@@ -29,20 +30,26 @@ export const DEFAULT_FOOTER_LABELS: FooterLabels = {
 
 /**
  * What a marketing email's managed footer shows in editors and previews,
- * where there's no real address or links yet. Pass the broadcast's or
- * sequence's `viewInBrowser` setting: off leaves the link out, as it is
- * from the emails that get sent.
+ * where there are no real links yet. Pass the team's `postalAddress` to show
+ * it formatted as sent emails will (or `mailingAddress` text), and the
+ * broadcast's or sequence's `viewInBrowser` setting: off leaves the link
+ * out, as it is from the emails that get sent.
  */
 export function marketingPreviewContext({
-  mailingAddress = "Your mailing address",
+  postalAddress,
+  mailingAddress,
   viewInBrowser = true,
 }: {
+  postalAddress?: PostalAddress | null;
   mailingAddress?: string;
   viewInBrowser?: boolean;
 } = {}): SendLitEmailRenderContext {
   return {
     footer: {
-      mailingAddress,
+      mailingAddress:
+        (postalAddress && formatPostalAddress(postalAddress)) ||
+        mailingAddress ||
+        "Your mailing address",
       unsubscribeUrl: "#unsubscribe-preview",
       ...(viewInBrowser && { viewInBrowserUrl: "#view-in-browser-preview" }),
     },

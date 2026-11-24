@@ -305,11 +305,6 @@ const cases: Case[] = [
     { method: "GET", path: "/settings/general" },
   ],
   [
-    "settings.general.update",
-    (s) => s.settings.general.update({ mailingAddress: "1 Main St" }),
-    { method: "PUT", path: "/settings/general", body: { mailingAddress: "1 Main St" } },
-  ],
-  [
     "settings.general.update with a postal address",
     (s) =>
       s.settings.general.update({
@@ -396,6 +391,18 @@ const cases: Case[] = [
       method: "PATCH",
       path: "/provisioning/teams/team_1",
       body: { name: "Acme 2" },
+    },
+  ],
+  [
+    "provisioning.updateTeam with a postal address",
+    (s) =>
+      s.provisioning.updateTeam("team_1", {
+        postalAddress: { line1: "1 Main St", city: "Pune", country: "IN" },
+      }),
+    {
+      method: "PATCH",
+      path: "/provisioning/teams/team_1",
+      body: { postalAddress: { line1: "1 Main St", city: "Pune", country: "IN" } },
     },
   ],
   [

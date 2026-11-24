@@ -21,10 +21,13 @@ mock.module("../../auth/require-team", () => ({
 }));
 
 const { db } = await import("../../db/client");
-const { seedTeamAndContact, truncateAll } = await import("../../test/db");
+const { seedTeamAndContact, TEST_POSTAL_ADDRESS, truncateAll } = await import(
+  "../../test/db"
+);
 type TestDb = import("../../test/db").TestDb;
 const { requestApp } = await import("../../test/http");
-const { resolveAddressUpdate } = await import("./queries");
+const { assertMailingAddressConfigured, mailingAddressText, normalizePostalAddress } =
+  await import("./queries");
 const { default: generalRoutes } = await import("./routes");
 
 const tdb = db as unknown as TestDb;
@@ -56,99 +59,62 @@ beforeEach(async () => {
   requestContext.teamId = team.id;
 });
 
-describe("resolveAddressUpdate", () => {
-  it("leaves the address alone when neither form is sent", () => {
-    expect(resolveAddressUpdate({})).toBeUndefined();
-  });
-
-  it("formats a postal address and drops its blank fields", () => {
+describe("postal address helpers", () => {
+  it("trims fields and drops blank optional ones", () => {
     expect(
-      resolveAddressUpdate({
-        postalAddress: {
-          ...bristol,
-          line1: " 18 Harbour Lane ",
-          line2: " ",
-          region: "",
-        },
+      normalizePostalAddress({
+        ...bristol,
+        line1: " 18 Harbour Lane ",
+        line2: " ",
+        region: "",
       }),
-    ).toEqual({
-      mailingAddress: "18 Harbour Lane\nBristol, BS1 4RN\nUnited Kingdom",
-      postalAddress: bristol,
-    });
+    ).toEqual(bristol);
   });
 
-  it("rejects both forms at once and unknown countries", () => {
-    expect(() =>
-      resolveAddressUpdate({ mailingAddress: "x", postalAddress: bristol }),
-    ).toThrow("postal_address_conflict");
-    expect(() =>
-      resolveAddressUpdate({ postalAddress: { ...bristol, country: "UK" } }),
-    ).toThrow("postal_country_invalid");
+  it("rejects countries that aren't current ISO codes", () => {
+    expect(() => normalizePostalAddress({ ...bristol, country: "UK" })).toThrow(
+      "postal_country_invalid",
+    );
+  });
+
+  it("formats the footer text, or null without an address", () => {
+    expect(mailingAddressText(bristol)).toBe(
+      "18 Harbour Lane\nBristol, BS1 4RN\nUnited Kingdom",
+    );
+    expect(mailingAddressText(null)).toBeNull();
   });
 });
 
 describe("general settings routes", () => {
-  it("returns a free-text address without parts", async () => {
+  it("returns the seeded address", async () => {
     const response = await requestApp(app(), "/settings/general");
     expect(response.status).toBe(200);
-    expect(response.json()).toMatchObject({
-      mailingAddress: "1 Test St, Testville",
-      postalAddress: null,
-    });
+    expect(response.json()).toMatchObject({ postalAddress: TEST_POSTAL_ADDRESS });
+    expect(response.json()).not.toHaveProperty("mailingAddress");
   });
 
-  it("stores a postal address and its formatted text", async () => {
-    const response = await put({ postalAddress: bristol });
+  it("stores a postal address", async () => {
+    const response = await put({ postalAddress: { ...bristol, line2: "" } });
     expect(response.status).toBe(200);
-    expect(response.json()).toMatchObject({
-      mailingAddress: "18 Harbour Lane\nBristol, BS1 4RN\nUnited Kingdom",
-      postalAddress: bristol,
-    });
-
-    const read = await requestApp(app(), "/settings/general");
-    expect(read.json()).toMatchObject({
-      mailingAddress: "18 Harbour Lane\nBristol, BS1 4RN\nUnited Kingdom",
+    expect(response.json()).toMatchObject({ postalAddress: bristol });
+    expect((await requestApp(app(), "/settings/general")).json()).toMatchObject({
       postalAddress: bristol,
     });
   });
 
   it("keeps the address when an update leaves it out", async () => {
     await put({ postalAddress: bristol });
-    const response = await put({});
-    expect(response.json()).toMatchObject({ postalAddress: bristol });
+    expect((await put({})).json()).toMatchObject({ postalAddress: bristol });
   });
 
-  it("clears the parts when free text replaces them", async () => {
-    await put({ postalAddress: bristol });
-    const response = await put({ mailingAddress: "PO Box 7, Bristol" });
-    expect(response.status).toBe(200);
-    expect(response.json()).toMatchObject({
-      mailingAddress: "PO Box 7, Bristol",
-      postalAddress: null,
-    });
-  });
-
-  it("clears both with postalAddress: null or an empty mailingAddress", async () => {
+  it("clears the address with null", async () => {
     await put({ postalAddress: bristol });
     expect((await put({ postalAddress: null })).json()).toMatchObject({
-      mailingAddress: null,
       postalAddress: null,
     });
-
-    await put({ postalAddress: bristol });
-    expect((await put({ mailingAddress: "" })).json()).toMatchObject({
-      mailingAddress: null,
-      postalAddress: null,
-    });
-  });
-
-  it("rejects both forms in one update", async () => {
-    await put({ postalAddress: bristol });
-    const response = await put({ mailingAddress: "1 Main St", postalAddress: bristol });
-    expect(response.status).toBe(400);
-    expect((await requestApp(app(), "/settings/general")).json()).toMatchObject({
-      postalAddress: bristol,
-    });
+    await expect(assertMailingAddressConfigured(requestContext.teamId)).rejects.toThrow(
+      "mailing_address_required",
+    );
   });
 
   it("rejects unknown countries and malformed addresses", async () => {
@@ -165,8 +131,7 @@ describe("general settings routes", () => {
       expect((await put({ postalAddress })).status).toBe(400);
     }
     expect((await requestApp(app(), "/settings/general")).json()).toMatchObject({
-      mailingAddress: "1 Test St, Testville",
-      postalAddress: null,
+      postalAddress: TEST_POSTAL_ADDRESS,
     });
   });
 });

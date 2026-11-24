@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { postalAddressSchema } from "./settings";
 
 export const teamSchema = z.object({
   teamId: z.string(),
@@ -47,7 +48,7 @@ export const provisionTeamBodySchema = z.object({
       replyTo: z.string().email().optional(),
     })
     .optional(),
-  mailingAddress: z.string().min(1).optional(),
+  postalAddress: postalAddressSchema.optional(),
   delivery: z
     .object({
       useOrganizationDefault: z.boolean().optional(),
@@ -85,7 +86,7 @@ export const provisionTeamResponseSchema = z.discriminatedUnion("created", [
  * grant, or organization topology. */
 export const provisionedTeamSchema = provisionedTeamBaseSchema.extend({
   status: z.enum(["active", "sending_suspended", "archived"]),
-  mailingAddress: z.string().nullable(),
+  postalAddress: postalAddressSchema.nullable(),
   teamEspEnabled: z.boolean(),
   teamCanChangeDefault: z.boolean(),
   createdAt: z.string().nullable(),
@@ -101,7 +102,7 @@ export const updateProvisionedTeamBodySchema = z
         replyTo: z.string().email().nullable().optional(),
       })
       .optional(),
-    mailingAddress: z.string().min(1).nullable().optional(),
+    postalAddress: postalAddressSchema.nullable().optional(),
     delivery: z
       .object({
         teamEspEnabled: z.boolean().optional(),

@@ -5,6 +5,15 @@ import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "../db/schema";
 
+/** The postal address every seeded team has; its footer text is
+ * `TEST_MAILING_ADDRESS`. */
+export const TEST_POSTAL_ADDRESS = {
+  line1: "1 Test St",
+  city: "Testville",
+  country: "US",
+};
+export const TEST_MAILING_ADDRESS = "1 Test St\nTestville\nUnited States";
+
 /**
  * An in-memory Postgres (PGlite) with the real drizzle migrations applied, so
  * tests exercise actual query semantics — unique indexes, `onConflictDoNothing`,
@@ -171,7 +180,7 @@ export async function seedTeamAndContact(
 
   await db.insert(schema.settings).values({
     teamId: team.id,
-    mailingAddress: "1 Test St, Testville",
+    postalAddress: TEST_POSTAL_ADDRESS,
     ...overrides.settings,
   });
 

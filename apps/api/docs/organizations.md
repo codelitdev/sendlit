@@ -1719,7 +1719,7 @@ There is no legacy fallback because there are no production users.
         "fromName": "Jane Doe",
         "replyTo": "jane@school.example",
     },
-    "mailingAddress": "...",
+    "postalAddress": { "line1": "...", "city": "...", "country": "GB" },
     "delivery": {
         "useOrganizationDefault": true,
         "teamEspEnabled": false,
@@ -1781,7 +1781,7 @@ the unrecovered key in the same operation.
 - Concurrent identical requests create one team.
 - Repeating an identical request returns `created: false` and the same team.
 - Store a hash of the canonical creation request before organization defaults
-  are resolved. A replay with a different `name`, `sender`, `mailingAddress`,
+  are resolved. A replay with a different `name`, `sender`, `postalAddress`,
   `delivery`, or `quota` payload returns `409 provisioning_conflict` and does
   not mutate the team. Callers use the lifecycle `PATCH` route for intentional
   changes.
