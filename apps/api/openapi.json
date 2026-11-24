@@ -684,6 +684,7 @@
           {
             "name": "offset",
             "in": "query",
+            "description": "Page number, 1-indexed (default: 1)",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -692,6 +693,7 @@
           {
             "name": "rowsPerPage",
             "in": "query",
+            "description": "Contacts per page (default: 10)",
             "schema": {
               "type": "integer",
               "minimum": 1
