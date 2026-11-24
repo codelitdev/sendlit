@@ -27,6 +27,11 @@
       "import": "./dist/footer/index.mjs",
       "default": "./dist/footer/index.mjs"
     },
+    "./postal-address": {
+      "types": "./dist/postal-address/index.d.ts",
+      "import": "./dist/postal-address/index.mjs",
+      "default": "./dist/postal-address/index.mjs"
+    },
     "./styles.css": "./dist/index.css"
   },
   "publishConfig": {
