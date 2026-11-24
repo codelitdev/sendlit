@@ -93,8 +93,10 @@ export function createApp(options: CreateAppOptions) {
   // Hand Better Auth a client IP it can trust for the hosted signup guards,
   // its rate limits and session IPs: Express's req.ip honours
   // ENABLE_TRUST_PROXY, and any value the client sent in this header is
-  // overwritten (secureCookieOptions reads only this header).
-  app.use("/api/auth", createClientIpMiddleware({ header: CLIENT_IP_HEADER }));
+  // overwritten (secureCookieOptions reads only this header). Set on every
+  // route, as in MediaLit, because other routes call auth.api with the
+  // request headers too.
+  app.use(createClientIpMiddleware({ header: CLIENT_IP_HEADER }));
   app.all("/api/auth/*", toNodeHandler(auth));
   app.use(oauthPagesRoutes);
   // The MCP handler owns JSON parsing and protocol content-type errors, so it
