@@ -25,6 +25,7 @@ import { EspFeedbackDialog } from "@/components/dashboard/esp-feedback-dialog";
 import { FeedbackRequirementNotice } from "@/components/dashboard/feedback-requirement-notice";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { PostalAddressFields } from "@/components/dashboard/postal-address-fields";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
 import { SendErrorMessage } from "@/components/dashboard/send-error-message";
 import { TrackingDomainSettings } from "@/components/dashboard/tracking-domain-settings";
@@ -52,7 +53,6 @@ import { IconButton } from "@/components/ui/codelit/icon-button";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/codelit/tabs";
-import { Textarea } from "@/components/ui/codelit/textarea";
 import {
   Table,
   TableBody,
@@ -86,6 +86,13 @@ import {
 import { ApiError } from "@/lib/api-client";
 import { presentDeliverySourceError } from "@/lib/delivery-source";
 import { espProviderLabel } from "@/lib/esp-providers";
+import {
+  EMPTY_POSTAL_ADDRESS_FORM,
+  isPostalAddressFormEmpty,
+  type PostalAddressForm,
+  postalAddressFromForm,
+  postalAddressToForm,
+} from "@/lib/postal-address";
 import { getTeamIdFromCookie } from "@/lib/tokens";
 
 const SETTINGS_TABS = ["general", "esp", "api-keys", "ai", "web"] as const;
@@ -106,7 +113,9 @@ export default function SettingsPage() {
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings | undefined>(
     undefined,
   );
-  const [mailingAddress, setMailingAddress] = useState("");
+  const [addressForm, setAddressForm] = useState<PostalAddressForm>(
+    EMPTY_POSTAL_ADDRESS_FORM,
+  );
   const [esps, setEsps] = useState<EspConfig[] | null>(null);
   const [defaultTeamEspId, setDefaultTeamEspId] = useState<string | null>(null);
   const [feedbackRequirement, setFeedbackRequirement] =
@@ -145,12 +154,12 @@ export default function SettingsPage() {
         getTeamDeliverySettings(),
       ]);
       setGeneralSettings(general);
-      setMailingAddress(general.mailingAddress ?? "");
+      setAddressForm(postalAddressToForm(general.postalAddress));
       setEsps(items);
       setDefaultTeamEspId(deliverySettings.defaultTeamEspId);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load settings");
-      setGeneralSettings({ mailingAddress: null });
+      setGeneralSettings({ mailingAddress: null, postalAddress: null });
       setEsps([]);
     }
   }
@@ -193,14 +202,18 @@ export default function SettingsPage() {
   }
 
   async function saveGeneral() {
+    const postalAddress = postalAddressFromForm(addressForm);
+    const clearing = !postalAddress && isPostalAddressFormEmpty(addressForm);
+    if (!postalAddress && !(clearing && generalSettings?.postalAddress)) {
+      setError("Enter a street address and choose a country.");
+      return;
+    }
     setSavingGeneral(true);
     setError(null);
     try {
-      const updated = await updateGeneralSettings({
-        mailingAddress,
-      });
+      const updated = await updateGeneralSettings({ postalAddress });
       setGeneralSettings(updated);
-      setMailingAddress(updated.mailingAddress ?? "");
+      setAddressForm(postalAddressToForm(updated.postalAddress));
       setGeneralSaved(true);
       setTimeout(() => setGeneralSaved(false), 2000);
     } catch (err) {
@@ -400,25 +413,27 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="mailing-address">
+                    <p className="text-sm font-medium">
                       Mailing address (required for broadcasts and sequences)
-                    </Label>
-                    <Textarea
-                      id="mailing-address"
-                      value={mailingAddress}
-                      onChange={(e) => setMailingAddress(e.target.value)}
-                      placeholder="123 Main St, City, Country"
-                      rows={4}
-                      aria-describedby="mailing-address-help"
-                    />
-                    <p
-                      id="mailing-address-help"
-                      className="text-sm text-muted-foreground"
-                    >
+                    </p>
+                    <p className="text-sm text-muted-foreground">
                       Your physical mailing address is included in the managed marketing
                       footer for broadcasts and sequences.
                     </p>
                   </div>
+                  {generalSettings?.mailingAddress?.trim() &&
+                    !generalSettings.postalAddress && (
+                      <div className="space-y-1.5 rounded-md border bg-muted/40 p-3">
+                        <p className="text-sm font-medium">Current address</p>
+                        <p className="whitespace-pre-line text-sm">
+                          {generalSettings.mailingAddress}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Fill in the fields below to replace it.
+                        </p>
+                      </div>
+                    )}
+                  <PostalAddressFields value={addressForm} onChange={setAddressForm} />
                 </CardContent>
                 <CardFooter>
                   <Button onClick={saveGeneral} disabled={savingGeneral}>
