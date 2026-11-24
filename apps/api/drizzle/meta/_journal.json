@@ -239,6 +239,13 @@
       "when": 1795335657730,
       "tag": "0033_outbound_campaign_delivery_index",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795509010507,
+      "tag": "0034_settings_postal_address",
+      "breakpoints": true
     }
   ]
 }

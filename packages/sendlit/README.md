@@ -70,7 +70,7 @@ new SendLit({
 | `sendlit.suppressions`   | `list`, `listAll`, `get`, `release`                                                                                                                                  |
 | `sendlit.deliveryEvents` | `list`, `listAll`, `get`                                                                                                                                             |
 | `sendlit.tags`           | `list`, `references`, `rename`, `remove`                                                                                                                             |
-| `sendlit.settings`       | `general.get`, `general.update` (the mailing address broadcasts and sequences need)                                                                                  |
+| `sendlit.settings`       | `general.get`, `general.update` (the mailing address broadcasts and sequences need, as text or as `postalAddress` fields)                                            |
 | `sendlit.overview`       | `get`: the team's dashboard numbers, optionally for `rangeDays` 1, 3, 7 or 30                                                                                        |
 
 Request and response types are exported too, for example `Contact`,

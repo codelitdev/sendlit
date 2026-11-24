@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "postal_address" jsonb;

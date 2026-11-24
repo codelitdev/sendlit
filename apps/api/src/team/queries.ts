@@ -122,6 +122,9 @@ export async function updateProvisionedTeam(
         .update(settings)
         .set({
           mailingAddress: input.mailingAddress,
+          // Free text replaces a structured address, whose fields no
+          // longer describe it.
+          postalAddress: null,
           updatedAt: new Date(),
         })
         .where(eq(settings.teamId, team.id));

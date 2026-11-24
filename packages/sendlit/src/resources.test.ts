@@ -309,6 +309,35 @@ const cases: Case[] = [
     (s) => s.settings.general.update({ mailingAddress: "1 Main St" }),
     { method: "PUT", path: "/settings/general", body: { mailingAddress: "1 Main St" } },
   ],
+  [
+    "settings.general.update with a postal address",
+    (s) =>
+      s.settings.general.update({
+        postalAddress: {
+          line1: "18 Harbour Lane",
+          city: "Bristol",
+          postalCode: "BS1 4RN",
+          country: "GB",
+        },
+      }),
+    {
+      method: "PUT",
+      path: "/settings/general",
+      body: {
+        postalAddress: {
+          line1: "18 Harbour Lane",
+          city: "Bristol",
+          postalCode: "BS1 4RN",
+          country: "GB",
+        },
+      },
+    },
+  ],
+  [
+    "settings.general.update clearing the postal address",
+    (s) => s.settings.general.update({ postalAddress: null }),
+    { method: "PUT", path: "/settings/general", body: { postalAddress: null } },
+  ],
   ["overview.get", (s) => s.overview.get(), { method: "GET", path: "/overview" }],
   [
     "overview.get with range",

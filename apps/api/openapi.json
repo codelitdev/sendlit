@@ -20694,13 +20694,53 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "postalAddress": {
+                      "type": "object",
+                      "properties": {
+                        "line1": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "description": "Street address"
+                        },
+                        "line2": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "Apartment, suite, building and so on"
+                        },
+                        "city": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "region": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "description": "State, province or region"
+                        },
+                        "postalCode": {
+                          "type": "string",
+                          "maxLength": 20
+                        },
+                        "country": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$",
+                          "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                        }
+                      },
+                      "required": [
+                        "line1",
+                        "country"
+                      ],
+                      "nullable": true
+                    },
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
                     }
                   },
                   "required": [
-                    "mailingAddress"
+                    "mailingAddress",
+                    "postalAddress"
                   ]
                 }
               }
@@ -20732,7 +20772,7 @@
         ]
       },
       "put": {
-        "description": "Omitted fields are left unchanged; send an empty string to clear a field.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
+        "description": "Omitted fields are left unchanged; send an empty string to clear a field. Set the footer's mailing address either as free text (`mailingAddress`) or as separate fields (`postalAddress`), not both (400). A `postalAddress` sets `mailingAddress` to its formatted text; 400 `postal_country_invalid` when its country isn't a current ISO 3166-1 alpha-2 code. Free text clears `postalAddress`; `postalAddress: null` or `mailingAddress: \"\"` clears both.\n\n**Authentication:** Requires a team API key or a user OAuth access token. Dashboard session cookies are also accepted.",
         "summary": "Update the team's general settings",
         "tags": [
           "Settings"
@@ -20747,6 +20787,45 @@
                 "properties": {
                   "mailingAddress": {
                     "type": "string"
+                  },
+                  "postalAddress": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "description": "Street address"
+                      },
+                      "line2": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Apartment, suite, building and so on"
+                      },
+                      "city": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "region": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "description": "State, province or region"
+                      },
+                      "postalCode": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "country": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{2}$",
+                        "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                      }
+                    },
+                    "required": [
+                      "line1",
+                      "country"
+                    ],
+                    "nullable": true
                   }
                 }
               }
@@ -20765,20 +20844,75 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "postalAddress": {
+                      "type": "object",
+                      "properties": {
+                        "line1": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "description": "Street address"
+                        },
+                        "line2": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "Apartment, suite, building and so on"
+                        },
+                        "city": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "region": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "description": "State, province or region"
+                        },
+                        "postalCode": {
+                          "type": "string",
+                          "maxLength": 20
+                        },
+                        "country": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$",
+                          "description": "ISO 3166-1 alpha-2 country code, uppercase (for example `GB`)"
+                        }
+                      },
+                      "required": [
+                        "line1",
+                        "country"
+                      ],
+                      "nullable": true
+                    },
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
                     }
                   },
                   "required": [
-                    "mailingAddress"
+                    "mailingAddress",
+                    "postalAddress"
                   ]
                 }
               }
             }
           },
           "400": {
-            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+            "description": "400\n\nOr `credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [

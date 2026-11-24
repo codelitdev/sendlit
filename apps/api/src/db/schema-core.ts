@@ -1,4 +1,4 @@
-import type { CustomFields } from "@sendlit/api-contract";
+import type { CustomFields, PostalAddress } from "@sendlit/api-contract";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -1299,6 +1299,10 @@ export const settings = pgTable("settings", {
     .unique()
     .references(() => teams.id, { onDelete: "cascade" }),
   mailingAddress: text("mailing_address"),
+  /** The same address as separate fields when it was saved that way
+   * (`mailingAddress` is then its formatted text); null when it was saved
+   * as free text. */
+  postalAddress: jsonb("postal_address").$type<PostalAddress>(),
   /** Hosted web pages for published broadcasts: the archive at
    * `/w/<webHandle>` and one page per issue. */
   webEnabled: boolean("web_enabled").notNull().default(false),

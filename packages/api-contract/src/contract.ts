@@ -1133,10 +1133,10 @@ const generalSettingsContract = c.router(
       method: "PUT",
       path: "/settings/general",
       body: updateGeneralSettingsBodySchema,
-      responses: { 200: generalSettingsSchema },
+      responses: { 200: generalSettingsSchema, 400: errorSchema },
       summary: "Update the team's general settings",
       description:
-        "Omitted fields are left unchanged; send an empty string to clear a field.",
+        "Omitted fields are left unchanged; send an empty string to clear a field. Set the footer's mailing address either as free text (`mailingAddress`) or as separate fields (`postalAddress`), not both (400). A `postalAddress` sets `mailingAddress` to its formatted text; 400 `postal_country_invalid` when its country isn't a current ISO 3166-1 alpha-2 code. Free text clears `postalAddress`; `postalAddress: null` or `mailingAddress: \"\"` clears both.",
     },
   },
   { metadata: { tag: "Settings" } },
