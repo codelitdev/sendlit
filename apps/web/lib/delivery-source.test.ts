@@ -3,9 +3,37 @@ import type { SendingOption } from "./api";
 import {
   isDeletedDeliverySource,
   presentDeliverySourceError,
+  presentSendError,
   sendingOptionFor,
   sendingOptionLabel,
 } from "./delivery-source";
+
+describe("presentSendError", () => {
+  it("names a shared mailbox pause instead of the generic billing text (#220)", () => {
+    const team = presentSendError("sending_paused", {
+      error: "sending_paused",
+      reason: "shared_esp_team_breach",
+      scope: "team",
+    });
+    expect(team).toContain("from this team are paused on the shared mailbox");
+    expect(team).toContain("Other teams on the mailbox keep sending");
+    const mailbox = presentSendError("sending_paused", {
+      error: "sending_paused",
+      reason: "shared_esp_breach",
+      scope: "shared_mailbox",
+    });
+    expect(mailbox).toContain("for every team on this shared mailbox");
+  });
+
+  it("falls back to the code's usual message", () => {
+    expect(
+      presentSendError("sending_paused", { reason: "payment_grace_expired" }),
+    ).toBe(presentDeliverySourceError("sending_paused"));
+    expect(presentSendError("esp_is_default")).toBe(
+      presentDeliverySourceError("esp_is_default"),
+    );
+  });
+});
 
 describe("presentDeliverySourceError", () => {
   it("explains each reason an ESP cannot be removed (#12)", () => {

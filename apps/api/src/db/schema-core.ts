@@ -2058,6 +2058,10 @@ export const outboundMessages = pgTable(
     campaignDeliveryIdx: index("outbound_messages_campaign_delivery_id_idx").on(
       table.campaignDeliveryId,
     ),
+    // The shared-ESP guard's rolling window over one organization ESP.
+    espAcceptedAtIdx: index("outbound_messages_esp_config_id_accepted_at_idx")
+      .on(table.espConfigId, table.acceptedAt)
+      .where(sql`${table.deliverySourceType} = 'organization'`),
     recipientHistoryIdx: index("outbound_messages_team_id_recipient_created_at_idx").on(
       table.teamId,
       table.normalizedRecipient,
@@ -2079,6 +2083,63 @@ export const outboundMessages = pgTable(
                 AND ${table.espGrantId} IS NULL
                 AND ${table.deliveryStatus} <> 'queued'
             )`,
+    ),
+  }),
+);
+
+/**
+ * Shared-ESP guard state (#220). A row with a null `teamId` is the whole
+ * organization ESP; a row with a `teamId` pauses one team's marketing through
+ * that ESP only, leaving its own ESPs and transactional mail alone.
+ */
+export const sharedEspSendingControls = pgTable(
+  "shared_esp_sending_controls",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    espConfigId: uuid("esp_config_id")
+      .notNull()
+      .references(() => espConfigs.id, { onDelete: "restrict" }),
+    teamId: uuid("team_id").references(() => teams.id, { onDelete: "restrict" }),
+    status: text("status").notNull().default("normal"),
+    reasonCode: text("reason_code"),
+    source: text("source").notNull().default("automatic"),
+    enteredAt: timestamp("entered_at", { withTimezone: true }),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true }),
+    minimumHoldUntil: timestamp("minimum_hold_until", { withTimezone: true }),
+    cleanEvaluationDays: integer("clean_evaluation_days").notNull().default(0),
+    operatorUserId: text("operator_user_id").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    operatorReason: text("operator_reason"),
+    /** When an operator last released this control. Until `releaseGraceUntil`
+     * the guard judges only sends accepted after it, so the reviewed bounces
+     * can't pause it again but new ones still do. */
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    releaseGraceUntil: timestamp("release_grace_until", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    espUnique: uniqueIndex("shared_esp_sending_controls_esp_uidx")
+      .on(table.espConfigId)
+      .where(sql`${table.teamId} IS NULL`),
+    espTeamUnique: uniqueIndex("shared_esp_sending_controls_esp_team_uidx")
+      .on(table.espConfigId, table.teamId)
+      .where(sql`${table.teamId} IS NOT NULL`),
+    statusCheck: check(
+      "shared_esp_sending_controls_status_check",
+      sql`${table.status} IN ('normal', 'warned', 'marketing_paused')`,
+    ),
+    sourceCheck: check(
+      "shared_esp_sending_controls_source_check",
+      sql`${table.source} IN ('automatic', 'operator')`,
+    ),
+    cleanDaysCheck: check(
+      "shared_esp_sending_controls_clean_days_check",
+      sql`${table.cleanEvaluationDays} >= 0`,
     ),
   }),
 );

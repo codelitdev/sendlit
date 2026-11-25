@@ -8,6 +8,7 @@ import {
   mailDispatchOutbox,
   outboundMessages,
   sequences,
+  sharedEspSendingControls,
   teamDeliverySettings,
   transactionalEmails,
 } from "../../db/schema";
@@ -498,6 +499,9 @@ async function deleteOwnedEspConfig(config: EspConfig): Promise<boolean> {
           ),
         );
     }
+    await tx
+      .delete(sharedEspSendingControls)
+      .where(eq(sharedEspSendingControls.espConfigId, config.id));
     const deleted = await tx
       .delete(espConfigs)
       .where(eq(espConfigs.id, config.id))

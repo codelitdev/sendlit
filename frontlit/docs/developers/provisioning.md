@@ -372,6 +372,14 @@ than a human-readable message.
 | `429`  | `too_many_requests`            | The provisioning rate limit was exceeded              |
 | `500`  | `server_error`                 | SendLit could not complete provisioning               |
 
+A team's own sends can also be refused while it's paused. A broadcast or
+sequence through the shared mailbox returns `403 sending_paused` with `reason`
+`shared_esp_team_breach` or `shared_esp_top_contributor` (`scope: "team"`) when
+that team's bounces or complaints put the mailbox at risk, or
+`shared_esp_breach` (`scope: "shared_mailbox"`) when every team on it is
+paused. Transactional email is not affected. See
+[Shared mailboxes](/docs/workspace/acceptable-use#shared-mailboxes).
+
 Treat a `404` as organization-scoped: a valid team belonging to another
 organization is intentionally not exposed through the caller's key.
 

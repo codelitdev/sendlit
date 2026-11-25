@@ -20,6 +20,7 @@ off. This page lists what applies where.
 | Pacing of a new account's sends through a shared mailbox | Off | On |
 | New-account daily ramp and monthly send caps (plans) | Off | On |
 | Auto-pause on high bounce or complaint rates | On | On |
+| Shared mailbox guard | Off; turn on with `SHARED_ESP_GUARD=on` | On |
 | Teams' own tracking domains | On, once your proxy serves them over HTTPS | On |
 
 Variables go in the root `.env` file; the Compose stack passes all of it to
@@ -80,6 +81,58 @@ too high, or when the ESP keeps failing. This runs on every install:
 | `AUTO_PAUSE_CHECK_SECONDS` | 30 | How often a sending campaign's rates are rechecked |
 
 Rates need bounce and complaint feedback from your ESP; see
+[Amazon SES bounces and complaints](/docs/self-hosting/amazon-ses-feedback) for SES.
+
+## Shared mailbox guard
+
+When several teams send through one shared mailbox (an organization ESP),
+they also share that ESP account's standing. Email providers enforce bounce
+and complaint limits on the whole account, and Amazon SES can pause an
+account at about 5% bounces or 0.1% complaints. One team's bad list could
+stop every team.
+
+The guard checks each shared mailbox every hour, and within a minute of a
+bounce or complaint, over the last 7 days:
+
+- A team whose own bounce or complaint rate is over the pause rate has its
+  broadcasts and sequences through that mailbox paused. It needs at least 5
+  bounces or 2 complaints first, so one complaint never pauses a small team.
+- If the mailbox's combined rate is still over the warning rate, the teams
+  that are over the warning rate themselves pause too, worst first. Clean
+  teams are never paused.
+- Only if the teams left are still over the pause rate does marketing pause
+  for every team on the mailbox.
+
+Transactional email always keeps sending, and teams' own ESPs aren't
+affected. A pause lasts at least `SHARED_ESP_MINIMUM_HOLD_HOURS`, then lifts
+after `SHARED_ESP_RECOVERY_CLEAN_DAYS` clean daily checks. Organization owners
+get an email on every change.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SHARED_ESP_GUARD` | `on` in Cloud, `off` self-hosted | `on` or `off` |
+| `SHARED_ESP_MIN_ACCEPTED` | 200 | Sends through the mailbox before its combined rate is judged |
+| `SHARED_ESP_BOUNCE_WARN_BPS` | 200 | Combined bounce rate that starts pausing the worst teams (2%) |
+| `SHARED_ESP_COMPLAINT_WARN_BPS` | 5 | Combined complaint rate that does the same (0.05%) |
+| `SHARED_ESP_BOUNCE_PAUSE_BPS` | 400 | Bounce rate that pauses a team, or the mailbox (4%) |
+| `SHARED_ESP_COMPLAINT_PAUSE_BPS` | 8 | Complaint rate that does the same (0.08%) |
+| `SHARED_ESP_TEAM_MIN_BOUNCES` | 5 | Bounces before a team's bounce rate is judged |
+| `SHARED_ESP_TEAM_MIN_COMPLAINTS` | 2 | Complaints before a team's complaint rate is judged |
+| `SHARED_ESP_MINIMUM_HOLD_HOURS` | 72 | Shortest pause |
+| `SHARED_ESP_RECOVERY_CLEAN_DAYS` | 3 | Clean daily checks before a pause lifts |
+
+See a mailbox's pauses and each team's last 7 days, or lift a pause early:
+
+```bash
+bun --filter @sendlit/api billing shared-esp-status esp_...
+bun --filter @sendlit/api billing shared-esp-release esp_... --team team_... --operator <user_id> --reason "List cleaned"
+```
+
+Leave out `--team` to lift a pause on the whole mailbox. For 7 days after a
+release, the guard counts only emails sent after it, so the bounces you
+reviewed can't pause it again, but a new bad list still does.
+
+The guard needs bounce and complaint feedback from the mailbox's ESP; see
 [Amazon SES bounces and complaints](/docs/self-hosting/amazon-ses-feedback) for SES.
 
 ## Cloud-only checks

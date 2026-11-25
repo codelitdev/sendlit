@@ -12,7 +12,11 @@ import logger from "../services/log";
 import { getOrganizationEntitlements } from "./entitlements";
 import { notifyReputationChange } from "./notifications";
 import { readReputationConfig } from "./reputation-config";
-import { type ReputationMetrics, reputationDecision } from "./reputation-policy";
+import {
+  advanceControlState,
+  type ReputationMetrics,
+  reputationDecision,
+} from "./reputation-policy";
 
 export { readReputationConfig } from "./reputation-config";
 
@@ -24,10 +28,6 @@ export type SendingControlStatus =
 
 function utcDayStart(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
-function sameUtcDay(a: Date | null, b: Date): boolean {
-  return Boolean(a && utcDayStart(a).getTime() === utcDayStart(b).getTime());
 }
 
 async function rollingMetrics(teamId: string, now: Date): Promise<ReputationMetrics> {
@@ -105,51 +105,31 @@ export async function evaluateTeamReputation(
 
     // Recovery streaks advance at most once per UTC day. Any breach resets
     // the streak immediately, and a marketing pause cannot recover before
-    // its minimum hold has elapsed.
-    const alreadyEvaluatedToday = sameUtcDay(control.evaluatedAt, now);
-    let nextStatus = desired.status;
-    let cleanDays = control.cleanEvaluationDays;
-    let reason = desired.reason;
-    let minimumHoldUntil = control.minimumHoldUntil;
-    const rank = (status: SendingControlStatus) =>
-      status === "all_paused"
-        ? 3
-        : status === "marketing_paused"
-          ? 2
-          : status === "warned"
-            ? 1
-            : 0;
-    if (rank(desired.status) > rank(control.status as SendingControlStatus)) {
-      cleanDays = 0;
-      if (desired.status === "marketing_paused") {
-        minimumHoldUntil = new Date(
-          now.getTime() + config.minimumHoldHours * 60 * 60 * 1000,
-        );
-      }
-    } else if (rank(desired.status) < rank(control.status as SendingControlStatus)) {
-      // Recovery never skips the current hold. marketing_paused stays
-      // paused until 72 hours plus seven clean days; warned needs seven
-      // clean days. Weaker samples cannot drop a pause to warned.
-      if (control.status === "marketing_paused" || control.status === "warned") {
-        if (desired.status === "normal" && !alreadyEvaluatedToday) {
-          cleanDays += 1;
-        } else if (desired.status !== "normal") {
-          cleanDays = 0;
-        }
-        const holdElapsed =
-          !minimumHoldUntil || minimumHoldUntil.getTime() <= now.getTime();
-        if (cleanDays >= config.recoveryCleanDays && holdElapsed) {
-          nextStatus = "normal";
-          reason = "reputation_recovered";
-          minimumHoldUntil = null;
-        } else {
-          nextStatus = control.status as SendingControlStatus;
-          reason = control.reasonCode ?? "reputation_pause";
-        }
-      }
-    } else if (desired.status === "warned" || desired.status === "marketing_paused") {
-      cleanDays = 0;
-    }
+    // its minimum hold has elapsed (72 hours plus seven clean days).
+    const transition = advanceControlState(
+      {
+        status: control.status as SendingControlStatus,
+        reasonCode: control.reasonCode,
+        evaluatedAt: control.evaluatedAt,
+        cleanEvaluationDays: control.cleanEvaluationDays,
+        minimumHoldUntil: control.minimumHoldUntil,
+      },
+      desired,
+      now,
+      {
+        minimumHoldHours: config.minimumHoldHours,
+        recoveryCleanDays: config.recoveryCleanDays,
+        recoveredReason: "reputation_recovered",
+        heldReason: "reputation_pause",
+      },
+    );
+    const {
+      alreadyEvaluatedToday,
+      status: nextStatus,
+      reason,
+      minimumHoldUntil,
+      cleanEvaluationDays: cleanDays,
+    } = transition;
 
     if (nextStatus !== control.status || !alreadyEvaluatedToday) {
       const enteredAt = nextStatus !== control.status ? now : control.enteredAt;

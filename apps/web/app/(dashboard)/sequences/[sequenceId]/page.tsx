@@ -75,10 +75,7 @@ import {
   updateSequenceEmail,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
-import {
-  isDeletedDeliverySource,
-  presentDeliverySourceError,
-} from "@/lib/delivery-source";
+import { isDeletedDeliverySource, presentSendError } from "@/lib/delivery-source";
 
 interface SequenceMeta {
   title: string;
@@ -293,7 +290,7 @@ export default function SequenceEditorPage({
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? presentDeliverySourceError(err.message)
+          ? presentSendError(err.message, err.body)
           : "Action failed",
       );
     }

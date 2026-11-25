@@ -122,6 +122,23 @@ Custom SMTP can be verified and activated after a successful test. It provides
 synchronous SMTP outcomes only; configure a supported feedback connection when
 you need bounce and complaint webhooks.
 
+### When one team's list affects the mailbox
+
+Every team on a shared mailbox shares its email provider account, and
+providers can pause an account whose bounce or complaint rate gets too high.
+SendLit watches each mailbox's last 7 days and acts first:
+
+- A team with a high bounce or complaint rate has its broadcasts and
+  sequences through the mailbox paused. Other teams keep sending.
+- If the rate is high across many teams, broadcasts and sequences pause for
+  every team on the mailbox.
+
+Transactional email keeps sending either way, and teams' own ESPs aren't
+affected. Organization owners get an email when a pause starts or lifts. A
+pause lasts at least 3 days and lifts once the recent sends are clean. Sends
+refused during a pause return `sending_paused` with the reason
+`shared_esp_team_breach`, `shared_esp_top_contributor` or `shared_esp_breach`.
+
 ## Grant a mailbox to a team
 
 On **Organizations → Teams**, each active team is a compact row. Open its

@@ -157,6 +157,7 @@ Run it with no arguments for the full list. Subcommands:
 - `set-override <organization_public_id> --teams <n>|none --contacts <n>|none --reason <text>`
 - `reputation-apply <team_public_id> <warned|marketing_paused|all_paused> --operator <user_id> --reason <text>`
 - `reputation-release <team_public_id> --operator <user_id> --reason <text>`
+- `shared-esp-status <esp_public_id>` / `shared-esp-release <esp_public_id> [--team <team_public_id>] --operator <user_id> --reason <text>`
 - `cancel-subscription <organization_public_id> --reason <text>`
 
 OSS mode has nothing to verify. A new `BILLING_CATALOG_REVISION` is recorded on

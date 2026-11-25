@@ -42,6 +42,26 @@ export function presentDeliverySourceError(error: string): string {
   }
 }
 
+/** Like `presentDeliverySourceError`, but reads the error body too, so a
+ * pause on a shared mailbox (#220) says which pause it is instead of the
+ * generic billing and reputation text. */
+export function presentSendError(error: string, body?: unknown): string {
+  const details = (typeof body === "object" && body !== null ? body : {}) as {
+    reason?: unknown;
+    scope?: unknown;
+  };
+  if (
+    error === "sending_paused" &&
+    typeof details.reason === "string" &&
+    details.reason.startsWith("shared_esp_")
+  ) {
+    return details.scope === "shared_mailbox"
+      ? "Broadcasts and sequences are paused for every team on this shared mailbox, because its combined bounce or complaint rate is too high. Transactional email still goes out. Organization owners have been emailed; sending resumes on its own once recent emails are clean."
+      : "Broadcasts and sequences from this team are paused on the shared mailbox, because too many of its recent emails bounced or were marked as spam. Other teams on the mailbox keep sending, and transactional email still goes out. Clean the list; sending resumes on its own after a few days once recent emails are clean, or contact SendLit support.";
+  }
+  return presentDeliverySourceError(error);
+}
+
 export function isDeletedDeliverySource({
   report,
   status,

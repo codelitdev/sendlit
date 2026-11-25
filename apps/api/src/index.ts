@@ -13,6 +13,8 @@ import {
   startDeliveryLifecycleJobs,
   stopDeliveryLifecycleJobs,
 } from "./delivery/lifecycle-jobs";
+import { startSharedEspGuard, stopSharedEspGuard } from "./delivery/shared-esp-guard";
+import { readSharedEspGuardConfig } from "./delivery/shared-esp-policy";
 import feedbackQueue from "./delivery-feedback/feedback-queue";
 import feedbackWorker from "./delivery-feedback/feedback-worker";
 import { startFeedbackReceiptPoller } from "./delivery-feedback/poller";
@@ -49,6 +51,7 @@ const app = createApp({
 startMailDispatchOutbox();
 startDeliveryLifecycleJobs();
 startReputationSync();
+startSharedEspGuard();
 
 process.on("unhandledRejection", (reason) => {
   logger.error({ error: (reason as Error)?.message }, "Unhandled promise rejection");
@@ -78,6 +81,7 @@ checkConfig()
         { name: "mail_dispatch_outbox", run: stopMailDispatchOutbox },
         { name: "delivery_lifecycle_jobs", run: stopDeliveryLifecycleJobs },
         { name: "reputation_sync", run: stopReputationSync },
+        { name: "shared_esp_guard", run: stopSharedEspGuard },
         { name: "billing_maintenance", run: () => billingMaintenance.stop() },
         { name: "tracking_domain_checks", run: stopTrackingDomainChecks },
         // Closing a BullMQ worker waits for the job it is running.
@@ -139,4 +143,5 @@ async function checkConfig() {
   // Billing mode is explicit and fail-closed: OSS must be opted into, and
   // cloud needs a complete, validated catalog and encryption key.
   validateBillingConfig();
+  readSharedEspGuardConfig();
 }

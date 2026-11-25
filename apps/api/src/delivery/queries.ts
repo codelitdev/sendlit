@@ -20,6 +20,7 @@ import {
 } from "../db/schema";
 import { recordOrganizationAuditEvent } from "../organization/audit";
 import { releaseReservedQuotaForGrantInTransaction } from "./quota";
+import { assertSharedEspAllowsMarketing } from "./shared-esp-guard";
 
 export type OrganizationDeliveryPolicy =
   typeof organizationDeliveryPolicies.$inferSelect;
@@ -131,6 +132,9 @@ export async function resolveDeliverySource(
       context.team.id,
       row.esp.id,
     );
+    if (purpose === "marketing") {
+      await assertSharedEspAllowsMarketing(context.team.id, row.esp.id);
+    }
     return {
       type: "organization",
       espConfigId: row.esp.id,
@@ -306,6 +310,9 @@ export async function resolvePinnedDeliverySource(input: {
     row.team.id,
     row.esp.id,
   );
+  if (input.purpose === "marketing") {
+    await assertSharedEspAllowsMarketing(row.team.id, row.esp.id);
+  }
   return {
     type: "organization",
     espConfigId: row.esp.id,

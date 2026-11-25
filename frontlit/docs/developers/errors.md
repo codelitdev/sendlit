@@ -95,6 +95,6 @@ Plan limits and billing mutations use the same stable codes on REST and MCP:
 | `409`  | `active_subscription_exists`       | Deleting is blocked while a subscription is live.                       |
 | `401`  | `recent_authentication_required`   | Sign in again before a billing mutation.                                |
 | `403`  | `domain_verification_required`     | The From domain must be verified after test volume.                     |
-| `403`  | `sending_paused`                   | Payment grace expired or a fair-use control paused sending.             |
+| `403`  | `sending_paused`                   | Payment grace expired, or a fair-use or shared-mailbox control paused sending. |
 
 Limit errors include `plan`, `usage`, `limit`, `requiredPlan`, and `upgradeUrl`. MCP tools return the same object in `structuredContent` instead of `internal_error`.

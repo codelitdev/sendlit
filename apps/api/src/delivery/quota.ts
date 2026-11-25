@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   espConfigTeamGrants,
@@ -19,6 +19,42 @@ function utcPeriods(now = new Date()) {
   const nextMonth = new Date(month);
   nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
   return { day, month, nextDay, nextMonth };
+}
+
+type BucketKey = {
+  scope: "grant" | "organization";
+  grantId: string | null;
+  periodType: "day" | "month";
+  periodStart: Date;
+};
+
+/**
+ * The one order every transaction locks a grant's usage buckets in: grant
+ * day, grant month, organization day, organization month. Reserving and
+ * committing a send both lock several of these rows; taking them in different
+ * orders let a request and the mail worker deadlock each other.
+ */
+function bucketKeysInLockOrder(grantId: string, day: Date, month: Date): BucketKey[] {
+  return [
+    { scope: "grant", grantId, periodType: "day", periodStart: day },
+    { scope: "grant", grantId, periodType: "month", periodStart: month },
+    { scope: "organization", grantId: null, periodType: "day", periodStart: day },
+    { scope: "organization", grantId: null, periodType: "month", periodStart: month },
+  ];
+}
+
+/** Matches exactly one bucket. The period type matters: on the 1st of a
+ * month the day and month buckets start at the same instant. */
+function bucketWhere(organizationId: string, key: BucketKey) {
+  return and(
+    eq(organizationEspUsageBuckets.organizationId, organizationId),
+    eq(organizationEspUsageBuckets.bucketScope, key.scope),
+    eq(organizationEspUsageBuckets.periodType, key.periodType),
+    eq(organizationEspUsageBuckets.periodStart, key.periodStart),
+    key.grantId
+      ? eq(organizationEspUsageBuckets.grantId, key.grantId)
+      : isNull(organizationEspUsageBuckets.grantId),
+  );
 }
 
 async function ensureBucket(
@@ -44,17 +80,7 @@ async function ensureBucket(
   const [bucket] = await tx
     .select()
     .from(organizationEspUsageBuckets)
-    .where(
-      and(
-        eq(organizationEspUsageBuckets.organizationId, input.organizationId),
-        eq(organizationEspUsageBuckets.bucketScope, input.scope),
-        eq(organizationEspUsageBuckets.periodType, input.periodType),
-        eq(organizationEspUsageBuckets.periodStart, input.periodStart),
-        input.grantId
-          ? eq(organizationEspUsageBuckets.grantId, input.grantId)
-          : undefined,
-      ),
-    )
+    .where(bucketWhere(input.organizationId, input))
     .limit(1)
     .for("update");
   if (!bucket) throw new Error("quota_bucket_not_created");
@@ -75,44 +101,31 @@ async function lockBucketsWithRoom(
   periods: ReturnType<typeof utcPeriods>,
   count: number,
 ) {
-  const specs = [
+  const limits = [
     {
-      scope: "grant" as const,
-      grantId: context.grant.id,
-      periodType: "day" as const,
-      periodStart: periods.day,
       limit: context.grant.dailyLimit,
       error: "organization_team_quota_exhausted",
       resetAt: periods.nextDay,
     },
     {
-      scope: "grant" as const,
-      grantId: context.grant.id,
-      periodType: "month" as const,
-      periodStart: periods.month,
       limit: context.grant.monthlyLimit,
       error: "organization_team_quota_exhausted",
       resetAt: periods.nextMonth,
     },
     {
-      scope: "organization" as const,
-      grantId: null,
-      periodType: "day" as const,
-      periodStart: periods.day,
       limit: context.policy.aggregateDailyLimit,
       error: "organization_quota_exhausted",
       resetAt: periods.nextDay,
     },
     {
-      scope: "organization" as const,
-      grantId: null,
-      periodType: "month" as const,
-      periodStart: periods.month,
       limit: context.policy.aggregateMonthlyLimit,
       error: "organization_quota_exhausted",
       resetAt: periods.nextMonth,
     },
   ];
+  const specs = bucketKeysInLockOrder(context.grant.id, periods.day, periods.month).map(
+    (key, index) => ({ ...key, ...limits[index] }),
+  );
   const buckets = [];
   for (const spec of specs) {
     const bucket = await ensureBucket(tx, {
@@ -289,35 +302,21 @@ async function transitionReservationInTransaction(
     .limit(1)
     .for("update");
   if (reservation?.state !== "reserved") return;
-  const buckets = await tx
-    .select()
-    .from(organizationEspUsageBuckets)
-    .where(
-      and(
-        eq(organizationEspUsageBuckets.organizationId, reservation.organizationId),
-        eq(organizationEspUsageBuckets.periodStart, reservation.dayPeriodStart),
-        or(
-          eq(organizationEspUsageBuckets.bucketScope, "organization"),
-          eq(organizationEspUsageBuckets.grantId, reservation.grantId),
-        ),
-      ),
-    )
-    .for("update");
-  const monthBuckets = await tx
-    .select()
-    .from(organizationEspUsageBuckets)
-    .where(
-      and(
-        eq(organizationEspUsageBuckets.organizationId, reservation.organizationId),
-        eq(organizationEspUsageBuckets.periodStart, reservation.monthPeriodStart),
-        or(
-          eq(organizationEspUsageBuckets.bucketScope, "organization"),
-          eq(organizationEspUsageBuckets.grantId, reservation.grantId),
-        ),
-      ),
-    )
-    .for("update");
-  for (const bucket of [...buckets, ...monthBuckets]) {
+  const buckets = [];
+  for (const key of bucketKeysInLockOrder(
+    reservation.grantId,
+    reservation.dayPeriodStart,
+    reservation.monthPeriodStart,
+  )) {
+    const [bucket] = await tx
+      .select()
+      .from(organizationEspUsageBuckets)
+      .where(bucketWhere(reservation.organizationId, key))
+      .limit(1)
+      .for("update");
+    if (bucket) buckets.push(bucket);
+  }
+  for (const bucket of buckets) {
     await tx
       .update(organizationEspUsageBuckets)
       .set({
@@ -428,9 +427,17 @@ export async function getTeamQuotaUsage(teamId: string) {
         ),
       ),
     );
-  const makeWindow = (periodStart: Date, limit: number | null, resetsAt: Date) => {
+  const makeWindow = (
+    periodType: "day" | "month",
+    periodStart: Date,
+    limit: number | null,
+    resetsAt: Date,
+  ) => {
+    // On the 1st the day and month buckets share a start, so match the type.
     const bucket = buckets.find(
-      (row) => row.periodStart.getTime() === periodStart.getTime(),
+      (row) =>
+        row.periodType === periodType &&
+        row.periodStart.getTime() === periodStart.getTime(),
     );
     const accepted = bucket?.acceptedCount ?? 0;
     const reserved = bucket?.reservedCount ?? 0;
@@ -443,8 +450,8 @@ export async function getTeamQuotaUsage(teamId: string) {
     };
   };
   return {
-    day: makeWindow(periods.day, grant.dailyLimit, periods.nextDay),
-    month: makeWindow(periods.month, grant.monthlyLimit, periods.nextMonth),
+    day: makeWindow("day", periods.day, grant.dailyLimit, periods.nextDay),
+    month: makeWindow("month", periods.month, grant.monthlyLimit, periods.nextMonth),
   };
 }
 
@@ -471,9 +478,17 @@ export async function getOrganizationQuotaUsage(organizationId: string) {
         ),
       ),
     );
-  const makeWindow = (periodStart: Date, limit: number | null, resetsAt: Date) => {
+  const makeWindow = (
+    periodType: "day" | "month",
+    periodStart: Date,
+    limit: number | null,
+    resetsAt: Date,
+  ) => {
+    // On the 1st the day and month buckets share a start, so match the type.
     const bucket = buckets.find(
-      (row) => row.periodStart.getTime() === periodStart.getTime(),
+      (row) =>
+        row.periodType === periodType &&
+        row.periodStart.getTime() === periodStart.getTime(),
     );
     const accepted = bucket?.acceptedCount ?? 0;
     const reserved = bucket?.reservedCount ?? 0;
@@ -486,7 +501,12 @@ export async function getOrganizationQuotaUsage(organizationId: string) {
     };
   };
   return {
-    day: makeWindow(periods.day, policy.aggregateDailyLimit, periods.nextDay),
-    month: makeWindow(periods.month, policy.aggregateMonthlyLimit, periods.nextMonth),
+    day: makeWindow("day", periods.day, policy.aggregateDailyLimit, periods.nextDay),
+    month: makeWindow(
+      "month",
+      periods.month,
+      policy.aggregateMonthlyLimit,
+      periods.nextMonth,
+    ),
   };
 }

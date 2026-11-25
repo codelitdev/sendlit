@@ -777,6 +777,17 @@ punishing low-volume senders. The future circuit breaker should pause
 non-essential marketing, retain per-recipient suppression, require minimum
 event counts, and be reversible with an audit trail.
 
+Update: both circuit breakers now exist. Team reputation controls
+(`src/billing/reputation.ts`, SendLit Cloud) pause one team on its own rates
+after 500 accepted messages a week. The shared-ESP guard
+(`src/delivery/shared-esp-guard.ts`, #220,
+[ADR 0013](../../../docs/decisions/0013-isolate-teams-on-a-shared-organization-esp.md))
+protects an organization ESP that many teams send through. It pauses marketing
+for the teams pushing the ESP's combined rate up (at least 5 bounces or 2
+complaints each, no volume floor), and for the whole ESP only when the problem
+is broad. Transactional mail is never paused by it, every change is audited,
+and operators release it with `billing shared-esp-release`.
+
 ## Provider-specific requirements
 
 ### Amazon SES/SNS

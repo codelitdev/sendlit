@@ -85,7 +85,7 @@ import {
 } from "@/lib/broadcast";
 import {
   isDeletedDeliverySource,
-  presentDeliverySourceError,
+  presentSendError,
   sendingOptionFor,
 } from "@/lib/delivery-source";
 import { useSegments } from "@/lib/use-segments";
@@ -290,7 +290,7 @@ export default function BroadcastEditorPage({
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? presentDeliverySourceError(err.message)
+          ? presentSendError(err.message, err.body)
           : "Action failed",
       );
     } finally {
@@ -526,7 +526,7 @@ export default function BroadcastEditorPage({
               } catch (err) {
                 setError(
                   err instanceof ApiError
-                    ? presentDeliverySourceError(err.message)
+                    ? presentSendError(err.message, err.body)
                     : "Action failed",
                 );
               } finally {
