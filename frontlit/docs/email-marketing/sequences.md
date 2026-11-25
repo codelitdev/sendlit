@@ -1,0 +1,204 @@
+---
+title: Sequences
+description: Multi-step event-triggered automations.
+nav_order: 60
+---
+
+Sequences enroll contacts from a trigger and send ordered emails over time.
+
+Sequence creation and additional sequence emails accept only templates whose
+`purpose` is `marketing`. A transactional template returns
+`422 template_not_marketing`. Each marketing email retains one final managed
+footer containing the workspace address and recipient-specific unsubscribe
+link.
+
+Supported triggers:
+
+- A contact subscribes.
+- A tag is added.
+- A tag is removed.
+- A custom event is received. See [Custom events](#custom-events).
+
+A triggered contact is enrolled only if they are subscribed, match the
+sequence's `filter` (when set), and don't match its `excludeFilter`. Both are
+set through the API or MCP `update_sequence`.
+
+## Custom events
+
+The **A custom event is received** trigger (`event:custom`) starts the
+sequence when your app sends a named event, such as `course purchased`, with
+`POST /events` or the SDK. Pick a name your app has sent, or type a new one to
+build the sequence before the first event arrives. Names are case-sensitive.
+See [Custom events](/docs/developers/events) for sending events.
+
+### Property filters
+
+Under **Only when the event's properties match…**, add up to 10 conditions
+on the event's properties. Choose whether all of them or any of them must
+match. A key can be a dot path up to three levels deep, such as `course.id`.
+
+| Condition                | Matches when the property                                                     |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| is / is not              | Equals the value. Text is compared without regard to case                    |
+| contains / doesn't contain | Contains the text, or for a list, has an element equal to the value          |
+| greater / less than (or equal) | Compares as a number. Text that isn't a number never matches             |
+| exists / doesn't exist   | Is present and not `null`                                                     |
+
+A missing property doesn't match **is**, **contains** or the number
+comparisons, and does match **is not** and **doesn't contain**. A value typed
+as text is compared as a number or `true`/`false` when the property is one.
+
+Through the API, set `triggerFilter` on the sequence:
+
+```json
+{
+    "triggerType": "event:custom",
+    "triggerData": "course purchased",
+    "triggerFilter": {
+        "aggregator": "and",
+        "filters": [{ "key": "price", "condition": "gt", "value": 100 }]
+    }
+}
+```
+
+Conditions are `is`, `is_not`, `contains`, `not_contains`, `gt`, `gte`, `lt`,
+`lte`, `exists` and `not_exists`. Changing the trigger type clears the filter.
+
+### Event merge tags
+
+A sequence started by an event can use the event's properties in its emails
+as `{{ event.<key> }}`, for example `{{ event.courseName }}` or
+`{{ event.course.id }}`. Each contact keeps the properties of the event that
+enrolled them for the whole sequence.
+
+A missing property renders as empty text. Write a fallback with Liquid's
+`default` filter:
+
+```liquid
+You're now on the {{ event.plan | default: "free" }} plan.
+```
+
+`event` holds only the event's properties: `{{ event.name }}` is a property
+called `name`, not the event name. Text values are HTML-escaped, so a
+property can't inject markup into the email. In a sequence that wasn't
+started by an event, `{{ event.* }}` renders empty. Merge tags aren't
+supported in subjects.
+
+## Who can enter
+
+**Who can enter** sets whether a contact can enroll more than once. It applies
+to every sequence trigger, and isn't available for broadcasts.
+
+| Option                          | API (`reentry`)   | A contact enrolls                                      |
+| ------------------------------- | ----------------- | ------------------------------------------------------ |
+| Every time the trigger happens  | `every_time`      | On each match. The default                             |
+| Only once                       | `once`            | The first time only                                    |
+| Once every N days               | `once_per_period` | Again after N days, set with `reentryPeriodDays` (1 to 365) |
+
+In every mode, a contact who is still going through the sequence isn't
+enrolled again, and keeps the event that enrolled them first. Setting
+`reentry` on a broadcast returns `400 invalid_reentry`.
+
+Each sequence email can have a delay, publish state, and optional tag action.
+
+The delay counts from the step before: the first email goes out its delay
+after the contact enters the sequence, and each later email its delay after
+the one before it. A first email with a delay of 0 goes out straight away.
+
+Once a sequence is running, its stats show **Waiting**: contacts who are in the
+sequence and haven't had their next email yet. Each email in the list shows how
+many contacts it goes to next, so a delayed email shows its contacts waiting
+rather than sent. Click the count to see who they are and when each one is due,
+soonest first, and search them by email or name: a delay counts from each
+contact's own entry (or previous email), so their times differ. `GET /sequences/{sequenceId}/schedule` (MCP `get_sequence_schedule`)
+returns the counts, and `GET /sequences/{sequenceId}/emails/{emailId}/waiting`
+(MCP `list_sequence_email_waiting_contacts`) lists the contacts, with `q` to
+search and `nextCursor` to page.
+
+Sequences are lifecycle mail, such as onboarding or end-of-trial emails, so a
+new sequence starts with **View in browser** off: its emails have no hosted web
+version. Turn it on to link one, like
+[broadcasts](/docs/email-marketing/broadcasts#plain-text-and-the-web-version) do.
+
+Use **Send test** in the email editor to send yourself a `[Test]` copy of an
+email before starting the sequence. Tests work the same way as for
+[broadcasts](/docs/email-marketing/broadcasts#send-a-test). In an event-triggered
+sequence, `{{ event.* }}` is filled from the last event received with that
+name, and the dialog says so. If none has been received yet, those tags render
+empty. To test the trigger itself, use **Send test event**; see
+[Test addresses](/docs/developers/events#test-addresses).
+
+A paused sequence sends nothing; enrolled contacts wait and continue from where
+they were when it is activated again. Triggers that happen while a sequence is
+paused or before it is first activated, including custom events, are not
+replayed when it is activated. Sequences pause themselves on high
+bounce or complaint rates like
+[broadcasts](/docs/email-marketing/broadcasts#automatic-pause-on-bounces-and-complaints).
+
+## Edit a running sequence
+
+While a sequence is active, changes to an email's subject and
+content are saved as a draft. Contacts keep getting the published version,
+so a half-finished edit, a typo or a broken merge tag never reaches anyone.
+The sequences list, and each step with changes, shows **Unpublished
+changes**.
+**Send test** sends the draft, so you can check it first. Changes to a
+step's delay, its **Send this email** switch and its tag action apply right
+away.
+While a sequence is a draft or paused, nothing is sending, so edits are saved
+directly, including any unpublished changes left from while it was active.
+
+When the changes are ready, click **Publish changes** above the step's
+content, or in the email editor. When several steps have changes, **Publish
+all changes** at the top of the sequence page publishes them together. Then
+choose who gets them:
+
+- **Contacts already in the sequence too** (the default): contacts get the
+  new version at their next step.
+- **New entrants only**: contacts already in the sequence keep the version
+  they entered with; only contacts who enter from now on get the new one.
+
+**Discard** throws the draft away and shows the published version again.
+
+### Restore an earlier version
+
+Every version you publish is kept. Choose **Version history** in the **⋯**
+menu next to a step's **Edit content** to see them, newest first, and
+**Restore** one to load it into the draft. Publish it to roll back.
+
+### Over the API and MCP
+
+`PATCH /sequences/{sequenceId}/emails/{emailId}` saves to the draft; the
+email's `draft` holds it and `hasUnpublishedChanges` is set on the email and
+the sequence. Publish with `POST /sequences/{sequenceId}/publish-changes`
+(optional `emailIds` and `scope`: `in_flight` or `new_entrants`), discard
+with `POST /sequences/{sequenceId}/discard-changes`, list versions with
+`GET /sequences/{sequenceId}/emails/{emailId}/versions` and restore one with
+`POST .../versions/{versionId}/restore`. The MCP tools are
+`publish_sequence_changes`, `discard_sequence_changes`,
+`list_sequence_email_versions` and `restore_sequence_email_version`.
+
+## Delete a sequence
+
+Delete a sequence from the **⋯** menu on the Sequences list, or with
+**Delete** on the sequence page. An active sequence can't be deleted: pause it
+first, so no contact is dropped in the middle of a send. The API answers
+`409 sequence_active`.
+
+Deleting a sequence is permanent and can't be undone. The confirmation says
+what goes with it:
+
+- Contacts still enrolled leave the sequence and get no more of its emails.
+  The contacts themselves are kept.
+- Its stats go too: the delivery, open and click history of every email it
+  sent. The outbound message log and the suppression list are kept, so
+  bounces and unsubscribes still protect your sender reputation.
+- Images only this sequence used are deleted from the media library. Images in
+  emails it already sent are kept, because inboxes still load them.
+
+If you might want the numbers later, export or note them before you delete.
+To stop a sequence but keep its history, pause it instead.
+
+With the API, `GET /sequences/{sequenceId}/deletion-preview` returns the
+enrolled-contact and sent-email counts, then `DELETE /sequences/{sequenceId}`
+deletes it. MCP clients use `preview_sequence_deletion` and `delete_sequence`.

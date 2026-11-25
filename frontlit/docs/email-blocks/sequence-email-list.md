@@ -1,0 +1,168 @@
+---
+title: SequenceEmailList
+description: Pick and reorder sequence emails.
+nav_order: 90
+---
+
+`SequenceEmailList` renders ordered sequence emails and optional reorder controls.
+"Add email" opens a [`TemplateChooser`](/docs/email-blocks/template-chooser) in
+a dialog; picking a template calls `onAdd(templateId)` so the host can create
+the new email from that starting point.
+
+Deleting an email asks for confirmation first via a shadcn `AlertDialog`:
+a destructive-styled confirm button, a warning icon, and the email's subject
+worked into the description (via `deleteDialogDescription`, a function of the
+email being deleted) so the user knows exactly what they're removing.
+Following the [Radix recommendation](https://www.radix-ui.com/primitives/docs/components/alert-dialog)
+for destructive actions, the Cancel button receives focus when the dialog
+opens rather than the default first-focusable-element behavior. `onDelete`
+only fires once the user confirms.
+
+Every visible string is a prop with a sensible English default — labels,
+empty/delay/status text, and the delete confirmation copy all included.
+
+`renderEmailDetail` adds a line under an email's delay and status, for anything
+the host knows about that email, such as how many contacts are waiting for it.
+Return nothing to leave the line out.
+
+You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/sequence-email-list/).
+
+## Usage
+
+This is the exact code behind the demo above (with the emails' shared `content` shortened to
+`defaultTemplateEmail` here for brevity — the demo uses a fuller sample email).
+
+```tsx
+import { useState } from "react";
+import {
+    SequenceEmailList,
+    defaultTemplateEmail,
+    type EmailTemplate,
+    type SequenceEmail,
+    type SystemTemplateSummary,
+} from "@sendlit/email-blocks";
+
+const day = 86_400_000;
+const now = new Date().toISOString();
+
+const initialEmails: SequenceEmail[] = [
+    {
+        id: "1",
+        sequenceId: "seq_1",
+        emailId: "email_1",
+        subject: "Welcome to SendLit",
+        content: defaultTemplateEmail,
+        delayInMillis: 0,
+        published: true,
+        createdAt: now,
+        updatedAt: now,
+    },
+    {
+        id: "2",
+        sequenceId: "seq_1",
+        emailId: "email_2",
+        subject: "Your first campaign checklist",
+        content: defaultTemplateEmail,
+        delayInMillis: 2 * day,
+        published: false,
+        actionType: "tag:add",
+        actionData: { tag: "activated" },
+        createdAt: now,
+        updatedAt: now,
+    },
+    {
+        id: "3",
+        sequenceId: "seq_1",
+        emailId: "email_3",
+        subject: "How to improve deliverability",
+        content: defaultTemplateEmail,
+        delayInMillis: 5 * day,
+        published: true,
+        createdAt: now,
+        updatedAt: now,
+    },
+];
+
+const systemTemplates: SystemTemplateSummary[] = [
+    {
+        templateId: "blank",
+        title: "Blank",
+        description: "Start from the required unsubscribe and address footer.",
+        content: defaultTemplateEmail,
+    },
+];
+
+const savedTemplates: EmailTemplate[] = [];
+
+function Example() {
+    const [emails, setEmails] = useState<SequenceEmail[]>(initialEmails);
+    const [selectedEmailId, setSelectedEmailId] = useState("email_1");
+    const [emailsOrder, setEmailsOrder] = useState([
+        "email_1",
+        "email_2",
+        "email_3",
+    ]);
+
+    return (
+        <SequenceEmailList
+            emails={emails}
+            emailsOrder={emailsOrder}
+            selectedEmailId={selectedEmailId}
+            onSelect={setSelectedEmailId}
+            onAdd={(templateId) => {
+                const template = [...systemTemplates, ...savedTemplates].find(
+                    (item) => item.templateId === templateId,
+                );
+                if (!template) return;
+                const emailId = `email_${Date.now()}`;
+                const newEmail: SequenceEmail = {
+                    id: emailId,
+                    sequenceId: "seq_1",
+                    emailId,
+                    subject: `New email from "${template.title}"`,
+                    content: template.content,
+                    delayInMillis: 0,
+                    published: false,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                };
+                setEmails((current) => [...current, newEmail]);
+                setEmailsOrder((current) => [...current, emailId]);
+                setSelectedEmailId(emailId);
+            }}
+            onDelete={(emailId) => {
+                setEmails((current) =>
+                    current.filter((email) => email.emailId !== emailId),
+                );
+                setEmailsOrder((current) =>
+                    current.filter((id) => id !== emailId),
+                );
+            }}
+            onReorder={setEmailsOrder}
+            systemTemplates={systemTemplates}
+            templates={savedTemplates}
+        />
+    );
+}
+```
+
+## Linking rows to a URL
+
+By default, clicking a row just calls `onSelect(emailId)` — there's no `href`,
+so browser-native link behaviors (ctrl/cmd-click to open in a new tab,
+right-click → copy link) don't work. Pass `getEmailHref` to render each row as
+a real `<a href>` instead of a plain clickable `<div>`; `onSelect` still fires
+on a plain click, so in-app state (like `selectedEmailId`) stays in sync.
+
+```tsx
+<SequenceEmailList
+    // ...other props
+    getEmailHref={(email) =>
+        `/dashboard/mails/sequence/${sequenceId}/${email.emailId}`
+    }
+    onSelect={(emailId) => setSelectedEmailId(emailId)}
+/>
+```
+
+This isn't wired into the interactive demo above, since a real `href` would
+navigate away from this docs page on a plain click.

@@ -1,0 +1,11 @@
+---
+title: Transactional log
+description: Inspect API-triggered, one-off email delivery.
+nav_order: 10
+---
+
+Transactional email is the API-triggered counterpart to broadcasts and sequences: receipts, password resets, notifications, and other one-off messages.
+
+The dashboard log is read-only and can be filtered by status: queued, sent, failed, or bounced. Open a row to inspect the recipient, sender, reply-to, template, timestamps, delivery status, and provider response details.
+
+Use the transactional send endpoint for server-to-server delivery. Use broadcasts for one-time audience sends and sequences for delayed automation.

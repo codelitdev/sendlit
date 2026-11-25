@@ -1,0 +1,288 @@
+---
+title: EmailEditor
+description: WYSIWYG editor for an email's content.
+nav_order: 100
+---
+
+`EmailEditor` edits an `Email`'s block content (text, link, image, separator, spacer,
+columns, social, html and conditional by default) and reports changes via `onChange`; pass `blocks` to customize
+which block types are available.
+
+If all you need is the editor and renderer — no filters, triggers, or the
+other blocks in this package — install
+[`@sendlit/email-editor`](https://www.npmjs.com/package/@sendlit/email-editor)
+directly instead. `@sendlit/email-blocks` re-exports it in full (`EmailEditor`,
+`Email`, `EmailBlock`, `EmailMeta`, `EmailStyle`, `BlockComponent`,
+`renderEmailToHtml`, `defaultEmail`) purely so the components below can share
+its types without you needing a second dependency.
+
+You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/email-editor/).
+
+## Usage
+
+### Simple editor
+
+```tsx
+import { useState } from "react";
+import { EmailEditor, defaultEmail, type Email } from "@sendlit/email-blocks";
+
+function Example() {
+    const [email, setEmail] = useState<Email>(defaultEmail);
+
+    return <EmailEditor email={email} onChange={setEmail} />;
+}
+```
+
+### Writing, subject and merge tags
+
+The editor opens in **Write** mode: the subject and preview text sit above the
+email like a document title, text is written inline as markdown (select text for
+a format bar, type `/` for blocks, type `{{` for merge tags), and blocks can be
+dragged by their handle. **Style** mode shows the email as readers will see it
+(desktop or mobile, sample data, a dark inbox) with a panel for the palette,
+typography and the selected block. A "Before you send" checklist flags a missing
+subject or preview text, empty buttons and images without alt text.
+
+Pass the optional props below to turn those on:
+
+```tsx
+<EmailEditor
+    email={email}
+    onChange={setEmail}
+    subject={subject}
+    onSubjectChange={setSubject}
+    variables={[
+        {
+            tag: "{{ subscriber.name }}",
+            description: "The name of the subscriber",
+            sample: "Priya",
+        },
+    ]}
+    senderName="Acme"
+    theme="sendlit" // "sendlit" | "neutral" | "dark"
+/>
+```
+
+Without `subject` the subject field is hidden, so a host that edits it elsewhere
+keeps working. Saving the subject is up to the host. The editor's look is a set
+of `--sle-*` CSS variables on the `.sle` element (colours, radii, fonts), so it
+can be re-skinned without touching the components. Import
+`@sendlit/email-editor/styles.css` for the styles.
+
+### Keyboard
+
+The editor works without a mouse. Each row is one Tab stop, named after what
+it holds ("Paragraph: Thanks for joining", "Button block: Get started").
+
+| Key                       | Does                                                              |
+| ------------------------- | ----------------------------------------------------------------- |
+| Enter on a row            | Edits a paragraph, or opens a block's settings                    |
+| Escape                    | Stops editing or closes the settings, staying on the row          |
+| ↑ / ↓                     | Moves between paragraphs and blocks, and up to the preview text   |
+| Alt+Shift+↑ / ↓           | Moves the row up or down                                          |
+| `/`, `{{`                 | Opens the block menu or the merge tag menu                        |
+| Ctrl/⌘+B, I, K            | Bold, italic, link                                                |
+| Alt+F10                   | Moves to the format toolbar while text is selected                |
+| Ctrl/⌘+Z, Shift+Ctrl/⌘+Z  | Undo, redo                                                        |
+
+In Style mode, Enter on a block moves to its settings and Escape returns to the
+block; the arrow keys move between blocks.
+
+### Choosing blocks
+
+`blocks` replaces the default list, so a host can add its own blocks and leave
+out any of the built-in ones, including all of them. Custom blocks are stored
+and rendered exactly as given. Writing paragraph by paragraph (Enter starts a
+new paragraph, `#` makes a heading, `-` a list) applies to the built-in `text`
+block. Without it, or with a host block registered under the name `text`, the
+editor still works: blocks are inserted from the menu, selected, reordered and
+edited through their settings, and the "keep writing" prompt is hidden.
+
+### Built-in blocks
+
+| Block         | Settings                                                           |
+| ------------- | ------------------------------------------------------------------ |
+| `text`        | Markdown `content`: paragraphs, headings, lists and quotes         |
+| `link`        | A link, or a button when `isButton` is set                         |
+| `image`       | `src`, `alt`, size and alignment                                   |
+| `separator`   | A divider line                                                     |
+| `spacer`      | Empty `height`                                                     |
+| `columns`     | Two markdown columns, `ratio`, optional stacking on small screens  |
+| `social`      | `links`: `{ network, url }` buttons for your profiles              |
+| `html`        | Raw `code`, sent as written                                        |
+| `conditional` | Markdown `content` shown only to contacts with (or without) a tag  |
+
+A `conditional` section is rendered as a Liquid condition on
+`subscriber.tags`, so it only works where a subscriber exists (marketing sends).
+`renderEmailToHtml` keeps the condition by default; pass `showConditionals` for
+a preview that shows every section.
+
+### Custom image uploader
+
+Use `blocks` to replace the default image block settings with a wrapper that
+opens your own uploader from the existing image upload button.
+
+```tsx
+import { useRef, useState, type ChangeEvent } from "react";
+import { EmailEditor, type Email } from "@sendlit/email-blocks";
+import { defaultEmail } from "@sendlit/email-editor";
+import {
+    ImageBlock,
+    Link,
+    Separator,
+    Text,
+    type UploaderProps,
+} from "@sendlit/email-editor/blocks";
+
+function LocalImageUploader({ children, onChange }: UploaderProps) {
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.currentTarget.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result !== "string") {
+                return;
+            }
+
+            onChange({
+                src: reader.result,
+                alt: file.name,
+            });
+        };
+        reader.readAsDataURL(file);
+        event.currentTarget.value = "";
+    };
+
+    return (
+        <span className="inline-flex" onClick={() => inputRef.current?.click()}>
+            {children}
+            <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                tabIndex={-1}
+                onClick={(event) => event.stopPropagation()}
+                onChange={handleFileChange}
+            />
+        </span>
+    );
+}
+
+const blocks = [
+    Text,
+    Separator,
+    Link,
+    ImageBlock.configure({ uploader: LocalImageUploader }),
+];
+
+function Example() {
+    const [email, setEmail] = useState<Email>(defaultEmail);
+
+    return <EmailEditor email={email} onChange={setEmail} blocks={blocks} />;
+}
+```
+
+Pass the same `Email` value to [`EmailPreview`](/docs/email-blocks/email-preview)
+or `renderEmailToHtml` (also re-exported) to see the rendered result or
+generate the HTML you actually send.
+
+## Generic add-on blocks
+
+`@sendlit/email-editor` does not know about SendLit template purposes or
+compliance. Host applications can register add-on blocks with:
+
+- `defaultSettings`
+- `insertable`, `deletable`, `duplicable`, and `movable` capabilities
+- `placement: "any" | "first" | "last"`
+- an optional `renderContext` supplied by the host
+
+- an optional `quickEdit` component (and `quickEditLayout: "row" | "column"`)
+  with the few fields worth editing while writing, such as a button's label and
+  link. Write mode shows it in a small popover under the selected block, with
+  Style, duplicate and delete; the full `settings` form stays in Style mode.
+  Without one, the popover offers just those three actions.
+
+Mutation handlers enforce these capabilities as well as hiding unavailable
+controls. The render context is passed to preview and HTML rendering but is
+never serialized into the `Email` document.
+
+SendLit itself uses those generic hooks for the optional
+`@sendlit/email-blocks/footer` add-on. Marketing hosts register it as a locked
+final block and provide the real address and unsubscribe URL:
+
+```tsx
+import { EmailEditor } from "@sendlit/email-editor";
+import { createFooterBlock } from "@sendlit/email-blocks/footer";
+
+// English labels by default; pass `{ labels }` to translate them.
+const footer = createFooterBlock();
+
+<EmailEditor
+    email={email}
+    onChange={setEmail}
+    blocks={[Text, Separator, Link, ImageBlock, footer]}
+    renderContext={{
+        footer: {
+            mailingAddress: "123 Main Street",
+            unsubscribeUrl: "#unsubscribe-preview",
+        },
+    }}
+/>;
+```
+
+Before an email is sent there's no real address or link, so editors and
+previews can use `marketingPreviewContext()` from the same entry point. Pass
+the broadcast's or sequence's `viewInBrowser` setting so the preview shows the
+"View in browser" link only when sent emails will have it:
+
+```tsx
+import { marketingPreviewContext } from "@sendlit/email-blocks/footer";
+
+<EmailEditor
+    blocks={[Text, Separator, Link, ImageBlock, footer]}
+    renderContext={marketingPreviewContext({
+        viewInBrowser: sequence.viewInBrowser,
+    })}
+    {...rest}
+/>;
+```
+
+The independently hosted editor remains generic: omit this add-on and context
+for ordinary or transactional designs.
+
+### Postal addresses
+
+`@sendlit/email-blocks/postal-address` formats a team's `postalAddress` into
+the footer text exactly as SendLit does when it sends. It doesn't depend on
+React, so servers can use it too. `marketingPreviewContext({ postalAddress })`
+uses it to show the address in previews:
+
+```ts
+import {
+    formatPostalAddress,
+    isPostalCountryCode,
+    POSTAL_COUNTRY_CODES,
+    postalCountryName,
+    type PostalAddress,
+} from "@sendlit/email-blocks/postal-address";
+
+formatPostalAddress({
+    line1: "18 Harbour Lane",
+    city: "Bristol",
+    postalCode: "BS1 4RN",
+    country: "GB",
+});
+// "18 Harbour Lane\nBristol, BS1 4RN\nUnited Kingdom"
+
+postalCountryName("DE", "de"); // "Deutschland"
+isPostalCountryCode("UK"); // false: the code is GB
+```
+
+`POSTAL_COUNTRY_CODES` lists all 249 current ISO 3166-1 alpha-2 codes for a
+country picker.
