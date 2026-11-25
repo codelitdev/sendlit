@@ -1,3 +1,4 @@
+import type { PostalAddress } from "@sendlit/api-contract";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { createApiKey } from "../apikey/queries";
 import {
@@ -18,6 +19,7 @@ import {
   teams,
 } from "../db/schema";
 import { transitionEspGrant } from "../delivery/queries";
+import { normalizePostalAddress } from "../settings/general/address";
 
 export type Team = typeof teams.$inferSelect;
 export type TeamMember = typeof teamMembers.$inferSelect;
@@ -97,7 +99,7 @@ export async function updateProvisionedTeam(
   input: {
     name?: string;
     sender?: { fromName?: string | null; replyTo?: string | null };
-    mailingAddress?: string | null;
+    postalAddress?: PostalAddress | null;
     delivery?: { teamEspEnabled?: boolean; teamCanChangeDefault?: boolean };
     quota?: { dailyLimit?: number | null; monthlyLimit?: number | null };
   },
@@ -117,11 +119,12 @@ export async function updateProvisionedTeam(
         .set({ name: input.name, updatedAt: new Date() })
         .where(eq(teams.id, team.id));
     }
-    if (input.mailingAddress !== undefined) {
+    if (input.postalAddress !== undefined) {
       await tx
         .update(settings)
         .set({
-          mailingAddress: input.mailingAddress,
+          postalAddress:
+            input.postalAddress && normalizePostalAddress(input.postalAddress),
           updatedAt: new Date(),
         })
         .where(eq(settings.teamId, team.id));
@@ -207,7 +210,7 @@ export async function createTeam({
   externalId,
   provisioningRequestHash,
   sender,
-  mailingAddress,
+  postalAddress,
   delivery,
   quota,
   createdBy,
@@ -219,7 +222,7 @@ export async function createTeam({
   externalId?: string;
   provisioningRequestHash?: string;
   sender?: { fromName?: string; replyTo?: string };
-  mailingAddress?: string;
+  postalAddress?: PostalAddress;
   delivery?: {
     useOrganizationDefault?: boolean;
     teamEspEnabled?: boolean;
@@ -250,7 +253,7 @@ export async function createTeam({
       .returning();
     await tx.insert(settings).values({
       teamId: created.id,
-      mailingAddress,
+      postalAddress: postalAddress && normalizePostalAddress(postalAddress),
     });
     const teamEspEnabled =
       delivery?.teamEspEnabled ?? policy?.teamEspEnabledByDefault ?? true;
@@ -333,7 +336,7 @@ export async function findOrCreateTeamByExternalId({
   name,
   provisioningRequestHash,
   sender,
-  mailingAddress,
+  postalAddress,
   delivery,
   quota,
   createdBy,
@@ -343,7 +346,7 @@ export async function findOrCreateTeamByExternalId({
   name: string;
   provisioningRequestHash: string;
   sender?: { fromName?: string; replyTo?: string };
-  mailingAddress?: string;
+  postalAddress?: PostalAddress;
   delivery?: {
     useOrganizationDefault?: boolean;
     teamEspEnabled?: boolean;
@@ -372,7 +375,7 @@ export async function findOrCreateTeamByExternalId({
       externalId,
       provisioningRequestHash,
       sender,
-      mailingAddress,
+      postalAddress,
       delivery,
       quota,
       createdBy,

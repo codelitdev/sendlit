@@ -44,7 +44,7 @@ export function OverviewDashboard() {
           // for this team, even though its credentials are never
           // exposed through the team-facing settings API.
           hasDeliverySource: sendingOptions.items.length > 0,
-          hasMailingAddress: Boolean(settings.mailingAddress?.trim()),
+          hasMailingAddress: Boolean(settings.postalAddress),
         });
       })
       .catch(() => setData(null));

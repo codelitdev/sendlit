@@ -74,6 +74,7 @@ describe("posthog browser wrapper", () => {
     expect(mocks.init).toHaveBeenCalledTimes(1);
     expect(mocks.init).toHaveBeenCalledWith("phc_test", {
       api_host: "https://us.i.posthog.com",
+      capture_exceptions: true,
       defaults: "2026-05-30",
       loaded: expect.any(Function),
     });

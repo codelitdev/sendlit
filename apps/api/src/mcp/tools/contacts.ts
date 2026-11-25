@@ -150,6 +150,13 @@ export const contactTools = (): SendLitMcpTool[] => [
         .min(1)
         .optional()
         .describe("Page number, 1-indexed (default: 1)"),
+      itemsPerPage: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .optional()
+        .describe("Contacts per page (default: 10)"),
     }),
     outputSchema: contactListSchema,
     annotations: { idempotentHint: true, openWorldHint: false },
@@ -177,6 +184,7 @@ export const contactTools = (): SendLitMcpTool[] => [
             filter,
             excludeFilter: args.excludeFilter as any,
             offset: args.offset,
+            rowsPerPage: args.itemsPerPage,
           }),
           countContacts(teamId, {
             searchText: args.q,

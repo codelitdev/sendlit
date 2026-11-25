@@ -3,9 +3,14 @@ import { registerDom } from "@sendlit/test-utils/dom";
 
 registerDom();
 
-const getGeneralSettings = mock(async () => ({ mailingAddress: "1 Main St" }));
-const updateGeneralSettings = mock(async (input: { mailingAddress?: string }) => ({
-  mailingAddress: input.mailingAddress ?? null,
+const mainStreet = { line1: "1 Main St", city: "Pune", country: "IN" };
+const getGeneralSettings = mock(
+  async (): Promise<{ postalAddress: unknown }> => ({
+    postalAddress: mainStreet,
+  }),
+);
+const updateGeneralSettings = mock(async (input: { postalAddress: unknown }) => ({
+  postalAddress: input.postalAddress,
 }));
 const sendSequenceEmailTest = mock(async (_s: string, _e: string, to: string[]) => ({
   sent: to,
@@ -26,6 +31,7 @@ const { act, cleanup, fireEvent, render, screen } = await import(
 const { addRecipients, parseRecipients, SendTestDialog } = await import(
   "./send-test-dialog"
 );
+const { defaultPostalCountry } = await import("@/lib/postal-address");
 
 const mailpit = {
   type: "team" as const,
@@ -100,9 +106,7 @@ describe("recipient helpers", () => {
 describe("SendTestDialog", () => {
   beforeEach(() => {
     globalThis.fetch = mock(async () => Response.json(null)) as never;
-    getGeneralSettings.mockImplementation(async () => ({
-      mailingAddress: "1 Main St",
-    }));
+    getGeneralSettings.mockImplementation(async () => ({ postalAddress: mainStreet }));
     sendSequenceEmailTest.mockClear();
   });
   afterEach(cleanup);
@@ -149,7 +153,7 @@ describe("SendTestDialog", () => {
   });
 
   it("asks for the mailing address before sending, and saves it inline", async () => {
-    getGeneralSettings.mockImplementation(async () => ({ mailingAddress: "" }));
+    getGeneralSettings.mockImplementation(async () => ({ postalAddress: null }));
     openDialog();
     await settle();
     expect(screen.getByText("Add your mailing address first")).toBeTruthy();
@@ -157,14 +161,20 @@ describe("SendTestDialog", () => {
     expect(sendButton().disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Add mailing address" }));
-    fireEvent.change(screen.getByLabelText("Mailing address"), {
-      target: { value: "1 Main St, Pune" },
+    fireEvent.change(screen.getByLabelText("Street address"), {
+      target: { value: "1 Main St" },
     });
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Pune" } });
     fireEvent.click(screen.getByRole("button", { name: "Save address" }));
     await settle();
     expect(screen.queryByText("Add your mailing address first")).toBeNull();
+    // The country starts as the browser's.
     expect(updateGeneralSettings).toHaveBeenCalledWith({
-      mailingAddress: "1 Main St, Pune",
+      postalAddress: {
+        line1: "1 Main St",
+        city: "Pune",
+        country: defaultPostalCountry(),
+      },
     });
     expect(sendButton().disabled).toBe(false);
   });

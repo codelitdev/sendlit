@@ -1,6 +1,7 @@
 import type { Email as EmailType } from "@sendlit/email-editor";
 import { JSDOM } from "jsdom";
 import { getOrganizationEntitlements } from "../billing/entitlements";
+import { mailingAddressText } from "../settings/general/address";
 import { getTeamSettingsRow } from "../settings/general/queries";
 import { trackingOrigin } from "../settings/tracking-domain/queries";
 import { validateTemplateContent } from "../templates/validation";
@@ -182,7 +183,7 @@ export async function renderCampaignHtml({
   const isPublic = web === "public";
   const variables = {
     subscriber: isPublic ? { email: "", name: null, tags: [] } : subscriber,
-    address: settings?.mailingAddress || "",
+    address: mailingAddressText(settings?.postalAddress) ?? "",
     unsubscribe_link: isPublic
       ? PUBLIC_UNSUBSCRIBE_PLACEHOLDER
       : getUnsubLink(unsubscribeToken, origin),

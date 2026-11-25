@@ -3,6 +3,7 @@
 import { Check, FlaskConical, Info, MapPin, Send, X } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { PostalAddressFields } from "@/components/dashboard/postal-address-fields";
 import {
   MAILING_ADDRESS_REQUIRED_ERROR,
   SendErrorMessage,
@@ -17,7 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/codelit/dialog";
 import { Label } from "@/components/ui/codelit/label";
-import { Textarea } from "@/components/ui/codelit/textarea";
 import type { SendingOption } from "@/lib/api";
 import {
   getGeneralSettings,
@@ -26,6 +26,11 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { presentDeliverySourceError } from "@/lib/delivery-source";
+import {
+  type PostalAddressForm,
+  postalAddressFromForm,
+  postalAddressToForm,
+} from "@/lib/postal-address";
 import { cn } from "@/lib/utils";
 
 export const MAX_TEST_RECIPIENTS = 5;
@@ -113,7 +118,7 @@ export function SendTestDialog({
       })
       .catch(() => undefined);
     getGeneralSettings()
-      .then((settings) => setAddressMissing(!settings.mailingAddress?.trim()))
+      .then((settings) => setAddressMissing(!settings.postalAddress))
       .catch(() => setAddressMissing(null));
   }, [open]);
 
@@ -351,19 +356,22 @@ function SummaryRow({ label, children }: { label: string; children: ReactNode })
 /** Amber prompt to add the team's mailing address without leaving the dialog. */
 function MailingAddressPrompt({ onSaved }: { onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
-  const [address, setAddress] = useState("");
+  const [address, setAddress] = useState<PostalAddressForm>(() =>
+    postalAddressToForm(null),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
-    if (!address.trim()) {
-      setError("Enter your mailing address");
+    const postalAddress = postalAddressFromForm(address);
+    if (!postalAddress) {
+      setError("Enter a street address and choose a country");
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      await updateGeneralSettings({ mailingAddress: address });
+      await updateGeneralSettings({ postalAddress });
       onSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save the address");
@@ -385,16 +393,10 @@ function MailingAddressPrompt({ onSaved }: { onSaved: () => void }) {
         </div>
         {editing ? (
           <div className="space-y-2">
-            <Label htmlFor="send-test-mailing-address" className="sr-only">
-              Mailing address
-            </Label>
-            <Textarea
-              id="send-test-mailing-address"
+            <PostalAddressFields
               value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="123 Main St, City, Country"
-              rows={3}
-              autoFocus
+              onChange={setAddress}
+              idPrefix="send-test-address"
             />
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">

@@ -1,5 +1,21 @@
 # sendlit
 
+## 0.6.0
+
+### Minor Changes
+
+- 46b4f6d: See which recipients bounced or complained from a broadcast or sequence:
+
+  - SDK: `sequences.deliveries(sequenceId, { outcome })` and `sequences.listAllDeliveries()` list each send with its outcome, bounce type, the ESP's reason and the address's suppression. Contact deliveries now include `messageId` and `outcome`.
+  - `SequenceAnalyticsMetric` takes `onSelect` and `selectLabel`, which render the value as a button. `sequenceStatsMetrics` takes `onViewBounced` and `onViewComplained` to open the recipients behind the bounce and complaint rates.
+  - The bounce and complaint tooltips say sending only pauses once 100 emails have gone out.
+
+- d9e1983: A team's mailing address is now a structured postal address. **Breaking:** the free-text `mailingAddress` field is gone.
+
+  - `@sendlit/email-blocks/postal-address`, a React-free entry point: the `PostalAddress` type, `POSTAL_COUNTRY_CODES` (the 249 current ISO 3166-1 alpha-2 codes), `postalCountryName(code, locale?)`, `isPostalCountryCode(code)` and `formatPostalAddress(address)`, which turns an address into the footer text SendLit sends.
+  - `marketingPreviewContext()` takes `postalAddress` and shows it formatted as sent emails do.
+  - SDK: `settings.general.get()` returns `{ postalAddress, updatedAt }` and `settings.general.update()` takes `{ postalAddress }` (`null` clears it); `mailingAddress` is removed from both. Provisioning takes and returns `postalAddress` instead of `mailingAddress` in `provisionTeam`, `getTeam` and `updateTeam`. An unknown country is a 400 `postal_country_invalid`. New `PostalAddress` type.
+
 ## 0.5.0
 
 ### Minor Changes

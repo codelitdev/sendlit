@@ -1,6 +1,6 @@
 {
   "name": "@sendlit/email-blocks",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Headless, ready-to-use blocks for composing your own email workflows powered by SendLit",
   "author": "SendLit",
   "license": "MIT",
@@ -26,6 +26,11 @@
       "types": "./dist/footer/index.d.ts",
       "import": "./dist/footer/index.mjs",
       "default": "./dist/footer/index.mjs"
+    },
+    "./postal-address": {
+      "types": "./dist/postal-address/index.d.ts",
+      "import": "./dist/postal-address/index.mjs",
+      "default": "./dist/postal-address/index.mjs"
     },
     "./styles.css": "./dist/index.css"
   },

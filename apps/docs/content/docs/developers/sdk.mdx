@@ -140,7 +140,12 @@ const platform = new SendLit({ apiKey: process.env.SENDLIT_ORG_API_KEY });
 const team = await platform.provisioning.provisionTeam({
     externalId: tenant.id,
     name: tenant.name,
-    mailingAddress: tenant.address,
+    postalAddress: {
+        line1: tenant.street,
+        city: tenant.city,
+        postalCode: tenant.postalCode,
+        country: tenant.country, // ISO 3166-1 alpha-2, such as "GB"
+    },
 });
 if (team.created) {
     // The plaintext key is returned only once. Encrypt and store it now.
@@ -167,6 +172,27 @@ await sendlit.sequences.start(broadcast.sequenceId);
 Starting a broadcast or sequence requires a mailing address in the team's
 settings and a way to send email: an organization delivery grant or the
 team's own ESP.
+
+The address is a structured `postalAddress`; SendLit formats it into the
+footer, and `get()` returns the same fields, so you can show them again for
+editing:
+
+```ts
+await sendlit.settings.general.update({
+    postalAddress: {
+        line1: "18 Harbour Lane",
+        city: "Bristol",
+        postalCode: "BS1 4RN",
+        country: "GB", // ISO 3166-1 alpha-2
+    },
+});
+// The footer shows "18 Harbour Lane", "Bristol, BS1 4RN", "United Kingdom".
+```
+
+`postalAddress: null` clears it. A country code that isn't a current ISO
+3166-1 alpha-2 code is a 400 `postal_country_invalid`. Use
+`formatPostalAddress` from `@sendlit/email-blocks/postal-address` to show the
+address the way the footer does.
 
 While a broadcast or sequence is active, `updateEmail` saves subject and
 content changes as a draft, and contacts keep getting the published version

@@ -54,6 +54,7 @@ const sessionIdentity: Extract<AuthenticatedIdentity, { method: "session" }> = {
   email: user.email,
   name: user.name,
   scopes: [],
+  authenticatedAt: new Date(),
 };
 
 function deps(overrides: Partial<AuthDependencies> = {}): AuthDependencies {

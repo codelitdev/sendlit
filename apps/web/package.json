@@ -12,8 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@codelitdev/design-system": "0.8.0",
-    "@codelitdev/observability": "0.8.0",
+    "@codelitdev/design-system": "0.17.0",
+    "@codelitdev/observability": "0.17.0",
     "@radix-ui/react-alert-dialog": "^1.1.18",
     "@radix-ui/react-dialog": "^1.1.18",
     "@radix-ui/react-label": "^2.1.11",
@@ -45,7 +45,7 @@
     "@sendlit/test-utils": "workspace:*",
     "@tailwindcss/postcss": "^4.3.2",
     "@testing-library/react": "^16.3.2",
-    "@types/bun": "1.4.1",
+    "@types/bun": "1.4.4",
     "@types/node": "^22.20.0",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19.2.17",

@@ -16,6 +16,7 @@ import {
   type ImportContactRow,
   type ImportContactsResult,
   type PaidPlan,
+  type PostalAddress,
   type PublishScope,
   type RenameTagResult,
   type Reputation,
@@ -224,7 +225,9 @@ export function listContacts(
     filter?: ContactFilterWithAggregator;
     /** Contacts matching this filter are left out. */
     excludeFilter?: ContactFilterWithAggregator;
+    /** Page number, 1-indexed. */
     offset?: number;
+    rowsPerPage?: number;
   } = {},
 ) {
   const filter = toApiContactFilter(params.filter);
@@ -237,6 +240,7 @@ export function listContacts(
         filter: filter ? JSON.stringify(filter) : undefined,
         excludeFilter: excludeFilter ? JSON.stringify(excludeFilter) : undefined,
         offset: params.offset,
+        rowsPerPage: params.rowsPerPage,
       },
     }),
   );
@@ -1991,7 +1995,7 @@ export function releaseSuppression(suppressionId: string, explanation?: string) 
 // ---- General settings -----------------------------------------------------
 
 export interface GeneralSettings {
-  mailingAddress: string | null;
+  postalAddress: PostalAddress | null;
   updatedAt?: string | null;
 }
 
@@ -1999,7 +2003,7 @@ export function getGeneralSettings() {
   return unwrap<GeneralSettings>(client.settings.general.get());
 }
 
-export function updateGeneralSettings(input: { mailingAddress?: string }) {
+export function updateGeneralSettings(input: { postalAddress: PostalAddress | null }) {
   return unwrap<GeneralSettings>(client.settings.general.update({ body: input }));
 }
 

@@ -164,6 +164,12 @@ send. Broadcast and sequence tools accept only marketing templates and report
 - `list_esps`, `create_esp`, `get_esp`, `update_esp`, `delete_esp`, `test_esp`
 - `check_esp_domain_authentication` (live SPF, DKIM and DMARC check of the From domain, with the records to add)
 
+`update_general_settings` takes the footer's mailing address as
+`postalAddress`: `line1`, optional `line2`, `city`, `region` and `postalCode`,
+and an uppercase ISO 3166-1 alpha-2 `country`. SendLit formats it into the
+footer. An unknown country is `postal_country_invalid`, and
+`postalAddress: null` clears the address.
+
 The ESP tools manage the team’s sending providers and default provider. Secrets are accepted for writes but are not returned in read responses.
 
 ### Teams and API keys
@@ -208,6 +214,15 @@ The exact configuration shape depends on the MCP client. For clients that suppor
 ```
 
 Prefer the client’s secure secret-store or environment-variable mechanism. Do not paste a live API key into a checked-in configuration file.
+
+## Discovery
+
+Clients that support [MCP Server Cards](https://modelcontextprotocol.io/seps/2127-mcp-server-cards) can find SendLit from the API domain alone. Both documents are public and need no credentials:
+
+- `GET https://api.sendlit.app/.well-known/ai-catalog.json` lists SendLit's MCP server.
+- `GET https://api.sendlit.app/mcp/server-card` describes it: name (`dev.codelit/sendlit`), version, endpoint and transport, and names CodeLit as the operator.
+
+The card does not list tools. Clients still read the tool catalog through `tools/list` after authenticating.
 
 ## Operational limits
 

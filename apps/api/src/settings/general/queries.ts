@@ -1,35 +1,38 @@
+import type { PostalAddress } from "@sendlit/api-contract";
 import { eq } from "drizzle-orm";
 import { db } from "../../db/client";
 import { settings } from "../../db/schema";
+import { mailingAddressText, normalizePostalAddress } from "./address";
 import { MAILING_ADDRESS_REQUIRED } from "./constants";
 
-export { MAILING_ADDRESS_REQUIRED } from "./constants";
+export { mailingAddressText, normalizePostalAddress } from "./address";
+export { MAILING_ADDRESS_REQUIRED, POSTAL_COUNTRY_INVALID } from "./constants";
 
 export type TeamSettings = typeof settings.$inferSelect;
 
 export interface GeneralSettingsInput {
-  /** `undefined` = keep unchanged; `""` = clear. */
-  mailingAddress?: string;
+  /** `undefined` = keep unchanged; `null` = clear. */
+  postalAddress?: PostalAddress | null;
 }
 
 /** The public shape of the per-team general settings singleton. Rows are
  * created lazily on first update — a missing row means "all defaults". */
 export interface GeneralSettings {
-  mailingAddress: string | null;
+  postalAddress: PostalAddress | null;
   updatedAt: Date | null;
 }
 
 /** A physical mailing address is required for marketing campaign delivery. */
 export async function assertMailingAddressConfigured(teamId: string): Promise<void> {
-  const settings = await getGeneralSettings(teamId);
-  if (!settings.mailingAddress?.trim()) {
+  const { postalAddress } = await getGeneralSettings(teamId);
+  if (!mailingAddressText(postalAddress)) {
     throw new Error(MAILING_ADDRESS_REQUIRED);
   }
 }
 
 function toGeneralSettings(row: TeamSettings | null): GeneralSettings {
   return {
-    mailingAddress: row?.mailingAddress ?? null,
+    postalAddress: row?.postalAddress ?? null,
     updatedAt: row?.updatedAt ?? null,
   };
 }
@@ -52,14 +55,17 @@ export async function upsertGeneralSettings(
   teamId: string,
   input: GeneralSettingsInput,
 ): Promise<GeneralSettings> {
+  const postalAddress =
+    input.postalAddress === undefined
+      ? undefined
+      : input.postalAddress && normalizePostalAddress(input.postalAddress);
   const existing = await getTeamSettingsRow(teamId);
 
-  const mailingAddress =
-    input.mailingAddress === undefined
-      ? (existing?.mailingAddress ?? null)
-      : input.mailingAddress || null;
-
-  const values = { mailingAddress, updatedAt: new Date() };
+  const values = {
+    postalAddress:
+      postalAddress === undefined ? (existing?.postalAddress ?? null) : postalAddress,
+    updatedAt: new Date(),
+  };
 
   if (existing) {
     const [row] = await db

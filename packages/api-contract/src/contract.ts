@@ -782,7 +782,7 @@ const sequencesContract = c.router(
       },
       summary: "Start a broadcast or activate a sequence",
       description:
-        "Requires a non-empty mailing address in the team's general settings. On SendLit Cloud, a new organization's first broadcast to 1,000 or more contacts through its own ESP is reviewed once before it can start (400 `broadcast_held_for_review`); start it again once approved.",
+        "Requires a postal address in the team's general settings. On SendLit Cloud, a new organization's first broadcast to 1,000 or more contacts through its own ESP is reviewed once before it can start (400 `broadcast_held_for_review`); start it again once approved.",
     },
     pause: {
       method: "POST",
@@ -889,7 +889,7 @@ const transactionalContract = c.router(
       },
       summary: "Send a transactional email",
       description:
-        "Requires a non-empty mailing address in the team's general settings. `templateId` must identify a team-owned transactional template; marketing templates return 422 template_not_transactional. Unguarded Liquid variables must be supplied in `variables`, or the API returns 422 missing_template_variables without creating a row or queue job. Inline `html` is sent verbatim without Liquid rendering. address, unsubscribe_link, and subscriber are marketing-only server-owned values and are unavailable to transactional templates.",
+        "Requires a postal address in the team's general settings. `templateId` must identify a team-owned transactional template; marketing templates return 422 template_not_transactional. Unguarded Liquid variables must be supplied in `variables`, or the API returns 422 missing_template_variables without creating a row or queue job. Inline `html` is sent verbatim without Liquid rendering. address, unsubscribe_link, and subscriber are marketing-only server-owned values and are unavailable to transactional templates.",
     },
     get: {
       method: "GET",
@@ -1061,8 +1061,7 @@ const espCollectionContract = c.router(
         502: testEspConfigResponseSchema,
       },
       summary: "Send a test email through a user-managed ESP",
-      description:
-        "Requires a non-empty mailing address in the team's general settings.",
+      description: "Requires a postal address in the team's general settings.",
     },
     activate: {
       method: "POST",
@@ -1133,10 +1132,10 @@ const generalSettingsContract = c.router(
       method: "PUT",
       path: "/settings/general",
       body: updateGeneralSettingsBodySchema,
-      responses: { 200: generalSettingsSchema },
+      responses: { 200: generalSettingsSchema, 400: errorSchema },
       summary: "Update the team's general settings",
       description:
-        "Omitted fields are left unchanged; send an empty string to clear a field.",
+        "Omit `postalAddress` to keep it; `null` clears it. 400 `postal_country_invalid` when its country isn't a current ISO 3166-1 alpha-2 code.",
     },
   },
   { metadata: { tag: "Settings" } },
@@ -1372,7 +1371,7 @@ const provisioningContract = c.router(
       },
       summary: "Find-or-create a team for a consumer-supplied tenant id",
       description:
-        "Server-to-server endpoint for multi-tenant consumers (e.g. CourseLit) to provision one SendLit team per tenant. Requires a scoped organization key as a Bearer token.",
+        "Server-to-server endpoint for multi-tenant consumers (e.g. CourseLit) to provision one SendLit team per tenant. Requires a scoped organization key as a Bearer token. `postalAddress` sets the team's footer address; 400 `postal_country_invalid` when its country isn't a current ISO 3166-1 alpha-2 code.",
     },
     getTeam: {
       method: "GET",
@@ -1390,11 +1389,14 @@ const provisioningContract = c.router(
       body: updateProvisionedTeamBodySchema,
       responses: {
         200: provisionedTeamSchema,
+        400: errorSchema,
         403: errorSchema,
         404: errorSchema,
         409: errorSchema,
       },
       summary: "Update a provisioned team's sender, limits, or settings",
+      description:
+        "Omitted fields are left unchanged. `postalAddress: null` clears the team's postal address; 400 `postal_country_invalid` when its country isn't a current ISO 3166-1 alpha-2 code.",
     },
     createTeamKey: {
       method: "POST",
