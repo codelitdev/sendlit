@@ -1,0 +1,100 @@
+---
+title: API errors
+description: Stable template, sending, and event error codes.
+nav_order: 50
+---
+
+SendLit returns JSON errors with a stable `error` string. Clients should branch
+on the code rather than human-readable descriptions.
+
+| Status | Error                                  | Meaning                                                              |
+| ------ | -------------------------------------- | -------------------------------------------------------------------- |
+| `422`  | `template_not_transactional`           | `POST /emails` received a marketing template.                        |
+| `422`  | `template_not_marketing`               | A broadcast or sequence received a transactional template.           |
+| `422`  | `missing_template_variables`           | Required Liquid paths were absent from `variables`.                  |
+| `422`  | `template_conversion_requires_changes` | Marketing-only references remain outside the managed footer.         |
+| `422`  | `footer_required`                      | Marketing content does not contain exactly one final managed footer. |
+| `422`  | `footer_not_allowed`                   | Transactional content contains a managed footer.                     |
+| `422`  | `conditional_not_allowed`              | Transactional content contains a conditional section.                |
+| `422`  | `marketing_variables_not_allowed`      | Transactional content references marketing-owned values.             |
+
+Missing and conversion errors include the affected paths:
+
+```json
+{
+    "error": "missing_template_variables",
+    "missingVariables": ["customer.name", "otp"]
+}
+```
+
+```json
+{
+    "error": "template_conversion_requires_changes",
+    "variables": ["subscriber.name"]
+}
+```
+
+All template-purpose, structural, and missing-variable checks happen before an
+email is queued. A rejected request does not create a partial destination
+template or transactional delivery.
+
+## Event and trigger errors
+
+| Status | Error                        | Meaning                                                                                                     |
+| ------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `404`  | `contact_not_found`          | `POST /events` received an unknown `contactId`, or an unknown email with `createContact: false`. Also returned by `GET /contacts/:contactId/events`. |
+| `422`  | `event_name_limit_reached`   | The event name is new and the team already has 500. Nothing was stored.                                     |
+| `409`  | `event_definition_exists`    | An event with that name is already registered.                                                              |
+| `409`  | `event_definition_in_use`    | The event can't be deleted while a sequence uses it as its trigger.                                         |
+| `409`  | `sequence_active`            | An active sequence, or a sending broadcast, can't be deleted. Pause it first.                               |
+| `409`  | `broadcast_sent`             | A broadcast that has started sending can't be deleted, so its report is kept. Archive it instead.           |
+| `409`  | `broadcast_not_sent`         | Only a sent broadcast can be archived. Delete a draft or scheduled broadcast instead.                       |
+| `404`  | `event_definition_not_found` | No event with that name is registered.                                                                      |
+| `400`  | `invalid_trigger_type`       | The trigger type isn't allowed for this broadcast or sequence.                                              |
+| `400`  | `invalid_trigger_data`       | The trigger value is invalid, for example an event name over 128 characters or starting with `$`.          |
+| `400`  | `invalid_trigger_filter`     | The `triggerFilter` is invalid or doesn't fit the trigger type, for example a filter on a tag trigger.     |
+| `400`  | `invalid_reentry`            | `reentry` was set on a broadcast, or `once_per_period` without `reentryPeriodDays` from 1 to 365.          |
+
+See [Custom events](/docs/developers/events) and [Sequences](/docs/email-marketing/sequences#custom-events).
+
+## Account deletion errors
+
+`POST /account/deletion` (dashboard session only):
+
+| Status | Error                      | Meaning                                                                                                                    |
+| ------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `403`  | `human_session_required`   | Account deletion needs a dashboard session. OAuth tokens and API keys can't delete an account.                              |
+| `400`  | `email_mismatch`           | The typed email isn't the account's email.                                                                                 |
+| `400`  | `invalid_code`             | The code from `POST /account/deletion/code` is wrong or expired. Request a new one.                                        |
+| `409`  | `account_deletion_blocked` | Something has to happen first. The body lists `organizations` with their `blocker`: `active_subscription_exists`, `billing_checkout_pending`, `last_organization_owner` or `billing_manager_required`. |
+
+## Authentication errors
+
+| Status | Error                        | Meaning                                                                                                 |
+| ------ | ---------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `400`  | `credential_ambiguous`       | The request sent more than one credential. Send exactly one; see [Authentication](/docs/developers/authentication). |
+| `401`  | `unauthorized`               | No credential, or an unknown, revoked or expired one.                                                    |
+| `401`  | `invalid_token`              | The bearer token is invalid or expired, or `Authorization` is not `Bearer <token>`.                       |
+| `503`  | `authentication_unavailable` | SendLit could not check the credential right now. Retry.                                                  |
+
+## Plan and billing errors
+
+Plan limits and billing mutations use the same stable codes on REST and MCP:
+
+| Status | Error                              | Meaning                                                                 |
+| ------ | ---------------------------------- | ----------------------------------------------------------------------- |
+| `403`  | `plan_feature_unavailable`         | The current plan does not include that capability.                      |
+| `409`  | `plan_limit_reached`               | A team, contact, or send cap was reached.                               |
+| `402`  | `payment_required`                 | The organization cannot send until payment or activation.               |
+| `403`  | `billing_owner_required`           | Only an owner (or the billing manager) can perform that billing action. |
+| `409`  | `free_organization_already_owned`  | The user already owns a Free organization.                              |
+| `409`  | `organization_name_already_exists` | The name is already used by an owned organization.                      |
+| `409`  | `billing_checkout_pending`         | A checkout attempt is already open.                                     |
+| `409`  | `billing_catalog_changed`          | Prices changed; review the new catalog before retrying.                 |
+| `503`  | `billing_catalog_unavailable`      | Checkout is frozen until the catalog is verified.                       |
+| `409`  | `active_subscription_exists`       | Deleting is blocked while a subscription is live.                       |
+| `401`  | `recent_authentication_required`   | Sign in again before a billing mutation.                                |
+| `403`  | `domain_verification_required`     | The From domain must be verified after test volume.                     |
+| `403`  | `sending_paused`                   | Payment grace expired or a fair-use control paused sending.             |
+
+Limit errors include `plan`, `usage`, `limit`, `requiredPlan`, and `upgradeUrl`. MCP tools return the same object in `structuredContent` instead of `internal_error`.

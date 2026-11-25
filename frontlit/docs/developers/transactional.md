@@ -1,0 +1,134 @@
+---
+title: Transactional email
+description: Send a single email through the REST API.
+nav_order: 70
+---
+
+Use `POST /emails` for one API-triggered message such as a receipt, invitation,
+password reset, OTP, or security notification. Transactional sends appear in
+the dashboard’s **Transactional log**. They do not enroll a contact in a
+sequence or use a broadcast audience.
+
+A configured ESP is required before SendLit accepts a send. A workspace mailing
+address is not required for transactional messages: they do not render a
+marketing footer or unsubscribe link. The address remains required for
+broadcasts and sequences, whose managed footer includes it.
+
+## Create a transactional template
+
+Create a template with `purpose: "transactional"`, or duplicate one of the
+built-in transactional starters from the template hub. System templates are
+starters and cannot be sent directly; the resulting team-owned identifier
+starts with `tpl_`.
+
+Template responses contain a server-computed `requiredVariables` list:
+
+```json
+{
+    "templateId": "tpl_...",
+    "purpose": "transactional",
+    "requiredVariables": ["customer.name", "otp"]
+}
+```
+
+The template hub shows these paths and provides ready-to-copy JSON and curl
+examples.
+
+## Send with a template
+
+Nested paths require nested JSON values:
+
+```sh
+curl -X POST 'http://localhost:5000/emails' \
+  -H 'content-type: application/json' \
+  -H 'x-sendlit-apikey: sl_live_...' \
+  --data '{
+    "to": "reader@example.com",
+    "subject": "Your sign-in code",
+    "templateId": "tpl_...",
+    "variables": {
+      "customer": { "name": "Rajat" },
+      "otp": "345987"
+    },
+    "idempotencyKey": "sign-in-123"
+  }'
+```
+
+`templateId` must identify a team-owned transactional template. A marketing
+template is rejected synchronously:
+
+```json
+{
+    "error": "template_not_transactional"
+}
+```
+
+## Required and optional variables
+
+Every unguarded Liquid value must be present before SendLit creates a
+transactional row or queue job:
+
+```liquid
+Your code is {{ otp }} for {{ customer.name }}.
+```
+
+Missing values return:
+
+```json
+{
+    "error": "missing_template_variables",
+    "missingVariables": ["customer.name", "otp"]
+}
+```
+
+Use a `default` filter or a direct `if` guard for intentionally optional
+content:
+
+```liquid
+Hello {{ first_name | default: "there" }}.
+{% if promotion %}
+Your code: {{ promotion.code }}
+{% endif %}
+```
+
+`address`, `unsubscribe_link`, `view_in_browser_url`, `web_version_url` and `subscriber.*` are
+owned by the marketing pipeline. They are rejected both in transactional template content and as
+top-level request variables.
+
+## Inline HTML
+
+Provide exactly one of `templateId` or `html`. Inline `html` is sent verbatim:
+SendLit does not run Liquid over it, and `variables` cannot be supplied with it.
+This prevents legitimate `{{` or `{%` content in caller-rendered HTML from
+being modified.
+
+## Sender name
+
+An email goes out from the sender of its delivery source. To use another name
+for one email, pass `fromName`, for example the name of the shop or school the
+email is about:
+
+```json
+{
+    "to": "reader@example.com",
+    "subject": "Your sign-in code",
+    "html": "<p>Your code is 345987</p>",
+    "fromName": "Yoga with Nalini"
+}
+```
+
+Only the name changes; the address stays the delivery source's verified one.
+`fromName` can be up to 100 characters. It can't contain line breaks or other
+control characters, invisible formatting characters such as right-to-left
+overrides and zero-width spaces, `<`, `>` or `@`, so a name can't pass for an
+address or read as something it isn't. Otherwise the send is refused with a
+`400`. A name with a comma, quote or other punctuation is quoted
+in the From header for you.
+
+## Plain-text part
+
+Every email goes out as `multipart/alternative` with an HTML and a plain-text
+part. SendLit generates the text from the final HTML: links become
+`text (url)`, list items get a `•` bullet, and images, styles and the hidden
+preview text are dropped. To send your own text instead, pass `text`; it is
+sent verbatim, like inline `html`.

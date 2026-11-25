@@ -1,0 +1,128 @@
+---
+title: Contacts
+description: Manage subscribers and segmentation data.
+nav_order: 10
+---
+
+Contacts represent subscribers in a team. Each contact has an email address, subscription state, tags, and custom fields.
+
+Tags are the primary automation and segmentation primitive. They can be applied manually, through API calls, or as actions after sequence emails are sent.
+
+Custom fields store generic contact attributes as scalar values or scalar arrays. Use namespaced keys for data synced from another system, for example `courselit.products: ["course_123"]` or `courselit.permissions: ["manageUsers"]`. SendLit treats these as CRM contact attributes; it does not need to understand the source system's product, community, or permission model.
+
+## Import contacts
+
+**Contacts → Import** takes a CSV export from beehiiv, Mailchimp, Substack,
+Kit (ConvertKit) or any other tool. The file is read in your browser; you then
+check how each column is imported. Common export headers are recognised
+automatically: email, name (or first and last name), tags, status, signup
+date (`created_at`, `OPTIN_TIME`, ...), and beehiiv's `tier`, which becomes a
+`tier:<value>` tag. Other columns become custom fields, or choose
+"Don't import". You can add tags to every imported contact, for example
+`beehiiv`. Step-by-step guides for [beehiiv](/docs/migrate/beehiiv),
+[Substack](/docs/migrate/substack) and [Mailchimp](/docs/migrate/mailchimp) cover each
+tool's export.
+
+If the file has no status column, the importer asks for the status of
+everyone in it, and suggests one from Mailchimp's file names
+(`unsubscribed_…`, `cleaned_…`).
+
+An import never makes a contact's status less strict. The order is
+subscribed, then unsubscribed, then bounced, then complained:
+
+| Source status | Imported as |
+| --- | --- |
+| Active, subscribed, empty | Subscribed |
+| Paused (beehiiv) | Subscribed, tagged `paused` |
+| Inactive, unsubscribed, deactivated | Unsubscribed |
+| Bounced, cleaned (Mailchimp) | Unsubscribed and added to the suppression list |
+| Complained, spam | Unsubscribed and suppressed as a complaint |
+| Pending, Needs approval | Skipped, or imported unsubscribed and tagged `pending` if you choose |
+
+A contact that already exists is matched by email: tags and custom fields are
+merged in, the name is updated, and an earlier signup date replaces a later
+one, so growth charts keep the original dates. An unsubscribed or suppressed
+contact is never re-subscribed. Imported contacts don't trigger sequences.
+Subscribed contacts beyond your plan's limit are skipped. When the import
+finishes you get counts of created, updated, unchanged, suppressed and
+skipped rows, with the reason for each skipped row. Importing the same file
+again is safe.
+
+Over the API, `POST /contacts/import` takes up to 1000 rows per request with
+each row's source `status` as it appears in the export; the MCP tool is
+`import_contacts`.
+
+## Export contacts
+
+**Contacts → Export** downloads every contact matching the current filter as
+CSV: email, name, status (subscribed, unsubscribed, bounced or complained),
+tags, created_at, suppression_reason and one column per custom field. Over
+the API use `GET /contacts/export` (optionally with `segmentId` or `filter`);
+the MCP tool is `export_contacts`. The file can be imported again as is.
+
+## Manage tags
+
+**Contacts → Tags** lists every tag your contacts carry, with how many
+contacts have each one. From there you can:
+
+- **Rename** a tag. SendLit renames it on every contact and in the segments,
+  broadcast and sequence filters, tag triggers, email tag actions and signup
+  forms that use it. Renaming to a tag that already exists merges the two.
+  Sent broadcasts keep their original filters.
+- **Delete** a tag. It is removed from every contact. Before you confirm,
+  SendLit shows how many contacts have it and everything that still uses it.
+  Those keep the old name: a filter on a deleted tag matches nobody, and a
+  trigger, email action or signup form can add the tag again, so update them
+  first.
+
+Renaming or deleting a tag doesn't start tag-added or tag-removed sequences.
+The API endpoints are under `/tags` (the Tags section in the API reference);
+the MCP tools are `list_tags`, `get_tag_references`, `rename_tag` and
+`delete_tag`.
+
+## Delete contacts
+
+Delete one contact from its row, or several at once:
+
+- **Select rows** with the checkboxes on **Contacts**, then choose **Delete**.
+- **Select everything that matches**: filter the list (or pick a segment),
+  tick the header checkbox, then choose **Select all N matching**. This covers
+  every page, not only the one you see.
+
+Before deleting, SendLit shows how many contacts will go and how many of them
+are unsubscribed. Deleting all matching contacts, or more than 100, asks you
+to type the number to confirm. Up to 1000 contacts are deleted straight away; larger deletions
+run in the background and the page shows their progress. If the matching
+contacts change between the preview and your confirmation (for example a
+signup arrives), nothing is deleted and you see the new count. Contacts added
+while a background deletion runs are kept.
+
+What happens to a deleted contact:
+
+- Its tags, custom fields, sequence progress, events and per-contact delivery
+  history are deleted with it. Deleting doesn't trigger any sequence.
+- Suppressions are kept. If the contact had unsubscribed, its address is added
+  to the suppression list (reason **manual**, "Unsubscribed contact was
+  deleted"), because unsubscribe status lives on the contact. Re-importing or
+  re-adding the address can't mail it again. You can release a manual
+  suppression from **Suppressions** if the person asks to hear from you again.
+- Broadcast and sequence reports keep their totals.
+
+Deleting contacts is not a full privacy (GDPR) erasure: delivery logs and the
+suppression list still hold the address, so that SendLit never mails someone
+who opted out. Contacts have no uploaded media, so there are no files to
+delete.
+
+Over the API, `POST /contacts/bulk-delete/preview` returns the count and
+`POST /contacts/bulk-delete` deletes either up to 1000 `contactIds` or every
+contact that `match`es a search (`q`), `segmentId` and `filter`. With `match`,
+pass the preview's count as `expectedCount`; a different live count returns
+409 `count_changed`. A large deletion answers 202 with a `deletionId` to poll
+at `GET /contacts/bulk-delete/{deletionId}`. The MCP tools are
+`preview_delete_contacts`, `delete_contacts` and `get_contact_deletion`.
+
+## Segments
+
+A segment is a saved, named contact filter — a combination of tag, email, subscription status, and signup date conditions joined with `and`/`or`. Build the filter once, save it as a segment, and reuse it instead of rebuilding it for every broadcast or sequence.
+
+Segments are dynamic: they store the filter, not a list of contacts, so the matching contacts are computed at the time the segment is used. Manage them via the `/segments` endpoints (the Segments section in the API reference), and preview the currently matching contacts with `GET /contacts?segmentId={segmentId}`. For one-off filtering, `GET /contacts` also accepts `filter` as serialized `ContactFilterWithAggregator` JSON. Filters can target fixed contact fields, tags, and `customField` keys. `q`, `segmentId`, and `filter` combine with AND.

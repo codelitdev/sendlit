@@ -1,0 +1,26 @@
+---
+title: Suppressions
+description: Understand addresses that SendLit will not send to.
+nav_order: 20
+---
+
+Suppressions protect sender reputation by preventing delivery to addresses that should not receive mail. The dashboard lists suppressed addresses and the reason they were suppressed.
+
+Reasons include hard bounce, spam complaint, repeated soft bounce, provider suppression, and manual suppression. A suppressed address is excluded from delivery even when it matches a broadcast audience or sequence enrollment rule.
+
+Treat suppression data as operational state: investigate the provider event before removing or overriding a manual suppression.
+
+## Spam complaints
+
+When a recipient marks your email as spam, SendLit suppresses the address and
+also unsubscribes the contact. The unsubscribe is permanent: releasing a
+suppression never resubscribes someone who complained, and re-adding the
+address later creates an unsubscribed contact.
+
+## Suppress an address yourself
+
+Use **Suppressions → Add suppression** to block an address, for example a role
+account, a known spam trap, or someone who asked by email not to be contacted.
+Over the API, `POST /suppressions` with `{ "email": "...", "note": "..." }`; the
+MCP tool is `add_suppression`. A manual suppression can be released later; a
+stronger suppression already on the address (such as a complaint) is kept.
