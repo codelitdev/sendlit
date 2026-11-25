@@ -1,0 +1,105 @@
+{
+  "$schema": "https://frontlit.app/schema/site.v1.json",
+  "header": {
+    "links": [
+      {
+        "label": "Features",
+        "href": "/#features"
+      },
+      {
+        "label": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "label": "Docs",
+        "href": "/docs",
+        "isButton": false
+      }
+    ],
+    "ctaHref": "https://app.sendlit.app",
+    "linkAlignment": "center",
+    "githubRepo": "codelitdev/sendlit",
+    "showGithubStars": false
+  },
+  "footer": {
+    "tagline": "Open-source email platform. Send newsletters, campaigns and sequences through your own SES or SMTP, or build email into your product.",
+    "socials": {
+      "github": "https://github.com/codelitdev/sendlit"
+    },
+    "columns": [
+      {
+        "title": "Product",
+        "links": [
+          {
+            "label": "Features",
+            "href": "/#features"
+          },
+          {
+            "label": "Pricing",
+            "href": "/pricing"
+          }
+        ]
+      },
+      {
+        "title": "Resources",
+        "links": [
+          {
+            "label": "Help center",
+            "href": "/help"
+          },
+          {
+            "label": "Documentation",
+            "href": "/docs"
+          }
+        ]
+      },
+      {
+        "title": "Legal",
+        "links": [
+          {
+            "label": "Terms of use",
+            "href": "/terms"
+          },
+          {
+            "label": "Privacy policy",
+            "href": "/privacy"
+          },
+          {
+            "label": "Acceptable use policy",
+            "href": "/acceptable-use"
+          },
+          {
+            "label": "Data processing agreement",
+            "href": "/dpa"
+          }
+        ]
+      },
+      {
+        "title": "Alternatives",
+        "links": [
+          {
+            "label": "SendLit vs Listmonk",
+            "href": "/compare#listmonk"
+          },
+          {
+            "label": "SendLit vs Mautic",
+            "href": "/compare#mautic"
+          },
+          {
+            "label": "SendLit vs MailCheap",
+            "href": "/compare#mailcheap"
+          },
+          {
+            "label": "SendLit vs beehiiv",
+            "href": "/compare#beehiiv"
+          },
+          {
+            "label": "SendLit vs Kit",
+            "href": "/compare#kit"
+          }
+        ]
+      }
+    ],
+    "copyrightText": "© SendLit. All rights reserved."
+  }
+}

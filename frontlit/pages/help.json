@@ -1,0 +1,15 @@
+{
+  "$schema": "https://frontlit.app/schema/page.v1.json",
+  "title": "Help desk",
+  "description": "Get help with SendLit: setup, sending through SES or SMTP, and billing. Open a ticket and we'll reply by email, or browse suggested help articles.",
+  "layout": [
+    {
+      "name": "support-form",
+      "settings": {
+        "title": "SendLit help desk",
+        "titleLevel": "h1",
+        "description": "Stuck on setup, sending or billing? Tell us what's going on and we'll reply by email. As you type, we'll suggest help articles that might answer your question right away. For setup guides, the API and React components, see the SendLit docs at docs.sendlit.app."
+      }
+    }
+  ]
+}
