@@ -6,8 +6,8 @@ nav_order: 20
 
 To send a broadcast:
 
-1. Add contacts, or [import them](/docs/email-marketing/contacts#import-contacts)
-   from a CSV. Moving from beehiiv, Substack or Mailchimp? Follow
+1. Add contacts, or bring them in [from a CSV](/docs/email-marketing/contacts#import-contacts).
+   Moving from beehiiv, Substack or Mailchimp? Follow
    [Moving your newsletter](/docs/migrate/overview).
 2. Create a template or start from a system template.
 3. Create a broadcast.
