@@ -149,6 +149,7 @@ import {
   revokeOrganizationSendingDomain,
   type SendingDomain,
   suspendOrganizationEsp,
+  type TeamHealth,
   testOrganizationEsp,
   transitionOrganizationEspGrant,
   updateOrganization,
@@ -3953,8 +3954,8 @@ function OrganizationOperationsSection({
       </div>
       <Card>
         <OrganizationSectionHeader
-          title="Transactional mail activity"
-          description="Counts are transactional only. Shared-delivery quota remains separate. No email content is shown."
+          title="Mail activity"
+          description="Broadcasts, sequences and transactional email for each team, with its sending health over the last 7 days and today's shared-mailbox quota. No email content is shown."
           action={
             <Select
               value={String(mailRangeDays)}
@@ -3964,10 +3965,7 @@ function OrganizationOperationsSection({
                 )
               }
             >
-              <SelectTrigger
-                aria-label="Transactional mail activity range"
-                className="w-36"
-              >
+              <SelectTrigger aria-label="Mail activity range" className="w-36">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -3984,11 +3982,15 @@ function OrganizationOperationsSection({
             <Loading />
           ) : (
             <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 <MailCountStat label="Sent" value={mailActivity.totals.sent} />
                 <MailCountStat label="Queued" value={mailActivity.totals.queued} />
                 <MailCountStat label="Failed" value={mailActivity.totals.failed} />
                 <MailCountStat label="Bounced" value={mailActivity.totals.bounced} />
+                <MailCountStat
+                  label="Marked as spam"
+                  value={mailActivity.totals.complained}
+                />
               </div>
               {mailActivity.teams.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
@@ -4004,6 +4006,9 @@ function OrganizationOperationsSection({
                         <TableHead className="text-right">Queued</TableHead>
                         <TableHead className="text-right">Failed</TableHead>
                         <TableHead className="text-right">Bounced</TableHead>
+                        <TableHead className="text-right">Spam</TableHead>
+                        <TableHead>Health</TableHead>
+                        <TableHead className="text-right">Quota today</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -4043,6 +4048,19 @@ function OrganizationOperationsSection({
                           <TableCell className="text-right tabular-nums">
                             {team.mail.bounced}
                           </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {team.mail.complained}
+                          </TableCell>
+                          <TableCell className="min-w-40 whitespace-normal">
+                            <TeamHealthBadge health={team.health} />
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {team.quota === null
+                              ? "—"
+                              : team.quota.day.limit === null
+                                ? `${team.quota.day.accepted} sent`
+                                : `${team.quota.day.accepted} of ${team.quota.day.limit}`}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -4053,6 +4071,43 @@ function OrganizationOperationsSection({
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+const HEALTH_LABEL: Record<TeamHealth["status"], string> = {
+  normal: "Healthy",
+  warned: "Warned",
+  marketing_paused: "Marketing paused",
+  all_paused: "All sending paused",
+};
+
+const HEALTH_CLASS: Record<TeamHealth["status"], string> = {
+  normal:
+    "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  warned: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  marketing_paused: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+  all_paused: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+};
+
+/** Status is colour plus words; where it comes from and the 7-day figures
+ * sit underneath. */
+function TeamHealthBadge({ health }: { health: TeamHealth }) {
+  const { sent, bounced, complained } = health.last7Days;
+  const where =
+    health.scope === "shared_mailbox"
+      ? "Whole shared mailbox. "
+      : health.reason?.startsWith("shared_esp_")
+        ? "On the shared mailbox. "
+        : "";
+  return (
+    <div className="space-y-1">
+      <Badge variant="outline" className={HEALTH_CLASS[health.status]}>
+        {HEALTH_LABEL[health.status]}
+      </Badge>
+      <p className="text-xs text-muted-foreground">
+        {where}7 days: {sent} sent, {bounced} bounced, {complained} spam
+      </p>
     </div>
   );
 }

@@ -1382,6 +1382,8 @@ const provisioningContract = c.router(
         404: errorSchema,
       },
       summary: "Get a provisioned team within the authenticated organization",
+      description:
+        "`health` is the team's sending status: `normal`, `warned`, `marketing_paused` or `all_paused`, with the `reason` code and whether it comes from the team's own reputation or the shared mailbox (`scope`). `last7Days` counts the emails the ESP accepted in the last 7 days and how many bounced or were marked as spam.",
     },
     updateTeam: {
       method: "PATCH",
@@ -1448,6 +1450,8 @@ const provisioningContract = c.router(
         404: errorSchema,
       },
       summary: "Get organization-delivery quota usage for a provisioned team",
+      description:
+        "Returns the team's day and month quota on the shared mailbox, plus its `health` (see Get a provisioned team).",
     },
   },
   { metadata: { tag: "Teams" } },
@@ -1866,9 +1870,9 @@ const organizationsContract = c.router(
         403: errorSchema,
         404: errorSchema,
       },
-      summary: "Get organization transactional mail activity",
+      summary: "Get organization mail activity and team health",
       description:
-        "Returns per-team and organization-total transactional mail counts (`sent`, `queued`, `failed`, `bounced`) for a window of 1, 3, 7, or 30 days (default 7). Includes teams with zero activity. Does not include campaigns, broadcasts, sequences, recipients, subjects, or email bodies. Shared-delivery quota remains on `/usage`.",
+        "Returns per-team and organization-total mail counts (`sent`, `queued`, `failed`, `bounced`, `complained`) from the outbound ledger, covering broadcasts, sequences and transactional email, for a window of 1, 3, 7, or 30 days (default 7). Includes teams with zero activity. Each team also carries its `health` (sending status with reason and scope, plus 7-day sent, bounced and complained counts, whatever the window) and its shared-mailbox `quota` (null without an active grant). No recipients, subjects, or email bodies.",
     },
     enterTeam: {
       method: "POST",

@@ -1203,6 +1203,14 @@ export interface OrganizationMailCounts {
   queued: number;
   failed: number;
   bounced: number;
+  complained: number;
+}
+
+export interface TeamHealth {
+  status: "normal" | "warned" | "marketing_paused" | "all_paused";
+  reason: string | null;
+  scope: "team" | "shared_mailbox" | null;
+  last7Days: { sent: number; bounced: number; complained: number };
 }
 
 export interface OrganizationMailActivityTeam {
@@ -1211,6 +1219,9 @@ export interface OrganizationMailActivityTeam {
   status: OrganizationTeam["status"];
   externalId: string | null;
   mail: OrganizationMailCounts;
+  health: TeamHealth;
+  /** Shared-mailbox quota; null when the team has no active grant. */
+  quota: OrganizationUsage | null;
 }
 
 export interface OrganizationMailActivity {

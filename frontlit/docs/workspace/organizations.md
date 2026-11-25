@@ -40,8 +40,8 @@ The Organizations page keeps the current organization in view, then splits
 administration into tabs: **General** (organization name), **Plan** (plan,
 payment status, limits, and usage), **Delivery**
 (shared mailboxes and default-delivery policy), **Teams** (grants and Enter
-team), **Members**, **Activity** (quota, transactional mail counts, and
-audit), and **Keys**.
+team), **Members**, **Activity** (quota, mail activity and team health,
+and audit), and **Keys**.
 
 Paid organizations can change, cancel, or resume their plan from the
 **Plan** tab; **Manage billing** there opens the hosted payment portal for
@@ -78,15 +78,23 @@ organization audit activity, and makes the team appear in the sidebar switcher.
 Organization members and organization API keys cannot enter a team. Archived
 teams cannot be entered.
 
-## Transactional mail activity
+## Mail activity and team health
 
-The **Transactional mail activity** card on **Organizations → Activity** shows
-organization totals and a per-team table of transactional mail counts (`sent`,
-`queued`, `failed`, `bounced`) for the last 1, 3, 7, or 30 days (default 7).
-Quiet teams still appear so provisioned tenants with no recent sends are
-visible. These counts are transactional only; they do not include campaigns,
-broadcasts, or sequences. Shared-delivery quota remains on **Shared-delivery
-usage**. Recipients, subjects, and email bodies are not shown.
+The **Mail activity** card on **Organizations → Activity** shows organization
+totals and a per-team table of mail counts (sent, queued, failed, bounced, and
+marked as spam) for the last 1, 3, 7, or 30 days (default 7). The counts cover
+broadcasts, sequences and transactional email. Quiet teams still appear, so
+provisioned tenants with no recent sends are visible.
+
+Each team also shows:
+
+- **Health**: whether the team is healthy, warned, or has marketing or all
+  sending paused, and whether that's because of its own sends or the whole
+  shared mailbox. Underneath are its last 7 days of sent, bounced and spam
+  counts, whatever the window above.
+- **Quota today**: how much of its daily shared-mailbox quota it has used.
+
+Recipients, subjects, and email bodies are not shown.
 
 > A team that is archived is removed from normal team switching and cannot
 > send. Its operational history is retained.

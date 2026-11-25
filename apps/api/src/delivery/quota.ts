@@ -401,58 +401,94 @@ export async function releaseReservedQuotaForGrantInTransaction(
   }
 }
 
-export async function getTeamQuotaUsage(teamId: string) {
-  const [grant] = await db
+export type QuotaWindow = {
+  limit: number | null;
+  accepted: number;
+  reserved: number;
+  remaining: number | null;
+  resetsAt: Date;
+};
+
+export type TeamQuotaUsage = { day: QuotaWindow; month: QuotaWindow };
+
+function quotaWindow(
+  bucket: { acceptedCount: number; reservedCount: number } | undefined,
+  limit: number | null,
+  resetsAt: Date,
+): QuotaWindow {
+  const accepted = bucket?.acceptedCount ?? 0;
+  const reserved = bucket?.reservedCount ?? 0;
+  return {
+    limit,
+    accepted,
+    reserved,
+    remaining: limit === null ? null : Math.max(0, limit - accepted - reserved),
+    resetsAt,
+  };
+}
+
+/** Shared-mailbox quota for several teams (by internal id). Teams without an
+ * active grant are left out. */
+export async function getTeamsQuotaUsage(
+  teamIds: string[],
+): Promise<Map<string, TeamQuotaUsage>> {
+  const result = new Map<string, TeamQuotaUsage>();
+  if (teamIds.length === 0) return result;
+  const grants = await db
     .select()
     .from(espConfigTeamGrants)
     .where(
       and(
-        eq(espConfigTeamGrants.teamId, teamId),
+        inArray(espConfigTeamGrants.teamId, teamIds),
         eq(espConfigTeamGrants.status, "active"),
       ),
-    )
-    .limit(1);
-  if (!grant) throw new Error("organization_delivery_disabled");
+    );
+  if (grants.length === 0) return result;
   const periods = utcPeriods();
   const buckets = await db
     .select()
     .from(organizationEspUsageBuckets)
     .where(
       and(
-        eq(organizationEspUsageBuckets.organizationId, grant.organizationId),
-        eq(organizationEspUsageBuckets.grantId, grant.id),
+        inArray(
+          organizationEspUsageBuckets.grantId,
+          grants.map((grant) => grant.id),
+        ),
         or(
           eq(organizationEspUsageBuckets.periodStart, periods.day),
           eq(organizationEspUsageBuckets.periodStart, periods.month),
         ),
       ),
     );
-  const makeWindow = (
-    periodType: "day" | "month",
-    periodStart: Date,
-    limit: number | null,
-    resetsAt: Date,
-  ) => {
-    // On the 1st the day and month buckets share a start, so match the type.
-    const bucket = buckets.find(
+  // On the 1st the day and month buckets share a start, so match the type.
+  const find = (grantId: string, periodType: "day" | "month", start: Date) =>
+    buckets.find(
       (row) =>
+        row.grantId === grantId &&
         row.periodType === periodType &&
-        row.periodStart.getTime() === periodStart.getTime(),
+        row.periodStart.getTime() === start.getTime(),
     );
-    const accepted = bucket?.acceptedCount ?? 0;
-    const reserved = bucket?.reservedCount ?? 0;
-    return {
-      limit,
-      accepted,
-      reserved,
-      remaining: limit === null ? null : Math.max(0, limit - accepted - reserved),
-      resetsAt,
-    };
-  };
-  return {
-    day: makeWindow("day", periods.day, grant.dailyLimit, periods.nextDay),
-    month: makeWindow("month", periods.month, grant.monthlyLimit, periods.nextMonth),
-  };
+  for (const grant of grants) {
+    result.set(grant.teamId, {
+      day: quotaWindow(
+        find(grant.id, "day", periods.day),
+        grant.dailyLimit,
+        periods.nextDay,
+      ),
+      month: quotaWindow(
+        find(grant.id, "month", periods.month),
+        grant.monthlyLimit,
+        periods.nextMonth,
+      ),
+    });
+  }
+  return result;
+}
+
+export async function getTeamQuotaUsage(teamId: string): Promise<TeamQuotaUsage> {
+  const usage = (await getTeamsQuotaUsage([teamId])).get(teamId);
+  if (!usage) throw new Error("organization_delivery_disabled");
+  return usage;
 }
 
 /** Organization-level aggregate usage. Unlike a grant window this remains
@@ -478,28 +514,22 @@ export async function getOrganizationQuotaUsage(organizationId: string) {
         ),
       ),
     );
+  // On the 1st the day and month buckets share a start, so match the type.
   const makeWindow = (
     periodType: "day" | "month",
     periodStart: Date,
     limit: number | null,
     resetsAt: Date,
-  ) => {
-    // On the 1st the day and month buckets share a start, so match the type.
-    const bucket = buckets.find(
-      (row) =>
-        row.periodType === periodType &&
-        row.periodStart.getTime() === periodStart.getTime(),
-    );
-    const accepted = bucket?.acceptedCount ?? 0;
-    const reserved = bucket?.reservedCount ?? 0;
-    return {
+  ) =>
+    quotaWindow(
+      buckets.find(
+        (row) =>
+          row.periodType === periodType &&
+          row.periodStart.getTime() === periodStart.getTime(),
+      ),
       limit,
-      accepted,
-      reserved,
-      remaining: limit === null ? null : Math.max(0, limit - accepted - reserved),
       resetsAt,
-    };
-  };
+    );
   return {
     day: makeWindow("day", periods.day, policy.aggregateDailyLimit, periods.nextDay),
     month: makeWindow(

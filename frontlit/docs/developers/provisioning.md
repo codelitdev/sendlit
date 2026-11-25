@@ -235,6 +235,32 @@ curl "$SENDLIT_API_URL/provisioning/teams/team_01JXYZ" \
   --header "Authorization: Bearer $SENDLIT_ORGANIZATION_API_KEY"
 ```
 
+The response includes the team's sending `health`:
+
+```json
+{
+  "health": {
+    "status": "marketing_paused",
+    "reason": "shared_esp_team_breach",
+    "scope": "team",
+    "last7Days": { "sent": 1840, "bounced": 92, "complained": 1 }
+  }
+}
+```
+
+- `status` is `normal`, `warned`, `marketing_paused` (broadcasts and sequences
+  are held; transactional email still sends) or `all_paused`.
+- `reason` is the code behind it, such as `shared_esp_team_breach` when the
+  team's own bounces paused it on the shared mailbox.
+- `scope` says where the status comes from: `team` for this team's own sends,
+  or `shared_mailbox` when the whole mailbox is paused. It's `null` while the
+  team is healthy.
+- `last7Days` counts the emails the ESP accepted over the last 7 days, and how
+  many of them bounced or were marked as spam.
+
+See [Sending safeguards](/docs/self-hosting/sending-safeguards) for what
+triggers each status and how it clears.
+
 Update mutable settings with `teams:manage`:
 
 ```bash
@@ -334,6 +360,12 @@ curl "$SENDLIT_API_URL/provisioning/teams/team_01JXYZ/usage" \
 
 ```json
 {
+    "health": {
+        "status": "normal",
+        "reason": null,
+        "scope": null,
+        "last7Days": { "sent": 2310, "bounced": 18, "complained": 0 }
+    },
     "day": {
         "limit": 500,
         "accepted": 120,
@@ -352,8 +384,23 @@ curl "$SENDLIT_API_URL/provisioning/teams/team_01JXYZ/usage" \
 ```
 
 `accepted` has already consumed quota. `reserved` represents work accepted by
-SendLit but not yet finalized. This endpoint requires an active organization
-delivery grant for the team.
+SendLit but not yet finalized. `health` is the same as on the team. This
+endpoint requires an active organization delivery grant for the team.
+
+### Every team in one call
+
+To check all your teams at once, read the organization's mail activity with
+the same `usage:read` key:
+
+```bash
+curl "$SENDLIT_API_URL/organizations/org_01JXYZ/mail-activity?rangeDays=7" \
+  --header "Authorization: Bearer $SENDLIT_ORGANIZATION_API_KEY"
+```
+
+Each entry in `teams` carries the team's mail counts for the window (`sent`,
+`queued`, `failed`, `bounced`, `complained`, covering broadcasts, sequences and
+transactional email), its `health`, and its `quota` (`day` and `month`, or
+`null` when the team has no active organization delivery grant).
 
 ## Errors
 

@@ -28336,8 +28336,8 @@
     },
     "/organizations/{organizationId}/mail-activity": {
       "get": {
-        "description": "Returns per-team and organization-total transactional mail counts (`sent`, `queued`, `failed`, `bounced`) for a window of 1, 3, 7, or 30 days (default 7). Includes teams with zero activity. Does not include campaigns, broadcasts, sequences, recipients, subjects, or email bodies. Shared-delivery quota remains on `/usage`.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
-        "summary": "Get organization transactional mail activity",
+        "description": "Returns per-team and organization-total mail counts (`sent`, `queued`, `failed`, `bounced`, `complained`) from the outbound ledger, covering broadcasts, sequences and transactional email, for a window of 1, 3, 7, or 30 days (default 7). Includes teams with zero activity. Each team also carries its `health` (sending status with reason and scope, plus 7-day sent, bounced and complained counts, whatever the window) and its shared-mailbox `quota` (null without an active grant). No recipients, subjects, or email bodies.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
+        "summary": "Get organization mail activity and team health",
         "tags": [
           "Organizations"
         ],
@@ -28394,13 +28394,18 @@
                         "bounced": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "complained": {
+                          "type": "integer",
+                          "minimum": 0
                         }
                       },
                       "required": [
                         "sent",
                         "queued",
                         "failed",
-                        "bounced"
+                        "bounced",
+                        "complained"
                       ]
                     },
                     "teams": {
@@ -28444,14 +28449,145 @@
                               "bounced": {
                                 "type": "integer",
                                 "minimum": 0
+                              },
+                              "complained": {
+                                "type": "integer",
+                                "minimum": 0
                               }
                             },
                             "required": [
                               "sent",
                               "queued",
                               "failed",
-                              "bounced"
+                              "bounced",
+                              "complained"
                             ]
+                          },
+                          "health": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "normal",
+                                  "warned",
+                                  "marketing_paused",
+                                  "all_paused"
+                                ]
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "scope": {
+                                "type": "string",
+                                "enum": [
+                                  "team",
+                                  "shared_mailbox"
+                                ],
+                                "nullable": true
+                              },
+                              "last7Days": {
+                                "type": "object",
+                                "properties": {
+                                  "sent": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "bounced": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "complained": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "sent",
+                                  "bounced",
+                                  "complained"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "reason",
+                              "scope",
+                              "last7Days"
+                            ]
+                          },
+                          "quota": {
+                            "type": "object",
+                            "properties": {
+                              "day": {
+                                "type": "object",
+                                "properties": {
+                                  "limit": {
+                                    "type": "integer",
+                                    "nullable": true
+                                  },
+                                  "accepted": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "reserved": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "remaining": {
+                                    "type": "integer",
+                                    "nullable": true
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "limit",
+                                  "accepted",
+                                  "reserved",
+                                  "remaining",
+                                  "resetsAt"
+                                ]
+                              },
+                              "month": {
+                                "type": "object",
+                                "properties": {
+                                  "limit": {
+                                    "type": "integer",
+                                    "nullable": true
+                                  },
+                                  "accepted": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "reserved": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "remaining": {
+                                    "type": "integer",
+                                    "nullable": true
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "limit",
+                                  "accepted",
+                                  "reserved",
+                                  "remaining",
+                                  "resetsAt"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "day",
+                              "month"
+                            ],
+                            "nullable": true
                           }
                         },
                         "required": [
@@ -28459,7 +28595,9 @@
                           "name",
                           "status",
                           "externalId",
-                          "mail"
+                          "mail",
+                          "health",
+                          "quota"
                         ]
                       }
                     }
@@ -30911,7 +31049,7 @@
     },
     "/provisioning/teams/{teamId}": {
       "get": {
-        "description": "**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "description": "`health` is the team's sending status: `normal`, `warned`, `marketing_paused` or `all_paused`, with the `reason` code and whether it comes from the team's own reputation or the shared mailbox (`scope`). `last7Days` counts the emails the ESP accepted in the last 7 days and how many bounced or were marked as spam.\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
         "summary": "Get a provisioned team within the authenticated organization",
         "tags": [
           "Teams"
@@ -31017,6 +31155,60 @@
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
@@ -31029,7 +31221,8 @@
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "health"
                   ]
                 }
               }
@@ -31284,6 +31477,60 @@
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
@@ -31296,7 +31543,8 @@
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "health"
                   ]
                 }
               }
@@ -31686,6 +31934,60 @@
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
@@ -31698,7 +32000,8 @@
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "health"
                   ]
                 }
               }
@@ -31877,6 +32180,60 @@
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
@@ -31889,7 +32246,8 @@
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "health"
                   ]
                 }
               }
@@ -31962,7 +32320,7 @@
     },
     "/provisioning/teams/{teamId}/usage": {
       "get": {
-        "description": "**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "description": "Returns the team's day and month quota on the shared mailbox, plus its `health` (see Get a provisioned team).\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
         "summary": "Get organization-delivery quota usage for a provisioned team",
         "tags": [
           "Teams"
@@ -32046,11 +32404,66 @@
                         "remaining",
                         "resetsAt"
                       ]
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
                     "day",
-                    "month"
+                    "month",
+                    "health"
                   ]
                 }
               }

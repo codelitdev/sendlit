@@ -25,7 +25,8 @@ mock.module("../auth/middleware", () => ({
 }));
 
 const { db } = await import("../db/client");
-const { espConfigs, transactionalEmails, user } = await import("../db/schema");
+const { espConfigs, espConfigTeamGrants, outboundMessages, teamSendingControls, user } =
+  await import("../db/schema");
 const { createTeam } = await import("../team/queries");
 const { truncateAll } = await import("../test/db");
 type TestDb = import("../test/db").TestDb;
@@ -73,24 +74,30 @@ async function attachTeamEsp(teamId: string) {
   return esp;
 }
 
-async function insertTransactional(input: {
+async function insertOutbound(input: {
   teamId: string;
-  outboxId: string;
-  status: string;
+  espConfigId: string;
+  deliveryStatus: string;
+  feedbackStatus?: string;
+  sourceType?: "campaign" | "transactional";
   createdAt?: Date;
-  toEmail?: string;
-  subject?: string;
-  html?: string;
 }) {
-  await tdb.insert(transactionalEmails).values({
+  const createdAt = input.createdAt ?? new Date(Date.now() - 60_000);
+  const accepted = !["queued", "prepared", "failed", "cancelled"].includes(
+    input.deliveryStatus,
+  );
+  await tdb.insert(outboundMessages).values({
     teamId: input.teamId,
     deliverySourceType: "team",
-    outboxId: input.outboxId,
-    toEmail: input.toEmail ?? "recipient@example.com",
-    subject: input.subject ?? "Secret subject",
-    html: input.html ?? "<p>secret body</p>",
-    status: input.status,
-    createdAt: input.createdAt ?? new Date(),
+    espConfigId: input.espConfigId,
+    sourceType: input.sourceType ?? "transactional",
+    recipientEmail: "recipient@example.com",
+    normalizedRecipient: "recipient@example.com",
+    provider: "smtp",
+    deliveryStatus: input.deliveryStatus,
+    feedbackStatus: input.feedbackStatus ?? "none",
+    acceptedAt: accepted ? createdAt : null,
+    createdAt,
   });
 }
 
@@ -117,40 +124,24 @@ describe("GET /organizations/:organizationId/mail-activity", () => {
       externalId: "school:alpha",
     });
     const alphaEsp = await attachTeamEsp(alpha.id);
-    await insertTransactional({
-      teamId: alpha.id,
-      outboxId: alphaEsp.id,
-      status: "sent",
-    });
-    await insertTransactional({
-      teamId: alpha.id,
-      outboxId: alphaEsp.id,
-      status: "sent",
-    });
-    await insertTransactional({
-      teamId: alpha.id,
-      outboxId: alphaEsp.id,
-      status: "queued",
-    });
-    await insertTransactional({
-      teamId: alpha.id,
-      outboxId: alphaEsp.id,
-      status: "failed",
-    });
-    await insertTransactional({
-      teamId: alpha.id,
-      outboxId: alphaEsp.id,
-      status: "bounced",
-    });
-    await insertTransactional({
-      teamId: alpha.id,
-      outboxId: alphaEsp.id,
-      status: "suppressed",
-    });
-    await insertTransactional({
-      teamId: alpha.id,
-      outboxId: alphaEsp.id,
-      status: "sent",
+    const send = (
+      deliveryStatus: string,
+      extra: Partial<Parameters<typeof insertOutbound>[0]> = {},
+    ) =>
+      insertOutbound({
+        teamId: alpha.id,
+        espConfigId: alphaEsp.id,
+        deliveryStatus,
+        ...extra,
+      });
+    await send("delivered");
+    await send("accepted", { sourceType: "campaign" });
+    await send("delivered", { sourceType: "campaign", feedbackStatus: "complained" });
+    await send("queued");
+    await send("failed");
+    await send("bounced", { sourceType: "campaign" });
+    await send("cancelled");
+    await send("delivered", {
       createdAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000),
     });
     authState.userId = owner.id;
@@ -163,11 +154,13 @@ describe("GET /organizations/:organizationId/mail-activity", () => {
     expect(response.status).toBe(200);
     const body = response.json();
     expect(body.rangeDays).toBe(7);
+    // Campaigns count too: sent is everything the ESP accepted.
     expect(body.totals).toEqual({
-      sent: 2,
+      sent: 4,
       queued: 1,
       failed: 1,
       bounced: 1,
+      complained: 1,
     });
     expect(body.teams.map((team: { name: string }) => team.name)).toEqual([
       "Alpha",
@@ -178,18 +171,22 @@ describe("GET /organizations/:organizationId/mail-activity", () => {
       name: "Alpha",
       status: "active",
       externalId: "school:alpha",
-      mail: { sent: 2, queued: 1, failed: 1, bounced: 1 },
+      mail: { sent: 4, queued: 1, failed: 1, bounced: 1, complained: 1 },
+      health: {
+        status: "normal",
+        reason: null,
+        scope: null,
+        last7Days: { sent: 4, bounced: 1, complained: 1 },
+      },
+      quota: null,
     });
     expect(body.teams[1]).toMatchObject({
       teamId: bravo.teamId,
       name: "Bravo",
-      mail: { sent: 0, queued: 0, failed: 0, bounced: 0 },
+      mail: { sent: 0, queued: 0, failed: 0, bounced: 0, complained: 0 },
     });
     expect(response.body).not.toContain("recipient@example.com");
-    expect(response.body).not.toContain("Secret subject");
-    expect(response.body).not.toContain("secret body");
-    expect(body).not.toHaveProperty("toEmail");
-    expect(JSON.stringify(body)).not.toMatch(/html|subject|toEmail/);
+    expect(JSON.stringify(body)).not.toMatch(/html|subject|toEmail|recipient/);
   });
 
   it("honors rangeDays=1 and defaults to 7", async () => {
@@ -200,10 +197,10 @@ describe("GET /organizations/:organizationId/mail-activity", () => {
       name: "Alpha",
     });
     const esp = await attachTeamEsp(team.id);
-    await insertTransactional({
+    await insertOutbound({
       teamId: team.id,
-      outboxId: esp.id,
-      status: "sent",
+      espConfigId: esp.id,
+      deliveryStatus: "delivered",
       createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
     });
     authState.userId = owner.id;
@@ -222,7 +219,7 @@ describe("GET /organizations/:organizationId/mail-activity", () => {
     expect(oneDay.status).toBe(200);
     expect(oneDay.json()).toMatchObject({
       rangeDays: 1,
-      totals: { sent: 0, queued: 0, failed: 0, bounced: 0 },
+      totals: { sent: 0, queued: 0, failed: 0, bounced: 0, complained: 0 },
     });
   });
 
@@ -255,10 +252,10 @@ describe("GET /organizations/:organizationId/mail-activity", () => {
       name: "Alpha",
     });
     const esp = await attachTeamEsp(team.id);
-    await insertTransactional({
+    await insertOutbound({
       teamId: team.id,
-      outboxId: esp.id,
-      status: "sent",
+      espConfigId: esp.id,
+      deliveryStatus: "delivered",
     });
     authState.authKind = "organization_key";
     authState.organizationId = organization.id;
@@ -272,7 +269,7 @@ describe("GET /organizations/:organizationId/mail-activity", () => {
     expect(activity.status).toBe(200);
     expect(activity.json()).toMatchObject({
       rangeDays: 30,
-      totals: { sent: 1, queued: 0, failed: 0, bounced: 0 },
+      totals: { sent: 1, queued: 0, failed: 0, bounced: 0, complained: 0 },
     });
 
     const usage = await requestApp(
@@ -295,5 +292,58 @@ describe("GET /organizations/:organizationId/mail-activity", () => {
     expect(usage.json()).not.toHaveProperty("totals");
     expect(usage.json()).not.toHaveProperty("teams");
     expect(usage.json()).not.toHaveProperty("rangeDays");
+  });
+
+  it("shows each team's health and shared-mailbox quota in one call", async () => {
+    const owner = await insertUser("Owner");
+    const organization = await createOrganization(owner.id, "Acme");
+    const paused = await createTeam({ organizationId: organization.id, name: "Alpha" });
+    const clean = await createTeam({ organizationId: organization.id, name: "Bravo" });
+    const [shared] = await tdb
+      .insert(espConfigs)
+      .values({
+        ownerScope: "organization",
+        organizationId: organization.id,
+        name: "District mailbox",
+        host: "smtp.example.net",
+        fromEmail: "news@district.example.org",
+        status: "active",
+      })
+      .returning();
+    for (const team of [paused, clean]) {
+      await tdb.insert(espConfigTeamGrants).values({
+        organizationId: organization.id,
+        espConfigId: shared.id,
+        teamId: team.id,
+        dailyLimit: 500,
+        createdByType: "user",
+      });
+    }
+    await tdb.insert(teamSendingControls).values({
+      teamId: paused.id,
+      status: "marketing_paused",
+      reasonCode: "bounce_rate_high",
+    });
+    authState.authKind = "organization_key";
+    authState.organizationId = organization.id;
+    authState.organizationApiKeyId = crypto.randomUUID();
+    authState.organizationScopes = ["usage:read"];
+
+    const response = await requestApp(
+      app(),
+      `/organizations/${organization.organizationId}/mail-activity`,
+    );
+
+    expect(response.status).toBe(200);
+    const [alpha, bravo] = response.json().teams;
+    expect(alpha.health).toMatchObject({
+      status: "marketing_paused",
+      reason: "bounce_rate_high",
+      scope: "team",
+    });
+    expect(alpha.quota.day).toMatchObject({ limit: 500, accepted: 0, remaining: 500 });
+    expect(alpha.quota.month).toMatchObject({ limit: null, remaining: null });
+    expect(bravo.health).toMatchObject({ status: "normal", scope: null });
+    expect(bravo.quota.day.limit).toBe(500);
   });
 });

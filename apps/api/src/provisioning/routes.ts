@@ -11,6 +11,7 @@ import { planGateHttp } from "../billing/errors";
 import { db } from "../db/client";
 import { teamApiKeys } from "../db/schema";
 import { getTeamQuotaUsage } from "../delivery/quota";
+import { getTeamHealth } from "../delivery/team-health";
 import { captureError, captureEvent } from "../observability";
 import { recordOrganizationAuditEvent } from "../organization/audit";
 import { getOrganization } from "../organization/queries";
@@ -68,7 +69,7 @@ async function resolveProvisionedTeam(req: any, publicTeamId: string) {
   return getTeamForOrganization(req.organizationId, publicTeamId);
 }
 
-function serializeProvisionedView(
+async function serializeProvisionedView(
   view: Awaited<ReturnType<typeof getProvisionedTeamView>>,
 ) {
   return {
@@ -82,6 +83,7 @@ function serializeProvisionedView(
     teamCanChangeDefault: view.delivery?.teamCanChangeDefault ?? true,
     createdAt: view.team.createdAt?.toISOString() ?? null,
     updatedAt: view.team.updatedAt?.toISOString() ?? null,
+    health: await getTeamHealth(view.team.id),
   };
 }
 
@@ -242,7 +244,7 @@ const impl = s.router(contract.provisioning, {
     if (!team) return { status: 404, body: { error: "team_not_found" } };
     return {
       status: 200,
-      body: serializeProvisionedView(await getProvisionedTeamView(team)),
+      body: await serializeProvisionedView(await getProvisionedTeamView(team)),
     };
   },
   updateTeam: async ({ params, body, req }) => {
@@ -261,7 +263,7 @@ const impl = s.router(contract.provisioning, {
       await auditProvisioningAction(authReq, updated, "team.updated");
       return {
         status: 200,
-        body: serializeProvisionedView(await getProvisionedTeamView(updated)),
+        body: await serializeProvisionedView(await getProvisionedTeamView(updated)),
       };
     } catch (error: any) {
       const gated = planGateHttp(error);
@@ -351,7 +353,7 @@ const impl = s.router(contract.provisioning, {
     await auditProvisioningAction(authReq, team, "team.suspended");
     return {
       status: 200,
-      body: serializeProvisionedView(await getProvisionedTeamView(updated!)),
+      body: await serializeProvisionedView(await getProvisionedTeamView(updated!)),
     };
   },
   resumeTeam: async ({ params, req }) => {
@@ -379,7 +381,7 @@ const impl = s.router(contract.provisioning, {
     await auditProvisioningAction(authReq, team, "team.resumed");
     return {
       status: 200,
-      body: serializeProvisionedView(await getProvisionedTeamView(updated!)),
+      body: await serializeProvisionedView(await getProvisionedTeamView(updated!)),
     };
   },
   archiveTeam: async ({ params, req }) => {
@@ -416,6 +418,7 @@ const impl = s.router(contract.provisioning, {
       return {
         status: 200,
         body: {
+          health: await getTeamHealth(team.id),
           day: {
             ...usage.day,
             resetsAt: usage.day.resetsAt.toISOString(),
