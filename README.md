@@ -14,7 +14,7 @@ a REST API, an MCP server and an embeddable email editor. Bring your own SMTP pr
 [![Tests](https://github.com/codelitdev/sendlit/actions/workflows/test.yaml/badge.svg)](https://github.com/codelitdev/sendlit/actions/workflows/test.yaml)
 [![Code quality](https://github.com/codelitdev/sendlit/actions/workflows/code-quality.yaml/badge.svg)](https://github.com/codelitdev/sendlit/actions/workflows/code-quality.yaml)
 
-[Website](https://sendlit.app) · [Docs](./apps/docs/content/docs/index.mdx) · [Getting started](./apps/docs/content/docs/getting-started/overview.mdx) · [Self-hosting](#self-hosting)
+[Website](https://sendlit.app) · [Docs](https://sendlit.app/docs) · [Getting started](https://sendlit.app/docs/getting-started/overview) · [Self-hosting](#self-hosting)
 
 </div>
 
@@ -45,16 +45,16 @@ docker compose up --build -d
 docker compose logs init
 ```
 
-Open the dashboard at <http://localhost:3000>, sign in with an email one-time code, and follow [Send your first broadcast](./apps/docs/content/docs/getting-started/first-broadcast.mdx).
+Open the dashboard at <http://localhost:3000>, sign in with an email one-time code, and follow [Send your first broadcast](https://sendlit.app/docs/getting-started/first-broadcast).
 
 `BOOTSTRAP_ORGANIZATION_OWNER_EMAIL` selects an ordinary initial organization
 owner; it does not create a special global-admin role. To integrate
 headlessly, set `BOOTSTRAP_DELIVERY_SETUP_API_KEY` and `BOOTSTRAP_TEAM_PROVISIONING_API_KEY` in
 `.env`. Bootstrap hashes both keys and never logs them.
-See the [Headless organization setup](./apps/docs/content/docs/developers/headless-provisioning.mdx)
+See the [Headless organization setup](https://sendlit.app/docs/developers/headless-provisioning)
 for the complete REST sequence, scopes, rotation, and migration from the old
 log-generated key. The plain Markdown guide is at
-[`apps/docs/integrations/headless-provisioning.md`](./apps/docs/integrations/headless-provisioning.md).
+[`docs/integrations/headless-provisioning.md`](docs/integrations/headless-provisioning.md).
 
 Create a team API key in the dashboard (Settings → API keys) and call the API with it:
 
@@ -63,7 +63,7 @@ curl http://localhost:4000/contacts \
   -H "x-sendlit-apikey: sl_live_..."
 ```
 
-Connect an AI agent: add `https://api.sendlit.app/mcp` (or `http://localhost:4000/mcp` for your own Compose instance) as a remote MCP server in your client and sign in. See the [MCP guide](./apps/docs/content/docs/developers/mcp.mdx).
+Connect an AI agent: add `https://api.sendlit.app/mcp` (or `http://localhost:4000/mcp` for your own Compose instance) as a remote MCP server in your client and sign in. See the [MCP guide](https://sendlit.app/docs/developers/mcp).
 
 ## Packages
 
@@ -73,7 +73,7 @@ Connect an AI agent: add `https://api.sendlit.app/mcp` (or `http://localhost:400
 | [`@sendlit/email-blocks`](packages/email-blocks) | Headless composing blocks for broadcasts, sequences and templates | MIT     |
 | [`@sendlit/api-contract`](packages/api-contract) | Shared REST API contract (schemas and types)                      | MIT     |
 
-The repository also contains the API (`apps/api`), which owns all product behavior including the MCP server; the dashboard (`apps/web`), a Next.js client over the API; and the docs site (`apps/docs`).
+The repository also contains the API (`apps/api`), which owns all product behavior including the MCP server; and the dashboard (`apps/web`), a Next.js client over the API.
 
 **Tech stack:** TypeScript, PostgreSQL, Redis, BullMQ, Next.js, Tailwind CSS and shadcn/ui.
 
@@ -91,9 +91,9 @@ For an internet-facing deployment:
 - Set `API_PUBLIC_URL`, `WEB_CLIENT`, `PROTOCOL=https` and `DOMAIN` to the public values before the first start.
 - Put the API and web ports behind a TLS reverse proxy, and set `ENABLE_TRUST_PROXY=true` when it forwards client IPs.
 - Back up the `postgres-data` volume and keep the `.env` secrets stable. Changing the ESP encryption key makes stored team SMTP credentials unreadable.
-- If you send through Amazon SES, follow [Amazon SES bounces and complaints](./apps/docs/content/docs/self-hosting/amazon-ses-feedback.mdx) so SendLit suppresses bounced and complaining addresses.
-- See [Sending safeguards](./apps/docs/content/docs/self-hosting/sending-safeguards.mdx) for which limits apply to a self-hosted install (test-send limits, auto-pause, your ESP's own tracking) and how to change them.
-- To let teams use their own tracking domains, configure on-demand TLS in your reverse proxy as described in [Tracking domains](./apps/docs/content/docs/self-hosting/tracking-domains.mdx).
+- If you send through Amazon SES, follow [Amazon SES bounces and complaints](https://sendlit.app/docs/self-hosting/amazon-ses-feedback) so SendLit suppresses bounced and complaining addresses.
+- See [Sending safeguards](https://sendlit.app/docs/self-hosting/sending-safeguards) for which limits apply to a self-hosted install (test-send limits, auto-pause, your ESP's own tracking) and how to change them.
+- To let teams use their own tracking domains, configure on-demand TLS in your reverse proxy as described in [Tracking domains](https://sendlit.app/docs/self-hosting/tracking-domains).
 
 Prebuilt images are published on release tags: [`codelit/sendlit`](https://hub.docker.com/r/codelit/sendlit) (API) and [`codelit/sendlit-web`](https://hub.docker.com/r/codelit/sendlit-web) (dashboard).
 
@@ -164,7 +164,7 @@ API startup; `catalog-verify` checks it against Dodo and activates it.
 
 ## Documentation
 
-Product, API and email-block docs live in [`apps/docs`](apps/docs). The REST reference is generated from the API contract, and the running API serves interactive documentation at `/docs`.
+Product, API and email-block docs are published at <https://sendlit.app/docs> from [`frontlit/docs`](frontlit/docs). The REST reference is generated from the API contract, and the running API serves interactive documentation at `/docs`.
 
 ## Contributing
 
@@ -186,7 +186,7 @@ Please don't report security issues in public issues. Report them privately thro
 
 SendLit is split into two licenses:
 
-- **AGPL-3.0-or-later** covers the server (`apps/api`), the dashboard (`apps/web`), the docs site (`apps/docs`) and internal tooling. If you run a modified SendLit as a hosted service, you must share your changes under the same license. Self-hosting is free.
+- **AGPL-3.0-or-later** covers the server (`apps/api`), the dashboard (`apps/web`), the docs (`frontlit/docs`) and internal tooling. If you run a modified SendLit as a hosted service, you must share your changes under the same license. Self-hosting is free.
 - **MIT** covers the packages you embed in your own products: `@sendlit/email-editor`, `@sendlit/email-blocks` and `@sendlit/api-contract`. Each published package declares MIT in its `package.json`.
 
 The AGPL license text is in [LICENSE](./LICENSE).

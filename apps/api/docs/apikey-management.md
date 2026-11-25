@@ -1,7 +1,7 @@
 # API Key Management
 
 A refresher on how SendLit API keys are implemented. For the user-facing view,
-see `apps/docs/content/docs/developers/authentication.mdx`.
+see <https://sendlit.app/docs/developers/authentication>.
 
 ## Key format
 
