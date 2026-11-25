@@ -9,11 +9,9 @@ in the trigger, the dropdown lists existing tags (checked when selected) via
 an optional `options` pool, and typing a value with no match offers to create
 it.
 
-You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/tag-editor/).
-
 ## Usage
 
-This is the exact code behind the demo above.
+A complete example:
 
 ```tsx
 import { useState } from "react";

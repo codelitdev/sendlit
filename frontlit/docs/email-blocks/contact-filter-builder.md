@@ -14,11 +14,9 @@ Every visible string (button/heading/dialog text, aria-labels, the default
 delete-segment confirmation copy (`deleteSegmentDescription`, a function of
 the segment being deleted).
 
-You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/contact-filter-builder/).
-
 ## Usage
 
-This is the exact code behind the demo above.
+A complete example:
 
 ```tsx
 import { useState } from "react";

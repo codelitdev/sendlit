@@ -10,11 +10,9 @@ paginated subscriber list underneath — they're separate blocks since a host
 may want to show metrics without a subscriber list (or vice versa), and only
 the list needs pagination.
 
-You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/sequence-analytics/).
-
 ## Usage
 
-This is the exact code behind the demo above.
+A complete example:
 
 ```tsx
 import { SequenceAnalytics } from "@sendlit/email-blocks";

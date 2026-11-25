@@ -13,7 +13,7 @@ SendLit helps teams compose and deliver email through four main resources:
 
 Before sending mail in production, configure the team's sending provider in settings. Without a team-level provider, SendLit will not send campaign mail.
 
-![SendLit sign-in screen](https://docs.sendlit.app/screenshots/sign-in.png)
+![SendLit sign-in screen](https://raw.githubusercontent.com/codelitdev/sendlit/main/assets/sign-in.png)
 
 Sign in with email OTP, then choose the team you want to work in. Every team has its own contacts, templates, automations, sending provider, API keys, and quota.
 

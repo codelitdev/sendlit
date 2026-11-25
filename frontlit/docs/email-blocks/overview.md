@@ -15,7 +15,7 @@ calls.
 
 New to the package? Start with [Getting Started](/docs/email-blocks/getting-started)
 for installation and Tailwind setup. The sidebar lists every component with
-its own prop reference and a live, editable demo.
+its own prop reference and example code.
 
 ## What are email blocks?
 
@@ -63,8 +63,7 @@ component in the [Getting Started](/docs/email-blocks/getting-started) guide.
 
 Each component page includes:
 
-- A live, editable demo.
-- The exact demo code.
+- Example code.
 - Prop details and notes for customization.
 
 ## Ownership flow
