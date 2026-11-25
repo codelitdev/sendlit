@@ -1,0 +1,11 @@
+{
+  "$schema": "https://frontlit.app/schema/page.v1.json",
+  "title": "Blog",
+  "description": "News, guides and product updates from SendLit.",
+  "robotsAllowed": false,
+  "layout": [
+    {
+      "name": "content-feed"
+    }
+  ]
+}

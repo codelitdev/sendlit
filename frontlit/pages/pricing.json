@@ -1,0 +1,170 @@
+{
+  "$schema": "https://frontlit.app/schema/page.v1.json",
+  "title": "Pricing: pay for the emails you send, not your list",
+  "description": "Free to start, from $10 a month. Unlimited contacts on every plan. Send through your own Amazon SES or SMTP. Self-host free, open source.",
+  "layout": [
+    {
+      "name": "hero",
+      "settings": {
+        "preTitle": "SIMPLE PRICING",
+        "title": "Pay for the emails you send, not the size of your list",
+        "description": "Every plan includes unlimited contacts, broadcasts, sequences and transactional email. You send through your own provider at its rates, and your SendLit plan grows with how much you send, never with how many people subscribe.",
+        "buttonCaption": "",
+        "buttonAction": "",
+        "secondaryButtonCaption": "",
+        "secondaryButtonAction": "",
+        "contentAlignment": "center"
+      }
+    },
+    {
+      "name": "pricing",
+      "settings": {
+        "title": "",
+        "pricingSwitcher": true,
+        "monthlyPriceCaption": "Monthly",
+        "yearlyPriceCaption": "Yearly (2 months free)",
+        "defaultPeriod": "monthly",
+        "tiers": [
+          {
+            "name": "Free",
+            "price": "$0 forever",
+            "description": "Trying SendLit with a small list or a side project.",
+            "features": [
+              "3,000 emails a month",
+              "1 team",
+              "Unlimited contacts",
+              "Broadcasts, sequences and transactional email",
+              "Bring your own Amazon SES, SMTP, Postmark, Resend and more",
+              "Includes a small \"Sent with SendLit\" footer on marketing emails"
+            ],
+            "buttonCaption": "Start free",
+            "buttonAction": "https://app.sendlit.app"
+          },
+          {
+            "name": "Starter",
+            "price": "$10/month",
+            "priceYearly": "$100/year",
+            "description": "Newsletters and small businesses that send every week.",
+            "features": [
+              "25,000 emails a month",
+              "1 team",
+              "Unlimited contacts",
+              "Everything in Free",
+              "Email support",
+              "Includes the \"Sent with SendLit\" footer on marketing emails"
+            ],
+            "buttonCaption": "Start with Starter",
+            "buttonAction": "https://app.sendlit.app",
+            "highlighted": false
+          },
+          {
+            "name": "Pro",
+            "price": "$29/month",
+            "priceYearly": "$290/year",
+            "description": "Growing newsletters and companies running more than one brand or list.",
+            "features": [
+              "125,000 emails a month",
+              "3 teams",
+              "Unlimited contacts",
+              "No SendLit footer",
+              "Shared organization mailbox: connect one sender and share it with your teams",
+              "Email support",
+              "Try it free for 14 days (monthly plan, once per account)"
+            ],
+            "buttonCaption": "Try Pro free for 14 days",
+            "buttonAction": "https://app.sendlit.app",
+            "highlighted": true
+          },
+          {
+            "name": "Business",
+            "price": "$99/month",
+            "priceYearly": "$990/year",
+            "description": "High-volume senders and platforms that give each customer their own email marketing.",
+            "features": [
+              "600,000 emails a month",
+              "15 teams",
+              "Unlimited contacts",
+              "No SendLit footer",
+              "Shared organization mailbox",
+              "Provisioning API and organization API keys, to create a team for each customer",
+              "Email support"
+            ],
+            "buttonCaption": "Start with Business",
+            "buttonAction": "https://app.sendlit.app"
+          }
+        ]
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "text": "Need more than 600,000 emails or 15 teams? [Talk to us about Enterprise](mailto:hi@codelit.dev).",
+        "alignment": "center"
+      }
+    },
+    {
+      "name": "banner",
+      "settings": {
+        "title": "Prefer to run it yourself? It's free.",
+        "description": "SendLit is open source. Self-host it with Docker Compose and every feature is on: unlimited emails, teams and contacts, no SendLit footer, and no payment needed. You run the servers and you pay only your email provider.",
+        "buttonCaption": "View on GitHub",
+        "buttonAction": "https://github.com/codelitdev/sendlit",
+        "secondaryButtonCaption": "",
+        "secondaryButtonAction": ""
+      }
+    },
+    {
+      "name": "embed",
+      "settings": {
+        "contentType": "script",
+        "content": "<style>.plc{max-width:1100px;margin:0 auto;padding:48px 16px;font-family:inherit;color:inherit}.plc h2{font-size:2rem;line-height:1.2;text-align:center;margin:0 0 24px;font-weight:600}.plc-s{overflow-x:auto;border:1px solid rgba(128,128,128,.3);border-radius:12px}.plc table{border-collapse:collapse;width:100%;min-width:720px;font-size:.95rem}.plc th,.plc td{padding:12px 14px;text-align:center;border-bottom:1px solid rgba(128,128,128,.25)}.plc th:first-child,.plc td:first-child{text-align:left}.plc thead th{font-weight:600}.plc tbody th{font-weight:500}.plc tr:last-child th,.plc tr:last-child td{border-bottom:0}.plc p{text-align:center;margin:16px 0 0;font-size:.9rem;opacity:.8}</style><div class=\"plc\"><h2>Compare plans</h2><div class=\"plc-s\" tabindex=\"0\" role=\"region\" aria-label=\"Compare plans table\"><table><caption style=\"position:absolute;left:-9999px\">Compare plans</caption><thead><tr><th scope=\"col\">Feature</th><th scope=\"col\">Free</th><th scope=\"col\">Starter</th><th scope=\"col\">Pro</th><th scope=\"col\">Business</th><th scope=\"col\">Self-hosted</th></tr></thead><tbody><tr><th scope=\"row\">Price (monthly)</th><td>$0</td><td>$10</td><td>$29</td><td>$99</td><td>$0</td></tr><tr><th scope=\"row\">Price (yearly)</th><td>n/a</td><td>$100</td><td>$290</td><td>$990</td><td>$0</td></tr><tr><th scope=\"row\">Emails a month (whole organization)</th><td>3,000</td><td>25,000</td><td>125,000</td><td>600,000</td><td>Unlimited</td></tr><tr><th scope=\"row\">Teams</th><td>1</td><td>1</td><td>3</td><td>15</td><td>Unlimited</td></tr><tr><th scope=\"row\">Contacts</th><td>Unlimited</td><td>Unlimited</td><td>Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr><tr><th scope=\"row\">Team members</th><td>Unlimited</td><td>Unlimited</td><td>Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr><tr><th scope=\"row\">\"Sent with SendLit\" footer</th><td>On</td><td>On</td><td>Off</td><td>Off</td><td>Off</td></tr><tr><th scope=\"row\">Shared organization mailbox</th><td>–</td><td>–</td><td>✓</td><td>✓</td><td>✓</td></tr><tr><th scope=\"row\">Provisioning API and org API keys</th><td>–</td><td>–</td><td>–</td><td>✓</td><td>✓</td></tr><tr><th scope=\"row\">Broadcasts, sequences, transactional API, MCP, React blocks</th><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr><tr><th scope=\"row\">Support</th><td>GitHub</td><td>Email</td><td>Email</td><td>Email</td><td>GitHub</td></tr></tbody></table></div><p>Email limits are shared by all teams in an organization. Your email provider bills for delivery separately.</p></div>"
+      }
+    },
+    {
+      "name": "faq",
+      "settings": {
+        "items": [
+          {
+            "question": "Do I pay for contacts?",
+            "answer": "No. Contacts are unlimited on every plan, including Free, and so are team members. Your price depends only on how many emails you send and how many teams you run."
+          },
+          {
+            "question": "What counts as an email?",
+            "answer": "Every broadcast, sequence and transactional email sent by any team in your organization counts as one email per recipient. The count resets each month."
+          },
+          {
+            "question": "Do I still pay my email provider?",
+            "answer": "Yes. You bring your own Amazon SES, SMTP, Postmark, Resend, SendGrid or Mailgun account and pay its rates directly. Amazon SES costs about $40 for 400,000 emails. SendLit never adds a per-email charge on top."
+          },
+          {
+            "question": "What happens if I reach my monthly limit?",
+            "answer": "Nothing is lost, and we never surprise you with an overage bill. New sends pause with a prompt to upgrade until your allowance resets next month, and a broadcast that would go over the limit won't start. Upgrade at any time and sending resumes right away."
+          },
+          {
+            "question": "Can I remove the \"Sent with SendLit\" footer?",
+            "answer": "Free and Starter include a small \"Sent with SendLit\" footer on marketing emails. Pro and Business remove it, and so does self-hosting."
+          },
+          {
+            "question": "Can I change plans later?",
+            "answer": "Yes, from Organizations → Plan. Upgrades, including monthly to yearly, take effect immediately and are prorated. Downgrades take effect on your next billing date. If you cancel, you keep your plan until the end of the period you paid for, and then the organization moves to Free. Your data is never deleted."
+          },
+          {
+            "question": "How do payments and refunds work?",
+            "answer": "Payments are handled by Dodo Payments, our merchant of record, which takes care of your card, taxes and invoices; we never see your full card number. Plans are billed in advance, monthly or yearly. Payments already made are not refunded unless the law requires it."
+          }
+        ]
+      }
+    },
+    {
+      "name": "banner",
+      "settings": {
+        "title": "Start sending on your own terms",
+        "description": "Free to start, with unlimited contacts from day one.",
+        "buttonCaption": "Get started free",
+        "buttonAction": "https://app.sendlit.app",
+        "secondaryButtonCaption": "Read the pricing docs",
+        "secondaryButtonAction": "https://docs.sendlit.app/workspace/pricing/"
+      }
+    }
+  ]
+}

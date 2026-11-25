@@ -1,0 +1,11 @@
+{
+  "$schema": "https://frontlit.app/schema/page.v1.json",
+  "title": "Docs",
+  "description": "Guides for sending email with SendLit through your own SES or SMTP.",
+  "robotsAllowed": false,
+  "layout": [
+    {
+      "name": "content-feed"
+    }
+  ]
+}

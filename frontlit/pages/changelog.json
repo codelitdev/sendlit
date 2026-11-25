@@ -1,0 +1,11 @@
+{
+  "$schema": "https://frontlit.app/schema/page.v1.json",
+  "title": "Changelog",
+  "description": "What is new in SendLit.",
+  "robotsAllowed": false,
+  "layout": [
+    {
+      "name": "content-feed"
+    }
+  ]
+}
