@@ -25,12 +25,9 @@ empty/delay/status text, and the delete confirmation copy all included.
 the host knows about that email, such as how many contacts are waiting for it.
 Return nothing to leave the line out.
 
-You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/sequence-email-list/).
-
 ## Usage
 
-This is the exact code behind the demo above (with the emails' shared `content` shortened to
-`defaultTemplateEmail` here for brevity — the demo uses a fuller sample email).
+A complete example (with the emails' shared `content` shortened to `defaultTemplateEmail` for brevity):
 
 ```tsx
 import { useState } from "react";
@@ -163,6 +160,3 @@ on a plain click, so in-app state (like `selectedEmailId`) stays in sync.
     onSelect={(emailId) => setSelectedEmailId(emailId)}
 />
 ```
-
-This isn't wired into the interactive demo above, since a real `href` would
-navigate away from this docs page on a plain click.

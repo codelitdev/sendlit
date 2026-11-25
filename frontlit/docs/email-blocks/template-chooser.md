@@ -8,13 +8,9 @@ nav_order: 120
 Section headings/descriptions, the loading label, and the empty-templates
 message are all props with English defaults.
 
-You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/template-chooser/).
-
 ## Usage
 
-This is the exact code behind the demo above (with each template's `content` shortened to
-`defaultTemplateEmail` for brevity — the demo uses a fuller sample email for "Announcement" and
-"Customer update").
+A complete example (with each template's `content` shortened to `defaultTemplateEmail` for brevity):
 
 ```tsx
 import { useMemo, useState } from "react";

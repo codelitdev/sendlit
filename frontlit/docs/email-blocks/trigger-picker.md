@@ -7,11 +7,9 @@ nav_order: 40
 `TriggerPicker` edits `triggerType` and optional `triggerData`. Host apps can
 pass their own `triggers` list to add or replace the built-in trigger options.
 
-You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/trigger-picker/).
-
 ## Usage
 
-This is the exact code behind the demo above.
+A complete example:
 
 ```tsx
 import { useMemo, useState } from "react";

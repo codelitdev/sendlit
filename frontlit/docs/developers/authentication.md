@@ -81,7 +81,7 @@ tokens are not affected.
 
 The web dashboard uses email OTP sign-in. The session is separate from team API keys: use the dashboard session for interactive administration and an API key for server-to-server requests.
 
-![SendLit sign-in screen](https://docs.sendlit.app/screenshots/sign-in.png)
+![SendLit sign-in screen](https://raw.githubusercontent.com/codelitdev/sendlit/b0d95595fc07377eaef6eb2b055f7685000f164f/apps/docs/public/screenshots/sign-in.png)
 
 ## Organization-key provisioning
 

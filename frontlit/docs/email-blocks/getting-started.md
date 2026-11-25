@@ -110,4 +110,4 @@ Every block is a controlled component — you own the state and any
 persistence/API calls, the component just renders it and reports changes via
 callbacks (`onChange`, `onAdd`, `onSelect`, etc.). See
 [Overview](/docs/email-blocks/overview) for the full component list, and each
-block's own page for its props and a live, editable demo.
+block's own page for its props and example code.

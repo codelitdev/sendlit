@@ -16,8 +16,6 @@ directly instead. `@sendlit/email-blocks` re-exports it in full (`EmailEditor`,
 `renderEmailToHtml`, `defaultEmail`) purely so the components below can share
 its types without you needing a second dependency.
 
-You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/email-editor/).
-
 ## Usage
 
 ### Simple editor

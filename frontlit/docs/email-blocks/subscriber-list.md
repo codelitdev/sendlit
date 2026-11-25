@@ -10,11 +10,9 @@ and `onPageChange`, and the host owns fetching each page's data (same
 controlled-props pattern as the rest of this package). Set `href` on a
 subscriber to link its name to a profile page.
 
-You can try this component live in the [interactive demo](https://docs.sendlit.app/email-blocks/subscriber-list/).
-
 ## Usage
 
-This is the exact code behind the demo above.
+A complete example:
 
 ```tsx
 import { useState } from "react";
