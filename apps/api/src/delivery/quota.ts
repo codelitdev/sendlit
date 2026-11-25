@@ -169,7 +169,12 @@ async function lockActiveGrant(tx: Executor, grantId: string): Promise<GrantCont
     )
     .where(eq(espConfigTeamGrants.id, grantId))
     .limit(1)
-    .for("update");
+    // `no key update`, not `update`: each send inserts its outbound row,
+    // whose foreign key takes FOR KEY SHARE on this grant, in the same
+    // transaction before reserving. FOR UPDATE conflicts with that lock, so
+    // concurrent sends (a broadcast) deadlocked; NO KEY UPDATE still
+    // serialises reservations on the grant without that conflict.
+    .for("no key update");
   if (context?.grant.status !== "active") {
     throw new Error("organization_delivery_disabled");
   }
