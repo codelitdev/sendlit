@@ -387,5 +387,5 @@ organization.
 
 See [Authentication](/docs/developers/authentication) for credential types,
 [API keys](/docs/developers/api-keys) for team-key handling, and the
-[API reference](/docs/api-reference) for the exhaustive request and response
+[API reference](https://docs.sendlit.app/api-reference/) for the exhaustive request and response
 schemas.

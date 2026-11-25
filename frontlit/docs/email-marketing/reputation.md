@@ -89,5 +89,5 @@ new link from the same page.
 `GET /reputation` returns the same data and alerts, and `POST /reputation/sync`
 refreshes it. Connecting Google returns a sign-in URL from
 `POST /reputation/google/connect` that a person opens in a browser. SNDS is
-connected with `PUT /reputation/snds`. See the [API reference](/docs/api-reference)
+connected with `PUT /reputation/snds`. See the [API reference](https://docs.sendlit.app/api-reference/)
 and the `*_reputation` MCP tools.

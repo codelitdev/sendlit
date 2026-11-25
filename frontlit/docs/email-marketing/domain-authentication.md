@@ -36,7 +36,7 @@ show up. If your provider signs with its own DKIM selector (the part before
 provider's selectors and common ones.
 
 The same check is available as `GET /settings/esps/:espId/domain-authentication`
-in the [API](/docs/api-reference) and as the `check_esp_domain_authentication` MCP
+in the [API](https://docs.sendlit.app/api-reference/) and as the `check_esp_domain_authentication` MCP
 tool.
 
 ## What each provider needs

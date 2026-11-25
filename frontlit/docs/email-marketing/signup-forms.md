@@ -91,6 +91,6 @@ opt-in form, because clicking the confirmation link proves it's them.
 
 ## API and MCP
 
-Manage forms with the `/forms` endpoints in the [API reference](/docs/api-reference)
+Manage forms with the `/forms` endpoints in the [API reference](https://docs.sendlit.app/api-reference/)
 or the `*_signup_form` MCP tools. The submission URL itself is public and
 needs no API key.

@@ -78,5 +78,5 @@ API key:
 
 Set each issue's canonical URL to its page on your site. Publishing itself is
 `PATCH /sequences/:sequenceId/web`, and the archive settings are
-`/settings/web`; see the [API reference](/docs/api-reference). The same actions
+`/settings/web`; see the [API reference](https://docs.sendlit.app/api-reference/). The same actions
 are available as MCP tools.
