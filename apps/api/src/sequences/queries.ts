@@ -971,9 +971,9 @@ export async function startSequence({
   await assertSendAllowedForTeam(teamId, "marketing");
   const team = await getTeam(teamId);
   if (!team) throw new Error("team_not_found");
-  // Hosted abuse controls: a new account's large import waits for review,
-  // and every published email is scanned before anything goes out.
-  await assertNoImportUnderReview(team.organizationId);
+  // Hosted abuse controls: a new account's large import holds the team that
+  // made it until reviewed, and every published email is scanned first.
+  await assertNoImportUnderReview(teamId);
   for (const email of sequence.emails.filter((e) => e.published)) {
     await assertEmailContentAllowed({ teamId, email });
   }

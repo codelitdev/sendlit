@@ -55,8 +55,9 @@ Once approved, the same content isn't checked again.
 ## Large imports
 
 Importing a large list in a short time, especially on a new account, alerts
-SendLit's operators. On accounts younger than 30 days, campaigns can't start
-until the import has been reviewed. Imports are recorded in the organization's
+SendLit's operators. On accounts younger than 30 days, the team that imported
+the list can't start campaigns until the import has been reviewed; other teams
+in the organization keep sending. Imports are recorded in the organization's
 activity log.
 
 ## New accounts send gradually

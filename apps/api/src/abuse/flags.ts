@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { releaseTeamSendingControl } from "../billing/reputation";
 import { db } from "../db/client";
 import {
@@ -50,6 +50,12 @@ export async function raiseAbuseFlag(input: {
           ? eq(abuseFlags.sequenceEmailId, input.sequenceEmailId)
           : undefined,
         input.contentHash ? eq(abuseFlags.contentHash, input.contentHash) : undefined,
+        // An import flag holds only its team, so each team gets its own.
+        input.kind === "import"
+          ? input.teamId
+            ? eq(abuseFlags.teamId, input.teamId)
+            : isNull(abuseFlags.teamId)
+          : undefined,
       ),
     )
     .limit(1);
