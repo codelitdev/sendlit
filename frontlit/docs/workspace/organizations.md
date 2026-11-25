@@ -8,7 +8,7 @@ Organizations sit above teams. They let a company or platform configure a
 mailbox once, then grant it to selected teams while keeping provider
 credentials out of those teams.
 
-![The Organizations workspace, with shared mailboxes and delivery policy](https://raw.githubusercontent.com/codelitdev/sendlit/b0d95595fc07377eaef6eb2b055f7685000f164f/apps/docs/public/screenshots/organizations.png)
+![The Organizations workspace, with shared mailboxes and delivery policy](https://raw.githubusercontent.com/codelitdev/sendlit/main/assets/organizations.png)
 
 ## The model
 
