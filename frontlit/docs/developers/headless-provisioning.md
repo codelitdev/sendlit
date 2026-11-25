@@ -9,7 +9,7 @@ copied from startup logs. It separates a short-lived delivery setup key from
 the narrower key used by integrations such as CourseLit to provision teams.
 
 The complete plain Markdown version is in the repository at
-[`apps/docs/integrations/headless-provisioning.md`](https://github.com/codelitdev/sendlit/blob/main/apps/docs/integrations/headless-provisioning.md).
+[`docs/integrations/headless-provisioning.md`](https://github.com/codelitdev/sendlit/blob/main/docs/integrations/headless-provisioning.md).
 The machine-readable REST contract is served at `GET /openapi.json`; Swagger
 UI is at `GET /docs`.
 

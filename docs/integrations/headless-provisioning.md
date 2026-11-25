@@ -5,7 +5,7 @@ CourseLit a separate, narrower key for ongoing team provisioning. The workflow
 uses supported REST APIs and works without a dashboard session or copying a
 generated key from startup logs.
 
-For the rendered version, see [Headless provisioning](/developers/headless-provisioning).
+For the rendered version, see [Headless provisioning](https://sendlit.app/docs/developers/headless-provisioning).
 The machine-readable API contract is available at `GET /openapi.json`; Swagger
 UI is at `GET /docs`.
 
@@ -281,7 +281,7 @@ immediately):
 
 An identical replay has `"created": false` and `"apiKey": null`.
 
-See [Provisioning teams](/developers/provisioning) for team lifecycle and
+See [Provisioning teams](https://sendlit.app/docs/developers/provisioning) for team lifecycle and
 retry behavior.
 
 ## Rotation and migration

@@ -7,5 +7,5 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@sendlit/api", "@sendlit/api-contract", "@sendlit/docs", "@sendlit/web"]
+  "ignore": ["@sendlit/api", "@sendlit/api-contract", "@sendlit/web"]
 }

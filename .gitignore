@@ -9,8 +9,6 @@ node_modules/
 dist/
 
 # Generated docs source
-apps/docs/.source/
-apps/docs/next-env.d.ts
 
 # IDE files
 .zed

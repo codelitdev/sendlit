@@ -41,7 +41,6 @@
   "scripts": {
     "dev:api": "bun --filter @sendlit/api dev",
     "dev:web": "bun --filter @sendlit/web dev",
-    "dev:docs": "bun --filter @sendlit/docs dev",
     "build:packages": "bun --filter @sendlit/email-editor build && bun --filter @sendlit/email-blocks build",
     "build": "bun run build:packages && bun --filter sendlit build && bun --filter @sendlit/api build && bun --filter @sendlit/web build",
     "typecheck": "bun run --workspaces --if-present typecheck",
