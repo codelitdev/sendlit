@@ -12,6 +12,12 @@ import { db } from "../db/client";
 import { teamApiKeys } from "../db/schema";
 import { getTeamQuotaUsage } from "../delivery/quota";
 import { getTeamHealth } from "../delivery/team-health";
+import {
+  refreshTeamSendingDomain,
+  removeTeamSendingDomain,
+  setTeamSendingDomain,
+  teamDomainErrorHttp,
+} from "../delivery/team-sending-domain";
 import { captureError, captureEvent } from "../observability";
 import { recordOrganizationAuditEvent } from "../organization/audit";
 import { getOrganization } from "../organization/queries";
@@ -402,6 +408,53 @@ const impl = s.router(contract.provisioning, {
     }
     await archiveTeam(team.id);
     await auditProvisioningAction(authReq, team, "team.archived");
+    return { status: 204, body: undefined };
+  },
+  getTeamSendingDomain: async ({ params, req }) => {
+    const authReq = req as any;
+    if (!hasScope(authReq, "teams:read"))
+      return { status: 403, body: { error: "organization_scope_required" } };
+    const team = await resolveProvisionedTeam(authReq, params.teamId);
+    if (!team) return { status: 404, body: { error: "team_not_found" } };
+    try {
+      return { status: 200, body: await refreshTeamSendingDomain(team.id) };
+    } catch (error) {
+      const mapped = teamDomainErrorHttp(error);
+      if (mapped?.status === 404 || mapped?.status === 422) return mapped as any;
+      if (mapped) return { status: 422, body: mapped.body };
+      throw error;
+    }
+  },
+  setTeamSendingDomain: async ({ params, req, body }) => {
+    const authReq = req as any;
+    if (!hasScope(authReq, "teams:manage"))
+      return { status: 403, body: { error: "organization_scope_required" } };
+    const team = await resolveProvisionedTeam(authReq, params.teamId);
+    if (!team) return { status: 404, body: { error: "team_not_found" } };
+    try {
+      const view = await setTeamSendingDomain(authReq.organizationId, team.id, body, {
+        type: "organization_key",
+        id: authReq.organizationApiKeyId,
+      });
+      return { status: 200, body: view };
+    } catch (error) {
+      const mapped = teamDomainErrorHttp(error);
+      if (mapped && mapped.status !== 502) return mapped as any;
+      if (mapped) return { status: 422, body: mapped.body };
+      throw error;
+    }
+  },
+  removeTeamSendingDomain: async ({ params, req }) => {
+    const authReq = req as any;
+    if (!hasScope(authReq, "teams:manage"))
+      return { status: 403, body: { error: "organization_scope_required" } };
+    const team = await resolveProvisionedTeam(authReq, params.teamId);
+    if (!team) return { status: 404, body: { error: "team_not_found" } };
+    const removed = await removeTeamSendingDomain(authReq.organizationId, team.id, {
+      type: "organization_key",
+      id: authReq.organizationApiKeyId,
+    });
+    if (!removed) return { status: 404, body: { error: "sending_domain_not_found" } };
     return { status: 204, body: undefined };
   },
   getTeamUsage: async ({ params, req }) => {

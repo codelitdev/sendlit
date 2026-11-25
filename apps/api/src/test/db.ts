@@ -65,6 +65,7 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
   await db.delete(schema.espFeedbackConnections);
   await db.delete(schema.organizationEspUsageBuckets);
   await db.delete(schema.espConfigTeamGrants);
+  await db.delete(schema.sendingDomains);
   await db.delete(schema.teamDeliverySettings);
   await db.delete(schema.teamSendingControls);
   await db.delete(schema.sharedEspSendingControls);
@@ -73,7 +74,6 @@ export async function truncateAll(db: Awaited<ReturnType<typeof makeTestDb>>) {
   await db.delete(schema.organizationDeliveryPolicies);
   await db.delete(schema.espConfigs);
   await db.delete(schema.teams);
-  await db.delete(schema.sendingDomains);
   await db.delete(schema.trialClaims);
   await db.delete(schema.organizationPlanPolicies);
   await db.delete(schema.billingReconciliationJobs);

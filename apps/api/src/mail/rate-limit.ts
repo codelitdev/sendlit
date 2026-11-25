@@ -206,6 +206,19 @@ export function quotaExhaustionDeferral(error: unknown): SendDeferredError | nul
   ) {
     return new SendDeferredError(untilNextUtcDay(), "marketing_daily_ramp");
   }
+  // A team's monthly cap on marketing through the shared From domain
+  // (delivery/team-sending-domain.ts) resets with the UTC month.
+  if (
+    err?.message === "plan_limit_reached" &&
+    err.details?.capability === "shared_domain_monthly_limit"
+  ) {
+    const now = new Date();
+    const nextMonth = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+    return new SendDeferredError(
+      nextMonth - now.getTime() + Math.floor(Math.random() * 600_000),
+      "shared_domain_monthly_limit",
+    );
+  }
   // A new organization's sends are spread across the day (abuse/pacing.ts).
   if (
     err?.message === "plan_limit_reached" &&

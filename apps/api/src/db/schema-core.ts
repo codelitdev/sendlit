@@ -229,10 +229,33 @@ export const sendingDomains = pgTable(
     nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
     failedCheckCount: integer("failed_check_count").notNull().default(0),
     firstFailedAt: timestamp("first_failed_at", { withTimezone: true }),
+    /** Set for a team's own From domain on a shared organization ESP (#220).
+     * Null for the organization's own verified domains. */
+    teamId: uuid("team_id").references(() => teams.id, { onDelete: "restrict" }),
+    /** The shared ESP the team domain is registered with, and its provider. */
+    espConfigId: uuid("esp_config_id").references(() => espConfigs.id, {
+      onDelete: "restrict",
+    }),
+    provider: text("provider"),
+    /** Team domains only: the provider's DKIM state (pending | verified |
+     * failed) and whether a DMARC record is published (pass | missing). */
+    dkimStatus: text("dkim_status"),
+    dmarcStatus: text("dmarc_status"),
+    /** Team domains only: the DNS records to publish, as the provider gave
+     * them (`{type, name, value, purpose}[]`). */
+    dnsRecords: jsonb("dns_records"),
+    /** When DKIM and DMARC last both passed, and when they started failing
+     * after that; a team sends from its domain only while it passes, within
+     * a grace period after a failure. */
+    authenticatedAt: timestamp("authenticated_at", { withTimezone: true }),
+    authFailingSince: timestamp("auth_failing_since", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    liveTeamDomainIdx: uniqueIndex("sending_domains_live_team_idx")
+      .on(table.teamId)
+      .where(sql`${table.teamId} IS NOT NULL AND ${table.status} <> 'revoked'`),
     domainIdCheck: publicIdCheck(
       "sending_domains_domain_id_check",
       table.domainId,
@@ -1038,6 +1061,10 @@ export const espConfigs = pgTable(
      * confirmed. Providers like SES use random selectors that DNS can't list,
      * so it's remembered for later checks. */
     dkimSelector: text("dkim_selector"),
+    /** Organization ESPs only: an encrypted provider API credential (for
+     * SES, an access key and region) used to register teams' own sending
+     * domains. Separate from the SMTP secret, which can only send. */
+    encryptedManagementSecret: text("encrypted_management_secret"),
     status: text("status").notNull().default("draft"),
     secretVersion: integer("secret_version").notNull().default(1),
     lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
@@ -1088,10 +1115,26 @@ export const organizationDeliveryPolicies = pgTable(
       .notNull()
       .default(true),
     teamCanChangeDefault: boolean("team_can_change_default").notNull().default(true),
+    /** Whether teams on a shared ESP must send from their own verified
+     * domain: `off`, for `marketing` only, or for `all` mail (#220). */
+    requireTeamSendingDomain: text("require_team_sending_domain")
+      .notNull()
+      .default("off"),
+    /** Optional monthly cap on each team's marketing sends through a shared
+     * ESP while the team still uses the shared From domain. */
+    sharedDomainMonthlyLimit: integer("shared_domain_monthly_limit"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    requireTeamSendingDomainCheck: check(
+      "organization_delivery_policies_require_team_domain_check",
+      sql`${table.requireTeamSendingDomain} IN ('off', 'marketing', 'all')`,
+    ),
+    sharedDomainLimitCheck: check(
+      "organization_delivery_policies_shared_domain_limit_check",
+      sql`${table.sharedDomainMonthlyLimit} IS NULL OR ${table.sharedDomainMonthlyLimit} >= 0`,
+    ),
     defaultEspFk: foreignKey({
       name: "organization_delivery_policies_default_esp_fk",
       columns: [table.defaultEspConfigId, table.organizationId],
@@ -1209,6 +1252,12 @@ export const espConfigTeamGrants = pgTable(
     drainUntil: timestamp("drain_until", { withTimezone: true }),
     fromName: text("from_name"),
     replyTo: text("reply_to"),
+    /** The team's own From address and domain on this shared ESP (#220);
+     * used only while the domain is verified and authenticates. */
+    fromEmail: text("from_email"),
+    sendingDomainId: uuid("sending_domain_id").references(() => sendingDomains.id, {
+      onDelete: "set null",
+    }),
     dailyLimit: integer("daily_limit"),
     monthlyLimit: integer("monthly_limit"),
     createdByType: text("created_by_type").notNull(),

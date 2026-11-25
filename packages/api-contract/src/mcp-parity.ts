@@ -265,6 +265,8 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   restOnly("organizations.resumeEsp", ORGANIZATION_ADMIN),
   restOnly("organizations.retireEsp", ORGANIZATION_ADMIN),
   restOnly("organizations.deleteEsp", ORGANIZATION_ADMIN),
+  restOnly("organizations.setEspManagementCredentials", ORGANIZATION_ADMIN),
+  restOnly("organizations.removeEspManagementCredentials", ORGANIZATION_ADMIN),
   restOnly("organizations.getEspFeedback", ORGANIZATION_ADMIN),
   restOnly("organizations.upsertEspFeedback", ORGANIZATION_ADMIN),
   restOnly("organizations.rotateEspFeedback", ORGANIZATION_ADMIN),
@@ -277,6 +279,9 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   restOnly("organizations.listAuditEvents", ORGANIZATION_ADMIN),
   restOnly("organizations.getEspGrant", ORGANIZATION_ADMIN),
   restOnly("organizations.upsertEspGrant", ORGANIZATION_ADMIN),
+  restOnly("organizations.getTeamSendingDomain", ORGANIZATION_ADMIN),
+  restOnly("organizations.setTeamSendingDomain", ORGANIZATION_ADMIN),
+  restOnly("organizations.removeTeamSendingDomain", ORGANIZATION_ADMIN),
   restOnly("organizations.transitionEspGrant", ORGANIZATION_ADMIN),
   restOnly("organizations.listSendingDomains", ORGANIZATION_ADMIN),
   restOnly("organizations.createSendingDomain", ORGANIZATION_ADMIN),
@@ -301,6 +306,9 @@ export const mcpParityManifest: readonly McpParityManifestEntry[] = [
   restOnly("provisioning.resumeTeam", PROVISIONING),
   restOnly("provisioning.archiveTeam", PROVISIONING),
   restOnly("provisioning.getTeamUsage", PROVISIONING),
+  restOnly("provisioning.getTeamSendingDomain", PROVISIONING),
+  restOnly("provisioning.setTeamSendingDomain", PROVISIONING),
+  restOnly("provisioning.removeTeamSendingDomain", PROVISIONING),
 
   // Dashboard overview
   restOnly(

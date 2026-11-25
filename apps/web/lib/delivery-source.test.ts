@@ -9,6 +9,22 @@ import {
 } from "./delivery-source";
 
 describe("presentSendError", () => {
+  it("explains a team's own sending domain stops", () => {
+    expect(
+      presentSendError("sending_paused", { reason: "team_sending_domain_failing" }),
+    ).toContain("stopped passing DKIM or DMARC");
+    expect(
+      presentSendError("domain_verification_required", {
+        reason: "team_sending_domain_required",
+      }),
+    ).toContain("requires this team to send from its own domain");
+    expect(
+      presentSendError("plan_limit_reached", {
+        capability: "shared_domain_monthly_limit",
+      }),
+    ).toContain("monthly allowance of marketing from the shared domain");
+  });
+
   it("names a shared mailbox pause instead of the generic billing text (#220)", () => {
     const team = presentSendError("sending_paused", {
       error: "sending_paused",

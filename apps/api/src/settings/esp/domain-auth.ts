@@ -152,6 +152,11 @@ const COMMON_DKIM_SELECTORS = [
 
 const SES_REGION = /email-smtp\.([a-z0-9-]+)\.amazonaws\.com/i;
 
+/** The AWS region of an SES SMTP endpoint, e.g. `email-smtp.eu-west-1…`. */
+export function sesRegionOf(host: string): string {
+  return host.match(SES_REGION)?.[1] ?? "us-east-1";
+}
+
 export function sendingDomainOf(fromEmail: string | null): string | null {
   const domain = fromEmail?.split("@")[1]?.trim().toLowerCase().replace(/\.$/, "");
   return domain || null;
@@ -173,7 +178,7 @@ const includes = (spf: string, include: string) =>
 
 /** The DMARC record for the domain, or for a parent domain, which also
  * covers its subdomains. */
-async function findDmarc(resolve: ResolveTxt, domain: string) {
+export async function findDmarc(resolve: ResolveTxt, domain: string) {
   const labels = domain.split(".");
   const hosts = labels.slice(0, -1).map((_, i) => labels.slice(i).join("."));
   // Look all of them up at once; the closest one with a record wins.
@@ -212,7 +217,7 @@ export async function checkDomainAuthentication(
     config.provider in GUIDES ? config.provider : "smtp"
   ) as EspProvider;
   const guide = GUIDES[provider];
-  const region = config.host.match(SES_REGION)?.[1] ?? "us-east-1";
+  const region = sesRegionOf(config.host);
 
   // SPF: the bounce domain's record when the provider uses one, else the
   // From domain's.

@@ -7,6 +7,8 @@ import {
   CalendarClock,
   CheckCircle2,
   Copy,
+  Globe,
+  KeyRound,
   LogIn,
   Mail,
   MoreHorizontal,
@@ -31,11 +33,13 @@ import { toast } from "sonner";
 import { Banner } from "@/components/dashboard/banner";
 import { useSetBreadcrumb } from "@/components/dashboard/breadcrumb-context";
 import { DeleteConfirmationDialog } from "@/components/dashboard/delete-confirmation-dialog";
+import { EspApiKeyDialog } from "@/components/dashboard/esp-api-key-dialog";
 import { EspConfigurationDialog } from "@/components/dashboard/esp-configuration-dialog";
 import { EspFeedbackDialog } from "@/components/dashboard/esp-feedback-dialog";
 import { Loading } from "@/components/dashboard/loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScrollablePage } from "@/components/dashboard/scrollable-page";
+import { TeamSendingDomainDialog } from "@/components/dashboard/team-sending-domain-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1852,6 +1856,7 @@ function SharedEspsSection({
 }) {
   const [editing, setEditing] = useState<EspConfig | null | undefined>(undefined);
   const [feedbackEsp, setFeedbackEsp] = useState<EspConfig | null>(null);
+  const [apiKeyEsp, setApiKeyEsp] = useState<EspConfig | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [transitioningId, setTransitioningId] = useState<string | null>(null);
   const [retiringEsp, setRetiringEsp] = useState<EspConfig | null>(null);
@@ -2047,6 +2052,14 @@ function SharedEspsSection({
                                       : "Activate"}
                               </DropdownMenuItem>
                             )}
+                            {esp.provider === "ses" && (
+                              <DropdownMenuItem onSelect={() => setApiKeyEsp(esp)}>
+                                <KeyRound />
+                                {esp.hasManagementCredentials
+                                  ? "Amazon SES API key (stored)"
+                                  : "Amazon SES API key"}
+                              </DropdownMenuItem>
+                            )}
                             {/* A never-activated draft is deleted; anything that
                                 has been live is retired and kept for its history
                                 (#12). A retired mailbox has nothing left to do. */}
@@ -2167,6 +2180,14 @@ function SharedEspsSection({
           if (!open) setFeedbackEsp(null);
         }}
       />
+      <EspApiKeyDialog
+        organizationId={organizationId}
+        esp={apiKeyEsp}
+        onOpenChange={(open) => {
+          if (!open) setApiKeyEsp(null);
+        }}
+        onSaved={onChanged}
+      />
     </Card>
   );
 }
@@ -2211,10 +2232,15 @@ function DeliveryPolicySection({
   const [aggregateMonthlyLimit, setAggregateMonthlyLimit] = useState("");
   const [teamEspEnabled, setTeamEspEnabled] = useState(true);
   const [teamCanChangeDefault, setTeamCanChangeDefault] = useState(true);
+  const [requireTeamDomain, setRequireTeamDomain] =
+    useState<OrganizationDeliveryPolicy["requireTeamSendingDomain"]>("off");
+  const [sharedDomainLimit, setSharedDomainLimit] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setRequireTeamDomain(policy?.requireTeamSendingDomain ?? "off");
+    setSharedDomainLimit(policy?.sharedDomainMonthlyLimit?.toString() ?? "");
     setDefaultEspId(policy?.defaultEspId ?? "");
     setAutoGrant(policy?.autoGrantDefaultEsp ?? false);
     setDailyLimit(policy?.defaultDailyLimit?.toString() ?? "");
@@ -2228,9 +2254,13 @@ function DeliveryPolicySection({
   async function save() {
     const numberOrNull = (value: string) => (value.trim() ? Number(value) : null);
     if (
-      [dailyLimit, monthlyLimit, aggregateDailyLimit, aggregateMonthlyLimit].some(
-        (value) => value.trim() && !Number.isInteger(numberOrNull(value)),
-      )
+      [
+        dailyLimit,
+        monthlyLimit,
+        aggregateDailyLimit,
+        aggregateMonthlyLimit,
+        sharedDomainLimit,
+      ].some((value) => value.trim() && !Number.isInteger(numberOrNull(value)))
     ) {
       setError("Quota limits must be whole numbers.");
       return;
@@ -2251,6 +2281,8 @@ function DeliveryPolicySection({
         aggregateMonthlyLimit: numberOrNull(aggregateMonthlyLimit),
         teamEspEnabledByDefault: teamEspEnabled,
         teamCanChangeDefault,
+        requireTeamSendingDomain: requireTeamDomain,
+        sharedDomainMonthlyLimit: numberOrNull(sharedDomainLimit),
       });
       await onChanged();
     } catch (err) {
@@ -2313,6 +2345,43 @@ function DeliveryPolicySection({
                     inputMode="numeric"
                     value={monthlyLimit}
                     onChange={(event) => setMonthlyLimit(event.target.value)}
+                    placeholder="No limit"
+                  />
+                </Field>
+              </div>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="text-sm font-medium">Teams' own sending domains</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                A team can send from its own domain on an Amazon SES shared mailbox, so
+                its sender reputation is its own. Set it up from a team's actions in
+                Teams.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Field label="Require a team's own domain for">
+                  <Select
+                    value={requireTeamDomain}
+                    onValueChange={(value) =>
+                      setRequireTeamDomain(value as typeof requireTeamDomain)
+                    }
+                  >
+                    <SelectTrigger aria-label="Require a team's own domain for">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">Nothing (optional)</SelectItem>
+                      <SelectItem value="marketing">
+                        Broadcasts and sequences
+                      </SelectItem>
+                      <SelectItem value="all">All email</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Monthly marketing on the shared domain">
+                  <Input
+                    inputMode="numeric"
+                    value={sharedDomainLimit}
+                    onChange={(event) => setSharedDomainLimit(event.target.value)}
                     placeholder="No limit"
                   />
                 </Field>
@@ -3199,6 +3268,7 @@ function TeamMailboxGrantRow({
   const mailbox = grant ? esps.find((esp) => esp.espId === grant.espId) : null;
   const archived = team.status === "archived";
   const viewerIsMember = Boolean(team.viewerIsMember);
+  const [domainOpen, setDomainOpen] = useState(false);
 
   async function openTeam() {
     setTeamIdCookie(team.teamId);
@@ -3253,10 +3323,27 @@ function TeamMailboxGrantRow({
           >
             {archived ? "Archived" : (grant?.status ?? "No shared ESP")}
           </Badge>
+          {!archived && grant?.sendingDomain ? (
+            <Badge
+              variant={
+                grant.sendingDomain.status === "failing"
+                  ? "destructive"
+                  : grant.sendingDomain.inUse
+                    ? "success"
+                    : "secondary"
+              }
+            >
+              {grant.sendingDomain.status === "failing"
+                ? "Own domain failing"
+                : grant.sendingDomain.inUse
+                  ? "Own domain"
+                  : "Own domain pending"}
+            </Badge>
+          ) : null}
         </div>
         <p className="mt-1 truncate text-sm text-muted-foreground">
           {mailbox
-            ? `${mailbox.name} · ${mailbox.fromEmail}`
+            ? `${mailbox.name} · ${grant?.sendingDomain?.inUse && grant.fromEmail ? grant.fromEmail : mailbox.fromEmail}`
             : team.externalId
               ? `Provisioned team · ${team.externalId}`
               : "Human-managed team"}
@@ -3305,6 +3392,13 @@ function TeamMailboxGrantRow({
               ? "Mailbox grant settings"
               : "Mailbox grant settings (upgrade required)"}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={archived || !grant || grant.status === "revoked"}
+            onSelect={() => setDomainOpen(true)}
+          >
+            <Globe />
+            Sending domain
+          </DropdownMenuItem>
           <DropdownMenuItem disabled={archived} onSelect={() => setRenameOpen(true)}>
             <Pencil />
             Rename team
@@ -3321,6 +3415,12 @@ function TeamMailboxGrantRow({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <TeamSendingDomainDialog
+        organizationId={organizationId}
+        team={domainOpen ? team : null}
+        onOpenChange={setDomainOpen}
+        onChanged={() => void onChanged()}
+      />
       <MailboxGrantDialog
         organizationId={organizationId}
         team={team}

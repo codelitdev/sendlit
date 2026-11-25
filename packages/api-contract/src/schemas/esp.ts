@@ -90,6 +90,9 @@ export const espConfigSchema = z.object({
   secure: z.boolean(),
   username: z.string().nullable().optional(),
   hasPassword: z.boolean(),
+  /** Organization ESPs: whether a provider API credential is stored, which
+   * lets teams register their own sending domains (SES only for now). */
+  hasManagementCredentials: z.boolean().optional(),
   fromName: z.string().nullable().optional(),
   fromEmail: z.string().nullable().optional(),
   replyTo: z.string().nullable().optional(),
@@ -233,4 +236,14 @@ export const domainAuthenticationQuerySchema = z.object({
     .describe(
       "DKIM selector to check (for Amazon SES, one Easy DKIM token). A selector that passes is saved on the ESP and used by later checks that omit it.",
     ),
+});
+
+/** An organization ESP's provider API credential, kept separately from the
+ * SMTP secret. For SES: an IAM access key allowed `ses:CreateEmailIdentity`,
+ * `ses:GetEmailIdentity` and `ses:DeleteEmailIdentity`. */
+export const espManagementCredentialsBodySchema = z.object({
+  accessKeyId: z.string().min(1),
+  secretAccessKey: z.string().min(1),
+  /** Defaults to the region in the SMTP host. */
+  region: z.string().min(1).optional(),
 });

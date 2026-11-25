@@ -41,7 +41,9 @@ import {
   espGrantSchema,
   organizationDeliveryPolicySchema,
   sendingOptionSchema,
+  setTeamSendingDomainBodySchema,
   teamDeliverySettingsSchema,
+  teamSendingDomainSchema,
   transitionEspGrantBodySchema,
   updateOrganizationDeliveryPolicyBodySchema,
   updateTeamDeliverySettingsBodySchema,
@@ -56,6 +58,7 @@ import {
   domainAuthenticationQuerySchema,
   domainAuthenticationSchema,
   espConfigSchema,
+  espManagementCredentialsBodySchema,
   retireEspConfigBodySchema,
   testEspConfigBodySchema,
   testEspConfigResponseSchema,
@@ -1441,6 +1444,41 @@ const provisioningContract = c.router(
       responses: { 204: c.noBody(), 403: errorSchema, 404: errorSchema },
       summary: "Archive a provisioned team",
     },
+    getTeamSendingDomain: {
+      method: "GET",
+      path: "/provisioning/teams/:teamId/sending-domain",
+      responses: {
+        200: teamSendingDomainSchema.nullable(),
+        403: errorSchema,
+        404: errorSchema,
+        422: errorSchema,
+      },
+      summary: "Check a provisioned team's own sending domain",
+      description:
+        "Re-checks the domain with the shared ESP and DNS. Requires `teams:read`. `null` when the team has none.",
+    },
+    setTeamSendingDomain: {
+      method: "PUT",
+      path: "/provisioning/teams/:teamId/sending-domain",
+      body: setTeamSendingDomainBodySchema,
+      responses: {
+        200: teamSendingDomainSchema,
+        400: errorSchema,
+        403: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+        422: errorSchema,
+      },
+      summary: "Set a provisioned team's own From address and register its domain",
+      description:
+        "Requires `teams:manage`. Returns the DNS records the team must publish (Amazon SES Easy DKIM CNAMEs and a DMARC TXT record). Errors as for the organization route.",
+    },
+    removeTeamSendingDomain: {
+      method: "DELETE",
+      path: "/provisioning/teams/:teamId/sending-domain",
+      responses: { 204: c.noBody(), 403: errorSchema, 404: errorSchema },
+      summary: "Stop using a provisioned team's own sending domain",
+    },
     getTeamUsage: {
       method: "GET",
       path: "/provisioning/teams/:teamId/usage",
@@ -1769,6 +1807,26 @@ const organizationsContract = c.router(
       description:
         "Only a never-activated draft with no history is deleted. 409 explains a blocked delete: `esp_retire_instead` (it has been activated; retire it instead), `esp_has_delivery_history`, or `delivery_source_in_use`.",
     },
+    setEspManagementCredentials: {
+      method: "PUT",
+      path: "/organizations/:organizationId/esps/:espId/management-credentials",
+      body: espManagementCredentialsBodySchema,
+      responses: {
+        200: espConfigSchema,
+        403: errorSchema,
+        404: errorSchema,
+        422: errorSchema,
+      },
+      summary: "Store a shared ESP's provider API credential",
+      description:
+        "Lets teams register their own sending domains on this mailbox. Amazon SES only for now (422 `provider_domain_unsupported` otherwise). The credential is encrypted at rest and never returned; the ESP shows `hasManagementCredentials`.",
+    },
+    removeEspManagementCredentials: {
+      method: "DELETE",
+      path: "/organizations/:organizationId/esps/:espId/management-credentials",
+      responses: { 200: espConfigSchema, 403: errorSchema, 404: errorSchema },
+      summary: "Remove a shared ESP's provider API credential",
+    },
     getEspFeedback: {
       method: "GET",
       path: "/organizations/:organizationId/esps/:espId/feedback",
@@ -1933,6 +1991,43 @@ const organizationsContract = c.router(
       },
       summary:
         "Transition a team's organization ESP grant; revoking detaches safe campaigns",
+    },
+    getTeamSendingDomain: {
+      method: "GET",
+      path: "/organizations/:organizationId/teams/:teamId/sending-domain",
+      responses: {
+        200: teamSendingDomainSchema.nullable(),
+        403: errorSchema,
+        404: errorSchema,
+        422: errorSchema,
+      },
+      summary: "Check a team's own sending domain",
+      description:
+        "Re-checks the domain with the shared ESP and DNS and returns its status and the DNS records to publish. `null` when the team has none. The team sends from it once the ESP has verified DKIM and a DMARC record is published.",
+    },
+    setTeamSendingDomain: {
+      method: "PUT",
+      path: "/organizations/:organizationId/teams/:teamId/sending-domain",
+      body: setTeamSendingDomainBodySchema,
+      responses: {
+        200: teamSendingDomainSchema,
+        400: errorSchema,
+        403: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+        422: errorSchema,
+      },
+      summary: "Set a team's own From address and register its domain",
+      description:
+        "Registers the From address's domain with the team's shared ESP (Amazon SES for now) and returns the DNS records to publish. Replacing a different domain removes the old one. 422 `esp_management_credentials_required` when the shared ESP has no API credential, `provider_domain_unsupported` for other providers, `organization_delivery_disabled` without an active grant. 409 `domain_in_use` when another team or the organization uses the domain.",
+    },
+    removeTeamSendingDomain: {
+      method: "DELETE",
+      path: "/organizations/:organizationId/teams/:teamId/sending-domain",
+      responses: { 204: c.noBody(), 403: errorSchema, 404: errorSchema },
+      summary: "Stop using a team's own sending domain",
+      description:
+        "Removes the domain from the shared ESP. The team goes back to the shared From domain, which the organization's `requireTeamSendingDomain` policy may refuse.",
     },
     listSendingDomains: {
       method: "GET",

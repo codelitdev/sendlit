@@ -11,6 +11,12 @@ export const organizationDeliveryPolicySchema = z.object({
   aggregateMonthlyLimit: nullableLimit,
   teamEspEnabledByDefault: z.boolean(),
   teamCanChangeDefault: z.boolean(),
+  /** Whether teams on a shared ESP must send from their own verified
+   * domain: `off` (default), for `marketing` only, or for `all` mail. */
+  requireTeamSendingDomain: z.enum(["off", "marketing", "all"]),
+  /** Monthly cap on each team's marketing through a shared ESP while it
+   * still uses the shared From domain; `null` for none. */
+  sharedDomainMonthlyLimit: nullableLimit,
   updatedAt: z.string(),
 });
 
@@ -24,6 +30,8 @@ export const updateOrganizationDeliveryPolicyBodySchema = z
     aggregateMonthlyLimit: nullableLimit.optional(),
     teamEspEnabledByDefault: z.boolean().optional(),
     teamCanChangeDefault: z.boolean().optional(),
+    requireTeamSendingDomain: z.enum(["off", "marketing", "all"]).optional(),
+    sharedDomainMonthlyLimit: nullableLimit.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required",
@@ -39,6 +47,18 @@ export const espGrantSchema = z.object({
   replyTo: z.string().nullable(),
   dailyLimit: nullableLimit,
   monthlyLimit: nullableLimit,
+  /** The team's own From address on this mailbox, when it has one. */
+  fromEmail: z.string().nullable().optional(),
+  /** The team's own sending domain, when it has one (see
+   * `/teams/:teamId/sending-domain`). */
+  sendingDomain: z
+    .object({
+      domain: z.string(),
+      status: z.enum(["pending", "verified", "failing"]),
+      inUse: z.boolean(),
+    })
+    .nullable()
+    .optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -112,3 +132,36 @@ export const sendingOptionSchema = z.discriminatedUnion("type", [
     countsAgainstQuota: z.literal(false),
   }),
 ]);
+
+export const teamSendingDomainRecordSchema = z.object({
+  type: z.enum(["CNAME", "TXT", "MX"]),
+  name: z.string(),
+  value: z.string(),
+  purpose: z.enum(["dkim", "dmarc", "spf", "return_path"]),
+  /** Whether the last check found it in place. */
+  present: z.boolean().optional(),
+});
+
+/** A team's own From domain on its organization's shared ESP. */
+export const teamSendingDomainSchema = z.object({
+  domain: z.string(),
+  fromEmail: z.string().nullable(),
+  /** `pending` until DKIM and DMARC first pass, `verified` once they have,
+   * `failing` when they stopped passing after that. */
+  status: z.enum(["pending", "verified", "failing"]),
+  dkim: z.enum(["pending", "verified", "failed"]),
+  dmarc: z.enum(["pass", "missing"]),
+  /** Whether the team's mail goes out from this domain right now. */
+  inUse: z.boolean(),
+  records: z.array(teamSendingDomainRecordSchema),
+  verifiedAt: z.string().nullable(),
+  failingSince: z.string().nullable(),
+  /** When the team's marketing pauses if the domain keeps failing. */
+  graceEndsAt: z.string().nullable(),
+  lastCheckedAt: z.string().nullable(),
+});
+
+export const setTeamSendingDomainBodySchema = z.object({
+  /** The team's From address; its domain is registered with the shared ESP. */
+  fromEmail: z.string().email(),
+});

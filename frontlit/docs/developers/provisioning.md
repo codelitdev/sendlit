@@ -402,6 +402,86 @@ Each entry in `teams` carries the team's mail counts for the window (`sent`,
 transactional email), its `health`, and its `quota` (`day` and `month`, or
 `null` when the team has no active organization delivery grant).
 
+## Give a team its own sending domain
+
+On an Amazon SES shared mailbox, a team can send from its own domain, signed
+with DKIM for that domain, so its sender reputation is its own rather than
+the mailbox's. The organization must first store an SES API key on the
+mailbox (Organizations → Delivery → the mailbox's actions → Amazon SES API
+key).
+
+Set the team's From address with `teams:manage`. SendLit registers its domain
+with SES and returns the DNS records to publish:
+
+```bash
+curl --request PUT \
+  "$SENDLIT_API_URL/provisioning/teams/team_01JXYZ/sending-domain" \
+  --header "Authorization: Bearer $SENDLIT_ORGANIZATION_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{ "fromEmail": "news@school-a.example.org" }'
+```
+
+```json
+{
+  "domain": "school-a.example.org",
+  "fromEmail": "news@school-a.example.org",
+  "status": "pending",
+  "dkim": "pending",
+  "dmarc": "missing",
+  "inUse": false,
+  "records": [
+    {
+      "type": "CNAME",
+      "name": "abc123._domainkey.school-a.example.org",
+      "value": "abc123.dkim.amazonses.com",
+      "purpose": "dkim",
+      "present": false
+    },
+    {
+      "type": "TXT",
+      "name": "_dmarc.school-a.example.org",
+      "value": "v=DMARC1; p=none;",
+      "purpose": "dmarc",
+      "present": false
+    }
+  ],
+  "verifiedAt": null,
+  "failingSince": null,
+  "graceEndsAt": null,
+  "lastCheckedAt": "2026-08-12T10:00:00.000Z"
+}
+```
+
+SES returns three DKIM CNAMEs (one is shown). Skip the DMARC record if the
+domain already has one. Show the records to the team, then check progress
+with `GET` on the same path (`teams:read`), which re-checks SES and DNS.
+SendLit also re-checks every hour.
+
+- `status` is `pending` until SES has verified DKIM and DMARC is published,
+  then `verified`. From then on the team's mail goes out from its own
+  address (`inUse: true`).
+- If the domain later stops passing, `status` becomes `failing`. The team
+  keeps sending from it until `graceEndsAt` (72 hours), then its broadcasts
+  and sequences pause with `sending_paused` (`reason:
+  "team_sending_domain_failing"`). Transactional email keeps sending. It
+  never falls back to the shared domain on its own.
+- `DELETE` on the same path removes the domain from SES. The team goes back
+  to the shared domain.
+
+| Status | Error                                  | Meaning                                                   |
+| ------ | -------------------------------------- | --------------------------------------------------------- |
+| `400`  | `domain_invalid`, `domain_public_suffix` | The From address isn't at a domain the team can own      |
+| `409`  | `domain_in_use`                        | Another team or the organization already uses the domain  |
+| `422`  | `esp_management_credentials_required`  | The shared mailbox has no SES API key                     |
+| `422`  | `provider_domain_unsupported`          | The shared mailbox isn't Amazon SES                       |
+| `422`  | `organization_delivery_disabled`       | The team has no active shared-mailbox grant               |
+
+The organization's delivery policy can require teams to use their own domain:
+`requireTeamSendingDomain` set to `marketing` or `all` refuses those sends
+from teams still on the shared domain with `domain_verification_required`
+(`reason: "team_sending_domain_required"`), and `sharedDomainMonthlyLimit`
+caps each team's monthly marketing through the shared domain.
+
 ## Errors
 
 Error responses contain a stable `error` value. Branch on that value rather

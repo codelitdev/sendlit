@@ -66,21 +66,34 @@ SendLit stays a marketing platform on the customer's ESP
 - The guard is on by default in SendLit Cloud. Self-hosted operators turn it
   on with `SHARED_ESP_GUARD=on`.
 
-### 2. A team's own domain on the shared ESP (planned)
+### 2. A team's own domain on the shared ESP (built)
 
-- A provisioned team can send from its own verified domain or subdomain. The
-  shared ESP signs its mail with DKIM for that domain.
+- A team can send from its own verified domain or subdomain. The shared ESP
+  signs its mail with DKIM for that domain, so Gmail and Microsoft judge the
+  team's mail on its own reputation.
 - SendLit registers the domain with the ESP through the provider's domain
-  API, using a management credential stored separately from the SMTP one.
-  Amazon SES comes first.
-- A team uses its own From address only while its domain passes DKIM and
-  DMARC. If the domain later fails, the team gets a grace period, then its
-  marketing pauses. **It never silently falls back to the shared domain**: a
-  failing team is exactly the one that shouldn't land on everyone's
-  reputation.
+  API, using a management credential stored encrypted on the organization
+  ESP, separately from the SMTP secret (which can only send). Amazon SES
+  comes first (SESv2 `CreateEmailIdentity` with Easy DKIM); SendGrid, Resend,
+  Postmark and Mailgun plug into the same adapter later. Plain SMTP has no
+  domain API and stays a manual setup.
+- Team domains reuse `sending_domains` with a `team_id`. Ownership is proven
+  by the provider's DKIM verification rather than the organization TXT
+  challenge, and they're re-checked hourly with the provider and DNS.
+- A team uses its own From address only once the provider has verified DKIM
+  and a DMARC record is published. Until then it keeps the shared domain. If
+  the domain later fails, the team keeps sending from it for a grace period
+  (`TEAM_SENDING_DOMAIN_GRACE_HOURS`, 72 by default), then its marketing
+  pauses (`sending_paused`, reason `team_sending_domain_failing`);
+  transactional mail keeps its own domain. **It never silently falls back to
+  the shared domain**: a failing team is exactly the one that shouldn't land
+  on everyone's reputation.
 - Organization policy `requireTeamSendingDomain` (`off`, `marketing` or
-  `all`) defaults to `off`, with an optional cap on how much a team can send
-  through the shared domain.
+  `all`) defaults to `off`. Teams still on the shared domain are refused
+  with `domain_verification_required` (reason `team_sending_domain_required`)
+  for what the policy covers. An optional `sharedDomainMonthlyLimit` caps a
+  team's monthly marketing through the shared domain; broadcasts over it wait
+  for the next month.
 
 ## Consequences
 
@@ -95,3 +108,7 @@ SendLit stays a marketing platform on the customer's ESP
 - The guard can't undo what the ESP has already counted. It keeps the shared
   account under the ESP's limits; it doesn't give teams separate reputations
   at Gmail and Microsoft. The team domains in part 2 do that.
+- A team domain needs the organization to hand SendLit an ESP API key that
+  can create and delete identities in its SES account. That's a broader
+  credential than SMTP; it's encrypted at rest, never returned, and can be
+  removed at any time, which stops new team domains but not existing ones.

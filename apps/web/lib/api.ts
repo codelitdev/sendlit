@@ -874,6 +874,8 @@ export interface EspConfig {
   secure: boolean;
   username: string | null;
   hasPassword: boolean;
+  /** Organization ESPs: a provider API credential is stored (SES only). */
+  hasManagementCredentials?: boolean;
   fromName: string | null;
   fromEmail: string | null;
   replyTo?: string | null;
@@ -1282,8 +1284,36 @@ export interface OrganizationEspGrant {
   replyTo: string | null;
   dailyLimit: number | null;
   monthlyLimit: number | null;
+  fromEmail?: string | null;
+  sendingDomain?: {
+    domain: string;
+    status: TeamSendingDomain["status"];
+    inUse: boolean;
+  } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TeamSendingDomainRecord {
+  type: "CNAME" | "TXT" | "MX";
+  name: string;
+  value: string;
+  purpose: "dkim" | "dmarc" | "spf" | "return_path";
+  present?: boolean;
+}
+
+export interface TeamSendingDomain {
+  domain: string;
+  fromEmail: string | null;
+  status: "pending" | "verified" | "failing";
+  dkim: "pending" | "verified" | "failed";
+  dmarc: "pass" | "missing";
+  inUse: boolean;
+  records: TeamSendingDomainRecord[];
+  verifiedAt: string | null;
+  failingSince: string | null;
+  graceEndsAt: string | null;
+  lastCheckedAt: string | null;
 }
 
 export interface OrganizationDeliveryPolicy {
@@ -1295,6 +1325,8 @@ export interface OrganizationDeliveryPolicy {
   aggregateMonthlyLimit: number | null;
   teamEspEnabledByDefault: boolean;
   teamCanChangeDefault: boolean;
+  requireTeamSendingDomain: "off" | "marketing" | "all";
+  sharedDomainMonthlyLimit: number | null;
   updatedAt: string;
 }
 
@@ -1486,6 +1518,8 @@ export function updateOrganizationDeliveryPolicy(
       | "aggregateMonthlyLimit"
       | "teamEspEnabledByDefault"
       | "teamCanChangeDefault"
+      | "requireTeamSendingDomain"
+      | "sharedDomainMonthlyLimit"
     >
   >,
 ) {
@@ -1678,6 +1712,51 @@ export function revokeOrganizationKey(organizationId: string, keyId: string) {
   return organizationRequest<void>(`/organizations/${organizationId}/keys/${keyId}`, {
     method: "DELETE",
   });
+}
+
+export function getTeamSendingDomain(organizationId: string, teamId: string) {
+  return organizationRequest<TeamSendingDomain | null>(
+    `/organizations/${organizationId}/teams/${teamId}/sending-domain`,
+  );
+}
+
+export function setTeamSendingDomain(
+  organizationId: string,
+  teamId: string,
+  fromEmail: string,
+) {
+  return organizationRequest<TeamSendingDomain>(
+    `/organizations/${organizationId}/teams/${teamId}/sending-domain`,
+    { method: "PUT", body: JSON.stringify({ fromEmail }) },
+  );
+}
+
+export function removeTeamSendingDomain(organizationId: string, teamId: string) {
+  return organizationRequest<void>(
+    `/organizations/${organizationId}/teams/${teamId}/sending-domain`,
+    { method: "DELETE" },
+  );
+}
+
+export function setOrganizationEspManagementCredentials(
+  organizationId: string,
+  espId: string,
+  input: { accessKeyId: string; secretAccessKey: string; region?: string },
+) {
+  return organizationRequest<EspConfig>(
+    `/organizations/${organizationId}/esps/${espId}/management-credentials`,
+    { method: "PUT", body: JSON.stringify(input) },
+  );
+}
+
+export function removeOrganizationEspManagementCredentials(
+  organizationId: string,
+  espId: string,
+) {
+  return organizationRequest<EspConfig>(
+    `/organizations/${organizationId}/esps/${espId}/management-credentials`,
+    { method: "DELETE" },
+  );
 }
 
 export function getOrganizationEspGrant(organizationId: string, teamId: string) {

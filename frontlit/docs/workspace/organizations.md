@@ -147,6 +147,33 @@ pause lasts at least 3 days and lifts once the recent sends are clean. Sends
 refused during a pause return `sending_paused` with the reason
 `shared_esp_team_breach`, `shared_esp_top_contributor` or `shared_esp_breach`.
 
+### A team's own sending domain
+
+On an Amazon SES shared mailbox, each team can send from its own domain
+instead of the mailbox's. Its mail is then signed with DKIM for its own
+domain, so Gmail and Microsoft judge it on its own reputation: one school's
+bad list doesn't drag down the others.
+
+1. Store an SES API key on the mailbox: **Organizations → Delivery**, the
+   mailbox's actions, **Amazon SES API key**. Use an IAM key allowed
+   `ses:CreateEmailIdentity`, `ses:GetEmailIdentity` and
+   `ses:DeleteEmailIdentity`. It's encrypted and never shown again.
+2. Open **Organizations → Teams**, the team's actions, **Sending domain**,
+   and enter the address the team should send from.
+3. Add the DNS records it shows (three DKIM CNAMEs and a DMARC record) at the
+   domain's DNS provider. SendLit checks every hour; **Check again** checks
+   now.
+
+The team switches to its own address once SES has verified DKIM and DMARC is
+published. If the records later break, the team keeps sending from its
+domain for 72 hours, then its broadcasts and sequences pause until it's
+fixed. It never quietly falls back to the shared domain.
+
+Under **Default delivery for new teams**, **Require a team's own domain for**
+can make it mandatory for broadcasts and sequences, or for all email, and
+**Monthly marketing on the shared domain** caps how much a team can send
+before it has its own domain.
+
 ## Grant a mailbox to a team
 
 On **Organizations → Teams**, each active team is a compact row. Open its

@@ -1,6 +1,6 @@
 import type { BillingEngine } from "@codelitdev/billing/workflows";
 import { startBillingWorkers } from "@codelitdev/platform/billing";
-import { and, eq, inArray, lt, lte } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, lte } from "drizzle-orm";
 import { db } from "../db/client";
 import { organizations, planSendReservations, sendingDomains } from "../db/schema";
 import { captureError } from "../observability";
@@ -97,6 +97,9 @@ async function checkDueSendingDomains(now: Date): Promise<void> {
       and(
         inArray(sendingDomains.status, ["pending", "verified", "failed"]),
         lt(sendingDomains.nextCheckAt, now),
+        // Teams' own domains are checked with their ESP instead
+        // (delivery/team-sending-domain.ts), not by the TXT challenge.
+        isNull(sendingDomains.teamId),
       ),
     )
     .limit(100);

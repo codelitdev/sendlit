@@ -15,6 +15,10 @@ import {
 } from "./delivery/lifecycle-jobs";
 import { startSharedEspGuard, stopSharedEspGuard } from "./delivery/shared-esp-guard";
 import { readSharedEspGuardConfig } from "./delivery/shared-esp-policy";
+import {
+  startTeamSendingDomainChecks,
+  stopTeamSendingDomainChecks,
+} from "./delivery/team-sending-domain";
 import feedbackQueue from "./delivery-feedback/feedback-queue";
 import feedbackWorker from "./delivery-feedback/feedback-worker";
 import { startFeedbackReceiptPoller } from "./delivery-feedback/poller";
@@ -52,6 +56,7 @@ startMailDispatchOutbox();
 startDeliveryLifecycleJobs();
 startReputationSync();
 startSharedEspGuard();
+startTeamSendingDomainChecks();
 
 process.on("unhandledRejection", (reason) => {
   logger.error({ error: (reason as Error)?.message }, "Unhandled promise rejection");
@@ -82,6 +87,10 @@ checkConfig()
         { name: "delivery_lifecycle_jobs", run: stopDeliveryLifecycleJobs },
         { name: "reputation_sync", run: stopReputationSync },
         { name: "shared_esp_guard", run: stopSharedEspGuard },
+        {
+          name: "team_sending_domain_checks",
+          run: async () => stopTeamSendingDomainChecks(),
+        },
         { name: "billing_maintenance", run: () => billingMaintenance.stop() },
         { name: "tracking_domain_checks", run: stopTrackingDomainChecks },
         // Closing a BullMQ worker waits for the job it is running.
