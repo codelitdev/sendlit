@@ -44,3 +44,8 @@ SendLit is built on the [CodeLit Platform](https://github.com/codelitdev/platfor
 - From browser based smoke testing, boot up the API and Web app using `bun run dev:api` and `bun run dev:web` respectively.
 - `docker compose -f docker-compose.local.yml up -d` starts Postgres, Redis and Mailpit for full integration testing.
 - Prefer Chrome DevTools MCP for browser-based debugging, in the headful mode.
+
+# Definition of "done"
+A task is considered done when you have performed the following steps.
+1. Full e2e browser based smoke testing on local 
+2. Full e2e browser based smoke testing on QA. Perform this step at the very last so that you have to do it only once per task.
