@@ -1,0 +1,386 @@
+{
+  "$schema": "https://frontlit.app/schema/page.v1.json",
+  "title": "White label email marketing for SaaS | SendLit",
+  "description": "White label email marketing for SaaS. Give each customer email under your brand: provision teams by API, embed React components, send via your own SES or SMTP.",
+  "layout": [
+    {
+      "name": "hero",
+      "settings": {
+        "verticalPadding": "py-12",
+        "preTitle": "EMBEDDABLE EMAIL PLATFORM",
+        "title": "White label email marketing for your SaaS, without building an email product",
+        "description": "One API call creates an isolated email workspace for each of your customers. Drop our React editor and blocks into your app, and send through your own Amazon SES or SMTP.",
+        "buttonCaption": "Start with Business",
+        "buttonAction": "https://app.sendlit.app",
+        "secondaryButtonCaption": "Try the editor live",
+        "secondaryButtonAction": "https://email-editor.courselit.app/",
+        "smallPrint": "Open source (AGPL-3.0) · React components are MIT · Bring SES, SMTP, Postmark, Resend, SendGrid or Mailgun",
+        "media": {
+          "url": "https://cdn.medialit.cloud/medialit-service/p/yGEhLY0p4F6pNpEc4FHmb9l8nZ4ZfuQ9YghxdtG8/main.webp",
+          "alt": "SendLit email editor and sequence list embedded in a violet host app"
+        }
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-0",
+        "text": "[Read the provisioning docs →](https://docs.sendlit.app/developers/provisioning)\n\nSends through your provider, not ours"
+      }
+    },
+    {
+      "name": "marquee",
+      "settings": {
+        "verticalPadding": "py-6",
+        "items": [
+          {
+            "text": "Amazon SES"
+          },
+          {
+            "text": "SMTP"
+          },
+          {
+            "text": "Postmark"
+          },
+          {
+            "text": "Resend"
+          },
+          {
+            "text": "SendGrid"
+          },
+          {
+            "text": "Mailgun"
+          }
+        ]
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-10",
+        "text": "## One organization for you. One team for each customer.\n\nYour backend holds an organization key. For each customer it creates a SendLit team with its own contacts, templates, sequences, suppressions and API key. Mail goes out through the provider you connect, either one shared mailbox for everyone or the customer's own."
+      }
+    },
+    {
+      "name": "embed",
+      "settings": {
+        "verticalPadding": "py-4",
+        "contentType": "script",
+        "content": "<figure class=\"slp-arch\" role=\"figure\" aria-label=\"How SendLit fits into your platform\" style=\"margin:0\"><style>.slp-arch{--slp-fg:var(--foreground,#2c241e);--slp-mfg:var(--muted-foreground,#6a6258);--slp-card:var(--card,#fefdfb);--slp-border:var(--border,#e2ddd5);--slp-muted:var(--muted,#eeebe5);--slp-accent:#3a9a5a;--slp-accent-text:#21703c;--slp-tint:rgba(58,154,90,.10);--slp-tint-strong:rgba(58,154,90,.18);container-type:inline-size;color:var(--slp-fg);font-family:inherit;font-size:16px;line-height:1.5;text-align:left;background:transparent;-webkit-text-size-adjust:100%}.slp-arch *,.slp-arch *::before,.slp-arch *::after{box-sizing:border-box}.slp-arch code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86em;background:var(--slp-muted);border-radius:5px;padding:.08em .35em;overflow-wrap:anywhere;color:var(--slp-fg)}\n.slp-arch{--slp-gap:14px}\n.slp-arch .slp-node{background:var(--slp-card);border:1px solid var(--slp-border);border-radius:12px;padding:12px 14px;box-shadow:0 1px 2px rgba(44,36,30,.06)}\n.slp-arch .slp-k{display:block;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--slp-mfg);margin:0 0 2px}\n.slp-arch .slp-t{display:block;font-size:16px;font-weight:700;line-height:1.3}\n.slp-arch .slp-s{display:block;font-size:14px;color:var(--slp-mfg);margin-top:2px}\n.slp-arch .slp-org{border-color:var(--slp-accent);background:linear-gradient(var(--slp-tint),var(--slp-tint)),var(--slp-card)}\n.slp-arch .slp-org .slp-t{color:var(--slp-accent-text)}\n.slp-arch .slp-top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:var(--slp-gap)}\n.slp-arch .slp-call{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:13px;color:var(--slp-mfg);text-align:center;min-width:220px}\n.slp-arch .slp-call code{font-size:13px}\n.slp-arch .slp-line{position:relative;width:100%;height:2px;background:repeating-linear-gradient(90deg,var(--slp-accent) 0 8px,transparent 8px 14px);background-size:14px 2px}\n.slp-arch .slp-line::after{content:\"\";position:absolute;right:-2px;top:-5px;border:6px solid transparent;border-left:9px solid var(--slp-accent);border-right:0}\n.slp-arch .slp-down{display:flex;justify-content:center;padding:6px 0;font-size:13px;color:var(--slp-mfg);gap:8px;align-items:center}\n.slp-arch .slp-down::before{content:\"\";width:2px;height:22px;background:repeating-linear-gradient(180deg,var(--slp-accent) 0 6px,transparent 6px 10px);background-size:2px 10px}\n.slp-arch .slp-teams{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--slp-gap)}\n.slp-arch .slp-team .slp-items{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:8px}\n.slp-arch .slp-chip{font-size:12.5px;line-height:1.2;padding:3px 7px;border-radius:999px;background:var(--slp-muted);color:var(--slp-fg)}\n.slp-arch .slp-chip.slp-key{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--slp-tint-strong);color:var(--slp-accent-text)}\n.slp-arch .slp-route{display:block;margin-top:8px;font-size:13px;line-height:1.35;color:var(--slp-mfg)}\n.slp-arch .slp-route b{color:var(--slp-accent-text);font-weight:600}\n.slp-arch .slp-more{border-style:dashed;background:transparent;box-shadow:none;display:flex;flex-direction:column;justify-content:center}\n.slp-arch .slp-send{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--slp-gap)}\n.slp-arch .slp-shared{grid-column:1 / span 2}\n.slp-arch .slp-own{grid-column:3}\n.slp-arch .slp-susp{grid-column:4;font-size:13px;color:var(--slp-mfg);border:1px dashed var(--slp-border);border-radius:12px;padding:10px 12px;align-self:stretch}\n.slp-arch .slp-susp code{font-size:12px}\n.slp-arch .slp-inbox{text-align:center}\n.slp-arch .slp-inbox .slp-t{font-weight:600}\n.slp-arch .slp-caption{margin:14px 0 0;font-size:14px;color:var(--slp-mfg);text-align:center}\n.slp-arch .slp-flow{animation:slp-dash 1.2s linear infinite}\n@keyframes slp-dash{to{background-position:14px 0}}\n.slp-arch .slp-down.slp-flow::before{animation:slp-dashv 1s linear infinite}\n@keyframes slp-dashv{to{background-position:0 10px}}\n@media (prefers-reduced-motion:reduce){.slp-arch .slp-flow,.slp-arch .slp-down.slp-flow::before{animation:none}}\n@container (max-width:720px){\n .slp-arch .slp-top{grid-template-columns:1fr;gap:0}\n .slp-arch .slp-call{min-width:0;padding:6px 0;flex-direction:row;justify-content:center;flex-wrap:wrap}\n .slp-arch .slp-call .slp-line{display:none}\n .slp-arch .slp-call::before{content:\"\";width:2px;height:22px;background:var(--slp-accent);flex:0 0 2px;margin-right:4px}\n .slp-arch .slp-teams,.slp-arch .slp-send{grid-template-columns:1fr;gap:10px}\n .slp-arch .slp-shared,.slp-arch .slp-own,.slp-arch .slp-susp{grid-column:auto}\n .slp-arch .slp-teams{grid-template-columns:1fr 1fr}\n .slp-arch .slp-team{padding:10px 11px}\n .slp-arch .slp-team .slp-items{gap:4px}\n .slp-arch .slp-chip{font-size:12.5px;padding:2px 6px}\n}\n@container (max-width:300px){ .slp-arch .slp-teams{grid-template-columns:1fr} }</style>\n<div class=\"slp-top\">\n <div class=\"slp-node\"><span class=\"slp-k\">You</span><span class=\"slp-t\">Your platform backend</span><span class=\"slp-s\">holds the organization key</span></div>\n <div class=\"slp-call\"><span>org key</span><span class=\"slp-line slp-flow\" aria-hidden=\"true\"></span><code>POST /provisioning/teams</code></div>\n <div class=\"slp-node slp-org\"><span class=\"slp-k\">SendLit</span><span class=\"slp-t\">Your organization</span><span class=\"slp-s\">one team for each customer</span></div>\n</div>\n<div class=\"slp-down slp-flow\">creates one team per customer</div>\n<div class=\"slp-teams\">\n <div class=\"slp-node slp-team\"><span class=\"slp-k\">Team</span><span class=\"slp-t\">Acme</span><span class=\"slp-items\"><span class=\"slp-chip\">contacts</span><span class=\"slp-chip\">templates</span><span class=\"slp-chip\">sequences</span><span class=\"slp-chip slp-key\">key</span></span><span class=\"slp-route\">sends via <b>shared mailbox</b></span></div>\n <div class=\"slp-node slp-team\"><span class=\"slp-k\">Team</span><span class=\"slp-t\">Globex</span><span class=\"slp-items\"><span class=\"slp-chip\">contacts</span><span class=\"slp-chip\">templates</span><span class=\"slp-chip\">sequences</span><span class=\"slp-chip slp-key\">key</span></span><span class=\"slp-route\">sends via <b>shared mailbox</b></span></div>\n <div class=\"slp-node slp-team\"><span class=\"slp-k\">Team</span><span class=\"slp-t\">Initech</span><span class=\"slp-items\"><span class=\"slp-chip\">contacts</span><span class=\"slp-chip\">templates</span><span class=\"slp-chip\">sequences</span><span class=\"slp-chip slp-key\">key</span></span><span class=\"slp-route\">sends via <b>its own ESP</b> (team ESP enabled)</span></div>\n <div class=\"slp-node slp-more\"><span class=\"slp-t\">+ more teams</span><span class=\"slp-s\">each with its own data and key</span></div>\n</div>\n<div class=\"slp-down slp-flow\">mail goes out through a provider you connect</div>\n<div class=\"slp-send\">\n <div class=\"slp-node slp-shared\"><span class=\"slp-k\">Shared</span><span class=\"slp-t\">Your shared mailbox: SES / SMTP</span><span class=\"slp-s\">Acme and Globex · per-team daily/monthly quota</span></div>\n <div class=\"slp-node slp-own\"><span class=\"slp-k\">Bring your own</span><span class=\"slp-t\">Initech's own ESP</span><span class=\"slp-s\">team ESP enabled</span></div>\n <div class=\"slp-susp\">Pause one customer with <code>POST /provisioning/teams/:id/suspend</code>. The other teams keep sending.</div>\n</div>\n<div class=\"slp-down slp-flow\">delivered to</div>\n<div class=\"slp-node slp-inbox\"><span class=\"slp-t\">Gmail · Outlook · Yahoo</span></div>\n<figcaption class=\"slp-caption\">SendLit never sends your mail. Every hosted plan delivers through an email provider you connect and pay directly.</figcaption>\n</figure>\n"
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-10",
+        "text": "## Provision a customer in one API call\n\nCall `POST /provisioning/teams` with your own tenant ID when a customer signs up. You get back a team and its API key. Retries are safe: the same `externalId` returns the same team and never creates a duplicate.\n\n- **Idempotent by your ID.** Calls are keyed on `(organization, externalId)`. A replay returns `created: false`. A replay with different input returns `409 provisioning_conflict`, so a retry can't silently change a tenant.\n\n- **Scoped keys.** The organization key carries only the scopes you grant (`teams:provision`, `teams:read`, `teams:manage`, `teams:keys`, `usage:read`). Each team key reaches exactly one team.\n\n- **Full lifecycle.** Read, update (name, sender, mailing address, quotas), rotate the team key, suspend, resume and archive.\n\n- **Clean offboarding.** When a customer leaves, or a person asks to be removed, delete one contact or every contact in that customer's team over the API or MCP, then archive the team. Opt-outs stay suppressed, so nobody is mailed again.\n\n- **Quotas per customer.** Set daily and monthly send limits for each team on your shared mailbox, and read usage over the API.\n\n- **Audited.** Provisioning actions are written to your organization's audit log. Org owners can \"Enter team\" to help a customer, and that is recorded too.\n\n[Read the provisioning docs →](https://docs.sendlit.app/developers/provisioning)\n\n[Headless setup guide →](https://docs.sendlit.app/developers/headless-provisioning)"
+      }
+    },
+    {
+      "name": "code-snippet",
+      "settings": {
+        "verticalPadding": "py-4",
+        "maxWidth": "max-w-3xl",
+        "code": "import { SendLit } from \"sendlit\";\n\n// Your backend, with an organization key (never in the browser)\nconst platform = new SendLit({ apiKey: process.env.SENDLIT_ORG_API_KEY });\n\nconst team = await platform.provisioning.provisionTeam({\n  externalId: workspace.id,          // an immutable ID from your database\n  name: workspace.name,\n  sender: { fromName: workspace.name, replyTo: workspace.supportEmail },\n  mailingAddress: workspace.address,\n  quota: { dailyLimit: 500, monthlyLimit: 10000 },\n});\n\nif (team.created) {\n  // The plaintext team key is returned once. Encrypt and store it.\n  await saveTeamKey(workspace.id, team.teamId, team.apiKey);\n}\n\n// Act on that customer's team with its own key\nconst sendlit = new SendLit({ apiKey: await loadTeamKey(workspace.id) });\nawait sendlit.contacts.create({ email: member.email, name: member.name });\n// New contacts enter any sequence triggered by subscriber:added",
+        "showPrompt": false,
+        "caption": "TypeScript SDK",
+        "contentAlignment": "left"
+      }
+    },
+    {
+      "name": "featured",
+      "settings": {
+        "verticalPadding": "py-10",
+        "title": "Put a real email editor inside your product",
+        "description": "Two MIT-licensed React packages give you the editor and the building blocks for broadcasts, sequences, contacts and templates. They are controlled components: your app owns the state and the API calls, and they inherit your Tailwind theme.",
+        "headerAlignment": "left",
+        "items": [
+          {
+            "title": "EmailEditor",
+            "description": "WYSIWYG block editor. Text, image, link and separator blocks. Register your own blocks. Plug in your own image uploader.",
+            "icon": "PenLine"
+          },
+          {
+            "title": "TemplateChooser",
+            "description": "System and saved templates with real rendered previews, so customers start from something good.",
+            "icon": "LayoutTemplate"
+          },
+          {
+            "title": "SequenceEmailList",
+            "description": "The steps of a sequence: select, reorder, delete with confirmation, add from a template.",
+            "icon": "ListOrdered"
+          },
+          {
+            "title": "TriggerPicker",
+            "description": "Choose what enrols a contact: subscribed, tag added, tag removed.",
+            "icon": "Zap"
+          },
+          {
+            "title": "ContactFilterBuilder",
+            "description": "Segment builder with tag, email, subscription and signup-date conditions, plus saved segments.",
+            "icon": "Filter"
+          },
+          {
+            "title": "TagEditor",
+            "description": "Add and remove a contact's tags, with a picker of existing tags.",
+            "icon": "Tags"
+          },
+          {
+            "title": "SubscriberList",
+            "description": "Paginated subscribers of a broadcast or sequence, with optional profile links.",
+            "icon": "Users"
+          },
+          {
+            "title": "SequenceAnalytics",
+            "description": "Sent, open rate, click rate and more for a broadcast or sequence.",
+            "icon": "BarChart3"
+          },
+          {
+            "title": "EmailPreview",
+            "description": "A scaled-down preview rendered through the same pipeline as outgoing mail.",
+            "icon": "Eye"
+          }
+        ]
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-0",
+        "text": "[Try the editor live](https://email-editor.courselit.app/)  ·  [Browse the components](https://docs.sendlit.app/email-blocks/getting-started)"
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-4",
+        "text": "- **Your theme.** The components use your shadcn/Tailwind CSS variables (`--primary`, `--background`, `--radius`...), so they match your brand without overrides.\n\n- **Your words.** Every visible string is an optional prop with an English default. You can localise or reword anything without forking.\n\n- **Your blocks.** `EmailEditor` takes a `blocks` array and a `renderContext`, so you can add product-specific blocks such as \"course card\" or \"event\". `renderEmailToHtml` turns the document into email-safe HTML.\n\n- **Your layout.** These are building blocks, not fixed pages. Arrange them however your app needs."
+      }
+    },
+    {
+      "name": "code-snippet",
+      "settings": {
+        "verticalPadding": "py-4",
+        "maxWidth": "max-w-3xl",
+        "code": "\"use client\";\nimport { useState } from \"react\";\nimport { EmailEditor, defaultEmail, type Email } from \"@sendlit/email-editor\";\nimport \"@sendlit/email-editor/styles.css\";\n\nexport function NewsletterComposer() {\n  const [email, setEmail] = useState<Email>(defaultEmail);\n  // Save with your backend, which calls SendLit with the customer's team key\n  return <EmailEditor email={email} onChange={setEmail} />;\n}",
+        "showPrompt": false,
+        "caption": "React. Requires React 19 and Tailwind. Components are pre-1.0 (0.2.x), so pin versions. Keep SendLit keys on your server and call the API through your backend.",
+        "contentAlignment": "left"
+      }
+    },
+    {
+      "name": "media",
+      "settings": {
+        "verticalPadding": "py-4",
+        "media": {
+          "url": "https://cdn.medialit.cloud/medialit-service/p/EivUFMqAuiUMhGFAV-KVZ0zcz8WsIyhSAtZb1GMA/main.webp",
+          "alt": "Editor UI follows your theme; the email keeps its own colours."
+        },
+        "objectFit": "contain"
+      }
+    },
+    {
+      "name": "featured",
+      "settings": {
+        "verticalPadding": "py-10",
+        "title": "Your customers' mail goes through your provider, with the hard parts done",
+        "description": "Connect one shared mailbox for all customers, let customers connect their own provider, or mix the two per team. SendLit handles the work around sending that platforms usually build themselves.",
+        "headerAlignment": "left",
+        "items": [
+          {
+            "title": "Shared or bring-your-own, per customer",
+            "description": "Each provisioning call sets useOrganizationDefault, teamEspEnabled and teamCanChangeDefault. A send never silently switches provider.",
+            "icon": "Split"
+          },
+          {
+            "title": "Bounces and complaints",
+            "description": "Feedback adapters for Amazon SES (SNS), Resend, Postmark, SendGrid and Mailgun feed automatic suppression.",
+            "icon": "ShieldAlert"
+          },
+          {
+            "title": "One-click unsubscribe",
+            "description": "Marketing mail carries List-Unsubscribe and List-Unsubscribe-Post (RFC 8058), as Gmail and Yahoo require.",
+            "icon": "MailMinus"
+          },
+          {
+            "title": "Domain checks",
+            "description": "SPF, DKIM and DMARC lookups for each provider's From domain, with the exact records to add, which you can surface in your own \"verify your domain\" screen.",
+            "icon": "BadgeCheck"
+          },
+          {
+            "title": "Your links, your domain",
+            "description": "Each team can use its own tracking domain for open, click, unsubscribe and \"view in browser\" links.",
+            "icon": "Link"
+          },
+          {
+            "title": "Warm-up and safeguards",
+            "description": "A new provider ramps up gradually and sends to the most engaged contacts first.",
+            "icon": "Flame"
+          }
+        ]
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-0",
+        "text": "SendLit doesn't operate mail servers or IPs. Delivery, dedicated IPs and the per-email cost are between you and your provider."
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-10",
+        "text": "## Your brand on every screen and every email\n\n- No \"Sent with SendLit\" footer on Business (it is also off on Pro and self-hosted).\n\n- Provisioned teams have no SendLit login. Your customers use your app, with our components inside it.\n\n- Sender name and Reply-To per customer. From addresses come from the provider you connect.\n\n- Per-team tracking domain, so links in emails use the customer's or your domain.\n\n- Components follow your theme tokens and copy.\n\nHosted signup forms, the unsubscribe confirmation page and the web archive are served by SendLit. With a tracking domain, their links use your domain."
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-10",
+        "text": "## What you'd build yourself\n\nSending an email is the easy part. A customer-facing email product needs all of this, and every piece has edge cases."
+      }
+    },
+    {
+      "name": "embed",
+      "settings": {
+        "verticalPadding": "py-4",
+        "contentType": "script",
+        "content": "<div class=\"slp-bvb\"><style>.slp-bvb{--slp-fg:var(--foreground,#2c241e);--slp-mfg:var(--muted-foreground,#6a6258);--slp-card:var(--card,#fefdfb);--slp-border:var(--border,#e2ddd5);--slp-muted:var(--muted,#eeebe5);--slp-accent:#3a9a5a;--slp-accent-text:#21703c;--slp-tint:rgba(58,154,90,.10);--slp-tint-strong:rgba(58,154,90,.18);container-type:inline-size;color:var(--slp-fg);font-family:inherit;font-size:16px;line-height:1.5;text-align:left;background:transparent;-webkit-text-size-adjust:100%}.slp-bvb *,.slp-bvb *::before,.slp-bvb *::after{box-sizing:border-box}.slp-bvb code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86em;background:var(--slp-muted);border-radius:5px;padding:.08em .35em;overflow-wrap:anywhere;color:var(--slp-fg)}\n.slp-bvb table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--slp-border);border-radius:14px;overflow:hidden;background:var(--slp-card)}\n.slp-bvb th,.slp-bvb td{padding:12px 18px;vertical-align:top;border-top:1px solid var(--slp-border);font-size:15px}\n.slp-bvb thead th{border-top:0;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--slp-mfg);background:var(--slp-muted)}\n.slp-bvb thead th+th{color:var(--slp-accent-text);background:var(--slp-tint-strong)}\n.slp-bvb td:first-child{width:46%;color:var(--slp-fg)}\n.slp-bvb td+td{background:var(--slp-tint)}\n.slp-bvb td+td::before{content:\"✓\";color:var(--slp-accent);font-weight:700;margin-right:8px}\n@container (max-width:640px){\n .slp-bvb table,.slp-bvb tbody,.slp-bvb tr,.slp-bvb td{display:block;width:auto}\n .slp-bvb table{border:1px solid var(--slp-border);border-radius:12px}\n .slp-bvb thead{display:block}\n .slp-bvb thead tr{display:flex}\n .slp-bvb thead th{flex:1;padding:9px 14px;font-size:12px}\n .slp-bvb thead th:first-child::after{content:\" →\";}\n .slp-bvb tr{border-top:1px solid var(--slp-border);padding:10px 14px}\n .slp-bvb tbody tr:first-child{border-top:0}\n .slp-bvb td{border:0;padding:0;background:transparent}\n .slp-bvb td:first-child{width:auto;font-weight:600;font-size:15px}\n .slp-bvb td+td{background:transparent;margin-top:3px;font-size:14.5px;color:var(--slp-fg)}\n}}</style><table><caption style=\"position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)\">What you would build yourself, and what SendLit provides</caption><thead><tr><th scope=\"col\">You'd need</th><th scope=\"col\">With SendLit</th></tr></thead><tbody><tr><td data-label=\"You'd need\">A tenant model with isolated data and keys</td><td data-label=\"With SendLit\"><code>POST /provisioning/teams</code>, one team and key per customer</td></tr><tr><td data-label=\"You'd need\">An email editor that outputs email-safe HTML</td><td data-label=\"With SendLit\"><code>@sendlit/email-editor</code> + <code>renderEmailToHtml</code></td></tr><tr><td data-label=\"You'd need\">Templates with previews</td><td data-label=\"With SendLit\"><code>TemplateChooser</code>, templates API</td></tr><tr><td data-label=\"You'd need\">Contacts, tags, custom fields, segments</td><td data-label=\"With SendLit\">Contacts and segments API, <code>ContactFilterBuilder</code>, <code>TagEditor</code></td></tr><tr><td data-label=\"You'd need\">Broadcast scheduling and drip sequences</td><td data-label=\"With SendLit\">Sequences API, <code>SequenceEmailList</code>, <code>TriggerPicker</code></td></tr><tr><td data-label=\"You'd need\">Transactional sends with idempotency</td><td data-label=\"With SendLit\"><code>POST /emails</code> with <code>idempotencyKey</code></td></tr><tr><td data-label=\"You'd need\">A send queue with per-customer limits</td><td data-label=\"With SendLit\">Per-team daily/monthly quotas on your shared mailbox</td></tr><tr><td data-label=\"You'd need\">Bounce and complaint ingestion for each provider</td><td data-label=\"With SendLit\">Adapters for SES, Resend, Postmark, SendGrid, Mailgun</td></tr><tr><td data-label=\"You'd need\">A suppression list enforced before every send</td><td data-label=\"With SendLit\">Built in, with a suppressions API</td></tr><tr><td data-label=\"You'd need\">Unsubscribe links and RFC 8058 headers</td><td data-label=\"With SendLit\">Built in</td></tr><tr><td data-label=\"You'd need\">Open and click tracking, custom tracking domains</td><td data-label=\"With SendLit\">Built in, per team</td></tr><tr><td data-label=\"You'd need\">SPF/DKIM/DMARC checks</td><td data-label=\"With SendLit\">Domain-authentication endpoint</td></tr><tr><td data-label=\"You'd need\">Analytics per broadcast and sequence</td><td data-label=\"With SendLit\">Stats API, <code>SequenceAnalytics</code></td></tr><tr><td data-label=\"You'd need\">An audit trail of admin actions</td><td data-label=\"With SendLit\">Organization audit log</td></tr></tbody></table></div>"
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-4",
+        "text": "Build the parts that make your product different. Use SendLit for the rest, and self-host it if you'd rather own every line.\n\n[Start with Business →](https://app.sendlit.app)\n\n[Talk to us →](/help)"
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-10",
+        "text": "## How SendLit compares for platforms"
+      }
+    },
+    {
+      "name": "embed",
+      "settings": {
+        "verticalPadding": "py-4",
+        "contentType": "script",
+        "content": "<div class=\"slp-cmp\"><style>.slp-cmp{--slp-fg:var(--foreground,#2c241e);--slp-mfg:var(--muted-foreground,#6a6258);--slp-card:var(--card,#fefdfb);--slp-border:var(--border,#e2ddd5);--slp-muted:var(--muted,#eeebe5);--slp-accent:#3a9a5a;--slp-accent-text:#21703c;--slp-tint:rgba(58,154,90,.10);--slp-tint-strong:rgba(58,154,90,.18);container-type:inline-size;color:var(--slp-fg);font-family:inherit;font-size:16px;line-height:1.5;text-align:left;background:transparent;-webkit-text-size-adjust:100%}.slp-cmp *,.slp-cmp *::before,.slp-cmp *::after{box-sizing:border-box}.slp-cmp code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86em;background:var(--slp-muted);border-radius:5px;padding:.08em .35em;overflow-wrap:anywhere;color:var(--slp-fg)}\n.slp-cmp .slp-yes{color:var(--slp-accent-text);font-weight:700}\n.slp-cmp .slp-no{color:var(--slp-mfg);font-weight:700}\n.slp-cmp table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;border:1px solid var(--slp-border);border-radius:14px;overflow:hidden;background:var(--slp-card)}\n.slp-cmp th,.slp-cmp td{padding:11px 12px;vertical-align:top;border-top:1px solid var(--slp-border);font-size:14px;overflow-wrap:anywhere}\n.slp-cmp thead th{border-top:0;font-size:14px;font-weight:700;background:var(--slp-muted);text-align:left}\n.slp-cmp thead th:first-child{background:var(--slp-muted)}\n.slp-cmp tbody th{font-weight:600;color:var(--slp-fg);text-align:left;width:18%}\n.slp-cmp col.slp-first{width:17%}\n.slp-cmp .slp-us{background:var(--slp-tint)}\n.slp-cmp thead th.slp-us{background:var(--slp-tint-strong);color:var(--slp-accent-text)}\n.slp-cmp tr.slp-pick th,.slp-cmp tr.slp-pick td{border-top:2px solid var(--slp-border)}\n.slp-cmp .slp-foot{margin:10px 0 0;font-size:13px;color:var(--slp-mfg)}\n.slp-cmp .slp-cards{display:none}\n@container (max-width:760px){\n .slp-cmp table{display:none}\n .slp-cmp .slp-cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));align-items:start}\n .slp-cmp .slp-card{border:1px solid var(--slp-border);border-radius:12px;background:var(--slp-card);overflow:hidden}\n .slp-cmp .slp-card.slp-us{border-color:var(--slp-accent);background:var(--slp-card)}\n .slp-cmp .slp-card h3{margin:0;padding:12px 14px;font-size:17px;line-height:1.3;font-weight:700;background:var(--slp-muted)}\n .slp-cmp .slp-card.slp-us h3{background:var(--slp-tint-strong);color:var(--slp-accent-text)}\n .slp-cmp dl{margin:0;padding:4px 14px 6px}\n .slp-cmp dl div{padding:7px 0;border-top:1px solid var(--slp-border)}\n .slp-cmp dl div:first-child{border-top:0}\n .slp-cmp dl div{display:grid;grid-template-columns:minmax(6.5em,34%) 1fr;gap:10px;align-items:baseline}\n .slp-cmp dt{font-size:13px;font-weight:600;line-height:1.35;color:var(--slp-mfg);margin:0;overflow-wrap:anywhere}\n .slp-cmp dd{margin:0;font-size:14.5px;line-height:1.4}\n .slp-cmp dl div.slp-pick dd{font-weight:600}\n}</style><table><colgroup><col class=\"slp-first\"><col><col><col><col></colgroup><thead><tr><th scope=\"col\"><span style=\"position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)\">Feature</span></th><th scope=\"col\" class=\"slp-us\">SendLit</th><th scope=\"col\">Build on Resend or SES</th><th scope=\"col\">EmailBuilder.js</th><th scope=\"col\">Loops</th></tr></thead><tbody><tr><th scope=\"row\">What it is</th><td class=\"slp-us\">Email marketing layer with a tenant API and React UI</td><td>A sending API; you build the rest</td><td>MIT React editor only</td><td>Email platform for one SaaS&#x27;s own users</td></tr><tr><th scope=\"row\">A workspace per customer via API</th><td class=\"slp-us\"><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> <code>POST /provisioning/teams</code></td><td>Build it (Resend: domain + key per customer; SES: tenants)</td><td><span class=\"slp-no\" aria-label=\"No\">✕</span></td><td><span class=\"slp-no\" aria-label=\"No\">✕</span> No provisioning API found</td></tr><tr><th scope=\"row\">Editor you can embed</th><td class=\"slp-us\"><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> MIT, React 19</td><td><span class=\"slp-no\" aria-label=\"No\">✕</span> Build or buy one</td><td><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> MIT</td><td><span class=\"slp-no\" aria-label=\"No\">✕</span></td></tr><tr><th scope=\"row\">Broadcasts and sequences</th><td class=\"slp-us\"><span class=\"slp-yes\" aria-label=\"Yes\">✓</span></td><td>Build it (Resend&#x27;s broadcasts live in Resend&#x27;s dashboard)</td><td><span class=\"slp-no\" aria-label=\"No\">✕</span></td><td><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> (in Loops&#x27; app)</td></tr><tr><th scope=\"row\">Contacts and segments</th><td class=\"slp-us\"><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> API + components</td><td>Build it</td><td><span class=\"slp-no\" aria-label=\"No\">✕</span></td><td><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> (in Loops&#x27; app)</td></tr><tr><th scope=\"row\">Bounce/complaint suppression</th><td class=\"slp-us\"><span class=\"slp-yes\" aria-label=\"Yes\">✓</span></td><td>Provider events; you wire suppression</td><td><span class=\"slp-no\" aria-label=\"No\">✕</span></td><td><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> Managed</td></tr><tr><th scope=\"row\">Who sends</th><td class=\"slp-us\">Your provider</td><td>Resend / SES</td><td>Nobody (editor only)</td><td>Loops</td></tr><tr><th scope=\"row\">Outbound event webhooks</th><td class=\"slp-us\">Not yet (poll the API)</td><td><span class=\"slp-yes\" aria-label=\"Yes\">✓</span></td><td>n/a</td><td><span class=\"slp-yes\" aria-label=\"Yes\">✓</span></td></tr><tr><th scope=\"row\">Open source</th><td class=\"slp-us\"><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> AGPL-3.0 core, MIT components</td><td>n/a</td><td><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> MIT (little activity since Feb 2026)</td><td><span class=\"slp-no\" aria-label=\"No\">✕</span></td></tr><tr><th scope=\"row\">Price shape</th><td class=\"slp-us\">$99/mo Business (600k emails, 15 teams) + your provider</td><td>Per email + your build time</td><td>Free + your build time</td><td>Per subscribed contact, from $49/mo</td></tr><tr class=\"slp-pick\"><th scope=\"row\">Pick it when</th><td class=\"slp-us\">You want customers to run email inside your product, on your provider</td><td>You only need transactional mail, or have a team to build the product layer</td><td>You only need an editor and will build sending, lists and automation</td><td>You need email for your own company, not for your customers</td></tr></tbody></table><div class=\"slp-cards\"><section class=\"slp-card slp-us\"><h3>SendLit</h3><dl><div><dt>What it is</dt><dd>Email marketing layer with a tenant API and React UI</dd></div><div><dt>A workspace per customer via API</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> <code>POST /provisioning/teams</code></dd></div><div><dt>Editor you can embed</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> MIT, React 19</dd></div><div><dt>Broadcasts and sequences</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span></dd></div><div><dt>Contacts and segments</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> API + components</dd></div><div><dt>Bounce/<wbr>complaint suppression</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span></dd></div><div><dt>Who sends</dt><dd>Your provider</dd></div><div><dt>Outbound event webhooks</dt><dd>Not yet (poll the API)</dd></div><div><dt>Open source</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> AGPL-3.0 core, MIT components</dd></div><div><dt>Price shape</dt><dd>$99/mo Business (600k emails, 15 teams) + your provider</dd></div><div class=\"slp-pick\"><dt>Pick it when</dt><dd>You want customers to run email inside your product, on your provider</dd></div></dl></section><section class=\"slp-card\"><h3>Build on Resend or SES</h3><dl><div><dt>What it is</dt><dd>A sending API; you build the rest</dd></div><div><dt>A workspace per customer via API</dt><dd>Build it (Resend: domain + key per customer; SES: tenants)</dd></div><div><dt>Editor you can embed</dt><dd><span class=\"slp-no\" aria-label=\"No\">✕</span> Build or buy one</dd></div><div><dt>Broadcasts and sequences</dt><dd>Build it (Resend&#x27;s broadcasts live in Resend&#x27;s dashboard)</dd></div><div><dt>Contacts and segments</dt><dd>Build it</dd></div><div><dt>Bounce/<wbr>complaint suppression</dt><dd>Provider events; you wire suppression</dd></div><div><dt>Who sends</dt><dd>Resend / SES</dd></div><div><dt>Outbound event webhooks</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span></dd></div><div><dt>Open source</dt><dd>n/a</dd></div><div><dt>Price shape</dt><dd>Per email + your build time</dd></div><div class=\"slp-pick\"><dt>Pick it when</dt><dd>You only need transactional mail, or have a team to build the product layer</dd></div></dl></section><section class=\"slp-card\"><h3>EmailBuilder.js</h3><dl><div><dt>What it is</dt><dd>MIT React editor only</dd></div><div><dt>A workspace per customer via API</dt><dd><span class=\"slp-no\" aria-label=\"No\">✕</span></dd></div><div><dt>Editor you can embed</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> MIT</dd></div><div><dt>Broadcasts and sequences</dt><dd><span class=\"slp-no\" aria-label=\"No\">✕</span></dd></div><div><dt>Contacts and segments</dt><dd><span class=\"slp-no\" aria-label=\"No\">✕</span></dd></div><div><dt>Bounce/<wbr>complaint suppression</dt><dd><span class=\"slp-no\" aria-label=\"No\">✕</span></dd></div><div><dt>Who sends</dt><dd>Nobody (editor only)</dd></div><div><dt>Outbound event webhooks</dt><dd>n/a</dd></div><div><dt>Open source</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> MIT (little activity since Feb 2026)</dd></div><div><dt>Price shape</dt><dd>Free + your build time</dd></div><div class=\"slp-pick\"><dt>Pick it when</dt><dd>You only need an editor and will build sending, lists and automation</dd></div></dl></section><section class=\"slp-card\"><h3>Loops</h3><dl><div><dt>What it is</dt><dd>Email platform for one SaaS&#x27;s own users</dd></div><div><dt>A workspace per customer via API</dt><dd><span class=\"slp-no\" aria-label=\"No\">✕</span> No provisioning API found</dd></div><div><dt>Editor you can embed</dt><dd><span class=\"slp-no\" aria-label=\"No\">✕</span></dd></div><div><dt>Broadcasts and sequences</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> (in Loops&#x27; app)</dd></div><div><dt>Contacts and segments</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> (in Loops&#x27; app)</dd></div><div><dt>Bounce/<wbr>complaint suppression</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span> Managed</dd></div><div><dt>Who sends</dt><dd>Loops</dd></div><div><dt>Outbound event webhooks</dt><dd><span class=\"slp-yes\" aria-label=\"Yes\">✓</span></dd></div><div><dt>Open source</dt><dd><span class=\"slp-no\" aria-label=\"No\">✕</span></dd></div><div><dt>Price shape</dt><dd>Per subscribed contact, from $49/mo</dd></div><div class=\"slp-pick\"><dt>Pick it when</dt><dd>You need email for your own company, not for your customers</dd></div></dl></section></div><p class=\"slp-foot\">Based on public product pages, October 2026. SendLit&#x27;s price excludes your email provider&#x27;s charges.</p></div>"
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-10",
+        "text": "## Provisioning is on Business\n\n### Business, $99/month ($990/year)\n\n600,000 emails a month across all teams · 15 teams · Provisioning API and organization keys · Shared organization mailbox · No SendLit footer · Unlimited contacts and team members · Email support.\n\n[Start with Business →](https://app.sendlit.app)\n\n[More than 15 customers or 600,000 emails? Talk to us about Enterprise.](/help)\n\n[Self-host for free: every feature, unlimited teams. You run the servers.](https://github.com/codelitdev/sendlit)\n\nYou pay your email provider for delivery. Amazon SES costs about $40 for 400,000 emails.\n\n[Compare all plans →](/pricing)"
+      }
+    },
+    {
+      "name": "featured",
+      "settings": {
+        "verticalPadding": "py-10",
+        "title": "Every feature in the API, typed end to end",
+        "titleSize": {},
+        "headerAlignment": "left",
+        "items": [
+          {
+            "title": "TypeScript SDK",
+            "description": "npm install sendlit. Typed from the same contract the API validates against. Retries are built in.",
+            "icon": "Braces"
+          },
+          {
+            "title": "REST + OpenAPI",
+            "description": "/openapi.json and interactive docs for every endpoint.",
+            "icon": "Server"
+          },
+          {
+            "title": "MCP server",
+            "description": "Your customers' AI assistants can manage their own team's contacts, templates and sends with OAuth or the team's key. (Provisioning stays REST-only.)",
+            "icon": "Bot"
+          }
+        ]
+      }
+    },
+    {
+      "name": "rich-text",
+      "settings": {
+        "verticalPadding": "py-10",
+        "text": "## What's not here yet\n\n- **Outbound webhooks** for delivered, bounced and unsubscribed events (tracked in issue #52). For now, poll `GET /delivery-events` and `GET /suppressions`.\n\n- **Custom-event triggers** for sequences (issue #136). Today sequences start on subscribe, tag added or tag removed.\n\n- **Browser tokens.** Call SendLit from your backend and keep keys server-side.\n\n- **Inviting your customers' staff into SendLit.** Provisioned teams are API-only by design.\n\n- **Subscriber preference center** (issue #54).\n\n[See the roadmap on GitHub →](https://github.com/codelitdev/sendlit/issues)"
+      }
+    },
+    {
+      "name": "faq",
+      "settings": {
+        "verticalPadding": "py-10",
+        "title": "FAQ",
+        "titleSize": {},
+        "items": [
+          {
+            "question": "Does SendLit send the emails?",
+            "answer": "No. Every hosted plan sends through a provider you connect: Amazon SES, any SMTP server, Postmark, Resend, SendGrid or Mailgun. You pay them directly, and the sending reputation stays yours."
+          },
+          {
+            "question": "Do my customers need their own email provider?",
+            "answer": "No. Connect one shared organization mailbox and every team can use it, with per-team limits. You can also let some customers connect their own provider (teamEspEnabled)."
+          },
+          {
+            "question": "How is one customer's data kept apart from another's?",
+            "answer": "Each customer is a separate team with its own contacts, templates, sequences, suppressions and API key. A team key can only reach its own team. Organization keys can't read team data through the provisioning API."
+          },
+          {
+            "question": "What happens if one customer sends spam?",
+            "answer": "Suspend that team with one call and everyone else keeps sending. Bounces and complaints are suppressed automatically, and per-team quotas cap how much any one customer can send through your shared mailbox."
+          },
+          {
+            "question": "Can I style the components to match my product?",
+            "answer": "Yes. They use your Tailwind/shadcn theme variables, every label is a prop, and you can add your own editor blocks."
+          },
+          {
+            "question": "Which React versions are supported?",
+            "answer": "React 19 (^19.2.0) with Tailwind v3 or v4. The packages are at 0.2.x, so pin your versions."
+          },
+          {
+            "question": "Can I call SendLit from the browser?",
+            "answer": "Not directly. Keep the organization and team keys on your server and proxy the calls your components need."
+          },
+          {
+            "question": "How many customers can I have?",
+            "answer": "Business includes 15 teams. For more, talk to us about Enterprise, or self-host with no team limit."
+          },
+          {
+            "question": "What does it cost?",
+            "answer": "Business is $99 a month or $990 a year for 600,000 emails across all teams, plus your provider's own charges."
+          },
+          {
+            "question": "Can I see what's happening in a customer's team?",
+            "answer": "Organization owners and admins can see transactional mail activity per team and can choose to enter a team to help. Every entry is recorded in the audit log."
+          },
+          {
+            "question": "Can I leave?",
+            "answer": "Yes. The core is open source (AGPL-3.0) and runs with one docker compose up, and the components are MIT."
+          },
+          {
+            "question": "Can my customers use AI assistants with it?",
+            "answer": "Yes. The MCP server is team-scoped, so each customer's assistant only reaches that customer's team."
+          }
+        ]
+      }
+    },
+    {
+      "name": "banner",
+      "settings": {
+        "verticalPadding": "py-12",
+        "title": "Give your customers email marketing this week",
+        "titleSize": {},
+        "description": "Provision a team, drop in the editor, connect your provider.\n\n[Talk to us →](/help)",
+        "buttonCaption": "Start with Business",
+        "buttonAction": "https://app.sendlit.app",
+        "secondaryButtonCaption": "Try the editor live",
+        "secondaryButtonAction": "https://email-editor.courselit.app/"
+      }
+    }
+  ]
+}
