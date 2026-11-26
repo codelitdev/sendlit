@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
-import { and, count, eq, gte } from "drizzle-orm";
+import { and, count, eq, gte, isNull } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   espFeedbackConnections,
@@ -90,11 +90,18 @@ export function serializeSendingDomain(
   };
 }
 
+/** The organization's own domains, proven with the TXT challenge. Teams'
+ * own sending domains (#220) are proven by their ESP's DKIM instead and are
+ * managed per team, so they are left out here and of verify and revoke. */
+const organizationOwned = (organizationId: string, domainId?: string) =>
+  and(
+    eq(sendingDomains.organizationId, organizationId),
+    isNull(sendingDomains.teamId),
+    ...(domainId ? [eq(sendingDomains.domainId, domainId)] : []),
+  );
+
 export async function listSendingDomains(organizationId: string) {
-  return db
-    .select()
-    .from(sendingDomains)
-    .where(eq(sendingDomains.organizationId, organizationId));
+  return db.select().from(sendingDomains).where(organizationOwned(organizationId));
 }
 
 export async function createSendingDomain(organizationId: string, input: string) {
@@ -173,12 +180,7 @@ export async function verifySendingDomain(organizationId: string, domainId: stri
   const [row] = await db
     .select()
     .from(sendingDomains)
-    .where(
-      and(
-        eq(sendingDomains.organizationId, organizationId),
-        eq(sendingDomains.domainId, domainId),
-      ),
-    )
+    .where(organizationOwned(organizationId, domainId))
     .limit(1);
   if (!row) return null;
   if (row.status === "revoked") return { row, verified: false };
@@ -222,12 +224,7 @@ export async function revokeSendingDomain(
   const [updated] = await db
     .update(sendingDomains)
     .set({ status: "revoked", updatedAt: new Date() })
-    .where(
-      and(
-        eq(sendingDomains.organizationId, organizationId),
-        eq(sendingDomains.domainId, domainId),
-      ),
-    )
+    .where(organizationOwned(organizationId, domainId))
     .returning({ id: sendingDomains.id });
   return Boolean(updated);
 }

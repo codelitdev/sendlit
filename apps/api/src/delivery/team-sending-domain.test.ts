@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 const dmarc = { published: false };
+process.env.BILLING_DOMAIN_VERIFICATION_KEY ||= "test-domain-verification-key";
 
 mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db");
@@ -26,6 +27,7 @@ const { seedTeamAndContact, truncateAll } = await import("../test/db");
 const providers = await import("./domain-providers");
 const domains = await import("./team-sending-domain");
 const { resolveDeliverySource } = await import("./queries");
+const orgDomains = await import("../billing/domains");
 type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
@@ -294,6 +296,38 @@ describe("team sending domains", () => {
       actor,
     );
     expect(view.domain).toBe("school-a.example.org");
+  });
+
+  it("keeps team domains out of the organization's own domain list, verify and revoke", async () => {
+    const ctx = await setup();
+    const own = await orgDomains.createSendingDomain(
+      ctx.organization.id,
+      "district.example.org",
+    );
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      ctx.team.id,
+      { fromEmail: "office@school-a.example.org" },
+      actor,
+    );
+    const team = await domainRow(ctx.team.id);
+
+    expect(
+      (await orgDomains.listSendingDomains(ctx.organization.id)).map(
+        (row) => row.domain,
+      ),
+    ).toEqual(["district.example.org"]);
+    expect(
+      await orgDomains.verifySendingDomain(ctx.organization.id, team.domainId),
+    ).toBeNull();
+    expect(
+      await orgDomains.revokeSendingDomain(ctx.organization.id, team.domainId),
+    ).toBe(false);
+    expect((await domainRow(ctx.team.id)).status).toBe("pending");
+    // The organization's own domain is unaffected.
+    expect(
+      await orgDomains.revokeSendingDomain(ctx.organization.id, own.row.domainId),
+    ).toBe(true);
   });
 
   it("needs a management credential on a supported provider", async () => {
