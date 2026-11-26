@@ -171,7 +171,7 @@ describe("shared ESP guard (integration)", () => {
     ).rejects.toMatchObject({ details: { scope: "shared_mailbox" } });
   });
 
-  it("recovers after the hold and three clean days", async () => {
+  it("lifts a team's pause once its sends are clean", async () => {
     const ctx = await setup();
     const bad = ctx.teams[0];
     const start = new Date();
@@ -180,16 +180,10 @@ describe("shared ESP guard (integration)", () => {
       acceptedAt: new Date(start.getTime() - HOUR),
     });
     await evaluateSharedEsp(ctx.esp.id, start);
-
     // The bad sends leave the 7-day window, then three clean daily checks.
-    for (const days of [8, 9]) {
+    for (const days of [8, 9, 10]) {
       await evaluateSharedEsp(ctx.esp.id, new Date(start.getTime() + days * DAY));
-      const [row] = await controls(ctx.esp.id);
-      expect(row.status).toBe("marketing_paused");
     }
-    await evaluateSharedEsp(ctx.esp.id, new Date(start.getTime() + 10 * DAY));
-    const [row] = await controls(ctx.esp.id);
-    expect(row).toMatchObject({ status: "normal", reasonCode: "shared_esp_recovered" });
     await assertSharedEspAllowsMarketing(bad.id, ctx.esp.id);
   });
 
@@ -237,6 +231,37 @@ describe("shared ESP guard (integration)", () => {
     });
   });
 
+  it("counts a team released before a later ESP-wide release only from the ESP release", async () => {
+    const ctx = await setup();
+    const team = ctx.teams[0];
+    const start = new Date(Date.now() - 3 * DAY);
+    const released = (teamId: string | null, releasedAt: Date) => ({
+      organizationId: ctx.organization.id,
+      espConfigId: ctx.esp.id,
+      teamId,
+      status: "normal",
+      source: "operator",
+      releasedAt,
+      releaseGraceUntil: new Date(releasedAt.getTime() + 7 * DAY),
+    });
+    await tdb
+      .insert(schema.sharedEspSendingControls)
+      .values([
+        released(team.id, start),
+        released(null, new Date(start.getTime() + 2 * DAY)),
+      ]);
+    // Bounces between the two releases were reviewed at the ESP release.
+    await sent(ctx, team.id, 100, {
+      bounced: 20,
+      acceptedAt: new Date(start.getTime() + DAY),
+    });
+
+    await evaluateSharedEsp(ctx.esp.id, new Date(start.getTime() + 2 * DAY + HOUR));
+
+    for (const row of await controls(ctx.esp.id)) expect(row.status).toBe("normal");
+    await assertSharedEspAllowsMarketing(team.id, ctx.esp.id);
+  });
+
   it("evaluates bounces that arrive inside the throttle minute once it ends", async () => {
     const ctx = await setup();
     const bad = ctx.teams[0];
@@ -276,14 +301,9 @@ describe("shared ESP guard (integration)", () => {
     }
   });
 
-  it("ignores team-owned ESPs and does nothing while the guard is off", async () => {
+  it("ignores team-owned ESPs", async () => {
     const ctx = await setup();
     await sent(ctx, ctx.teams[0].id, 100, { bounced: 20 });
-    process.env.SHARED_ESP_GUARD = "off";
-    await evaluateAllSharedEsps();
-    expect(await controls(ctx.esp.id)).toHaveLength(0);
-
-    process.env.SHARED_ESP_GUARD = "on";
     const [teamEsp] = await tdb
       .select()
       .from(schema.espConfigs)

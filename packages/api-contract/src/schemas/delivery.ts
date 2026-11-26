@@ -48,7 +48,7 @@ export const espGrantSchema = z.object({
   dailyLimit: nullableLimit,
   monthlyLimit: nullableLimit,
   /** The team's own From address on this mailbox, when it has one. */
-  fromEmail: z.string().nullable().optional(),
+  fromEmail: z.string().nullable(),
   /** The team's own sending domain, when it has one (see
    * `/teams/:teamId/sending-domain`). */
   sendingDomain: z
@@ -57,8 +57,7 @@ export const espGrantSchema = z.object({
       status: z.enum(["pending", "verified", "failing"]),
       inUse: z.boolean(),
     })
-    .nullable()
-    .optional(),
+    .nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -134,10 +133,10 @@ export const sendingOptionSchema = z.discriminatedUnion("type", [
 ]);
 
 export const teamSendingDomainRecordSchema = z.object({
-  type: z.enum(["CNAME", "TXT", "MX"]),
+  type: z.enum(["CNAME", "TXT"]),
   name: z.string(),
   value: z.string(),
-  purpose: z.enum(["dkim", "dmarc", "spf", "return_path"]),
+  purpose: z.enum(["dkim", "dmarc"]),
   /** Whether the last check found it in place. */
   present: z.boolean().optional(),
 });

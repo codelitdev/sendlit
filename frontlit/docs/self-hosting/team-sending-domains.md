@@ -82,7 +82,6 @@ or with `PUT /provisioning/teams/:teamId/sending-domain`
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `TEAM_SENDING_DOMAIN_GRACE_HOURS` | `72` | How long a team keeps sending from its domain after DKIM or DMARC stop passing, before its broadcasts and sequences pause. |
-| `SES_API_ENDPOINT` | AWS | Sends the SES API calls to a compatible endpoint instead, for testing. |
 
 SendLit re-checks every team domain hourly. To rotate the key, create a new
 one, store it the same way, then delete the old one in IAM. Removing the key

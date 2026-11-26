@@ -12,8 +12,7 @@ import {
 } from "../db/schema";
 import { captureError, captureEvent } from "../observability";
 import { recordOrganizationAuditEvent } from "../organization/audit";
-import logger from "../services/log";
-import { findDmarc } from "../settings/esp/domain-auth";
+import { findDmarc, sendingDomainOf } from "../settings/esp/domain-auth";
 import { freshDnsLookups } from "../utils/dns";
 import {
   type DomainDnsRecord,
@@ -36,7 +35,7 @@ const VERIFIED_RECHECK_MS = 24 * HOUR;
 
 /** How long a team keeps sending from its domain after DKIM or DMARC start
  * failing, before its marketing pauses. */
-export function teamDomainGraceMs(): number {
+function teamDomainGraceMs(): number {
   const raw = Number(process.env.TEAM_SENDING_DOMAIN_GRACE_HOURS ?? 72);
   return (Number.isFinite(raw) && raw >= 0 ? raw : 72) * HOUR;
 }
@@ -78,17 +77,12 @@ function dmarcRecord(domain: string): DomainDnsRecord {
 }
 
 export function teamDomainStatus(row: DomainRow): TeamSendingDomainView["status"] {
-  if (!row.authenticatedAt) return "pending";
+  if (!row.verifiedAt) return "pending";
   return row.authFailingSince ? "failing" : "verified";
 }
 
 function viewOf(row: DomainRow, fromEmail: string | null): TeamSendingDomainView {
   const failingSince = row.authFailingSince;
-  const status = !row.authenticatedAt
-    ? "pending"
-    : failingSince
-      ? "failing"
-      : "verified";
   const dmarc = (row.dmarcStatus as "pass" | "missing" | null) ?? "missing";
   const records = ((row.dnsRecords as DomainDnsRecord[] | null) ?? []).map((record) =>
     record.purpose === "dmarc"
@@ -98,7 +92,7 @@ function viewOf(row: DomainRow, fromEmail: string | null): TeamSendingDomainView
   return {
     domain: row.domain,
     fromEmail,
-    status,
+    status: teamDomainStatus(row),
     dkim: (row.dkimStatus as TeamSendingDomainView["dkim"] | null) ?? "pending",
     dmarc,
     inUse: teamDomainUsable(row, new Date()),
@@ -115,7 +109,7 @@ function viewOf(row: DomainRow, fromEmail: string | null): TeamSendingDomainView
 /** The domain authenticated at least once and, if it has since started
  * failing, is still within its grace period. */
 export function teamDomainUsable(row: DomainRow, now: Date): boolean {
-  if (row.status !== "verified" || !row.authenticatedAt) return false;
+  if (row.status !== "verified" || !row.verifiedAt) return false;
   if (!row.authFailingSince) return true;
   return now.getTime() - row.authFailingSince.getTime() < teamDomainGraceMs();
 }
@@ -136,6 +130,16 @@ async function liveGrant(teamId: string) {
   return row ?? null;
 }
 
+async function espOf(row: DomainRow) {
+  if (!row.espConfigId) return null;
+  const [esp] = await db
+    .select()
+    .from(espConfigs)
+    .where(eq(espConfigs.id, row.espConfigId))
+    .limit(1);
+  return esp ?? null;
+}
+
 async function liveDomain(teamId: string): Promise<DomainRow | null> {
   const [row] = await db
     .select()
@@ -145,22 +149,12 @@ async function liveDomain(teamId: string): Promise<DomainRow | null> {
   return row ?? null;
 }
 
-export async function getTeamSendingDomain(
-  teamId: string,
-): Promise<TeamSendingDomainView | null> {
-  const [domain, grant] = await Promise.all([liveDomain(teamId), liveGrant(teamId)]);
-  if (!domain) return null;
-  return viewOf(
-    domain,
-    grant?.grant.sendingDomainId === domain.id ? grant.grant.fromEmail : null,
-  );
-}
-
 /**
  * Sets the team's From address on its shared ESP and registers the
  * address's domain with the ESP. Replacing a different domain removes the
- * old one from the ESP. Throws `organization_delivery_disabled` without a
- * grant, `from_email_invalid`, `domain_invalid`, `domain_in_use`,
+ * old one from the ESP once the new one is saved. Throws
+ * `organization_delivery_disabled` without a grant, `from_email_invalid`,
+ * `domain_invalid`, `domain_in_use`, `domain_exists_at_provider`,
  * `provider_domain_unsupported` or `esp_management_credentials_required`.
  */
 export async function setTeamSendingDomain(
@@ -178,6 +172,11 @@ export async function setTeamSendingDomain(
     throw new Error("organization_delivery_disabled");
   }
   const adapter = domainProviderFor(grant.esp);
+  // The shared mailbox's own domain is the organization's, never a team's.
+  const sharedDomain = sendingDomainOf(grant.esp.fromEmail);
+  if (sharedDomain && normalizeSendingDomain(sharedDomain) === domain) {
+    throw new Error("domain_in_use");
+  }
 
   const [taken] = await db
     .select({ teamId: sendingDomains.teamId })
@@ -193,93 +192,98 @@ export async function setTeamSendingDomain(
   if (taken && taken.teamId !== teamId) throw new Error("domain_in_use");
 
   const existing = await liveDomain(teamId);
-  if (existing && existing.domain !== domain) {
-    await removeFromProvider(existing);
-  }
-  const state = await adapter.register(domain);
+  const same = existing?.domain === domain;
+  // Throws `domain_exists_at_provider` for an identity SendLit didn't create.
+  if (!same) await adapter.register(domain);
   const now = new Date();
-  const records = [...state.records, dmarcRecord(domain)];
 
-  const row = await db.transaction(async (tx) => {
-    let saved: DomainRow;
-    if (existing && existing.domain === domain) {
-      [saved] = await tx
-        .update(sendingDomains)
-        .set({ dnsRecords: records, nextCheckAt: now, updatedAt: now })
-        .where(eq(sendingDomains.id, existing.id))
-        .returning();
-    } else {
-      if (existing) {
-        await tx
-          .update(sendingDomains)
-          .set({ status: "revoked", updatedAt: now })
-          .where(eq(sendingDomains.id, existing.id));
-      }
-      // A revoked row for the same domain would collide on the
-      // organization/domain unique index; reuse it.
-      const [revoked] = await tx
-        .select({ id: sendingDomains.id })
-        .from(sendingDomains)
-        .where(
-          and(
-            eq(sendingDomains.organizationId, organizationId),
-            eq(sendingDomains.domain, domain),
-          ),
-        )
-        .limit(1);
-      const values = {
-        teamId,
-        espConfigId: grant.esp.id,
-        provider: adapter.provider,
-        status: "pending",
-        dkimStatus: state.dkim,
-        dmarcStatus: "missing",
-        dnsRecords: records,
-        verifiedAt: null,
-        authenticatedAt: null,
-        authFailingSince: null,
-        failedCheckCount: 0,
-        firstFailedAt: null,
-        nextCheckAt: now,
-        updatedAt: now,
-      };
-      if (revoked) {
+  let row: DomainRow;
+  try {
+    row = await db.transaction(async (tx) => {
+      let saved: DomainRow;
+      if (existing && same) {
         [saved] = await tx
           .update(sendingDomains)
-          .set(values)
-          .where(eq(sendingDomains.id, revoked.id))
+          .set({ nextCheckAt: now, updatedAt: now })
+          .where(eq(sendingDomains.id, existing.id))
           .returning();
       } else {
-        [saved] = await tx
-          .insert(sendingDomains)
-          .values({
-            ...values,
-            organizationId,
-            domain,
-            // Ownership is proven by the provider's DKIM check, not the
-            // organization TXT challenge; keep the column's contract.
-            challengeTokenHash: createHash("sha256")
-              .update(randomBytes(32))
-              .digest("hex"),
-          })
-          .returning();
+        if (existing) {
+          await tx
+            .update(sendingDomains)
+            .set({ status: "revoked", nextCheckAt: null, updatedAt: now })
+            .where(eq(sendingDomains.id, existing.id));
+        }
+        // A revoked row for the same domain would collide on the
+        // organization/domain unique index; reuse it.
+        const [revoked] = await tx
+          .select({ id: sendingDomains.id })
+          .from(sendingDomains)
+          .where(
+            and(
+              eq(sendingDomains.organizationId, organizationId),
+              eq(sendingDomains.domain, domain),
+            ),
+          )
+          .limit(1);
+        // DKIM state and records come from the check that follows.
+        const values = {
+          teamId,
+          espConfigId: grant.esp.id,
+          status: "pending",
+          dkimStatus: null,
+          dmarcStatus: null,
+          dnsRecords: null,
+          verifiedAt: null,
+          authFailingSince: null,
+          failedCheckCount: 0,
+          firstFailedAt: null,
+          nextCheckAt: now,
+          updatedAt: now,
+        };
+        if (revoked) {
+          [saved] = await tx
+            .update(sendingDomains)
+            .set(values)
+            .where(eq(sendingDomains.id, revoked.id))
+            .returning();
+        } else {
+          [saved] = await tx
+            .insert(sendingDomains)
+            .values({
+              ...values,
+              organizationId,
+              domain,
+              // Ownership is proven by the provider's DKIM check, not the
+              // organization TXT challenge; keep the column's contract.
+              challengeTokenHash: createHash("sha256")
+                .update(randomBytes(32))
+                .digest("hex"),
+            })
+            .returning();
+        }
       }
-    }
-    await tx
-      .update(espConfigTeamGrants)
-      .set({ fromEmail, sendingDomainId: saved.id, updatedAt: now })
-      .where(eq(espConfigTeamGrants.id, grant.grant.id));
-    await recordOrganizationAuditEvent(tx, {
-      organizationId,
-      actor,
-      action: "team_sending_domain.set",
-      teamId,
-      espConfigId: grant.esp.id,
-      espGrantId: grant.grant.id,
-      metadata: { domain },
+      await tx
+        .update(espConfigTeamGrants)
+        .set({ fromEmail, sendingDomainId: saved.id, updatedAt: now })
+        .where(eq(espConfigTeamGrants.id, grant.grant.id));
+      await recordOrganizationAuditEvent(tx, {
+        organizationId,
+        actor,
+        action: "team_sending_domain.set",
+        teamId,
+        espConfigId: grant.esp.id,
+        espGrantId: grant.grant.id,
+        metadata: { domain },
+      });
+      return saved;
     });
-    return saved;
-  });
+  } catch (error) {
+    // Don't leave behind an identity SendLit created but no longer tracks.
+    if (!same) await adapter.remove(domain).catch(() => undefined);
+    throw error;
+  }
+  if (existing && !same) await removeFromProvider(existing);
   captureEvent({
     event: "team_sending_domain_set",
     source: "delivery.team_sending_domain",
@@ -289,23 +293,18 @@ export async function setTeamSendingDomain(
   return viewOf(await checkTeamSendingDomain(row), fromEmail);
 }
 
+/** Best effort, after the change is committed: the team's choice applies in
+ * SendLit either way, and a leftover identity at the provider is reported. */
 async function removeFromProvider(row: DomainRow): Promise<void> {
-  if (!row.espConfigId) return;
-  const [esp] = await db
-    .select()
-    .from(espConfigs)
-    .where(eq(espConfigs.id, row.espConfigId))
-    .limit(1);
-  if (!esp) return;
   try {
-    await domainProviderFor(esp).remove(row.domain);
+    const esp = await espOf(row);
+    if (esp) await domainProviderFor(esp).remove(row.domain);
   } catch (error) {
-    // The team's choice still applies in SendLit; a leftover identity at
-    // the provider is harmless and is logged for the operator.
-    logger.warn(
-      { sending_domain: row.domainId, error: (error as Error).message },
-      "team sending domain: provider removal failed",
-    );
+    captureError({
+      error,
+      source: "delivery.team_sending_domain.remove",
+      teamId: row.teamId ?? undefined,
+    });
   }
 }
 
@@ -319,7 +318,6 @@ export async function removeTeamSendingDomain(
 ): Promise<boolean> {
   const row = await liveDomain(teamId);
   if (!row || row.organizationId !== organizationId) return false;
-  await removeFromProvider(row);
   const now = new Date();
   await db.transaction(async (tx) => {
     await tx
@@ -339,6 +337,7 @@ export async function removeTeamSendingDomain(
       metadata: { domain: row.domain },
     });
   });
+  await removeFromProvider(row);
   return true;
 }
 
@@ -352,12 +351,7 @@ export async function checkTeamSendingDomain(
   row: DomainRow,
   now = new Date(),
 ): Promise<DomainRow> {
-  if (!row.espConfigId) return row;
-  const [esp] = await db
-    .select()
-    .from(espConfigs)
-    .where(eq(espConfigs.id, row.espConfigId))
-    .limit(1);
+  const esp = await espOf(row);
   if (!esp) return row;
   const [state, dmarc] = await Promise.all([
     domainProviderFor(esp).status(row.domain),
@@ -365,7 +359,7 @@ export async function checkTeamSendingDomain(
   ]);
   const dkim = state?.dkim ?? "failed";
   const passing = Boolean(state?.verified && dkim === "verified" && dmarc);
-  const authenticatedBefore = Boolean(row.authenticatedAt);
+  const authenticatedBefore = Boolean(row.verifiedAt);
   const failingSince = passing
     ? null
     : authenticatedBefore
@@ -382,7 +376,6 @@ export async function checkTeamSendingDomain(
       dmarcStatus: dmarc ? "pass" : "missing",
       dnsRecords: records,
       verifiedAt: passing ? (row.verifiedAt ?? now) : row.verifiedAt,
-      authenticatedAt: passing ? now : row.authenticatedAt,
       authFailingSince: failingSince,
       lastCheckedAt: now,
       nextCheckAt: new Date(
@@ -425,15 +418,21 @@ export async function refreshTeamSendingDomain(
 ): Promise<TeamSendingDomainView | null> {
   const row = await liveDomain(teamId);
   if (!row) return null;
-  const grant = await liveGrant(teamId);
-  const checked = await checkTeamSendingDomain(row);
-  return viewOf(checked, grant?.grant.fromEmail ?? null);
+  const [grant, checked] = await Promise.all([
+    liveGrant(teamId),
+    checkTeamSendingDomain(row),
+  ]);
+  return viewOf(
+    checked,
+    grant?.grant.sendingDomainId === row.id ? grant.grant.fromEmail : null,
+  );
 }
 
-/** The hourly sweep over team domains that are due. */
+/** The hourly sweep over team domains that are due. Each row is claimed
+ * first so several API instances don't check the same domain. */
 export async function checkDueTeamSendingDomains(now = new Date()): Promise<void> {
   const due = await db
-    .select()
+    .select({ id: sendingDomains.id })
     .from(sendingDomains)
     .where(
       and(
@@ -443,34 +442,33 @@ export async function checkDueTeamSendingDomains(now = new Date()): Promise<void
       ),
     )
     .limit(100);
-  for (const row of due) {
+  for (const { id } of due) {
+    const [claimed] = await db
+      .update(sendingDomains)
+      .set({ nextCheckAt: new Date(now.getTime() + PENDING_RECHECK_MS) })
+      .where(and(eq(sendingDomains.id, id), lt(sendingDomains.nextCheckAt, now)))
+      .returning();
+    if (!claimed) continue;
     try {
-      await checkTeamSendingDomain(row, now);
+      await checkTeamSendingDomain(claimed, now);
     } catch (error) {
       captureError({
         error,
         source: "delivery.team_sending_domain.check",
-        teamId: row.teamId ?? undefined,
+        teamId: claimed.teamId ?? undefined,
       });
     }
   }
 }
 
-let timer: ReturnType<typeof setInterval> | null = null;
-
-export function startTeamSendingDomainChecks(intervalMs = HOUR): void {
-  if (timer) return;
-  timer = setInterval(() => {
+export function startTeamSendingDomainChecks(intervalMs = HOUR): () => void {
+  const timer = setInterval(() => {
     void checkDueTeamSendingDomains().catch((error) =>
       captureError({ error, source: "delivery.team_sending_domain.sweep" }),
     );
   }, intervalMs);
   timer.unref?.();
-}
-
-export function stopTeamSendingDomainChecks(): void {
-  if (timer) clearInterval(timer);
-  timer = null;
+  return () => clearInterval(timer);
 }
 
 type GrantForSend = {
@@ -498,7 +496,7 @@ export async function teamFromAddress(
       .from(sendingDomains)
       .where(eq(sendingDomains.id, grant.sendingDomainId))
       .limit(1);
-    if (row?.authenticatedAt && row.status === "verified") {
+    if (row?.verifiedAt && row.status === "verified") {
       if (teamDomainUsable(row, now) || purpose === "transactional") {
         return grant.fromEmail;
       }
@@ -574,44 +572,41 @@ export async function setEspManagementCredentials(
   } catch {
     throw new Error("esp_management_credentials_invalid");
   }
-  const [saved] = await db.transaction(async (tx) => {
-    const rows = await tx
-      .update(espConfigs)
-      .set({ encryptedManagementSecret: encrypted, updatedAt: new Date() })
-      .where(eq(espConfigs.id, esp.id))
-      .returning();
-    await recordOrganizationAuditEvent(tx, {
-      organizationId,
-      actor,
-      action: "organization_esp.management_credentials_set",
-      espConfigId: esp.id,
-    });
-    return rows;
-  });
-  return saved;
+  return saveManagementSecret(organizationId, esp.id, encrypted, actor);
 }
 
+/** Throws `esp_not_found`. */
 export async function removeEspManagementCredentials(
   organizationId: string,
   espPublicId: string,
   actor: Actor,
 ): Promise<typeof espConfigs.$inferSelect> {
   const esp = await organizationEsp(organizationId, espPublicId);
-  const [saved] = await db.transaction(async (tx) => {
-    const rows = await tx
+  return saveManagementSecret(organizationId, esp.id, null, actor);
+}
+
+async function saveManagementSecret(
+  organizationId: string,
+  espConfigId: string,
+  encrypted: string | null,
+  actor: Actor,
+): Promise<typeof espConfigs.$inferSelect> {
+  return db.transaction(async (tx) => {
+    const [saved] = await tx
       .update(espConfigs)
-      .set({ encryptedManagementSecret: null, updatedAt: new Date() })
-      .where(eq(espConfigs.id, esp.id))
+      .set({ encryptedManagementSecret: encrypted, updatedAt: new Date() })
+      .where(eq(espConfigs.id, espConfigId))
       .returning();
     await recordOrganizationAuditEvent(tx, {
       organizationId,
       actor,
-      action: "organization_esp.management_credentials_removed",
-      espConfigId: esp.id,
+      action: encrypted
+        ? "organization_esp.management_credentials_set"
+        : "organization_esp.management_credentials_removed",
+      espConfigId,
     });
-    return rows;
+    return saved;
   });
-  return saved;
 }
 
 async function organizationEsp(organizationId: string, espPublicId: string) {
@@ -633,7 +628,7 @@ async function organizationEsp(organizationId: string, espPublicId: string) {
 /** HTTP status and body for a team sending domain error, or null. */
 export function teamDomainErrorHttp(
   error: unknown,
-): { status: 400 | 404 | 409 | 422 | 502; body: { error: string } } | null {
+): { status: 400 | 404 | 409 | 422; body: { error: string } } | null {
   const message = (error as Error | undefined)?.message;
   switch (message) {
     case "from_email_invalid":
@@ -643,6 +638,7 @@ export function teamDomainErrorHttp(
     case "esp_not_found":
       return { status: 404, body: { error: message } };
     case "domain_in_use":
+    case "domain_exists_at_provider":
       return { status: 409, body: { error: message } };
     case "organization_delivery_disabled":
     case "provider_domain_unsupported":
@@ -652,7 +648,7 @@ export function teamDomainErrorHttp(
     default:
       // The provider's API refused or failed (permissions, throttling).
       if ((error as { $metadata?: unknown } | undefined)?.$metadata) {
-        return { status: 502, body: { error: "esp_provider_error" } };
+        return { status: 422, body: { error: "esp_provider_error" } };
       }
       return null;
   }

@@ -1,6 +1,7 @@
-import { and, count, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
+import { and, count, eq, gte, isNull, or } from "drizzle-orm";
 import { PlanGateError } from "../billing/errors";
 import { notifyOrganizationOwners } from "../billing/notifications";
+import { ledgerCounts } from "../billing/reputation";
 import { advanceControlState, type ControlStatus } from "../billing/reputation-policy";
 import { db } from "../db/client";
 import {
@@ -22,11 +23,10 @@ import {
 const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type ControlRow = typeof sharedEspSendingControls.$inferSelect;
-type GuardStatus = "normal" | "warned" | "marketing_paused";
+type GuardStatus = Exclude<ControlStatus, "all_paused">;
 
 type ControlChange = {
   organizationId: string;
-  espConfigId: string;
   espPublicId: string;
   espName: string;
   teamId: string | null;
@@ -39,42 +39,18 @@ type ControlChange = {
 
 /** Each team's seven-day counts through one organization ESP, from the
  * deduplicated outbound ledger (the same projection team reputation uses). */
-export async function sharedEspMetrics(
+export function sharedEspMetrics(
   espConfigId: string,
   now = new Date(),
   options: { since?: Date; teamId?: string } = {},
 ): Promise<TeamEspMetrics[]> {
-  const windowStart = new Date(now.getTime() - WINDOW_MS);
-  const since =
-    options.since && options.since > windowStart ? options.since : windowStart;
-  const rows = await db
-    .select({
-      teamId: outboundMessages.teamId,
-      accepted: count(),
-      bounced: count(
-        sql`CASE WHEN ${outboundMessages.deliveryStatus} = 'bounced' THEN 1 END`,
-      ),
-      complained: count(
-        sql`CASE WHEN ${outboundMessages.feedbackStatus} = 'complained' THEN 1 END`,
-      ),
-    })
-    .from(outboundMessages)
-    .where(
-      and(
-        eq(outboundMessages.espConfigId, espConfigId),
-        eq(outboundMessages.deliverySourceType, "organization"),
-        gte(outboundMessages.acceptedAt, since),
-        lt(outboundMessages.acceptedAt, now),
-        options.teamId ? eq(outboundMessages.teamId, options.teamId) : undefined,
-      ),
-    )
-    .groupBy(outboundMessages.teamId);
-  return rows.map((row) => ({
-    teamId: row.teamId,
-    accepted: Number(row.accepted),
-    bounced: Number(row.bounced),
-    complained: Number(row.complained),
-  }));
+  return ledgerCounts({
+    now,
+    since: options.since,
+    teamIds: options.teamId ? [options.teamId] : undefined,
+    espConfigId,
+    deliverySource: "organization",
+  });
 }
 
 /**
@@ -134,7 +110,7 @@ export async function evaluateSharedEsp(
       const current = control.status as GuardStatus;
       const transition = advanceControlState(
         {
-          status: current as ControlStatus,
+          status: current,
           reasonCode: control.reasonCode,
           evaluatedAt: control.evaluatedAt,
           cleanEvaluationDays: control.cleanEvaluationDays,
@@ -175,7 +151,6 @@ export async function evaluateSharedEsp(
       });
       changes.push({
         organizationId,
-        espConfigId,
         espPublicId: esp.espId,
         espName: esp.name,
         teamId,
@@ -237,14 +212,15 @@ async function graceAwareMetrics(
     row.releasedAt && row.releaseGraceUntil && row.releaseGraceUntil > now
       ? row.releasedAt
       : undefined;
-  const espRelease = rows.find((row) => row.teamId === null);
-  const metrics = await sharedEspMetrics(espConfigId, now, {
-    since: espRelease ? releasedAt(espRelease) : undefined,
-  });
+  const espRow = rows.find((row) => row.teamId === null);
+  const espRelease = espRow ? releasedAt(espRow) : undefined;
+  const metrics = await sharedEspMetrics(espConfigId, now, { since: espRelease });
   for (const row of rows) {
-    const since = releasedAt(row);
-    if (!row.teamId || !since) continue;
+    const teamRelease = releasedAt(row);
+    if (!row.teamId || !teamRelease) continue;
     const teamId = row.teamId;
+    // A later ESP-wide release also covers this team's earlier bounces.
+    const since = espRelease && espRelease > teamRelease ? espRelease : teamRelease;
     const [fresh] = await sharedEspMetrics(espConfigId, now, { since, teamId });
     const index = metrics.findIndex((team) => team.teamId === teamId);
     if (index >= 0) metrics.splice(index, 1);
@@ -343,12 +319,7 @@ export async function evaluateSharedEspSoon(
 ): Promise<void> {
   if (outbound.deliverySourceType !== "organization" || !outbound.espConfigId) return;
   const id = outbound.espConfigId;
-  try {
-    if (!readSharedEspGuardConfig().enabled) return;
-  } catch (error) {
-    captureError({ error, source: "delivery.shared_esp_guard.event" });
-    return;
-  }
+  if (!readSharedEspGuardConfig().enabled) return;
   const wait = (lastRun.get(id) ?? 0) + EVENT_THROTTLE_MS - now.getTime();
   if (wait > 0) {
     if (!trailing.has(id)) {
@@ -422,9 +393,7 @@ export async function assertSharedEspAllowsMarketing(
     .limit(1);
   if (paused) {
     throw new PlanGateError("sending_paused", {
-      reason:
-        paused.reason ??
-        (paused.teamId ? "shared_esp_team_breach" : "shared_esp_breach"),
+      reason: paused.reason,
       scope: paused.teamId ? "team" : "shared_mailbox",
     });
   }
@@ -501,7 +470,6 @@ export async function releaseSharedEspControl(input: {
       );
     return {
       organizationId: control.organizationId,
-      espConfigId: control.espConfigId,
       espPublicId: esp.espId,
       espName: esp.name,
       teamId: control.teamId,

@@ -432,6 +432,22 @@ function quotaWindow(
   };
 }
 
+/** A period's bucket, for one grant when `grantId` is given. On the 1st the
+ * day and month buckets share a start, so the type is matched too. */
+function findBucket(
+  buckets: (typeof organizationEspUsageBuckets.$inferSelect)[],
+  periodType: "day" | "month",
+  periodStart: Date,
+  grantId?: string,
+) {
+  return buckets.find(
+    (row) =>
+      (grantId === undefined || row.grantId === grantId) &&
+      row.periodType === periodType &&
+      row.periodStart.getTime() === periodStart.getTime(),
+  );
+}
+
 /** Shared-mailbox quota for several teams (by internal id). Teams without an
  * active grant are left out. */
 export async function getTeamsQuotaUsage(
@@ -465,23 +481,15 @@ export async function getTeamsQuotaUsage(
         ),
       ),
     );
-  // On the 1st the day and month buckets share a start, so match the type.
-  const find = (grantId: string, periodType: "day" | "month", start: Date) =>
-    buckets.find(
-      (row) =>
-        row.grantId === grantId &&
-        row.periodType === periodType &&
-        row.periodStart.getTime() === start.getTime(),
-    );
   for (const grant of grants) {
     result.set(grant.teamId, {
       day: quotaWindow(
-        find(grant.id, "day", periods.day),
+        findBucket(buckets, "day", periods.day, grant.id),
         grant.dailyLimit,
         periods.nextDay,
       ),
       month: quotaWindow(
-        find(grant.id, "month", periods.month),
+        findBucket(buckets, "month", periods.month, grant.id),
         grant.monthlyLimit,
         periods.nextMonth,
       ),
@@ -519,27 +527,14 @@ export async function getOrganizationQuotaUsage(organizationId: string) {
         ),
       ),
     );
-  // On the 1st the day and month buckets share a start, so match the type.
-  const makeWindow = (
-    periodType: "day" | "month",
-    periodStart: Date,
-    limit: number | null,
-    resetsAt: Date,
-  ) =>
-    quotaWindow(
-      buckets.find(
-        (row) =>
-          row.periodType === periodType &&
-          row.periodStart.getTime() === periodStart.getTime(),
-      ),
-      limit,
-      resetsAt,
-    );
   return {
-    day: makeWindow("day", periods.day, policy.aggregateDailyLimit, periods.nextDay),
-    month: makeWindow(
-      "month",
-      periods.month,
+    day: quotaWindow(
+      findBucket(buckets, "day", periods.day),
+      policy.aggregateDailyLimit,
+      periods.nextDay,
+    ),
+    month: quotaWindow(
+      findBucket(buckets, "month", periods.month),
       policy.aggregateMonthlyLimit,
       periods.nextMonth,
     ),

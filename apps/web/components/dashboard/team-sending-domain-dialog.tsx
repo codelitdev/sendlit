@@ -1,9 +1,14 @@
 "use client";
 
-import { Check, ChevronDown, Globe, RefreshCw } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { Check, Globe, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
-import { CopyButton } from "@/components/dashboard/domain-authentication-dialog";
+import { DialogSection } from "@/components/dashboard/dialog-section";
+import { DnsRecordsTable } from "@/components/dashboard/dns-records-table";
+import {
+  STATUS_STYLE,
+  type Status,
+} from "@/components/dashboard/domain-authentication-dialog";
 import { Loading } from "@/components/dashboard/loading";
 import { Badge } from "@/components/ui/codelit/badge";
 import { Button } from "@/components/ui/codelit/button";
@@ -18,53 +23,16 @@ import {
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   getTeamSendingDomain,
   removeTeamSendingDomain,
   setTeamSendingDomain,
   type TeamSendingDomain,
-  type TeamSendingDomainRecord,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { relativeTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 type Section = "From address" | "DKIM" | "DMARC";
-type Tone = "pass" | "warn" | "fail";
-
-const TONE: Record<
-  Tone,
-  { icon: string; bar: string; badge: "success" | "warning" | "destructive" }
-> = {
-  pass: {
-    icon: "bg-[var(--success-soft)] text-[#1f6b35]",
-    bar: "bg-[var(--success)]",
-    badge: "success",
-  },
-  warn: {
-    icon: "bg-[var(--warning-soft)] text-[var(--warning)]",
-    bar: "bg-[var(--warning)]",
-    badge: "warning",
-  },
-  fail: {
-    icon: "bg-[var(--destructive-soft)] text-destructive",
-    bar: "bg-destructive",
-    badge: "destructive",
-  },
-};
-
 const ERRORS: Record<string, string> = {
   esp_management_credentials_required:
     "This shared mailbox has no Amazon SES API key yet. Add one from Organizations → Delivery, then try again.",
@@ -73,11 +41,14 @@ const ERRORS: Record<string, string> = {
   provider_domain_unsupported:
     "Teams can register their own domain only on an Amazon SES shared mailbox for now.",
   organization_delivery_disabled: "Grant this team a shared mailbox first.",
-  domain_in_use: "Another team or the organization already uses this domain.",
+  domain_in_use:
+    "This domain is already used by another team or by the shared mailbox itself.",
+  domain_exists_at_provider:
+    "This domain is already set up in the mailbox's Amazon SES account outside SendLit. Remove it there first, or use another domain.",
   domain_invalid: "Enter an address at a domain you own.",
   domain_public_suffix: "Use your own domain, not a shared one like gmail.com.",
   from_email_invalid: "Enter a valid email address.",
-  esp_provider_error: "Amazon SES didn't answer. Try again in a minute.",
+  esp_provider_error: "Amazon SES returned an error. Try again in a minute.",
 };
 
 function errorText(err: unknown): string {
@@ -157,6 +128,14 @@ export function TeamSendingDomainDialog({
         ? `Mail from this team goes out as ${domain.fromEmail}.`
         : "Add the records below. The team switches to its own domain once both pass.";
 
+  const [fromTone, fromBadge]: [Status, string] = !domain
+    ? ["warn", "Not set"]
+    : !domain.inUse
+      ? [domain.status === "failing" ? "fail" : "warn", "Waiting for DNS"]
+      : domain.status === "failing"
+        ? ["fail", "Failing"]
+        : ["pass", "In use"];
+
   const dkimRecords =
     domain?.records.filter((record) => record.purpose === "dkim") ?? [];
   const dmarcRecords =
@@ -188,7 +167,7 @@ export function TeamSendingDomainDialog({
                     key={i}
                     className={cn(
                       "h-1.5 w-14 rounded-full",
-                      ok ? TONE.pass.bar : TONE.warn.bar,
+                      ok ? STATUS_STYLE.pass.bar : STATUS_STYLE.warn.bar,
                     )}
                   />
                 ))}
@@ -204,31 +183,15 @@ export function TeamSendingDomainDialog({
           {!loaded && !error && <Loading />}
           {loaded && (
             <>
-              <DomainSection
+              <DialogSection
                 name="From address"
                 summary={
                   domain
                     ? (domain.fromEmail ?? domain.domain)
                     : "The address this team's emails come from."
                 }
-                tone={
-                  !domain
-                    ? "warn"
-                    : domain.status === "failing"
-                      ? "fail"
-                      : domain.inUse
-                        ? "pass"
-                        : "warn"
-                }
-                badge={
-                  !domain
-                    ? "Not set"
-                    : domain.inUse
-                      ? domain.status === "failing"
-                        ? "Failing"
-                        : "In use"
-                      : "Waiting for DNS"
-                }
+                summaryClassName="break-all"
+                {...sectionStatus(fromTone, fromBadge)}
                 open={open["From address"]}
                 onOpenChange={(value) =>
                   setOpen((current) => ({ ...current, "From address": value }))
@@ -266,27 +229,21 @@ export function TeamSendingDomainDialog({
                     {busy === "remove" ? "Removing…" : "Stop using this domain"}
                   </Button>
                 )}
-              </DomainSection>
+              </DialogSection>
 
               {domain && (
                 <>
-                  <DomainSection
+                  <DialogSection
                     name="DKIM"
                     summary="Signs every email so inboxes know it came from your domain."
-                    tone={
-                      domain.dkim === "verified"
-                        ? "pass"
-                        : domain.dkim === "failed"
-                          ? "fail"
-                          : "warn"
-                    }
-                    badge={
-                      domain.dkim === "verified"
-                        ? "Verified"
-                        : domain.dkim === "failed"
-                          ? "Failed"
-                          : `${dkimRecords.length} records to add`
-                    }
+                    {...(domain.dkim === "verified"
+                      ? sectionStatus("pass", "Verified")
+                      : domain.dkim === "failed"
+                        ? sectionStatus("fail", "Failed")
+                        : sectionStatus(
+                            "warn",
+                            `${dkimRecords.length} records to add`,
+                          ))}
                     open={open.DKIM}
                     onOpenChange={(value) =>
                       setOpen((current) => ({ ...current, DKIM: value }))
@@ -296,13 +253,14 @@ export function TeamSendingDomainDialog({
                       Add these CNAME records at your DNS provider. Amazon SES checks
                       them on its own, usually within an hour.
                     </p>
-                    <RecordsTable records={dkimRecords} domain={domain.domain} />
-                  </DomainSection>
-                  <DomainSection
+                    <DnsRecordsTable records={dkimRecords} domain={domain.domain} />
+                  </DialogSection>
+                  <DialogSection
                     name="DMARC"
                     summary="Tells inboxes what to do with mail that fails authentication."
-                    tone={domain.dmarc === "pass" ? "pass" : "warn"}
-                    badge={domain.dmarc === "pass" ? "Set up" : "1 record to add"}
+                    {...(domain.dmarc === "pass"
+                      ? sectionStatus("pass", "Set up")
+                      : sectionStatus("warn", "1 record to add"))}
                     open={open.DMARC}
                     onOpenChange={(value) =>
                       setOpen((current) => ({ ...current, DMARC: value }))
@@ -312,8 +270,8 @@ export function TeamSendingDomainDialog({
                       Add this TXT record unless your domain already has a DMARC record.
                       Start with p=none to monitor.
                     </p>
-                    <RecordsTable records={dmarcRecords} domain={domain.domain} />
-                  </DomainSection>
+                    <DnsRecordsTable records={dmarcRecords} domain={domain.domain} />
+                  </DialogSection>
                 </>
               )}
             </>
@@ -330,7 +288,9 @@ export function TeamSendingDomainDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Close
             </Button>
-            {!domain || fromEmail.trim().toLowerCase() !== domain.fromEmail ? (
+            {!domain ||
+            (fromEmail.trim() !== "" &&
+              fromEmail.trim().toLowerCase() !== domain.fromEmail) ? (
               <Button
                 disabled={!team || busy !== null || !fromEmail.includes("@")}
                 onClick={() =>
@@ -374,123 +334,11 @@ export function TeamSendingDomainDialog({
   );
 }
 
-function DomainSection({
-  name,
-  summary,
-  tone,
-  badge,
-  open,
-  onOpenChange,
-  children,
-}: {
-  name: Section;
-  summary: string;
-  tone: Tone;
-  badge: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  children: ReactNode;
-}) {
-  return (
-    <Collapsible
-      open={open}
-      onOpenChange={onOpenChange}
-      className="rounded-lg border bg-card"
-    >
-      <CollapsibleTrigger className="flex w-full items-center gap-4 rounded-lg px-5 py-4 text-left outline-none focus-visible:shadow-[var(--shadow-focus)]">
-        <span
-          className={cn(
-            "grid size-9 shrink-0 place-items-center rounded-full text-sm font-bold",
-            TONE[tone].icon,
-          )}
-          aria-hidden
-        >
-          {tone === "pass" ? <Check className="size-4" /> : "!"}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium">{name}</span>
-          <span className="block break-all text-sm text-muted-foreground">
-            {summary}
-          </span>
-        </span>
-        <Badge variant={TONE[tone].badge}>{badge}</Badge>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform",
-            open && "rotate-180",
-          )}
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-4 px-5 pb-5 sm:pl-[4.75rem]">
-        {children}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function RecordsTable({
-  records,
-  domain,
-}: {
-  records: TeamSendingDomainRecord[];
-  domain: string;
-}) {
-  return (
-    <>
-      <div className="overflow-hidden rounded-lg border bg-muted/40">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="px-4">Type</TableHead>
-              <TableHead className="px-4">Host</TableHead>
-              <TableHead className="px-4">Value</TableHead>
-              <TableHead className="px-4">Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {records.map((record) => (
-              <TableRow key={record.name} className="align-top hover:bg-transparent">
-                <TableCell className="whitespace-normal px-4 py-3">
-                  <span className="rounded-md border bg-card px-2 py-1 font-mono text-xs">
-                    {record.type}
-                  </span>
-                </TableCell>
-                <TableCell className="whitespace-normal px-4 py-3">
-                  <div className="flex items-start gap-1.5">
-                    <span className="break-all font-mono text-xs leading-5">
-                      {record.name}
-                    </span>
-                    <CopyButton
-                      value={record.name}
-                      label={`Copy ${record.purpose} host`}
-                    />
-                  </div>
-                </TableCell>
-                <TableCell className="whitespace-normal px-4 py-3">
-                  <div className="flex items-start gap-1.5">
-                    <span className="break-all font-mono text-xs leading-5">
-                      {record.value}
-                    </span>
-                    <CopyButton
-                      value={record.value}
-                      label={`Copy ${record.purpose} value`}
-                    />
-                  </div>
-                </TableCell>
-                <TableCell className="whitespace-normal px-4 py-3">
-                  <Badge variant={record.present ? "success" : "outline"}>
-                    {record.present ? "Found" : "Not found"}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Some DNS providers add <span className="font-mono">{domain}</span> to the host
-        for you. If yours does, enter only the part before it.
-      </p>
-    </>
-  );
+/** Icon, icon colour and pill of a section in the given state. */
+function sectionStatus(tone: Status, label: string) {
+  return {
+    icon: tone === "pass" ? <Check className="size-4" /> : "!",
+    iconClassName: STATUS_STYLE[tone].icon,
+    badge: <Badge variant={STATUS_STYLE[tone].badge}>{label}</Badge>,
+  };
 }

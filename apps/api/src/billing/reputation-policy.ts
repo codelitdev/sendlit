@@ -11,7 +11,7 @@ export type ReputationDecision = {
   reason: string;
 };
 
-function rateAtLeast(
+export function rateAtLeast(
   numerator: number,
   denominator: number,
   thresholdBps: number,
@@ -66,15 +66,17 @@ export type ControlTransition = {
   alreadyEvaluatedToday: boolean;
 };
 
-const CONTROL_RANK: Record<ControlStatus, number> = {
+export const CONTROL_RANK: Record<ControlStatus, number> = {
   normal: 0,
   warned: 1,
   marketing_paused: 2,
   all_paused: 3,
 };
 
-function utcDay(date: Date): number {
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+export function utcDayStart(date: Date): Date {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 }
 
 /**
@@ -97,7 +99,8 @@ export function advanceControlState(
   },
 ): ControlTransition {
   const alreadyEvaluatedToday = Boolean(
-    control.evaluatedAt && utcDay(control.evaluatedAt) === utcDay(now),
+    control.evaluatedAt &&
+      utcDayStart(control.evaluatedAt).getTime() === utcDayStart(now).getTime(),
   );
   let status = desired.status;
   let cleanEvaluationDays = control.cleanEvaluationDays;

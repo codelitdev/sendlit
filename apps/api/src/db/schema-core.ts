@@ -232,11 +232,10 @@ export const sendingDomains = pgTable(
     /** Set for a team's own From domain on a shared organization ESP (#220).
      * Null for the organization's own verified domains. */
     teamId: uuid("team_id").references(() => teams.id, { onDelete: "restrict" }),
-    /** The shared ESP the team domain is registered with, and its provider. */
+    /** The shared ESP the team domain is registered with. */
     espConfigId: uuid("esp_config_id").references(() => espConfigs.id, {
       onDelete: "restrict",
     }),
-    provider: text("provider"),
     /** Team domains only: the provider's DKIM state (pending | verified |
      * failed) and whether a DMARC record is published (pass | missing). */
     dkimStatus: text("dkim_status"),
@@ -244,10 +243,9 @@ export const sendingDomains = pgTable(
     /** Team domains only: the DNS records to publish, as the provider gave
      * them (`{type, name, value, purpose}[]`). */
     dnsRecords: jsonb("dns_records"),
-    /** When DKIM and DMARC last both passed, and when they started failing
-     * after that; a team sends from its domain only while it passes, within
-     * a grace period after a failure. */
-    authenticatedAt: timestamp("authenticated_at", { withTimezone: true }),
+    /** Team domains: when DKIM and DMARC started failing after they first
+     * passed (`verifiedAt`); a team sends from its domain only while it
+     * passes, within a grace period after a failure. */
     authFailingSince: timestamp("auth_failing_since", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

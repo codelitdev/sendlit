@@ -1,19 +1,18 @@
-import { and, count, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, inArray, isNull, ne, or } from "drizzle-orm";
+import { ledgerCounts } from "../billing/reputation";
+import { CONTROL_RANK, type ControlStatus } from "../billing/reputation-policy";
 import { db } from "../db/client";
 import {
   espConfigTeamGrants,
-  outboundMessages,
   sharedEspSendingControls,
   teamSendingControls,
 } from "../db/schema";
 import { readSharedEspGuardConfig } from "./shared-esp-policy";
 
-export type TeamHealthStatus = "normal" | "warned" | "marketing_paused" | "all_paused";
-
 export type TeamHealth = {
   /** The strictest control on the team: its own reputation control or the
    * shared mailbox's guard, for the team or the whole mailbox. */
-  status: TeamHealthStatus;
+  status: ControlStatus;
   reason: string | null;
   /** Where `status` comes from; null while it is `normal`. */
   scope: "team" | "shared_mailbox" | null;
@@ -21,15 +20,6 @@ export type TeamHealth = {
    * bounced or were marked as spam. */
   last7Days: { sent: number; bounced: number; complained: number };
 };
-
-const RANK: Record<TeamHealthStatus, number> = {
-  normal: 0,
-  warned: 1,
-  marketing_paused: 2,
-  all_paused: 3,
-};
-
-const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function healthy(): TeamHealth {
   return {
@@ -49,33 +39,15 @@ export async function getTeamsHealth(
   for (const id of teamIds) result.set(id, healthy());
   if (teamIds.length === 0) return result;
 
-  const metrics = await db
-    .select({
-      teamId: outboundMessages.teamId,
-      sent: count(),
-      bounced: count(
-        sql`CASE WHEN ${outboundMessages.deliveryStatus} = 'bounced' THEN 1 END`,
-      ),
-      complained: count(
-        sql`CASE WHEN ${outboundMessages.feedbackStatus} = 'complained' THEN 1 END`,
-      ),
-    })
-    .from(outboundMessages)
-    .where(
-      and(
-        inArray(outboundMessages.teamId, teamIds),
-        gte(outboundMessages.acceptedAt, new Date(now.getTime() - WINDOW_MS)),
-        lt(outboundMessages.acceptedAt, now),
-      ),
-    )
-    .groupBy(outboundMessages.teamId);
+  // Every delivery source counts: this is the team's whole sending health.
+  const metrics = await ledgerCounts({ now, teamIds });
   for (const row of metrics) {
     const health = result.get(row.teamId);
     if (!health) continue;
     health.last7Days = {
-      sent: Number(row.sent),
-      bounced: Number(row.bounced),
-      complained: Number(row.complained),
+      sent: row.accepted,
+      bounced: row.bounced,
+      complained: row.complained,
     };
   }
 
@@ -86,8 +58,13 @@ export async function getTeamsHealth(
     scope: "team" | "shared_mailbox",
   ) => {
     const health = result.get(teamId);
-    const next = status as TeamHealthStatus;
-    if (!health || !(next in RANK) || RANK[next] <= RANK[health.status]) return;
+    const next = status as ControlStatus;
+    if (
+      !health ||
+      !(next in CONTROL_RANK) ||
+      CONTROL_RANK[next] <= CONTROL_RANK[health.status]
+    )
+      return;
     health.status = next;
     health.reason = reason;
     health.scope = scope;

@@ -59,6 +59,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge as StatusBadge } from "@/components/ui/codelit/badge";
 import { Button } from "@/components/ui/codelit/button";
 import { Checkbox } from "@/components/ui/codelit/checkbox";
 import {
@@ -3269,6 +3270,14 @@ function TeamMailboxGrantRow({
   const archived = team.status === "archived";
   const viewerIsMember = Boolean(team.viewerIsMember);
   const [domainOpen, setDomainOpen] = useState(false);
+  const ownDomain: [string, "destructive" | "success" | "secondary"] | null =
+    !grant?.sendingDomain
+      ? null
+      : grant.sendingDomain.status === "failing"
+        ? ["Own domain failing", "destructive"]
+        : grant.sendingDomain.inUse
+          ? ["Own domain", "success"]
+          : ["Own domain pending", "secondary"];
 
   async function openTeam() {
     setTeamIdCookie(team.teamId);
@@ -3323,22 +3332,8 @@ function TeamMailboxGrantRow({
           >
             {archived ? "Archived" : (grant?.status ?? "No shared ESP")}
           </Badge>
-          {!archived && grant?.sendingDomain ? (
-            <Badge
-              variant={
-                grant.sendingDomain.status === "failing"
-                  ? "destructive"
-                  : grant.sendingDomain.inUse
-                    ? "success"
-                    : "secondary"
-              }
-            >
-              {grant.sendingDomain.status === "failing"
-                ? "Own domain failing"
-                : grant.sendingDomain.inUse
-                  ? "Own domain"
-                  : "Own domain pending"}
-            </Badge>
+          {!archived && ownDomain ? (
+            <Badge variant={ownDomain[1]}>{ownDomain[0]}</Badge>
           ) : null}
         </div>
         <p className="mt-1 truncate text-sm text-muted-foreground">
@@ -4175,19 +4170,14 @@ function OrganizationOperationsSection({
   );
 }
 
-const HEALTH_LABEL: Record<TeamHealth["status"], string> = {
-  normal: "Healthy",
-  warned: "Warned",
-  marketing_paused: "Marketing paused",
-  all_paused: "All sending paused",
-};
-
-const HEALTH_CLASS: Record<TeamHealth["status"], string> = {
-  normal:
-    "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  warned: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  marketing_paused: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
-  all_paused: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+const HEALTH_BADGE: Record<
+  TeamHealth["status"],
+  [label: string, variant: "success" | "warning" | "destructive"]
+> = {
+  normal: ["Healthy", "success"],
+  warned: ["Warned", "warning"],
+  marketing_paused: ["Marketing paused", "destructive"],
+  all_paused: ["All sending paused", "destructive"],
 };
 
 /** Status is colour plus words; where it comes from and the 7-day figures
@@ -4200,11 +4190,10 @@ function TeamHealthBadge({ health }: { health: TeamHealth }) {
       : health.reason?.startsWith("shared_esp_")
         ? "On the shared mailbox. "
         : "";
+  const [label, variant] = HEALTH_BADGE[health.status];
   return (
     <div className="space-y-1">
-      <Badge variant="outline" className={HEALTH_CLASS[health.status]}>
-        {HEALTH_LABEL[health.status]}
-      </Badge>
+      <StatusBadge variant={variant}>{label}</StatusBadge>
       <p className="text-xs text-muted-foreground">
         {where}7 days: {sent} sent, {bounced} bounced, {complained} spam
       </p>

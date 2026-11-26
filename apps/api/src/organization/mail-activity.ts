@@ -1,4 +1,5 @@
 import { and, asc, count, eq, gt, inArray, sql } from "drizzle-orm";
+import { BOUNCED, COMPLAINED } from "../billing/reputation";
 import { db } from "../db/client";
 import { outboundMessages, teams } from "../db/schema";
 import { getTeamsQuotaUsage } from "../delivery/quota";
@@ -64,12 +65,8 @@ export async function getOrganizationMailActivity(
             failed: count(
               sql`CASE WHEN ${outboundMessages.deliveryStatus} = 'failed' THEN 1 END`,
             ),
-            bounced: count(
-              sql`CASE WHEN ${outboundMessages.deliveryStatus} = 'bounced' THEN 1 END`,
-            ),
-            complained: count(
-              sql`CASE WHEN ${outboundMessages.feedbackStatus} = 'complained' THEN 1 END`,
-            ),
+            bounced: count(BOUNCED),
+            complained: count(COMPLAINED),
           })
           .from(outboundMessages)
           .where(

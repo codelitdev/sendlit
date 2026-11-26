@@ -360,12 +360,6 @@ curl "$SENDLIT_API_URL/provisioning/teams/team_01JXYZ/usage" \
 
 ```json
 {
-    "health": {
-        "status": "normal",
-        "reason": null,
-        "scope": null,
-        "last7Days": { "sent": 2310, "bounced": 18, "complained": 0 }
-    },
     "day": {
         "limit": 500,
         "accepted": 120,
@@ -384,7 +378,8 @@ curl "$SENDLIT_API_URL/provisioning/teams/team_01JXYZ/usage" \
 ```
 
 `accepted` has already consumed quota. `reserved` represents work accepted by
-SendLit but not yet finalized. `health` is the same as on the team. This
+SendLit but not yet finalized. The response also carries the team's `health`
+([above](#read-and-update-a-provisioned-team)). This
 endpoint requires an active organization delivery grant for the team.
 
 ### Every team in one call
@@ -468,13 +463,15 @@ SendLit also re-checks every hour.
 - `DELETE` on the same path removes the domain from SES. The team goes back
   to the shared domain.
 
-| Status | Error                                  | Meaning                                                   |
-| ------ | -------------------------------------- | --------------------------------------------------------- |
-| `400`  | `domain_invalid`, `domain_public_suffix` | The From address isn't at a domain the team can own      |
-| `409`  | `domain_in_use`                        | Another team or the organization already uses the domain  |
-| `422`  | `esp_management_credentials_required`  | The shared mailbox has no SES API key                     |
-| `422`  | `provider_domain_unsupported`          | The shared mailbox isn't Amazon SES                       |
-| `422`  | `organization_delivery_disabled`       | The team has no active shared-mailbox grant               |
+| Status | Error                                    | Meaning                                                                                                   |
+| ------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `400`  | `domain_invalid`, `domain_public_suffix` | The From address isn't at a domain the team can own                                                       |
+| `409`  | `domain_in_use`                          | Another team, the organization, or the shared mailbox's own From address already uses the domain          |
+| `409`  | `domain_exists_at_provider`              | The domain is already an identity in the mailbox's SES account, and SendLit didn't add it. Remove it there or use another domain |
+| `422`  | `esp_management_credentials_required`    | The shared mailbox has no SES API key                                                                     |
+| `422`  | `provider_domain_unsupported`            | The shared mailbox isn't Amazon SES                                                                       |
+| `422`  | `organization_delivery_disabled`         | The team has no active shared-mailbox grant                                                               |
+| `422`  | `esp_provider_error`                     | Amazon SES returned an error. Retry                                                                       |
 
 The organization's delivery policy can require teams to use their own domain:
 `requireTeamSendingDomain` set to `marketing` or `all` refuses those sends
@@ -499,13 +496,9 @@ than a human-readable message.
 | `429`  | `too_many_requests`            | The provisioning rate limit was exceeded              |
 | `500`  | `server_error`                 | SendLit could not complete provisioning               |
 
-A team's own sends can also be refused while it's paused. A broadcast or
-sequence through the shared mailbox returns `403 sending_paused` with `reason`
-`shared_esp_team_breach` or `shared_esp_top_contributor` (`scope: "team"`) when
-that team's bounces or complaints put the mailbox at risk, or
-`shared_esp_breach` (`scope: "shared_mailbox"`) when every team on it is
-paused. Transactional email is not affected. See
-[Shared mailboxes](/docs/workspace/acceptable-use#shared-mailboxes).
+A paused team's broadcasts and sequences return `403 sending_paused`, with
+`reason` `shared_esp_team_breach`, `shared_esp_top_contributor` or
+`shared_esp_breach`; see [Shared mailboxes](/docs/workspace/acceptable-use#shared-mailboxes).
 
 Treat a `404` as organization-scoped: a valid team belonging to another
 organization is intentionally not exposed through the caller's key.

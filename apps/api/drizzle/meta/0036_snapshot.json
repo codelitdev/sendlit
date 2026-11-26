@@ -7479,12 +7479,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "dkim_status": {
           "name": "dkim_status",
           "type": "text",
@@ -7500,12 +7494,6 @@
         "dns_records": {
           "name": "dns_records",
           "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "authenticated_at": {
-          "name": "authenticated_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

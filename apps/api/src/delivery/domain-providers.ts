@@ -16,10 +16,10 @@ import { decryptSecret, encryptSecret } from "../utils/secret-crypto";
  */
 
 export type DomainDnsRecord = {
-  type: "CNAME" | "TXT" | "MX";
+  type: "CNAME" | "TXT";
   name: string;
   value: string;
-  purpose: "dkim" | "dmarc" | "spf" | "return_path";
+  purpose: "dkim" | "dmarc";
 };
 
 export type ProviderDomainState = {
@@ -32,7 +32,9 @@ export type ProviderDomainState = {
 
 export interface DomainProviderAdapter {
   readonly provider: string;
-  /** Registers the domain, or returns it as it is if already registered. */
+  /** Registers a new domain. Throws `domain_exists_at_provider` when the
+   * provider already has it: SendLit never adopts, and so never later
+   * deletes, an identity it did not create. */
   register(domain: string): Promise<ProviderDomainState>;
   status(domain: string): Promise<ProviderDomainState | null>;
   remove(domain: string): Promise<void>;
@@ -50,8 +52,6 @@ export function encryptManagementCredentials(
   return encryptSecret(JSON.stringify(credentials));
 }
 
-export const SUPPORTED_DOMAIN_PROVIDERS = ["ses"] as const;
-
 function sesDkim(status: string | undefined): ProviderDomainState["dkim"] {
   if (status === "SUCCESS") return "verified";
   if (status === "FAILED") return "failed";
@@ -59,51 +59,51 @@ function sesDkim(status: string | undefined): ProviderDomainState["dkim"] {
   return "pending";
 }
 
-function sesRecords(domain: string, tokens: string[] | undefined): DomainDnsRecord[] {
-  return (tokens ?? []).map((token) => ({
-    type: "CNAME" as const,
-    name: `${token}._domainkey.${domain}`,
-    value: `${token}.dkim.amazonses.com`,
-    purpose: "dkim" as const,
-  }));
+function sesState(
+  domain: string,
+  identity: {
+    VerifiedForSendingStatus?: boolean;
+    DkimAttributes?: { Status?: string; Tokens?: string[] };
+  },
+): ProviderDomainState {
+  return {
+    verified: identity.VerifiedForSendingStatus === true,
+    dkim: sesDkim(identity.DkimAttributes?.Status),
+    records: (identity.DkimAttributes?.Tokens ?? []).map((token) => ({
+      type: "CNAME",
+      name: `${token}._domainkey.${domain}`,
+      value: `${token}.dkim.amazonses.com`,
+      purpose: "dkim",
+    })),
+  };
 }
 
 export function sesAdapter(
   credentials: SesManagementCredentials,
   host: string,
-  client?: Pick<SESv2Client, "send">,
 ): DomainProviderAdapter {
-  const ses =
-    client ??
-    new SESv2Client({
-      // An SES-compatible endpoint (e.g. LocalStack) instead of AWS.
-      ...(process.env.SES_API_ENDPOINT
-        ? { endpoint: process.env.SES_API_ENDPOINT }
-        : {}),
-      region: credentials.region || sesRegionOf(host),
-      credentials: {
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-      },
-    });
-  const status = async (domain: string): Promise<ProviderDomainState | null> => {
-    try {
-      const identity = await ses.send(
-        new GetEmailIdentityCommand({ EmailIdentity: domain }),
-      );
-      return {
-        verified: identity.VerifiedForSendingStatus === true,
-        dkim: sesDkim(identity.DkimAttributes?.Status),
-        records: sesRecords(domain, identity.DkimAttributes?.Tokens),
-      };
-    } catch (error) {
-      if (error instanceof NotFoundException) return null;
-      throw error;
-    }
-  };
+  const ses = new SESv2Client({
+    // An SES-compatible endpoint (e.g. LocalStack) instead of AWS.
+    ...(process.env.SES_API_ENDPOINT ? { endpoint: process.env.SES_API_ENDPOINT } : {}),
+    region: credentials.region || sesRegionOf(host),
+    credentials: {
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+    },
+  });
   return {
     provider: "ses",
-    status,
+    async status(domain) {
+      try {
+        const identity = await ses.send(
+          new GetEmailIdentityCommand({ EmailIdentity: domain }),
+        );
+        return sesState(domain, identity);
+      } catch (error) {
+        if (error instanceof NotFoundException) return null;
+        throw error;
+      }
+    },
     async register(domain) {
       try {
         const created = await ses.send(
@@ -112,17 +112,12 @@ export function sesAdapter(
             DkimSigningAttributes: { NextSigningKeyLength: "RSA_2048_BIT" },
           }),
         );
-        return {
-          verified: created.VerifiedForSendingStatus === true,
-          dkim: sesDkim(created.DkimAttributes?.Status),
-          records: sesRecords(domain, created.DkimAttributes?.Tokens),
-        };
+        return sesState(domain, created);
       } catch (error) {
-        // Registered before (a retry, or removed from SendLit but not SES).
-        if (!(error instanceof AlreadyExistsException)) throw error;
-        const existing = await status(domain);
-        if (!existing) throw error;
-        return existing;
+        if (error instanceof AlreadyExistsException) {
+          throw new Error("domain_exists_at_provider");
+        }
+        throw error;
       }
     },
     async remove(domain) {
@@ -152,12 +147,5 @@ export function domainProviderFor(esp: {
   const credentials = JSON.parse(
     decryptSecret(esp.encryptedManagementSecret),
   ) as SesManagementCredentials;
-  return (adapterOverride ?? sesAdapter)(credentials, esp.host);
-}
-
-let adapterOverride: typeof sesAdapter | null = null;
-
-/** Tests only: replace the SES adapter factory. */
-export function setDomainAdapterForTests(factory: typeof sesAdapter | null): void {
-  adapterOverride = factory;
+  return sesAdapter(credentials, esp.host);
 }

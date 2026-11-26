@@ -1,4 +1,8 @@
 import { positiveInt } from "../billing/reputation-config";
+import {
+  type ReputationMetrics as Counts,
+  rateAtLeast,
+} from "../billing/reputation-policy";
 
 /**
  * Shared-ESP guard thresholds (#220, ADR 0013). They sit below the
@@ -21,19 +25,6 @@ export type SharedEspGuardConfig = {
   recoveryCleanDays: number;
 };
 
-const DISABLED_CONFIG: SharedEspGuardConfig = {
-  enabled: false,
-  minimumAccepted: 200,
-  bounceWarnBps: 200,
-  complaintWarnBps: 5,
-  bouncePauseBps: 400,
-  complaintPauseBps: 8,
-  teamMinimumBounces: 5,
-  teamMinimumComplaints: 2,
-  minimumHoldHours: 72,
-  recoveryCleanDays: 3,
-};
-
 /** Throws on an invalid `SHARED_ESP_*` value; the API calls it at startup
  * so a typo fails the boot instead of a send. */
 export function readSharedEspGuardConfig(): SharedEspGuardConfig {
@@ -46,29 +37,23 @@ export function readSharedEspGuardConfig(): SharedEspGuardConfig {
     ((raw === undefined || raw === "") &&
       process.env.SENDLIT_DEPLOYMENT_MODE === "cloud");
   // A bad threshold must never break sending while the guard is off.
-  if (!enabled) return DISABLED_CONFIG;
+  const n = (name: string, fallback: number) =>
+    enabled ? positiveInt(name, fallback) : fallback;
   return {
     enabled,
-    minimumAccepted: positiveInt("SHARED_ESP_MIN_ACCEPTED", 200),
-    bounceWarnBps: positiveInt("SHARED_ESP_BOUNCE_WARN_BPS", 200),
-    complaintWarnBps: positiveInt("SHARED_ESP_COMPLAINT_WARN_BPS", 5),
-    bouncePauseBps: positiveInt("SHARED_ESP_BOUNCE_PAUSE_BPS", 400),
-    complaintPauseBps: positiveInt("SHARED_ESP_COMPLAINT_PAUSE_BPS", 8),
-    teamMinimumBounces: positiveInt("SHARED_ESP_TEAM_MIN_BOUNCES", 5),
-    teamMinimumComplaints: positiveInt("SHARED_ESP_TEAM_MIN_COMPLAINTS", 2),
-    minimumHoldHours: positiveInt("SHARED_ESP_MINIMUM_HOLD_HOURS", 72),
-    recoveryCleanDays: positiveInt("SHARED_ESP_RECOVERY_CLEAN_DAYS", 3),
+    minimumAccepted: n("SHARED_ESP_MIN_ACCEPTED", 200),
+    bounceWarnBps: n("SHARED_ESP_BOUNCE_WARN_BPS", 200),
+    complaintWarnBps: n("SHARED_ESP_COMPLAINT_WARN_BPS", 5),
+    bouncePauseBps: n("SHARED_ESP_BOUNCE_PAUSE_BPS", 400),
+    complaintPauseBps: n("SHARED_ESP_COMPLAINT_PAUSE_BPS", 8),
+    teamMinimumBounces: n("SHARED_ESP_TEAM_MIN_BOUNCES", 5),
+    teamMinimumComplaints: n("SHARED_ESP_TEAM_MIN_COMPLAINTS", 2),
+    minimumHoldHours: n("SHARED_ESP_MINIMUM_HOLD_HOURS", 72),
+    recoveryCleanDays: n("SHARED_ESP_RECOVERY_CLEAN_DAYS", 3),
   };
 }
 
-export type TeamEspMetrics = {
-  teamId: string;
-  accepted: number;
-  bounced: number;
-  complained: number;
-};
-
-type Counts = Omit<TeamEspMetrics, "teamId">;
+export type TeamEspMetrics = Counts & { teamId: string };
 
 export type SharedEspTeamReason =
   | "shared_esp_team_breach"
@@ -83,10 +68,6 @@ export type SharedEspDecision = {
   pausedTeams: { teamId: string; reason: SharedEspTeamReason }[];
   total: Counts;
 };
-
-function rateAtLeast(numerator: number, denominator: number, bps: number): boolean {
-  return denominator > 0 && numerator * 10_000 >= denominator * bps;
-}
 
 function overRates(counts: Counts, bounceBps: number, complaintBps: number): boolean {
   return (

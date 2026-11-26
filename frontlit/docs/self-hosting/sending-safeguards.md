@@ -85,28 +85,11 @@ Rates need bounce and complaint feedback from your ESP; see
 
 ## Shared mailbox guard
 
-When several teams send through one shared mailbox (an organization ESP),
-they also share that ESP account's standing. Email providers enforce bounce
-and complaint limits on the whole account, and Amazon SES can pause an
-account at about 5% bounces or 0.1% complaints. One team's bad list could
-stop every team.
-
-The guard checks each shared mailbox every hour, and within a minute of a
-bounce or complaint, over the last 7 days:
-
-- A team whose own bounce or complaint rate is over the pause rate has its
-  broadcasts and sequences through that mailbox paused. It needs at least 5
-  bounces or 2 complaints first, so one complaint never pauses a small team.
-- If the mailbox's combined rate is still over the warning rate, the teams
-  that are over the warning rate themselves pause too, worst first. Clean
-  teams are never paused.
-- Only if the teams left are still over the pause rate does marketing pause
-  for every team on the mailbox.
-
-Transactional email always keeps sending, and teams' own ESPs aren't
-affected. A pause lasts at least `SHARED_ESP_MINIMUM_HOLD_HOURS`, then lifts
-after `SHARED_ESP_RECOVERY_CLEAN_DAYS` clean daily checks. Organization owners
-get an email on every change.
+When several teams send through one shared mailbox (an organization ESP), the
+guard pauses marketing for the teams whose bounces or complaints put the
+provider account at risk. It checks every hour and within a minute of a bounce
+or complaint. [Shared mailboxes](/docs/workspace/acceptable-use#shared-mailboxes)
+describes what it does; these variables set its rates:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |

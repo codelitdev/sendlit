@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import express from "express";
 
 const authState = {
@@ -8,6 +8,22 @@ const authState = {
   organizationScopes: [] as string[],
 };
 
+const sdk = await import("@aws-sdk/client-sesv2");
+let providerFails = false;
+mock.module("@aws-sdk/client-sesv2", () => ({
+  ...sdk,
+  SESv2Client: class {
+    async send() {
+      if (providerFails) {
+        throw Object.assign(new Error("Rate exceeded"), { $metadata: {} });
+      }
+      return {
+        VerifiedForSendingStatus: false,
+        DkimAttributes: { Status: "PENDING", Tokens: ["tok"] },
+      };
+    }
+  },
+}));
 mock.module("../db/client", async () => {
   const { makeTestDb } = await import("../test/db");
   return { db: await makeTestDb() };
@@ -56,27 +72,8 @@ const send = (method: string, path: string, body?: unknown) =>
 
 beforeEach(async () => {
   await truncateAll(tdb);
-  const state = (domain: string) => ({
-    verified: false,
-    dkim: "pending" as const,
-    records: [
-      {
-        type: "CNAME" as const,
-        name: `tok._domainkey.${domain}`,
-        value: "tok.dkim.amazonses.com",
-        purpose: "dkim" as const,
-      },
-    ],
-  });
-  providers.setDomainAdapterForTests(() => ({
-    provider: "ses",
-    register: async (domain) => state(domain),
-    status: async (domain) => state(domain),
-    remove: async () => undefined,
-  }));
+  providerFails = false;
 });
-
-afterEach(() => providers.setDomainAdapterForTests(null));
 
 describe("provisioning: team sending domain", () => {
   it("sets, reads and removes a provisioned team's own domain", async () => {
@@ -130,6 +127,13 @@ describe("provisioning: team sending domain", () => {
       ],
     });
     expect((await send("GET", path)).json()).toMatchObject({ status: "pending" });
+
+    // A provider failure is a declared 422, not an undeclared 502.
+    providerFails = true;
+    const failed = await send("GET", path);
+    expect(failed.status).toBe(422);
+    expect(failed.json()).toEqual({ error: "esp_provider_error" });
+    providerFails = false;
 
     expect((await send("DELETE", path)).status).toBe(204);
     expect((await send("GET", path)).json()).toBeNull();

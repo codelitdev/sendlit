@@ -420,8 +420,7 @@ const impl = s.router(contract.provisioning, {
       return { status: 200, body: await refreshTeamSendingDomain(team.id) };
     } catch (error) {
       const mapped = teamDomainErrorHttp(error);
-      if (mapped?.status === 404 || mapped?.status === 422) return mapped as any;
-      if (mapped) return { status: 422, body: mapped.body };
+      if (mapped) return mapped as any;
       throw error;
     }
   },
@@ -439,8 +438,7 @@ const impl = s.router(contract.provisioning, {
       return { status: 200, body: view };
     } catch (error) {
       const mapped = teamDomainErrorHttp(error);
-      if (mapped && mapped.status !== 502) return mapped as any;
-      if (mapped) return { status: 422, body: mapped.body };
+      if (mapped) return mapped as any;
       throw error;
     }
   },

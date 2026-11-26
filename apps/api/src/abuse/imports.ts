@@ -94,13 +94,15 @@ export async function recordContactImport(input: {
     : config.importAlertContacts;
   const judge = (imported: number, total: number) => {
     const existingBefore = Math.max(total - imported, 0);
+    const overThreshold = imported >= threshold;
+    const bigJump =
+      imported >= GROWTH_ALERT_FLOOR &&
+      imported > config.importAlertGrowthFactor * Math.max(existingBefore, 1);
     return {
       imported,
       existingBefore,
-      overThreshold: imported >= threshold,
-      bigJump:
-        imported >= GROWTH_ALERT_FLOOR &&
-        imported > config.importAlertGrowthFactor * Math.max(existingBefore, 1),
+      overThreshold,
+      flagged: overThreshold || bigJump,
     };
   };
   // Each team is judged on its own imports, so a flag holds only the team
@@ -115,19 +117,17 @@ export async function recordContactImport(input: {
   };
   for (const row of importRows) entry(row.teamId).imported += Number(row.imported);
   for (const row of contactRows) entry(row.teamId).total += Number(row.total);
-  const flagged = (result: ReturnType<typeof judge>) =>
-    result.overThreshold || result.bigJump;
   const rest = { imported: 0, total: 0 };
   for (const [id, value] of byTeam) {
-    if (id !== null && flagged(judge(value.imported, value.total))) continue;
+    if (id !== null && judge(value.imported, value.total).flagged) continue;
     rest.imported += value.imported;
     rest.total += value.total;
   }
   const own = byTeam.get(input.teamId) ?? { imported: 0, total: 0 };
   const teamResult = judge(own.imported, own.total);
-  const teamFlagged = flagged(teamResult);
+  const teamFlagged = teamResult.flagged;
   const result = teamFlagged ? teamResult : judge(rest.imported, rest.total);
-  if (!result.overThreshold && !result.bigJump) return;
+  if (!result.flagged) return;
 
   const hold = isNew && config.holdLargeImportsOfNewAccounts;
   await raiseAbuseFlag({

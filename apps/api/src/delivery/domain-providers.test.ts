@@ -1,41 +1,45 @@
-import { describe, expect, it } from "bun:test";
-import {
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+
+const sdk = await import("@aws-sdk/client-sesv2");
+let handle: (command: unknown) => unknown;
+let sent: unknown[];
+mock.module("@aws-sdk/client-sesv2", () => ({
+  ...sdk,
+  SESv2Client: class {
+    async send(command: unknown) {
+      sent.push(command);
+      return handle(command);
+    }
+  },
+}));
+
+const { sesAdapter } = await import("./domain-providers");
+const {
   AlreadyExistsException,
   CreateEmailIdentityCommand,
   DeleteEmailIdentityCommand,
-  GetEmailIdentityCommand,
   NotFoundException,
-} from "@aws-sdk/client-sesv2";
-import { sesAdapter } from "./domain-providers";
+} = sdk;
 
 const credentials = { accessKeyId: "AKIA-TEST", secretAccessKey: "secret" };
 const meta = { $metadata: {} };
 
-function fakeSes(handler: (command: unknown) => unknown) {
-  const sent: unknown[] = [];
-  return {
-    sent,
-    client: {
-      send: async (command: unknown) => {
-        sent.push(command);
-        return handler(command);
-      },
-    } as never,
-  };
-}
+beforeEach(() => {
+  sent = [];
+});
 
 describe("SES domain adapter", () => {
   it("registers a domain with Easy DKIM and returns its CNAMEs", async () => {
-    const ses = fakeSes(() => ({
+    handle = () => ({
       VerifiedForSendingStatus: false,
       DkimAttributes: { Status: "PENDING", Tokens: ["t1", "t2", "t3"] },
-    }));
-    const state = await sesAdapter(credentials, "", ses.client).register(
-      "school.example.org",
-    );
+    });
+    const state = await sesAdapter(credentials, "").register("school.example.org");
 
-    expect(ses.sent[0]).toBeInstanceOf(CreateEmailIdentityCommand);
-    expect((ses.sent[0] as CreateEmailIdentityCommand).input).toMatchObject({
+    expect(sent[0]).toBeInstanceOf(CreateEmailIdentityCommand);
+    expect(
+      (sent[0] as InstanceType<typeof CreateEmailIdentityCommand>).input,
+    ).toMatchObject({
       EmailIdentity: "school.example.org",
       DkimSigningAttributes: { NextSigningKeyLength: "RSA_2048_BIT" },
     });
@@ -51,32 +55,26 @@ describe("SES domain adapter", () => {
     });
   });
 
-  it("reuses an identity that already exists and maps DKIM status", async () => {
-    const ses = fakeSes((command) => {
-      if (command instanceof CreateEmailIdentityCommand) {
-        throw new AlreadyExistsException({ message: "exists", ...meta });
-      }
-      return {
-        VerifiedForSendingStatus: true,
-        DkimAttributes: { Status: "SUCCESS", Tokens: ["t1"] },
-      };
-    });
-    const state = await sesAdapter(credentials, "", ses.client).register(
-      "school.example.org",
-    );
+  it("never adopts an identity that already exists at the provider", async () => {
+    handle = () => {
+      throw new AlreadyExistsException({ message: "exists", ...meta });
+    };
 
-    expect(ses.sent[1]).toBeInstanceOf(GetEmailIdentityCommand);
-    expect(state).toMatchObject({ verified: true, dkim: "verified" });
+    await expect(
+      sesAdapter(credentials, "").register("school.example.org"),
+    ).rejects.toThrow("domain_exists_at_provider");
+    // No lookup of, and so no later claim on, the existing identity.
+    expect(sent).toHaveLength(1);
   });
 
   it("treats a missing identity as none, and removing it as done", async () => {
-    const ses = fakeSes(() => {
+    handle = () => {
       throw new NotFoundException({ message: "missing", ...meta });
-    });
-    const adapter = sesAdapter(credentials, "", ses.client);
+    };
+    const adapter = sesAdapter(credentials, "");
 
     expect(await adapter.status("school.example.org")).toBeNull();
     await adapter.remove("school.example.org");
-    expect(ses.sent[1]).toBeInstanceOf(DeleteEmailIdentityCommand);
+    expect(sent[1]).toBeInstanceOf(DeleteEmailIdentityCommand);
   });
 });

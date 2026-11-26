@@ -126,7 +126,7 @@ export async function teamSendingDomains(teamId: string): Promise<string[]> {
       and(
         eq(sendingDomains.teamId, teamId),
         eq(sendingDomains.status, "verified"),
-        isNotNull(sendingDomains.authenticatedAt),
+        isNotNull(sendingDomains.verifiedAt),
       ),
     );
   return [

@@ -2019,7 +2019,7 @@ const organizationsContract = c.router(
       },
       summary: "Set a team's own From address and register its domain",
       description:
-        "Registers the From address's domain with the team's shared ESP (Amazon SES for now) and returns the DNS records to publish. Replacing a different domain removes the old one. 422 `esp_management_credentials_required` when the shared ESP has no API credential, `provider_domain_unsupported` for other providers, `organization_delivery_disabled` without an active grant. 409 `domain_in_use` when another team or the organization uses the domain.",
+        "Registers the From address's domain with the team's shared ESP (Amazon SES for now) and returns the DNS records to publish. Replacing a different domain removes the old one. 422 `esp_management_credentials_required` when the shared ESP has no API credential, `provider_domain_unsupported` for other providers, `organization_delivery_disabled` without an active grant. 409 `domain_in_use` when another team, the organization or the shared mailbox's own From address uses the domain, and `domain_exists_at_provider` when the ESP account already has the domain (SendLit never takes over an identity it did not create). 422 `esp_provider_error` when the provider's API refuses or fails.",
     },
     removeTeamSendingDomain: {
       method: "DELETE",

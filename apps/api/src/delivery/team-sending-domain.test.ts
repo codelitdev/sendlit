@@ -1,6 +1,44 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 const dmarc = { published: false };
+
+/** The fake SES account: identities by domain, and every call made. */
+let identities: Map<
+  string,
+  { verified: boolean; dkim: "pending" | "verified" | "failed" }
+>;
+let calls: string[];
+let sesFails = false;
+const sdk = await import("@aws-sdk/client-sesv2");
+const SES_DKIM = { pending: "PENDING", verified: "SUCCESS", failed: "FAILED" };
+mock.module("@aws-sdk/client-sesv2", () => ({
+  ...sdk,
+  SESv2Client: class {
+    async send(command: { input: { EmailIdentity: string } }) {
+      const domain = command.input.EmailIdentity;
+      calls.push(`${command.constructor.name} ${domain}`);
+      if (sesFails)
+        throw new Error("The security token included in the request is invalid.");
+      const meta = { $metadata: {} };
+      if (command instanceof sdk.CreateEmailIdentityCommand) {
+        if (identities.has(domain)) {
+          throw new sdk.AlreadyExistsException({ message: "exists", ...meta });
+        }
+        identities.set(domain, { verified: false, dkim: "pending" });
+      }
+      if (command instanceof sdk.DeleteEmailIdentityCommand) {
+        identities.delete(domain);
+        return {};
+      }
+      const identity = identities.get(domain);
+      if (!identity) throw new sdk.NotFoundException({ message: "missing", ...meta });
+      return {
+        VerifiedForSendingStatus: identity.verified,
+        DkimAttributes: { Status: SES_DKIM[identity.dkim], Tokens: ["a", "b", "c"] },
+      };
+    }
+  },
+}));
 process.env.BILLING_DOMAIN_VERIFICATION_KEY ||= "test-domain-verification-key";
 
 mock.module("../db/client", async () => {
@@ -31,50 +69,21 @@ const orgDomains = await import("../billing/domains");
 type TestDb = import("../test/db").TestDb;
 
 const tdb = db as unknown as TestDb;
-const HOUR = 60 * 60 * 1000;
 
-/** The fake SES account: identities by domain. */
-let identities: Map<
-  string,
-  { verified: boolean; dkim: "pending" | "verified" | "failed" }
->;
-let removed: string[];
+const HOUR = 60 * 60 * 1000;
 
 beforeEach(async () => {
   await truncateAll(tdb);
   identities = new Map();
-  removed = [];
+  calls = [];
+  sesFails = false;
   dmarc.published = false;
-  providers.setDomainAdapterForTests(() => ({
-    provider: "ses",
-    async register(domain) {
-      if (!identities.has(domain))
-        identities.set(domain, { verified: false, dkim: "pending" });
-      return this.status(domain) as never;
-    },
-    async status(domain) {
-      const identity = identities.get(domain);
-      if (!identity) return null;
-      return {
-        ...identity,
-        records: ["a", "b", "c"].map((token) => ({
-          type: "CNAME" as const,
-          name: `${token}._domainkey.${domain}`,
-          value: `${token}.dkim.amazonses.com`,
-          purpose: "dkim" as const,
-        })),
-      };
-    },
-    async remove(domain) {
-      identities.delete(domain);
-      removed.push(domain);
-    },
-  }));
 });
 
-afterEach(() => {
-  providers.setDomainAdapterForTests(null);
-});
+const removed = () =>
+  calls.filter((call) => call.startsWith("DeleteEmailIdentityCommand"));
+const registered = () =>
+  calls.filter((call) => call.startsWith("CreateEmailIdentityCommand"));
 
 async function setup() {
   const { organization, team } = await seedTeamAndContact(tdb);
@@ -165,14 +174,15 @@ describe("team sending domains", () => {
 
   it("keeps the team's domain through a grace period, then pauses marketing", async () => {
     const ctx = await setup();
-    identities.set("school-a.example.org", { verified: true, dkim: "verified" });
-    dmarc.published = true;
     await domains.setTeamSendingDomain(
       ctx.organization.id,
       ctx.team.id,
       { fromEmail: "office@school-a.example.org" },
       actor,
     );
+    identities.set("school-a.example.org", { verified: true, dkim: "verified" });
+    dmarc.published = true;
+    await domains.refreshTeamSendingDomain(ctx.team.id);
 
     dmarc.published = false;
     const failing = await domains.refreshTeamSendingDomain(ctx.team.id);
@@ -279,14 +289,14 @@ describe("team sending domains", () => {
     expect(
       await domains.removeTeamSendingDomain(ctx.organization.id, ctx.team.id, actor),
     ).toBe(true);
-    expect(removed).toEqual(["school-a.example.org"]);
+    expect(removed()).toEqual(["DeleteEmailIdentityCommand school-a.example.org"]);
     expect((await domainRow(ctx.team.id)).status).toBe("revoked");
     const [grant] = await tdb
       .select()
       .from(schema.espConfigTeamGrants)
       .where(eq(schema.espConfigTeamGrants.id, ctx.grant.id));
     expect(grant).toMatchObject({ fromEmail: null, sendingDomainId: null });
-    expect(await domains.getTeamSendingDomain(ctx.team.id)).toBeNull();
+    expect(await domains.refreshTeamSendingDomain(ctx.team.id)).toBeNull();
 
     // The other team can now use it, reusing the revoked row.
     const view = await domains.setTeamSendingDomain(
@@ -354,16 +364,7 @@ describe("team sending domains", () => {
     expect(saved.encryptedManagementSecret).toBeTruthy();
     expect(saved.encryptedManagementSecret).not.toContain("AKIA-NEW");
 
-    providers.setDomainAdapterForTests(() => ({
-      provider: "ses",
-      register: async () => {
-        throw new Error("unused");
-      },
-      status: async () => {
-        throw new Error("The security token included in the request is invalid.");
-      },
-      remove: async () => undefined,
-    }));
+    sesFails = true;
     await expect(
       domains.setEspManagementCredentials(
         ctx.organization.id,
@@ -372,6 +373,7 @@ describe("team sending domains", () => {
         actor,
       ),
     ).rejects.toThrow("esp_management_credentials_invalid");
+    sesFails = false;
 
     await tdb
       .update(schema.espConfigs)
@@ -385,5 +387,128 @@ describe("team sending domains", () => {
         actor,
       ),
     ).rejects.toThrow("provider_domain_unsupported");
+  });
+
+  it("never takes over a domain SendLit didn't register, nor the shared mailbox's own", async () => {
+    const ctx = await setup();
+    const set = (fromEmail: string) =>
+      domains.setTeamSendingDomain(
+        ctx.organization.id,
+        ctx.team.id,
+        { fromEmail },
+        actor,
+      );
+    // Verified in the AWS account by someone else.
+    identities.set("school-a.example.org", { verified: true, dkim: "verified" });
+
+    await expect(set("office@school-a.example.org")).rejects.toThrow(
+      "domain_exists_at_provider",
+    );
+    await expect(set("office@District.example.org")).rejects.toThrow("domain_in_use");
+    expect(registered()).toEqual(["CreateEmailIdentityCommand school-a.example.org"]);
+    expect(removed()).toEqual([]);
+    expect(identities.has("school-a.example.org")).toBe(true);
+    expect(await domainRow(ctx.team.id)).toBeUndefined();
+  });
+
+  it("re-setting the same domain only refreshes it, without registering again", async () => {
+    const ctx = await setup();
+    const set = (fromEmail: string) =>
+      domains.setTeamSendingDomain(
+        ctx.organization.id,
+        ctx.team.id,
+        { fromEmail },
+        actor,
+      );
+    await set("office@school-a.example.org");
+
+    const view = await set("hello@school-a.example.org");
+    expect(view).toMatchObject({
+      domain: "school-a.example.org",
+      fromEmail: "hello@school-a.example.org",
+    });
+    expect(registered()).toHaveLength(1);
+    expect(removed()).toEqual([]);
+  });
+
+  it("switches domains by registering the new one before removing the old one", async () => {
+    const ctx = await setup();
+    const set = (fromEmail: string) =>
+      domains.setTeamSendingDomain(
+        ctx.organization.id,
+        ctx.team.id,
+        { fromEmail },
+        actor,
+      );
+    await set("office@school-a.example.org");
+    identities.set("school-b.example.org", { verified: true, dkim: "verified" });
+
+    // The new domain fails at the provider: the old one stays, untouched.
+    await expect(set("office@school-b.example.org")).rejects.toThrow(
+      "domain_exists_at_provider",
+    );
+    expect(removed()).toEqual([]);
+    expect(identities.has("school-a.example.org")).toBe(true);
+    expect((await domainRow(ctx.team.id)).domain).toBe("school-a.example.org");
+
+    calls = [];
+    const view = await set("office@school-c.example.org");
+    expect(view.domain).toBe("school-c.example.org");
+    expect(
+      calls.indexOf("CreateEmailIdentityCommand school-c.example.org"),
+    ).toBeLessThan(calls.indexOf("DeleteEmailIdentityCommand school-a.example.org"));
+    expect(identities.has("school-a.example.org")).toBe(false);
+  });
+
+  it("checks each due domain once across concurrent sweeps", async () => {
+    const ctx = await setup();
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      ctx.team.id,
+      { fromEmail: "office@school-a.example.org" },
+      actor,
+    );
+    await tdb
+      .update(schema.sendingDomains)
+      .set({ nextCheckAt: new Date(Date.now() - HOUR) })
+      .where(eq(schema.sendingDomains.teamId, ctx.team.id));
+    calls = [];
+
+    await Promise.all([
+      domains.checkDueTeamSendingDomains(),
+      domains.checkDueTeamSendingDomains(),
+    ]);
+    expect(calls).toEqual(["GetEmailIdentityCommand school-a.example.org"]);
+  });
+
+  it("shows no From address when the grant no longer points at the domain", async () => {
+    const ctx = await setup();
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      ctx.team.id,
+      { fromEmail: "office@school-a.example.org" },
+      actor,
+    );
+    await tdb
+      .update(schema.espConfigTeamGrants)
+      .set({ sendingDomainId: null })
+      .where(eq(schema.espConfigTeamGrants.id, ctx.grant.id));
+
+    expect((await domains.refreshTeamSendingDomain(ctx.team.id))?.fromEmail).toBeNull();
+  });
+
+  it("maps provider errors to 422 and an identity SendLit didn't create to 409", () => {
+    expect(
+      domains.teamDomainErrorHttp(
+        Object.assign(new Error("throttled"), { $metadata: { httpStatusCode: 429 } }),
+      ),
+    ).toEqual({ status: 422, body: { error: "esp_provider_error" } });
+    expect(domains.teamDomainErrorHttp(new Error("domain_exists_at_provider"))).toEqual(
+      {
+        status: 409,
+        body: { error: "domain_exists_at_provider" },
+      },
+    );
+    expect(domains.teamDomainErrorHttp(new Error("boom"))).toBeNull();
   });
 });

@@ -98,3 +98,13 @@ Plan limits and billing mutations use the same stable codes on REST and MCP:
 | `403`  | `sending_paused`                   | Payment grace expired, or a fair-use or shared-mailbox control paused sending. |
 
 Limit errors include `plan`, `usage`, `limit`, `requiredPlan`, and `upgradeUrl`. MCP tools return the same object in `structuredContent` instead of `internal_error`.
+
+## Team sending-domain errors
+
+Setting a team's own sending domain on a shared mailbox can return
+`domain_invalid`, `domain_public_suffix`, `domain_in_use`,
+`domain_exists_at_provider`, `esp_management_credentials_required`,
+`provider_domain_unsupported`, `organization_delivery_disabled` or
+`esp_provider_error`. See
+[Give a team its own sending domain](/docs/developers/provisioning#give-a-team-its-own-sending-domain)
+for what each means.

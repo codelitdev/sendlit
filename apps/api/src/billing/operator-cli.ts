@@ -97,6 +97,16 @@ async function organizationByPublicId(publicId: string | undefined) {
   return organization;
 }
 
+async function teamByPublicId(publicId: string | undefined) {
+  const [team] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(eq(teams.teamId, required(publicId)))
+    .limit(1);
+  if (!team) throw new Error("team_not_found");
+  return team;
+}
+
 /**
  * Pre-deploy safety for 0.4.1 (README "Billing operations"). alpha.3 kept a
  * subscription paid while the provider said active, even after its scheduled
@@ -377,12 +387,7 @@ async function run(
       ) {
         throw new UsageError();
       }
-      const [team] = await db
-        .select({ id: teams.id })
-        .from(teams)
-        .where(eq(teams.teamId, required(rest[0])))
-        .limit(1);
-      if (!team) throw new Error("team_not_found");
+      const team = await teamByPublicId(rest[0]);
       const ok = await applyTeamSendingControl(
         team.id,
         status,
@@ -394,12 +399,7 @@ async function run(
     }
     case "reputation-release": {
       const context = operatorContext(rest);
-      const [team] = await db
-        .select({ id: teams.id })
-        .from(teams)
-        .where(eq(teams.teamId, required(rest[0])))
-        .limit(1);
-      if (!team) throw new Error("team_not_found");
+      const team = await teamByPublicId(rest[0]);
       const ok = await releaseTeamSendingControl(
         team.id,
         context.actorId,
@@ -452,16 +452,7 @@ async function run(
       const esp = await organizationEspByPublicId(rest[0]);
       const context = operatorContext(rest);
       const teamPublicId = arg("--team", rest);
-      let teamId: string | null = null;
-      if (teamPublicId) {
-        const [team] = await db
-          .select({ id: teams.id })
-          .from(teams)
-          .where(eq(teams.teamId, teamPublicId))
-          .limit(1);
-        if (!team) throw new Error("team_not_found");
-        teamId = team.id;
-      }
+      const teamId = teamPublicId ? (await teamByPublicId(teamPublicId)).id : null;
       const ok = await releaseSharedEspControl({
         espConfigId: esp.id,
         teamId,

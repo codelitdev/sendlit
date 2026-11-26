@@ -57,6 +57,7 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { broadcastDeleteActions, presentBroadcastStatus } from "@/lib/broadcast";
+import { presentSendError } from "@/lib/delivery-source";
 import { ITEMS_PER_PAGE } from "@/lib/pagination";
 
 const STATUS_VARIANT: Record<Sequence["status"], "success" | "neutral" | "outline"> = {
@@ -129,7 +130,11 @@ export function SequenceListPage({
       await unarchiveBroadcast(sequence.sequenceId);
       await reloadAfterRemoving();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed");
+      setError(
+        err instanceof ApiError
+          ? presentSendError(err.message, err.body)
+          : "Action failed",
+      );
     }
   }
 
@@ -142,7 +147,11 @@ export function SequenceListPage({
       }
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed");
+      setError(
+        err instanceof ApiError
+          ? presentSendError(err.message, err.body)
+          : "Action failed",
+      );
     }
   }
 
