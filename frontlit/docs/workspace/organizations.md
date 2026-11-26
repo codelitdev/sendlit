@@ -158,6 +158,8 @@ bad list doesn't drag down the others.
    mailbox's actions, **Amazon SES API key**. Use an IAM key allowed
    `ses:CreateEmailIdentity`, `ses:GetEmailIdentity` and
    `ses:DeleteEmailIdentity`. It's encrypted and never shown again.
+   [Teams' own sending domains](/docs/self-hosting/team-sending-domains)
+   walks through creating it in AWS.
 2. Open **Organizations → Teams**, the team's actions, **Sending domain**,
    and enter the address the team should send from.
 3. Add the DNS records it shows (three DKIM CNAMEs and a DMARC record) at the
