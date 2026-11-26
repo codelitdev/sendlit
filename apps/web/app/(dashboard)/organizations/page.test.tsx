@@ -19,6 +19,12 @@ const mocks = {
   enterOrganizationTeam: mock(),
   listOrganizationAuditEvents: mock(),
   getOrganizationEspGrant: mock(),
+  checkEspDomainAuthentication: mock(),
+  getTeamSendingDomain: mock(),
+  setTeamSendingDomain: mock(),
+  removeTeamSendingDomain: mock(),
+  setOrganizationEspManagementCredentials: mock(),
+  removeOrganizationEspManagementCredentials: mock(),
   getOrganizationBilling: mock(),
   getBillingCatalog: mock(),
   createOrganizationBillingCheckout: mock(),
@@ -77,6 +83,14 @@ mock.module("@/lib/api", () => ({
   enterOrganizationTeam: mocks.enterOrganizationTeam,
   listOrganizationAuditEvents: mocks.listOrganizationAuditEvents,
   getOrganizationEspGrant: mocks.getOrganizationEspGrant,
+  checkEspDomainAuthentication: mocks.checkEspDomainAuthentication,
+  getTeamSendingDomain: mocks.getTeamSendingDomain,
+  setTeamSendingDomain: mocks.setTeamSendingDomain,
+  removeTeamSendingDomain: mocks.removeTeamSendingDomain,
+  setOrganizationEspManagementCredentials:
+    mocks.setOrganizationEspManagementCredentials,
+  removeOrganizationEspManagementCredentials:
+    mocks.removeOrganizationEspManagementCredentials,
   getOrganizationBilling: mocks.getOrganizationBilling,
   getBillingCatalog: mocks.getBillingCatalog,
   createOrganizationBillingCheckout: mocks.createOrganizationBillingCheckout,
@@ -208,7 +222,7 @@ beforeEach(() => {
   });
   mocks.getOrganizationMailActivity.mockResolvedValue({
     rangeDays: 7,
-    totals: { sent: 0, queued: 0, failed: 0, bounced: 0 },
+    totals: { sent: 0, queued: 0, failed: 0, bounced: 0, complained: 0 },
     teams: [],
   });
   mocks.enterOrganizationTeam.mockResolvedValue({
@@ -744,7 +758,7 @@ const provisionedTeam = {
   viewerIsMember: false,
 };
 
-describe("transactional mail activity and enter team", () => {
+describe("mail activity and enter team", () => {
   beforeEach(() => {
     Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
       configurable: true,
@@ -767,14 +781,24 @@ describe("transactional mail activity and enter team", () => {
     });
     mocks.getOrganizationMailActivity.mockResolvedValue({
       rangeDays: 7,
-      totals: { sent: 4, queued: 1, failed: 2, bounced: 0 },
+      totals: { sent: 4, queued: 1, failed: 2, bounced: 0, complained: 0 },
       teams: [
         {
           teamId: "tm_school",
           name: "School One",
           status: "active",
           externalId: "school:one",
-          mail: { sent: 4, queued: 1, failed: 2, bounced: 0 },
+          mail: { sent: 4, queued: 1, failed: 2, bounced: 0, complained: 0 },
+          health: {
+            status: "marketing_paused",
+            reason: "shared_esp_team_breach",
+            scope: "team",
+            last7Days: { sent: 40, bounced: 9, complained: 0 },
+          },
+          quota: {
+            day: { ...usageWindow, limit: 500, accepted: 12 },
+            month: usageWindow,
+          },
         },
       ],
     });
@@ -784,12 +808,7 @@ describe("transactional mail activity and enter team", () => {
     renderPage();
     await openTab("Activity");
 
-    expect(await screen.findByText("Transactional mail activity")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Counts are transactional only. Shared-delivery quota remains separate. No email content is shown.",
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText("Mail activity")).toBeTruthy();
     await waitFor(() => {
       expect(mocks.getOrganizationMailActivity).toHaveBeenCalledWith("org_1", 7);
     });
@@ -798,6 +817,11 @@ describe("transactional mail activity and enter team", () => {
     expect(screen.getAllByText("4").length).toBeGreaterThan(0);
     expect(screen.getAllByText("1").length).toBeGreaterThan(0);
     expect(screen.getAllByText("2").length).toBeGreaterThan(0);
+    expect(screen.getByText("Marketing paused")).toBeTruthy();
+    expect(
+      screen.getByText("On the shared mailbox. 7 days: 40 sent, 9 bounced, 0 spam"),
+    ).toBeTruthy();
+    expect(screen.getByText("12 of 500")).toBeTruthy();
   });
 
   it("enters a provisioned team, then notifies the team switcher", async () => {

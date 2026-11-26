@@ -403,6 +403,11 @@ Background work starts with `startBillingMaintenance()` (`src/billing/lifecycle.
   hourly pending-organization cleanup, sending-domain checks, reputation, and
   SLO alerts.
 
+The shared mailbox guard (`src/delivery/shared-esp-guard.ts`, ADR 0013) runs
+its own hourly sweep in every mode, plus a throttled check after each bounce
+or complaint through an organization ESP. It does nothing unless
+`SHARED_ESP_GUARD` is on (the default in cloud).
+
 Shutdown awaits `stop()`, which waits for work already running.
 
 ### Operator CLI

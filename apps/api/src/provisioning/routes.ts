@@ -11,6 +11,13 @@ import { planGateHttp } from "../billing/errors";
 import { db } from "../db/client";
 import { teamApiKeys } from "../db/schema";
 import { getTeamQuotaUsage } from "../delivery/quota";
+import { getTeamHealth } from "../delivery/team-health";
+import {
+  refreshTeamSendingDomain,
+  removeTeamSendingDomain,
+  setTeamSendingDomain,
+  teamDomainErrorHttp,
+} from "../delivery/team-sending-domain";
 import { captureError, captureEvent } from "../observability";
 import { recordOrganizationAuditEvent } from "../organization/audit";
 import { getOrganization } from "../organization/queries";
@@ -68,7 +75,7 @@ async function resolveProvisionedTeam(req: any, publicTeamId: string) {
   return getTeamForOrganization(req.organizationId, publicTeamId);
 }
 
-function serializeProvisionedView(
+async function serializeProvisionedView(
   view: Awaited<ReturnType<typeof getProvisionedTeamView>>,
 ) {
   return {
@@ -82,6 +89,7 @@ function serializeProvisionedView(
     teamCanChangeDefault: view.delivery?.teamCanChangeDefault ?? true,
     createdAt: view.team.createdAt?.toISOString() ?? null,
     updatedAt: view.team.updatedAt?.toISOString() ?? null,
+    health: await getTeamHealth(view.team.id),
   };
 }
 
@@ -242,7 +250,7 @@ const impl = s.router(contract.provisioning, {
     if (!team) return { status: 404, body: { error: "team_not_found" } };
     return {
       status: 200,
-      body: serializeProvisionedView(await getProvisionedTeamView(team)),
+      body: await serializeProvisionedView(await getProvisionedTeamView(team)),
     };
   },
   updateTeam: async ({ params, body, req }) => {
@@ -261,7 +269,7 @@ const impl = s.router(contract.provisioning, {
       await auditProvisioningAction(authReq, updated, "team.updated");
       return {
         status: 200,
-        body: serializeProvisionedView(await getProvisionedTeamView(updated)),
+        body: await serializeProvisionedView(await getProvisionedTeamView(updated)),
       };
     } catch (error: any) {
       const gated = planGateHttp(error);
@@ -351,7 +359,7 @@ const impl = s.router(contract.provisioning, {
     await auditProvisioningAction(authReq, team, "team.suspended");
     return {
       status: 200,
-      body: serializeProvisionedView(await getProvisionedTeamView(updated!)),
+      body: await serializeProvisionedView(await getProvisionedTeamView(updated!)),
     };
   },
   resumeTeam: async ({ params, req }) => {
@@ -379,7 +387,7 @@ const impl = s.router(contract.provisioning, {
     await auditProvisioningAction(authReq, team, "team.resumed");
     return {
       status: 200,
-      body: serializeProvisionedView(await getProvisionedTeamView(updated!)),
+      body: await serializeProvisionedView(await getProvisionedTeamView(updated!)),
     };
   },
   archiveTeam: async ({ params, req }) => {
@@ -402,6 +410,51 @@ const impl = s.router(contract.provisioning, {
     await auditProvisioningAction(authReq, team, "team.archived");
     return { status: 204, body: undefined };
   },
+  getTeamSendingDomain: async ({ params, req }) => {
+    const authReq = req as any;
+    if (!hasScope(authReq, "teams:read"))
+      return { status: 403, body: { error: "organization_scope_required" } };
+    const team = await resolveProvisionedTeam(authReq, params.teamId);
+    if (!team) return { status: 404, body: { error: "team_not_found" } };
+    try {
+      return { status: 200, body: await refreshTeamSendingDomain(team.id) };
+    } catch (error) {
+      const mapped = teamDomainErrorHttp(error);
+      if (mapped) return mapped as any;
+      throw error;
+    }
+  },
+  setTeamSendingDomain: async ({ params, req, body }) => {
+    const authReq = req as any;
+    if (!hasScope(authReq, "teams:manage"))
+      return { status: 403, body: { error: "organization_scope_required" } };
+    const team = await resolveProvisionedTeam(authReq, params.teamId);
+    if (!team) return { status: 404, body: { error: "team_not_found" } };
+    try {
+      const view = await setTeamSendingDomain(authReq.organizationId, team.id, body, {
+        type: "organization_key",
+        id: authReq.organizationApiKeyId,
+      });
+      return { status: 200, body: view };
+    } catch (error) {
+      const mapped = teamDomainErrorHttp(error);
+      if (mapped) return mapped as any;
+      throw error;
+    }
+  },
+  removeTeamSendingDomain: async ({ params, req }) => {
+    const authReq = req as any;
+    if (!hasScope(authReq, "teams:manage"))
+      return { status: 403, body: { error: "organization_scope_required" } };
+    const team = await resolveProvisionedTeam(authReq, params.teamId);
+    if (!team) return { status: 404, body: { error: "team_not_found" } };
+    const removed = await removeTeamSendingDomain(authReq.organizationId, team.id, {
+      type: "organization_key",
+      id: authReq.organizationApiKeyId,
+    });
+    if (!removed) return { status: 404, body: { error: "sending_domain_not_found" } };
+    return { status: 204, body: undefined };
+  },
   getTeamUsage: async ({ params, req }) => {
     const authReq = req as any;
     if (!hasScope(authReq, "usage:read"))
@@ -416,6 +469,7 @@ const impl = s.router(contract.provisioning, {
       return {
         status: 200,
         body: {
+          health: await getTeamHealth(team.id),
           day: {
             ...usage.day,
             resetsAt: usage.day.resetsAt.toISOString(),

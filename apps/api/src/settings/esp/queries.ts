@@ -8,11 +8,13 @@ import {
   mailDispatchOutbox,
   outboundMessages,
   sequences,
+  sharedEspSendingControls,
   teamDeliverySettings,
   transactionalEmails,
 } from "../../db/schema";
 import { cancelQueuedWorkForGrantInTransaction } from "../../delivery/queries";
 import { releaseReservedQuotaForGrantInTransaction } from "../../delivery/quota";
+import { releaseTeamSendingDomains } from "../../delivery/team-sending-domain";
 import { warmupValues } from "../../mail/warmup";
 import { decryptSecret, encryptSecret } from "../../utils/secret-crypto";
 import { checkDomainAuthentication } from "./domain-auth";
@@ -498,6 +500,9 @@ async function deleteOwnedEspConfig(config: EspConfig): Promise<boolean> {
           ),
         );
     }
+    await tx
+      .delete(sharedEspSendingControls)
+      .where(eq(sharedEspSendingControls.espConfigId, config.id));
     const deleted = await tx
       .delete(espConfigs)
       .where(eq(espConfigs.id, config.id))
@@ -663,7 +668,7 @@ export async function transitionEspConfig(
         options?.drainUntil ?? new Date(Date.now() + 24 * 60 * 60 * 1000);
     }
   }
-  return db.transaction(async (tx) => {
+  const retired = await db.transaction(async (tx) => {
     const [updated] = await tx
       .update(espConfigs)
       .set(values)
@@ -769,6 +774,17 @@ export async function transitionEspConfig(
     }
     return updated;
   });
+  if (action === "retire" && options?.cancel && retired.ownerScope === "organization") {
+    // Teams' own domains registered through this mailbox go with it, then
+    // the provider API key that could manage them.
+    await releaseTeamSendingDomains({ espConfigId: retired.id });
+    await db
+      .update(espConfigs)
+      .set({ encryptedManagementSecret: null, updatedAt: new Date() })
+      .where(eq(espConfigs.id, retired.id));
+    retired.encryptedManagementSecret = null;
+  }
+  return retired;
 }
 
 /**

@@ -42,6 +42,42 @@ export function presentDeliverySourceError(error: string): string {
   }
 }
 
+/** Like `presentDeliverySourceError`, but reads the error body too, so a
+ * pause on a shared mailbox (#220) says which pause it is instead of the
+ * generic billing and reputation text. */
+export function presentSendError(error: string, body?: unknown): string {
+  const details = (typeof body === "object" && body !== null ? body : {}) as {
+    reason?: unknown;
+    scope?: unknown;
+    capability?: unknown;
+  };
+  if (error === "sending_paused" && details.reason === "team_sending_domain_failing") {
+    return "Broadcasts and sequences from this team are paused because its own sending domain stopped passing DKIM or DMARC checks. Fix its DNS records (Organizations → Teams → Sending domain); sending resumes once they pass. Transactional email still goes out.";
+  }
+  if (
+    error === "domain_verification_required" &&
+    details.reason === "team_sending_domain_required"
+  ) {
+    return "Your organization requires this team to send from its own domain. Ask an organization admin to set up the team's sending domain in Organizations → Teams.";
+  }
+  if (
+    error === "plan_limit_reached" &&
+    details.capability === "shared_domain_monthly_limit"
+  ) {
+    return "This team has sent its monthly allowance of marketing from the shared domain. Set up the team's own sending domain to keep sending, or wait until next month.";
+  }
+  if (
+    error === "sending_paused" &&
+    typeof details.reason === "string" &&
+    details.reason.startsWith("shared_esp_")
+  ) {
+    return details.scope === "shared_mailbox"
+      ? "Broadcasts and sequences are paused for every team on this shared mailbox, because its combined bounce or complaint rate is too high. Transactional email still goes out. Organization owners have been emailed; sending resumes on its own once recent emails are clean."
+      : "Broadcasts and sequences from this team are paused on the shared mailbox, because too many of its recent emails bounced or were marked as spam. Other teams on the mailbox keep sending, and transactional email still goes out. Clean the list; sending resumes on its own after a few days once recent emails are clean, or contact SendLit support.";
+  }
+  return presentDeliverySourceError(error);
+}
+
 export function isDeletedDeliverySource({
   report,
   status,

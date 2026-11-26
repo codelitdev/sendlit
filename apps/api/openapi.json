@@ -18052,6 +18052,9 @@
                           "hasPassword": {
                             "type": "boolean"
                           },
+                          "hasManagementCredentials": {
+                            "type": "boolean"
+                          },
                           "fromName": {
                             "type": "string",
                             "nullable": true
@@ -18338,6 +18341,9 @@
                     "hasPassword": {
                       "type": "boolean"
                     },
+                    "hasManagementCredentials": {
+                      "type": "boolean"
+                    },
                     "fromName": {
                       "type": "string",
                       "nullable": true
@@ -18548,6 +18554,9 @@
                       "nullable": true
                     },
                     "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
                       "type": "boolean"
                     },
                     "fromName": {
@@ -18893,6 +18902,9 @@
                       "nullable": true
                     },
                     "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
                       "type": "boolean"
                     },
                     "fromName": {
@@ -19670,6 +19682,9 @@
                     "hasPassword": {
                       "type": "boolean"
                     },
+                    "hasManagementCredentials": {
+                      "type": "boolean"
+                    },
                     "fromName": {
                       "type": "string",
                       "nullable": true
@@ -19936,6 +19951,9 @@
                     "hasPassword": {
                       "type": "boolean"
                     },
+                    "hasManagementCredentials": {
+                      "type": "boolean"
+                    },
                     "fromName": {
                       "type": "string",
                       "nullable": true
@@ -20182,6 +20200,9 @@
                       "nullable": true
                     },
                     "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
                       "type": "boolean"
                     },
                     "fromName": {
@@ -20476,6 +20497,9 @@
                       "nullable": true
                     },
                     "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
                       "type": "boolean"
                     },
                     "fromName": {
@@ -24668,6 +24692,9 @@
                           "hasPassword": {
                             "type": "boolean"
                           },
+                          "hasManagementCredentials": {
+                            "type": "boolean"
+                          },
                           "fromName": {
                             "type": "string",
                             "nullable": true
@@ -24996,6 +25023,9 @@
                     "hasPassword": {
                       "type": "boolean"
                     },
+                    "hasManagementCredentials": {
+                      "type": "boolean"
+                    },
                     "fromName": {
                       "type": "string",
                       "nullable": true
@@ -25229,6 +25259,9 @@
                       "nullable": true
                     },
                     "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
                       "type": "boolean"
                     },
                     "fromName": {
@@ -25561,6 +25594,9 @@
                       "nullable": true
                     },
                     "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
                       "type": "boolean"
                     },
                     "fromName": {
@@ -26096,6 +26132,9 @@
                     "hasPassword": {
                       "type": "boolean"
                     },
+                    "hasManagementCredentials": {
+                      "type": "boolean"
+                    },
                     "fromName": {
                       "type": "string",
                       "nullable": true
@@ -26367,6 +26406,9 @@
                     "hasPassword": {
                       "type": "boolean"
                     },
+                    "hasManagementCredentials": {
+                      "type": "boolean"
+                    },
                     "fromName": {
                       "type": "string",
                       "nullable": true
@@ -26618,6 +26660,9 @@
                       "nullable": true
                     },
                     "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
                       "type": "boolean"
                     },
                     "fromName": {
@@ -26917,6 +26962,547 @@
                       "nullable": true
                     },
                     "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
+                      "type": "boolean"
+                    },
+                    "fromName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "fromEmail": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "replyTo": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "maxSendRate": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "dailySendLimit": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "sentToday": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "warmup": {
+                      "type": "object",
+                      "properties": {
+                        "targetDailyVolume": {
+                          "type": "integer"
+                        },
+                        "startedAt": {
+                          "type": "string"
+                        },
+                        "day": {
+                          "type": "integer"
+                        },
+                        "totalDays": {
+                          "type": "integer"
+                        },
+                        "todayLimit": {
+                          "type": "integer"
+                        },
+                        "complete": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "targetDailyVolume",
+                        "startedAt",
+                        "day",
+                        "totalDays",
+                        "todayLimit",
+                        "complete"
+                      ],
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "draft",
+                        "active",
+                        "suspended",
+                        "draining",
+                        "retired"
+                      ]
+                    },
+                    "secretVersion": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "exclusiveMinimum": 0
+                    },
+                    "lastTestedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastTestStatus": {
+                      "type": "string",
+                      "enum": [
+                        "success",
+                        "failed"
+                      ],
+                      "nullable": true
+                    },
+                    "lastTestError": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "activatedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "drainUntil": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "retiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "espId",
+                    "name",
+                    "provider",
+                    "host",
+                    "port",
+                    "secure",
+                    "hasPassword",
+                    "status",
+                    "secretVersion"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          },
+          {
+            "dashboardHostSession": []
+          },
+          {
+            "organizationApiKey": []
+          }
+        ]
+      }
+    },
+    "/organizations/{organizationId}/esps/{espId}/management-credentials": {
+      "put": {
+        "description": "Lets teams register their own sending domains on this mailbox. Amazon SES only for now (422 `provider_domain_unsupported` otherwise). The credential is encrypted at rest and never returned; the ESP shows `hasManagementCredentials`.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
+        "summary": "Store a shared ESP's provider API credential",
+        "tags": [
+          "Organizations"
+        ],
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "espId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accessKeyId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "secretAccessKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "region": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "accessKeyId",
+                  "secretAccessKey"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "espId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "type": "string"
+                    },
+                    "port": {
+                      "type": "number"
+                    },
+                    "secure": {
+                      "type": "boolean"
+                    },
+                    "username": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
+                      "type": "boolean"
+                    },
+                    "fromName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "fromEmail": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "replyTo": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "maxSendRate": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "dailySendLimit": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "sentToday": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "warmup": {
+                      "type": "object",
+                      "properties": {
+                        "targetDailyVolume": {
+                          "type": "integer"
+                        },
+                        "startedAt": {
+                          "type": "string"
+                        },
+                        "day": {
+                          "type": "integer"
+                        },
+                        "totalDays": {
+                          "type": "integer"
+                        },
+                        "todayLimit": {
+                          "type": "integer"
+                        },
+                        "complete": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "targetDailyVolume",
+                        "startedAt",
+                        "day",
+                        "totalDays",
+                        "todayLimit",
+                        "complete"
+                      ],
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "draft",
+                        "active",
+                        "suspended",
+                        "draining",
+                        "retired"
+                      ]
+                    },
+                    "secretVersion": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "exclusiveMinimum": 0
+                    },
+                    "lastTestedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastTestStatus": {
+                      "type": "string",
+                      "enum": [
+                        "success",
+                        "failed"
+                      ],
+                      "nullable": true
+                    },
+                    "lastTestError": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "activatedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "drainUntil": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "retiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "espId",
+                    "name",
+                    "provider",
+                    "host",
+                    "port",
+                    "secure",
+                    "hasPassword",
+                    "status",
+                    "secretVersion"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          },
+          {
+            "dashboardHostSession": []
+          },
+          {
+            "organizationApiKey": []
+          }
+        ]
+      },
+      "delete": {
+        "description": "409 `esp_management_credentials_in_use` while teams' own sending domains are registered through the mailbox: remove those first.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
+        "summary": "Remove a shared ESP's provider API credential",
+        "tags": [
+          "Organizations"
+        ],
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "espId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "espId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "type": "string"
+                    },
+                    "port": {
+                      "type": "number"
+                    },
+                    "secure": {
+                      "type": "boolean"
+                    },
+                    "username": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "hasPassword": {
+                      "type": "boolean"
+                    },
+                    "hasManagementCredentials": {
                       "type": "boolean"
                     },
                     "fromName": {
@@ -27904,6 +28490,19 @@
                     "teamCanChangeDefault": {
                       "type": "boolean"
                     },
+                    "requireTeamSendingDomain": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "marketing",
+                        "all"
+                      ]
+                    },
+                    "sharedDomainMonthlyLimit": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "nullable": true
+                    },
                     "updatedAt": {
                       "type": "string"
                     }
@@ -27917,6 +28516,8 @@
                     "aggregateMonthlyLimit",
                     "teamEspEnabledByDefault",
                     "teamCanChangeDefault",
+                    "requireTeamSendingDomain",
+                    "sharedDomainMonthlyLimit",
                     "updatedAt"
                   ]
                 }
@@ -28036,6 +28637,19 @@
                   },
                   "teamCanChangeDefault": {
                     "type": "boolean"
+                  },
+                  "requireTeamSendingDomain": {
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "marketing",
+                      "all"
+                    ]
+                  },
+                  "sharedDomainMonthlyLimit": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "nullable": true
                   }
                 }
               }
@@ -28083,6 +28697,19 @@
                     "teamCanChangeDefault": {
                       "type": "boolean"
                     },
+                    "requireTeamSendingDomain": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "marketing",
+                        "all"
+                      ]
+                    },
+                    "sharedDomainMonthlyLimit": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "nullable": true
+                    },
                     "updatedAt": {
                       "type": "string"
                     }
@@ -28096,6 +28723,8 @@
                     "aggregateMonthlyLimit",
                     "teamEspEnabledByDefault",
                     "teamCanChangeDefault",
+                    "requireTeamSendingDomain",
+                    "sharedDomainMonthlyLimit",
                     "updatedAt"
                   ]
                 }
@@ -28336,8 +28965,8 @@
     },
     "/organizations/{organizationId}/mail-activity": {
       "get": {
-        "description": "Returns per-team and organization-total transactional mail counts (`sent`, `queued`, `failed`, `bounced`) for a window of 1, 3, 7, or 30 days (default 7). Includes teams with zero activity. Does not include campaigns, broadcasts, sequences, recipients, subjects, or email bodies. Shared-delivery quota remains on `/usage`.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
-        "summary": "Get organization transactional mail activity",
+        "description": "Returns per-team and organization-total mail counts (`sent`, `queued`, `failed`, `bounced`, `complained`) from the outbound ledger, covering broadcasts, sequences and transactional email, for a window of 1, 3, 7, or 30 days (default 7). Includes teams with zero activity. Each team also carries its `health` (sending status with reason and scope, plus 7-day sent, bounced and complained counts, whatever the window) and its shared-mailbox `quota` (null without an active grant). No recipients, subjects, or email bodies.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
+        "summary": "Get organization mail activity and team health",
         "tags": [
           "Organizations"
         ],
@@ -28394,13 +29023,18 @@
                         "bounced": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "complained": {
+                          "type": "integer",
+                          "minimum": 0
                         }
                       },
                       "required": [
                         "sent",
                         "queued",
                         "failed",
-                        "bounced"
+                        "bounced",
+                        "complained"
                       ]
                     },
                     "teams": {
@@ -28444,14 +29078,145 @@
                               "bounced": {
                                 "type": "integer",
                                 "minimum": 0
+                              },
+                              "complained": {
+                                "type": "integer",
+                                "minimum": 0
                               }
                             },
                             "required": [
                               "sent",
                               "queued",
                               "failed",
-                              "bounced"
+                              "bounced",
+                              "complained"
                             ]
+                          },
+                          "health": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "normal",
+                                  "warned",
+                                  "marketing_paused",
+                                  "all_paused"
+                                ]
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "scope": {
+                                "type": "string",
+                                "enum": [
+                                  "team",
+                                  "shared_mailbox"
+                                ],
+                                "nullable": true
+                              },
+                              "last7Days": {
+                                "type": "object",
+                                "properties": {
+                                  "sent": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "bounced": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "complained": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "sent",
+                                  "bounced",
+                                  "complained"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "reason",
+                              "scope",
+                              "last7Days"
+                            ]
+                          },
+                          "quota": {
+                            "type": "object",
+                            "properties": {
+                              "day": {
+                                "type": "object",
+                                "properties": {
+                                  "limit": {
+                                    "type": "integer",
+                                    "nullable": true
+                                  },
+                                  "accepted": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "reserved": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "remaining": {
+                                    "type": "integer",
+                                    "nullable": true
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "limit",
+                                  "accepted",
+                                  "reserved",
+                                  "remaining",
+                                  "resetsAt"
+                                ]
+                              },
+                              "month": {
+                                "type": "object",
+                                "properties": {
+                                  "limit": {
+                                    "type": "integer",
+                                    "nullable": true
+                                  },
+                                  "accepted": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "reserved": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "remaining": {
+                                    "type": "integer",
+                                    "nullable": true
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "limit",
+                                  "accepted",
+                                  "reserved",
+                                  "remaining",
+                                  "resetsAt"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "day",
+                              "month"
+                            ],
+                            "nullable": true
                           }
                         },
                         "required": [
@@ -28459,7 +29224,9 @@
                           "name",
                           "status",
                           "externalId",
-                          "mail"
+                          "mail",
+                          "health",
+                          "quota"
                         ]
                       }
                     }
@@ -28903,6 +29670,35 @@
                       "minimum": 0,
                       "nullable": true
                     },
+                    "fromEmail": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "sendingDomain": {
+                      "type": "object",
+                      "properties": {
+                        "domain": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "verified",
+                            "failing"
+                          ]
+                        },
+                        "inUse": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "domain",
+                        "status",
+                        "inUse"
+                      ],
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -28920,6 +29716,8 @@
                     "replyTo",
                     "dailyLimit",
                     "monthlyLimit",
+                    "fromEmail",
+                    "sendingDomain",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -29098,6 +29896,35 @@
                       "minimum": 0,
                       "nullable": true
                     },
+                    "fromEmail": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "sendingDomain": {
+                      "type": "object",
+                      "properties": {
+                        "domain": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "verified",
+                            "failing"
+                          ]
+                        },
+                        "inUse": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "domain",
+                        "status",
+                        "inUse"
+                      ],
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -29115,6 +29942,8 @@
                     "replyTo",
                     "dailyLimit",
                     "monthlyLimit",
+                    "fromEmail",
+                    "sendingDomain",
                     "createdAt",
                     "updatedAt"
                   ]
@@ -29364,6 +30193,35 @@
                       "minimum": 0,
                       "nullable": true
                     },
+                    "fromEmail": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "sendingDomain": {
+                      "type": "object",
+                      "properties": {
+                        "domain": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "verified",
+                            "failing"
+                          ]
+                        },
+                        "inUse": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "domain",
+                        "status",
+                        "inUse"
+                      ],
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -29381,6 +30239,8 @@
                     "replyTo",
                     "dailyLimit",
                     "monthlyLimit",
+                    "fromEmail",
+                    "sendingDomain",
                     "createdAt",
                     "updatedAt"
                   ]
@@ -29429,6 +30289,571 @@
           },
           "409": {
             "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          },
+          {
+            "dashboardHostSession": []
+          },
+          {
+            "organizationApiKey": []
+          }
+        ]
+      }
+    },
+    "/organizations/{organizationId}/teams/{teamId}/sending-domain": {
+      "get": {
+        "description": "Re-checks the domain with the shared ESP and DNS (at most every 30 seconds; calls in between return the last check) and returns its status and the DNS records to publish. `null` when the team has none. The team sends from it once the ESP has verified DKIM and a DMARC record is published.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
+        "summary": "Check a team's own sending domain",
+        "tags": [
+          "Organizations"
+        ],
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "fromEmail": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failing"
+                      ]
+                    },
+                    "dkim": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failed"
+                      ]
+                    },
+                    "dmarc": {
+                      "type": "string",
+                      "enum": [
+                        "pass",
+                        "missing"
+                      ]
+                    },
+                    "inUse": {
+                      "type": "boolean"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "CNAME",
+                              "TXT"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "dkim",
+                              "dmarc"
+                            ]
+                          },
+                          "present": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "name",
+                          "value",
+                          "purpose"
+                        ]
+                      }
+                    },
+                    "verifiedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "failingSince": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "graceEndsAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastCheckedAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "domain",
+                    "fromEmail",
+                    "status",
+                    "dkim",
+                    "dmarc",
+                    "inUse",
+                    "records",
+                    "verifiedAt",
+                    "failingSince",
+                    "graceEndsAt",
+                    "lastCheckedAt"
+                  ],
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          },
+          {
+            "dashboardHostSession": []
+          },
+          {
+            "organizationApiKey": []
+          }
+        ]
+      },
+      "put": {
+        "description": "Registers the From address's domain with the team's shared ESP (Amazon SES for now) and returns the DNS records to publish. Replacing a different domain removes the old one. 422 `esp_management_credentials_required` when the shared ESP has no API credential, `provider_domain_unsupported` for other providers, `organization_delivery_disabled` without an active grant. 409 `domain_in_use` when another team, the organization or the shared mailbox's own From address uses the domain, and `domain_exists_at_provider` when the ESP account already has the domain (SendLit never takes over an identity it did not create). 422 `esp_provider_error` when the provider's API refuses or fails.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
+        "summary": "Set a team's own From address and register its domain",
+        "tags": [
+          "Organizations"
+        ],
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fromEmail": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                },
+                "required": [
+                  "fromEmail"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "fromEmail": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failing"
+                      ]
+                    },
+                    "dkim": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failed"
+                      ]
+                    },
+                    "dmarc": {
+                      "type": "string",
+                      "enum": [
+                        "pass",
+                        "missing"
+                      ]
+                    },
+                    "inUse": {
+                      "type": "boolean"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "CNAME",
+                              "TXT"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "dkim",
+                              "dmarc"
+                            ]
+                          },
+                          "present": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "name",
+                          "value",
+                          "purpose"
+                        ]
+                      }
+                    },
+                    "verifiedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "failingSince": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "graceEndsAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastCheckedAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "domain",
+                    "fromEmail",
+                    "status",
+                    "dkim",
+                    "dmarc",
+                    "inUse",
+                    "records",
+                    "verifiedAt",
+                    "failingSince",
+                    "graceEndsAt",
+                    "lastCheckedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400\n\nOr `credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "userAccessToken": []
+          },
+          {
+            "dashboardSession": []
+          },
+          {
+            "dashboardSecureSession": []
+          },
+          {
+            "dashboardHostSession": []
+          },
+          {
+            "organizationApiKey": []
+          }
+        ]
+      },
+      "delete": {
+        "description": "Removes the domain from the shared ESP. The team goes back to the shared From domain, which the organization's `requireTeamSendingDomain` policy may refuse.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
+        "summary": "Stop using a team's own sending domain",
+        "tags": [
+          "Organizations"
+        ],
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "204"
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
             "content": {
               "application/json": {
                 "schema": {
@@ -30911,7 +32336,7 @@
     },
     "/provisioning/teams/{teamId}": {
       "get": {
-        "description": "**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "description": "`health` is the team's sending status: `normal`, `warned`, `marketing_paused` or `all_paused`, with the `reason` code and whether it comes from the team's own reputation or the shared mailbox (`scope`). `last7Days` counts the emails the ESP accepted in the last 7 days and how many bounced or were marked as spam.\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
         "summary": "Get a provisioned team within the authenticated organization",
         "tags": [
           "Teams"
@@ -31017,6 +32442,60 @@
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
@@ -31029,7 +32508,8 @@
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "health"
                   ]
                 }
               }
@@ -31284,6 +32764,60 @@
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
@@ -31296,7 +32830,8 @@
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "health"
                   ]
                 }
               }
@@ -31686,6 +33221,60 @@
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
@@ -31698,7 +33287,8 @@
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "health"
                   ]
                 }
               }
@@ -31877,6 +33467,60 @@
                     "updatedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
@@ -31889,7 +33533,8 @@
                     "teamEspEnabled",
                     "teamCanChangeDefault",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "health"
                   ]
                 }
               }
@@ -31960,9 +33605,514 @@
         ]
       }
     },
+    "/provisioning/teams/{teamId}/sending-domain": {
+      "get": {
+        "description": "Re-checks the domain with the shared ESP and DNS, at most every 30 seconds (calls in between return the last check). Requires `teams:read`. `null` when the team has none.\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "summary": "Check a provisioned team's own sending domain",
+        "tags": [
+          "Teams"
+        ],
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "fromEmail": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failing"
+                      ]
+                    },
+                    "dkim": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failed"
+                      ]
+                    },
+                    "dmarc": {
+                      "type": "string",
+                      "enum": [
+                        "pass",
+                        "missing"
+                      ]
+                    },
+                    "inUse": {
+                      "type": "boolean"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "CNAME",
+                              "TXT"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "dkim",
+                              "dmarc"
+                            ]
+                          },
+                          "present": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "name",
+                          "value",
+                          "purpose"
+                        ]
+                      }
+                    },
+                    "verifiedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "failingSince": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "graceEndsAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastCheckedAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "domain",
+                    "fromEmail",
+                    "status",
+                    "dkim",
+                    "dmarc",
+                    "inUse",
+                    "records",
+                    "verifiedAt",
+                    "failingSince",
+                    "graceEndsAt",
+                    "lastCheckedAt"
+                  ],
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "organizationApiKey": []
+          }
+        ]
+      },
+      "put": {
+        "description": "Requires `teams:manage`. Returns the DNS records the team must publish (Amazon SES Easy DKIM CNAMEs and a DMARC TXT record). Errors as for the organization route.\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "summary": "Set a provisioned team's own From address and register its domain",
+        "tags": [
+          "Teams"
+        ],
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fromEmail": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                },
+                "required": [
+                  "fromEmail"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "fromEmail": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failing"
+                      ]
+                    },
+                    "dkim": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failed"
+                      ]
+                    },
+                    "dmarc": {
+                      "type": "string",
+                      "enum": [
+                        "pass",
+                        "missing"
+                      ]
+                    },
+                    "inUse": {
+                      "type": "boolean"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "CNAME",
+                              "TXT"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "dkim",
+                              "dmarc"
+                            ]
+                          },
+                          "present": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "name",
+                          "value",
+                          "purpose"
+                        ]
+                      }
+                    },
+                    "verifiedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "failingSince": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "graceEndsAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastCheckedAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "domain",
+                    "fromEmail",
+                    "status",
+                    "dkim",
+                    "dmarc",
+                    "inUse",
+                    "records",
+                    "verifiedAt",
+                    "failingSince",
+                    "graceEndsAt",
+                    "lastCheckedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400\n\nOr `credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "organizationApiKey": []
+          }
+        ]
+      },
+      "delete": {
+        "description": "**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "summary": "Stop using a provisioned team's own sending domain",
+        "tags": [
+          "Teams"
+        ],
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "204"
+          },
+          "400": {
+            "description": "`credential_ambiguous`: the request sent more than one credential (for example an API key and a bearer token). Send exactly one."
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "organizationApiKey": []
+          }
+        ]
+      }
+    },
     "/provisioning/teams/{teamId}/usage": {
       "get": {
-        "description": "**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "description": "Returns the team's day and month quota on the shared mailbox, plus its `health` (see Get a provisioned team).\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
         "summary": "Get organization-delivery quota usage for a provisioned team",
         "tags": [
           "Teams"
@@ -32046,11 +34196,66 @@
                         "remaining",
                         "resetsAt"
                       ]
+                    },
+                    "health": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warned",
+                            "marketing_paused",
+                            "all_paused"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "team",
+                            "shared_mailbox"
+                          ],
+                          "nullable": true
+                        },
+                        "last7Days": {
+                          "type": "object",
+                          "properties": {
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "bounced": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "complained": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sent",
+                            "bounced",
+                            "complained"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "reason",
+                        "scope",
+                        "last7Days"
+                      ]
                     }
                   },
                   "required": [
                     "day",
-                    "month"
+                    "month",
+                    "health"
                   ]
                 }
               }

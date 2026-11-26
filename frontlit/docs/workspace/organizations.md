@@ -40,8 +40,8 @@ The Organizations page keeps the current organization in view, then splits
 administration into tabs: **General** (organization name), **Plan** (plan,
 payment status, limits, and usage), **Delivery**
 (shared mailboxes and default-delivery policy), **Teams** (grants and Enter
-team), **Members**, **Activity** (quota, transactional mail counts, and
-audit), and **Keys**.
+team), **Members**, **Activity** (quota, mail activity and team health,
+and audit), and **Keys**.
 
 Paid organizations can change, cancel, or resume their plan from the
 **Plan** tab; **Manage billing** there opens the hosted payment portal for
@@ -78,15 +78,23 @@ organization audit activity, and makes the team appear in the sidebar switcher.
 Organization members and organization API keys cannot enter a team. Archived
 teams cannot be entered.
 
-## Transactional mail activity
+## Mail activity and team health
 
-The **Transactional mail activity** card on **Organizations → Activity** shows
-organization totals and a per-team table of transactional mail counts (`sent`,
-`queued`, `failed`, `bounced`) for the last 1, 3, 7, or 30 days (default 7).
-Quiet teams still appear so provisioned tenants with no recent sends are
-visible. These counts are transactional only; they do not include campaigns,
-broadcasts, or sequences. Shared-delivery quota remains on **Shared-delivery
-usage**. Recipients, subjects, and email bodies are not shown.
+The **Mail activity** card on **Organizations → Activity** shows organization
+totals and a per-team table of mail counts (sent, queued, failed, bounced, and
+marked as spam) for the last 1, 3, 7, or 30 days (default 7). The counts cover
+broadcasts, sequences and transactional email. Quiet teams still appear, so
+provisioned tenants with no recent sends are visible.
+
+Each team also shows:
+
+- **Health**: whether the team is healthy, warned, or has marketing or all
+  sending paused, and whether that's because of its own sends or the whole
+  shared mailbox. Underneath are its last 7 days of sent, bounced and spam
+  counts, whatever the window above.
+- **Quota today**: how much of its daily shared-mailbox quota it has used.
+
+Recipients, subjects, and email bodies are not shown.
 
 > A team that is archived is removed from normal team switching and cannot
 > send. Its operational history is retained.
@@ -121,6 +129,42 @@ silently switched to a different sender.
 Custom SMTP can be verified and activated after a successful test. It provides
 synchronous SMTP outcomes only; configure a supported feedback connection when
 you need bounce and complaint webhooks.
+
+### When one team's list affects the mailbox
+
+Every team on a shared mailbox shares its email provider account, so one
+team's bad list could get the whole account paused. SendLit pauses broadcasts
+and sequences for the teams causing it first; see
+[Shared mailboxes](/docs/workspace/acceptable-use#shared-mailboxes).
+
+### A team's own sending domain
+
+On an Amazon SES shared mailbox, each team can send from its own domain
+instead of the mailbox's. Its mail is then signed with DKIM for its own
+domain, so Gmail and Microsoft judge it on its own reputation: one school's
+bad list doesn't drag down the others.
+
+1. Create an AWS key and store it on the mailbox, as described in
+   [Teams' own sending domains](/docs/self-hosting/team-sending-domains).
+2. Open **Organizations → Teams**, the team's actions, **Sending domain**,
+   and enter the address the team should send from.
+3. Add the DNS records it shows (three DKIM CNAMEs and a DMARC record) at the
+   domain's DNS provider. SendLit checks every hour; **Check again** checks
+   now.
+
+The team switches to its own address once SES has verified DKIM and DMARC is
+published. If the records later break, the team keeps sending from its
+domain for 72 hours, then its broadcasts and sequences pause until it's
+fixed. It never quietly falls back to the shared domain.
+
+Under **Default delivery for new teams**, **Require a team's own domain for**
+can make it mandatory for broadcasts and sequences, or for all email, and
+**Monthly marketing on the shared domain** caps how many broadcast and
+sequence emails a team can send from the shared domain each month before it
+has its own domain. Transactional email doesn't count.
+
+Cancelling a team's mailbox grant, archiving the team or retiring the mailbox
+removes the team's domain from SES too.
 
 ## Grant a mailbox to a team
 

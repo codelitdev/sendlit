@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { teamHealthSchema, teamQuotaUsageSchema } from "./teams";
 
 export const organizationRoleSchema = z.enum(["owner", "admin", "member"]);
 
@@ -108,6 +109,7 @@ export const organizationMailCountsSchema = z.object({
   queued: z.number().int().nonnegative(),
   failed: z.number().int().nonnegative(),
   bounced: z.number().int().nonnegative(),
+  complained: z.number().int().nonnegative(),
 });
 
 export const organizationMailActivityTeamSchema = z.object({
@@ -116,10 +118,14 @@ export const organizationMailActivityTeamSchema = z.object({
   status: z.enum(["active", "sending_suspended", "archived"]),
   externalId: z.string().nullable(),
   mail: organizationMailCountsSchema,
+  health: teamHealthSchema,
+  /** Shared-mailbox quota; null when the team has no active grant. */
+  quota: teamQuotaUsageSchema.nullable(),
 });
 
-/** Per-team and org-total transactional mail counts. Does not include
- * campaigns, broadcasts, sequences, recipients, subjects, or bodies. */
+/** Per-team and org-total mail counts from the outbound ledger (campaigns
+ * and transactional), with each team's health and quota. No recipients,
+ * subjects, or bodies. */
 export const organizationMailActivitySchema = z.object({
   rangeDays: z.union([z.literal(1), z.literal(3), z.literal(7), z.literal(30)]),
   totals: organizationMailCountsSchema,

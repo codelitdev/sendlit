@@ -18,6 +18,7 @@ export function DialogSection({
   iconClassName = "bg-[var(--warning-soft)] text-[var(--warning)]",
   name,
   summary,
+  summaryClassName,
   badge,
   children,
 }: {
@@ -27,6 +28,8 @@ export function DialogSection({
   iconClassName?: string;
   name: string;
   summary: string;
+  /** e.g. `break-all` for a summary that is one long address. */
+  summaryClassName?: string;
   badge: ReactNode;
   children: ReactNode;
 }) {
@@ -47,7 +50,9 @@ export function DialogSection({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{name}</span>
-          <span className="block text-sm text-muted-foreground">{summary}</span>
+          <span className={cn("block text-sm text-muted-foreground", summaryClassName)}>
+            {summary}
+          </span>
         </span>
         {badge}
         <ChevronDown

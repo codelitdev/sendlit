@@ -55,8 +55,9 @@ Once approved, the same content isn't checked again.
 ## Large imports
 
 Importing a large list in a short time, especially on a new account, alerts
-SendLit's operators. On accounts younger than 30 days, campaigns can't start
-until the import has been reviewed. Imports are recorded in the organization's
+SendLit's operators. On accounts younger than 30 days, the team that imported
+the list can't start campaigns until the import has been reviewed; other teams
+in the organization keep sending. Imports are recorded in the organization's
 activity log.
 
 ## New accounts send gradually
@@ -99,6 +100,25 @@ and duplicate provider events count once.
 
 `all_paused` does not auto-recover. A SendLit operator must review the list and
 release the team, which starts at `warned`.
+
+## Shared mailboxes
+
+Teams that send through an organization's shared mailbox share its email
+provider account, and providers can pause a whole account when its bounce or
+complaint rate gets too high. SendLit checks each shared mailbox's last seven
+days and acts before the provider does:
+
+| Signal | Action |
+| --- | --- |
+| A team's own bounce ≥ 4% or complaint ≥ 0.08% (at least 5 bounces or 2 complaints) | Pause that team's broadcasts and sequences through the mailbox |
+| The mailbox's combined bounce ≥ 2% or complaint ≥ 0.05% | Warn owners, and pause the teams over those rates themselves, worst first, until the rest is under them |
+| The teams left are still at bounce ≥ 4% or complaint ≥ 0.08% | Pause broadcasts and sequences for every team on the mailbox |
+
+There's no 500-message minimum here, so a small team with a bad list is caught
+too, but a single complaint never pauses a team. Transactional mail keeps
+sending, and teams' own ESPs aren't affected. A pause lasts at least 72 hours
+and lifts after three clean daily checks; a SendLit operator can release it
+earlier. Organization owners are emailed when a pause starts or lifts.
 
 ## Domain verification
 

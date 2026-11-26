@@ -195,6 +195,10 @@ accepted messages in seven days), SendLit applies these safeguards:
 | Bounce ≥ 5% or complaint ≥ 0.1%  | Stop broadcasts and sequences; transactional delivery may continue slowly |
 | Complaint ≥ 0.3%                 | Stop all new sends for that team                                          |
 
+Teams on a shared organization mailbox are also checked together, so one
+team's list can't put the mailbox's provider account at risk; see
+[Shared mailboxes](/docs/workspace/acceptable-use#shared-mailboxes).
+
 Small samples are not judged by percentages alone; a short list with a few
 bounces should not trip a threshold, while clear complaint abuse can still be
 stopped. New paid organizations also ramp marketing volume gradually. Cloud

@@ -112,6 +112,12 @@ export function untilNextUtcDay(now = new Date()): number {
   return next - now.getTime() + Math.floor(Math.random() * 600_000);
 }
 
+/** Like `untilNextUtcDay`, until the 1st of the next UTC month. */
+function untilNextUtcMonth(now = new Date()): number {
+  const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+  return next - now.getTime() + Math.floor(Math.random() * 600_000);
+}
+
 /**
  * Counts one marketing send against the ESP's daily warm-up cap, or throws
  * `SendDeferredError` until the next UTC day when the cap is reached.
@@ -205,6 +211,14 @@ export function quotaExhaustionDeferral(error: unknown): SendDeferredError | nul
     err.details?.capability === "marketing_daily_ramp"
   ) {
     return new SendDeferredError(untilNextUtcDay(), "marketing_daily_ramp");
+  }
+  // A team's monthly cap on marketing through the shared From domain
+  // (delivery/team-sending-domain.ts) resets with the UTC month.
+  if (
+    err?.message === "plan_limit_reached" &&
+    err.details?.capability === "shared_domain_monthly_limit"
+  ) {
+    return new SendDeferredError(untilNextUtcMonth(), "shared_domain_monthly_limit");
   }
   // A new organization's sends are spread across the day (abuse/pacing.ts).
   if (

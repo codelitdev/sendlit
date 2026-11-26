@@ -3,10 +3,16 @@ import { db } from "../db/client";
 import {
   billingReconciliationJobs,
   billingSubscriptions,
+  espConfigs,
   organizationPlanPolicies,
   organizations,
+  sharedEspSendingControls,
   teams,
 } from "../db/schema";
+import {
+  releaseSharedEspControl,
+  sharedEspMetrics,
+} from "../delivery/shared-esp-guard";
 import { recordOrganizationAuditEvent } from "../organization/audit";
 import { readBillingConfig } from "./catalog";
 import { getBillingOperations } from "./engine";
@@ -39,6 +45,8 @@ export const BILLING_CLI_USAGE = `Usage:
   billing set-override <organization_public_id> --teams <n>|none --contacts <n>|none --operator <id> --reason <text>
   billing reputation-apply <team_public_id> <warned|marketing_paused|all_paused> --operator <id> --reason <text>
   billing reputation-release <team_public_id> --operator <id> --reason <text>
+  billing shared-esp-status <esp_public_id>
+  billing shared-esp-release <esp_public_id> [--team <team_public_id>] --operator <id> --reason <text>
   billing cancel-subscription <organization_public_id> --operator <id> --reason <text>`;
 
 function arg(flag: string, argv: string[]): string | undefined {
@@ -64,6 +72,21 @@ function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+async function organizationEspByPublicId(publicId: string | undefined) {
+  const [esp] = await db
+    .select({ id: espConfigs.id, espId: espConfigs.espId })
+    .from(espConfigs)
+    .where(
+      and(
+        eq(espConfigs.espId, required(publicId)),
+        eq(espConfigs.ownerScope, "organization"),
+      ),
+    )
+    .limit(1);
+  if (!esp) throw new Error("organization_esp_not_found");
+  return esp;
+}
+
 async function organizationByPublicId(publicId: string | undefined) {
   const [organization] = await db
     .select({ id: organizations.id, organizationId: organizations.organizationId })
@@ -72,6 +95,16 @@ async function organizationByPublicId(publicId: string | undefined) {
     .limit(1);
   if (!organization) throw new Error("organization_not_found");
   return organization;
+}
+
+async function teamByPublicId(publicId: string | undefined) {
+  const [team] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(eq(teams.teamId, required(publicId)))
+    .limit(1);
+  if (!team) throw new Error("team_not_found");
+  return team;
 }
 
 /**
@@ -354,12 +387,7 @@ async function run(
       ) {
         throw new UsageError();
       }
-      const [team] = await db
-        .select({ id: teams.id })
-        .from(teams)
-        .where(eq(teams.teamId, required(rest[0])))
-        .limit(1);
-      if (!team) throw new Error("team_not_found");
+      const team = await teamByPublicId(rest[0]);
       const ok = await applyTeamSendingControl(
         team.id,
         status,
@@ -371,17 +399,67 @@ async function run(
     }
     case "reputation-release": {
       const context = operatorContext(rest);
-      const [team] = await db
-        .select({ id: teams.id })
-        .from(teams)
-        .where(eq(teams.teamId, required(rest[0])))
-        .limit(1);
-      if (!team) throw new Error("team_not_found");
+      const team = await teamByPublicId(rest[0]);
       const ok = await releaseTeamSendingControl(
         team.id,
         context.actorId,
         context.reason,
       );
+      io.out(ok ? "released" : "not released");
+      return 0;
+    }
+    case "shared-esp-status": {
+      const esp = await organizationEspByPublicId(rest[0]);
+      const rows = await db
+        .select({
+          team: teams.teamId,
+          status: sharedEspSendingControls.status,
+          reason: sharedEspSendingControls.reasonCode,
+          source: sharedEspSendingControls.source,
+          enteredAt: sharedEspSendingControls.enteredAt,
+          minimumHoldUntil: sharedEspSendingControls.minimumHoldUntil,
+          releaseGraceUntil: sharedEspSendingControls.releaseGraceUntil,
+        })
+        .from(sharedEspSendingControls)
+        .leftJoin(teams, eq(teams.id, sharedEspSendingControls.teamId))
+        .where(eq(sharedEspSendingControls.espConfigId, esp.id));
+      const metrics = await sharedEspMetrics(esp.id, io.now());
+      const publicTeams = metrics.length
+        ? await db
+            .select({ id: teams.id, teamId: teams.teamId })
+            .from(teams)
+            .where(
+              inArray(
+                teams.id,
+                metrics.map((row) => row.teamId),
+              ),
+            )
+        : [];
+      const publicId = new Map(publicTeams.map((row) => [row.id, row.teamId]));
+      io.out(
+        json({
+          esp: esp.espId,
+          controls: rows,
+          lastSevenDays: metrics.map(({ teamId, ...counts }) => ({
+            team: publicId.get(teamId) ?? null,
+            ...counts,
+          })),
+        }),
+      );
+      return 0;
+    }
+    case "shared-esp-release": {
+      const esp = await organizationEspByPublicId(rest[0]);
+      const context = operatorContext(rest);
+      const teamPublicId = arg("--team", rest);
+      const teamId = teamPublicId ? (await teamByPublicId(teamPublicId)).id : null;
+      const ok = await releaseSharedEspControl({
+        espConfigId: esp.id,
+        teamId,
+        operatorUserId: context.actorId,
+        operatorReason: context.reason,
+        now: io.now(),
+      });
       io.out(ok ? "released" : "not released");
       return 0;
     }

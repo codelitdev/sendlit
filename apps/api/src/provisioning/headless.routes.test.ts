@@ -37,6 +37,8 @@ const {
   organizationAuditEvents,
   organizationDeliveryPolicies,
   organizationMembers,
+  outboundMessages,
+  sharedEspSendingControls,
   teamDeliverySettings,
   teams,
   user,
@@ -404,5 +406,85 @@ describe("headless organization provisioning", () => {
     expect((await send("PATCH", path, { postalAddress: null })).json()).toMatchObject({
       postalAddress: null,
     });
+  });
+
+  it("shows a team's health on the team and usage responses", async () => {
+    const owner = await insertUser("Owner");
+    const org = await createOrganization(owner.id, "Acme");
+    authState.organizationId = org.id;
+    authState.organizationScopes = ["teams:provision", "teams:read", "usage:read"];
+    const esp = await createActiveOrganizationEsp(org.id);
+    const created = await requestApp(app(), "/provisioning/teams", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ externalId: "courselit:school-1", name: "School 1" }),
+    });
+    const [team] = await tdb
+      .select()
+      .from(teams)
+      .where(eq(teams.teamId, created.json().teamId));
+    const [grant] = await tdb
+      .insert(espConfigTeamGrants)
+      .values({
+        organizationId: org.id,
+        espConfigId: esp.id,
+        teamId: team.id,
+        dailyLimit: 100,
+        createdByType: "user",
+      })
+      .returning();
+    const acceptedAt = new Date(Date.now() - 60 * 60 * 1000);
+    await tdb.insert(outboundMessages).values(
+      Array.from({ length: 10 }, (_, i) => ({
+        teamId: team.id,
+        deliverySourceType: "organization",
+        espConfigId: esp.id,
+        espGrantId: grant.id,
+        sourceType: "campaign",
+        recipientEmail: `r${i}@example.com`,
+        normalizedRecipient: `r${i}@example.com`,
+        provider: "smtp",
+        deliveryStatus: i < 3 ? "bounced" : "delivered",
+        feedbackStatus: i === 9 ? "complained" : "none",
+        acceptedAt,
+      })),
+    );
+    await tdb.insert(sharedEspSendingControls).values({
+      organizationId: org.id,
+      espConfigId: esp.id,
+      teamId: team.id,
+      status: "marketing_paused",
+      reasonCode: "shared_esp_team_breach",
+    });
+    const path = `/provisioning/teams/${team.teamId}`;
+    const last7Days = { sent: 10, bounced: 3, complained: 1 };
+
+    // The shared-mailbox pause only counts while its guard is on.
+    const off = await requestApp(app(), path);
+    expect(off.json().health).toEqual({
+      status: "normal",
+      reason: null,
+      scope: null,
+      last7Days,
+    });
+
+    process.env.SHARED_ESP_GUARD = "on";
+    try {
+      const paused = {
+        status: "marketing_paused",
+        reason: "shared_esp_team_breach",
+        scope: "team",
+        last7Days,
+      };
+      expect((await requestApp(app(), path)).json().health).toEqual(paused);
+      const usage = await requestApp(app(), `${path}/usage`);
+      expect(usage.status).toBe(200);
+      expect(usage.json()).toMatchObject({
+        health: paused,
+        day: { limit: 100, accepted: 0, remaining: 100 },
+      });
+    } finally {
+      delete process.env.SHARED_ESP_GUARD;
+    }
   });
 });

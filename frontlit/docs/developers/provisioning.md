@@ -235,6 +235,32 @@ curl "$SENDLIT_API_URL/provisioning/teams/team_01JXYZ" \
   --header "Authorization: Bearer $SENDLIT_ORGANIZATION_API_KEY"
 ```
 
+The response includes the team's sending `health`:
+
+```json
+{
+  "health": {
+    "status": "marketing_paused",
+    "reason": "shared_esp_team_breach",
+    "scope": "team",
+    "last7Days": { "sent": 1840, "bounced": 92, "complained": 1 }
+  }
+}
+```
+
+- `status` is `normal`, `warned`, `marketing_paused` (broadcasts and sequences
+  are held; transactional email still sends) or `all_paused`.
+- `reason` is the code behind it, such as `shared_esp_team_breach` when the
+  team's own bounces paused it on the shared mailbox.
+- `scope` says where the status comes from: `team` for this team's own sends,
+  or `shared_mailbox` when the whole mailbox is paused. It's `null` while the
+  team is healthy.
+- `last7Days` counts the emails the ESP accepted over the last 7 days, and how
+  many of them bounced or were marked as spam.
+
+See [Sending safeguards](/docs/self-hosting/sending-safeguards) for what
+triggers each status and how it clears.
+
 Update mutable settings with `teams:manage`:
 
 ```bash
@@ -352,8 +378,109 @@ curl "$SENDLIT_API_URL/provisioning/teams/team_01JXYZ/usage" \
 ```
 
 `accepted` has already consumed quota. `reserved` represents work accepted by
-SendLit but not yet finalized. This endpoint requires an active organization
-delivery grant for the team.
+SendLit but not yet finalized. The response also carries the team's `health`
+([above](#read-and-update-a-provisioned-team)). This
+endpoint requires an active organization delivery grant for the team.
+
+### Every team in one call
+
+To check all your teams at once, read the organization's mail activity with
+the same `usage:read` key:
+
+```bash
+curl "$SENDLIT_API_URL/organizations/org_01JXYZ/mail-activity?rangeDays=7" \
+  --header "Authorization: Bearer $SENDLIT_ORGANIZATION_API_KEY"
+```
+
+Each entry in `teams` carries the team's mail counts for the window (`sent`,
+`queued`, `failed`, `bounced`, `complained`, covering broadcasts, sequences and
+transactional email), its `health`, and its `quota` (`day` and `month`, or
+`null` when the team has no active organization delivery grant).
+
+## Give a team its own sending domain
+
+On an Amazon SES shared mailbox, a team can send from its own domain, signed
+with DKIM for that domain, so its sender reputation is its own rather than
+the mailbox's. The organization must first store an SES API key on the
+mailbox (Organizations → Delivery → the mailbox's actions → Amazon SES API
+key).
+
+Set the team's From address with `teams:manage`. SendLit registers its domain
+with SES and returns the DNS records to publish:
+
+```bash
+curl --request PUT \
+  "$SENDLIT_API_URL/provisioning/teams/team_01JXYZ/sending-domain" \
+  --header "Authorization: Bearer $SENDLIT_ORGANIZATION_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{ "fromEmail": "news@school-a.example.org" }'
+```
+
+```json
+{
+  "domain": "school-a.example.org",
+  "fromEmail": "news@school-a.example.org",
+  "status": "pending",
+  "dkim": "pending",
+  "dmarc": "missing",
+  "inUse": false,
+  "records": [
+    {
+      "type": "CNAME",
+      "name": "abc123._domainkey.school-a.example.org",
+      "value": "abc123.dkim.amazonses.com",
+      "purpose": "dkim",
+      "present": false
+    },
+    {
+      "type": "TXT",
+      "name": "_dmarc.school-a.example.org",
+      "value": "v=DMARC1; p=none;",
+      "purpose": "dmarc",
+      "present": false
+    }
+  ],
+  "verifiedAt": null,
+  "failingSince": null,
+  "graceEndsAt": null,
+  "lastCheckedAt": "2026-08-12T10:00:00.000Z"
+}
+```
+
+SES returns three DKIM CNAMEs (one is shown). Skip the DMARC record if the
+domain already has one. Show the records to the team, then check progress
+with `GET` on the same path (`teams:read`), which re-checks SES and DNS at
+most every 30 seconds (calls in between return the last check). SendLit also
+re-checks every hour.
+
+- `status` is `pending` until SES has verified DKIM and DMARC is published,
+  then `verified`. From then on the team's mail goes out from its own
+  address (`inUse: true`).
+- If the domain later stops passing, `status` becomes `failing`. The team
+  keeps sending from it until `graceEndsAt` (72 hours), then its broadcasts
+  and sequences pause with `sending_paused` (`reason:
+  "team_sending_domain_failing"`). Transactional email keeps sending. It
+  never falls back to the shared domain on its own.
+- `DELETE` on the same path removes the domain from SES. The team goes back
+  to the shared domain. Cancelling the team's shared-mailbox grant, archiving
+  the team or retiring the mailbox also removes it.
+
+| Status | Error                                    | Meaning                                                                                                   |
+| ------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `400`  | `domain_invalid`, `domain_public_suffix` | The From address isn't at a domain the team can own                                                       |
+| `409`  | `domain_in_use`                          | Another team, the organization, or the shared mailbox's own From address already uses the domain          |
+| `409`  | `domain_exists_at_provider`              | The domain is already an identity in the mailbox's SES account, and SendLit didn't add it. Remove it there or use another domain |
+| `422`  | `esp_management_credentials_required`    | The shared mailbox has no SES API key                                                                     |
+| `422`  | `provider_domain_unsupported`            | The shared mailbox isn't Amazon SES                                                                       |
+| `422`  | `organization_delivery_disabled`         | The team has no active shared-mailbox grant                                                               |
+| `422`  | `esp_provider_error`                     | Amazon SES returned an error. Retry                                                                       |
+
+The organization's delivery policy can require teams to use their own domain:
+`requireTeamSendingDomain` set to `marketing` or `all` refuses those sends
+from teams still on the shared domain with `domain_verification_required`
+(`reason: "team_sending_domain_required"`), and `sharedDomainMonthlyLimit`
+caps how many broadcast and sequence emails each team sends from the shared
+domain in a calendar month (UTC). Transactional email doesn't count.
 
 ## Errors
 
@@ -371,6 +498,10 @@ than a human-readable message.
 | `409`  | `invalid_lifecycle_transition` | The requested status transition is not allowed        |
 | `429`  | `too_many_requests`            | The provisioning rate limit was exceeded              |
 | `500`  | `server_error`                 | SendLit could not complete provisioning               |
+
+A paused team's broadcasts and sequences return `403 sending_paused`, with
+`reason` `shared_esp_team_breach`, `shared_esp_top_contributor` or
+`shared_esp_breach`; see [Shared mailboxes](/docs/workspace/acceptable-use#shared-mailboxes).
 
 Treat a `404` as organization-scoped: a valid team belonging to another
 organization is intentionally not exposed through the caller's key.

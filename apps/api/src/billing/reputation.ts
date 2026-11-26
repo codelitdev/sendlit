@@ -1,4 +1,4 @@
-import { and, count, eq, gt, gte, lt, sql } from "drizzle-orm";
+import { and, count, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   billingPlanStates,
@@ -12,7 +12,12 @@ import logger from "../services/log";
 import { getOrganizationEntitlements } from "./entitlements";
 import { notifyReputationChange } from "./notifications";
 import { readReputationConfig } from "./reputation-config";
-import { type ReputationMetrics, reputationDecision } from "./reputation-policy";
+import {
+  advanceControlState,
+  type ReputationMetrics,
+  reputationDecision,
+  utcDayStart,
+} from "./reputation-policy";
 
 export { readReputationConfig } from "./reputation-config";
 
@@ -22,41 +27,62 @@ export type SendingControlStatus =
   | "marketing_paused"
   | "all_paused";
 
-function utcDayStart(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
+const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-function sameUtcDay(a: Date | null, b: Date): boolean {
-  return Boolean(a && utcDayStart(a).getTime() === utcDayStart(b).getTime());
-}
+/** Count fragments over the outbound ledger: bounced and complained sends. */
+export const BOUNCED = sql`CASE WHEN ${outboundMessages.deliveryStatus} = 'bounced' THEN 1 END`;
+export const COMPLAINED = sql`CASE WHEN ${outboundMessages.feedbackStatus} = 'complained' THEN 1 END`;
 
-async function rollingMetrics(teamId: string, now: Date): Promise<ReputationMetrics> {
-  const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const [row] = await db
+export type LedgerCounts = ReputationMetrics & { teamId: string };
+
+/**
+ * Each team's seven-day accepted, bounced and complained counts from the
+ * deduplicated outbound ledger, so retries and duplicate provider events
+ * can't inflate rates. `since` narrows the window but never widens it.
+ * With `espConfigId`, only sends through that ESP from the given delivery
+ * source count; otherwise every delivery source does.
+ */
+export async function ledgerCounts(options: {
+  now: Date;
+  since?: Date;
+  teamIds?: string[];
+  espConfigId?: string;
+  deliverySource?: "organization";
+  /** A transaction to read in, instead of the pool. */
+  executor?: Pick<typeof db, "select">;
+}): Promise<LedgerCounts[]> {
+  const { now } = options;
+  const windowStart = new Date(now.getTime() - WINDOW_MS);
+  const since =
+    options.since && options.since > windowStart ? options.since : windowStart;
+  const rows = await (options.executor ?? db)
     .select({
-      accepted: count(
-        sql`CASE WHEN ${outboundMessages.acceptedAt} IS NOT NULL THEN 1 END`,
-      ),
-      bounced: count(
-        sql`CASE WHEN ${outboundMessages.acceptedAt} IS NOT NULL AND ${outboundMessages.deliveryStatus} = 'bounced' THEN 1 END`,
-      ),
-      complained: count(
-        sql`CASE WHEN ${outboundMessages.acceptedAt} IS NOT NULL AND ${outboundMessages.feedbackStatus} = 'complained' THEN 1 END`,
-      ),
+      teamId: outboundMessages.teamId,
+      accepted: count(),
+      bounced: count(BOUNCED),
+      complained: count(COMPLAINED),
     })
     .from(outboundMessages)
     .where(
       and(
-        eq(outboundMessages.teamId, teamId),
+        options.teamIds ? inArray(outboundMessages.teamId, options.teamIds) : undefined,
+        options.espConfigId
+          ? eq(outboundMessages.espConfigId, options.espConfigId)
+          : undefined,
+        options.deliverySource
+          ? eq(outboundMessages.deliverySourceType, options.deliverySource)
+          : undefined,
         gte(outboundMessages.acceptedAt, since),
         lt(outboundMessages.acceptedAt, now),
       ),
-    );
-  return {
-    accepted: Number(row?.accepted ?? 0),
-    bounced: Number(row?.bounced ?? 0),
-    complained: Number(row?.complained ?? 0),
-  };
+    )
+    .groupBy(outboundMessages.teamId);
+  return rows.map((row) => ({
+    teamId: row.teamId,
+    accepted: Number(row.accepted),
+    bounced: Number(row.bounced),
+    complained: Number(row.complained),
+  }));
 }
 
 /**
@@ -79,7 +105,10 @@ export async function evaluateTeamReputation(
   const entitlements = await getOrganizationEntitlements(team.organizationId, now);
   if (!entitlements.fairUse) return;
 
-  const metrics = await rollingMetrics(teamId, now);
+  const [metrics = { accepted: 0, bounced: 0, complained: 0 }] = await ledgerCounts({
+    now,
+    teamIds: [teamId],
+  });
   const config = readReputationConfig();
   const evaluateRates = metrics.accepted >= config.minimumAccepted;
   if (!evaluateRates && metrics.complained < config.complaintStopAbsolute) return;
@@ -105,51 +134,31 @@ export async function evaluateTeamReputation(
 
     // Recovery streaks advance at most once per UTC day. Any breach resets
     // the streak immediately, and a marketing pause cannot recover before
-    // its minimum hold has elapsed.
-    const alreadyEvaluatedToday = sameUtcDay(control.evaluatedAt, now);
-    let nextStatus = desired.status;
-    let cleanDays = control.cleanEvaluationDays;
-    let reason = desired.reason;
-    let minimumHoldUntil = control.minimumHoldUntil;
-    const rank = (status: SendingControlStatus) =>
-      status === "all_paused"
-        ? 3
-        : status === "marketing_paused"
-          ? 2
-          : status === "warned"
-            ? 1
-            : 0;
-    if (rank(desired.status) > rank(control.status as SendingControlStatus)) {
-      cleanDays = 0;
-      if (desired.status === "marketing_paused") {
-        minimumHoldUntil = new Date(
-          now.getTime() + config.minimumHoldHours * 60 * 60 * 1000,
-        );
-      }
-    } else if (rank(desired.status) < rank(control.status as SendingControlStatus)) {
-      // Recovery never skips the current hold. marketing_paused stays
-      // paused until 72 hours plus seven clean days; warned needs seven
-      // clean days. Weaker samples cannot drop a pause to warned.
-      if (control.status === "marketing_paused" || control.status === "warned") {
-        if (desired.status === "normal" && !alreadyEvaluatedToday) {
-          cleanDays += 1;
-        } else if (desired.status !== "normal") {
-          cleanDays = 0;
-        }
-        const holdElapsed =
-          !minimumHoldUntil || minimumHoldUntil.getTime() <= now.getTime();
-        if (cleanDays >= config.recoveryCleanDays && holdElapsed) {
-          nextStatus = "normal";
-          reason = "reputation_recovered";
-          minimumHoldUntil = null;
-        } else {
-          nextStatus = control.status as SendingControlStatus;
-          reason = control.reasonCode ?? "reputation_pause";
-        }
-      }
-    } else if (desired.status === "warned" || desired.status === "marketing_paused") {
-      cleanDays = 0;
-    }
+    // its minimum hold has elapsed (72 hours plus seven clean days).
+    const transition = advanceControlState(
+      {
+        status: control.status as SendingControlStatus,
+        reasonCode: control.reasonCode,
+        evaluatedAt: control.evaluatedAt,
+        cleanEvaluationDays: control.cleanEvaluationDays,
+        minimumHoldUntil: control.minimumHoldUntil,
+      },
+      desired,
+      now,
+      {
+        minimumHoldHours: config.minimumHoldHours,
+        recoveryCleanDays: config.recoveryCleanDays,
+        recoveredReason: "reputation_recovered",
+        heldReason: "reputation_pause",
+      },
+    );
+    const {
+      alreadyEvaluatedToday,
+      status: nextStatus,
+      reason,
+      minimumHoldUntil,
+      cleanEvaluationDays: cleanDays,
+    } = transition;
 
     if (nextStatus !== control.status || !alreadyEvaluatedToday) {
       const enteredAt = nextStatus !== control.status ? now : control.enteredAt;

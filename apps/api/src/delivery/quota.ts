@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   espConfigTeamGrants,
@@ -19,6 +19,42 @@ function utcPeriods(now = new Date()) {
   const nextMonth = new Date(month);
   nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
   return { day, month, nextDay, nextMonth };
+}
+
+type BucketKey = {
+  scope: "grant" | "organization";
+  grantId: string | null;
+  periodType: "day" | "month";
+  periodStart: Date;
+};
+
+/**
+ * The one order every transaction locks a grant's usage buckets in: grant
+ * day, grant month, organization day, organization month. Reserving and
+ * committing a send both lock several of these rows; taking them in different
+ * orders let a request and the mail worker deadlock each other.
+ */
+function bucketKeysInLockOrder(grantId: string, day: Date, month: Date): BucketKey[] {
+  return [
+    { scope: "grant", grantId, periodType: "day", periodStart: day },
+    { scope: "grant", grantId, periodType: "month", periodStart: month },
+    { scope: "organization", grantId: null, periodType: "day", periodStart: day },
+    { scope: "organization", grantId: null, periodType: "month", periodStart: month },
+  ];
+}
+
+/** Matches exactly one bucket. The period type matters: on the 1st of a
+ * month the day and month buckets start at the same instant. */
+function bucketWhere(organizationId: string, key: BucketKey) {
+  return and(
+    eq(organizationEspUsageBuckets.organizationId, organizationId),
+    eq(organizationEspUsageBuckets.bucketScope, key.scope),
+    eq(organizationEspUsageBuckets.periodType, key.periodType),
+    eq(organizationEspUsageBuckets.periodStart, key.periodStart),
+    key.grantId
+      ? eq(organizationEspUsageBuckets.grantId, key.grantId)
+      : isNull(organizationEspUsageBuckets.grantId),
+  );
 }
 
 async function ensureBucket(
@@ -44,17 +80,7 @@ async function ensureBucket(
   const [bucket] = await tx
     .select()
     .from(organizationEspUsageBuckets)
-    .where(
-      and(
-        eq(organizationEspUsageBuckets.organizationId, input.organizationId),
-        eq(organizationEspUsageBuckets.bucketScope, input.scope),
-        eq(organizationEspUsageBuckets.periodType, input.periodType),
-        eq(organizationEspUsageBuckets.periodStart, input.periodStart),
-        input.grantId
-          ? eq(organizationEspUsageBuckets.grantId, input.grantId)
-          : undefined,
-      ),
-    )
+    .where(bucketWhere(input.organizationId, input))
     .limit(1)
     .for("update");
   if (!bucket) throw new Error("quota_bucket_not_created");
@@ -75,44 +101,31 @@ async function lockBucketsWithRoom(
   periods: ReturnType<typeof utcPeriods>,
   count: number,
 ) {
-  const specs = [
+  const limits = [
     {
-      scope: "grant" as const,
-      grantId: context.grant.id,
-      periodType: "day" as const,
-      periodStart: periods.day,
       limit: context.grant.dailyLimit,
       error: "organization_team_quota_exhausted",
       resetAt: periods.nextDay,
     },
     {
-      scope: "grant" as const,
-      grantId: context.grant.id,
-      periodType: "month" as const,
-      periodStart: periods.month,
       limit: context.grant.monthlyLimit,
       error: "organization_team_quota_exhausted",
       resetAt: periods.nextMonth,
     },
     {
-      scope: "organization" as const,
-      grantId: null,
-      periodType: "day" as const,
-      periodStart: periods.day,
       limit: context.policy.aggregateDailyLimit,
       error: "organization_quota_exhausted",
       resetAt: periods.nextDay,
     },
     {
-      scope: "organization" as const,
-      grantId: null,
-      periodType: "month" as const,
-      periodStart: periods.month,
       limit: context.policy.aggregateMonthlyLimit,
       error: "organization_quota_exhausted",
       resetAt: periods.nextMonth,
     },
   ];
+  const specs = bucketKeysInLockOrder(context.grant.id, periods.day, periods.month).map(
+    (key, index) => ({ ...key, ...limits[index] }),
+  );
   const buckets = [];
   for (const spec of specs) {
     const bucket = await ensureBucket(tx, {
@@ -156,7 +169,12 @@ async function lockActiveGrant(tx: Executor, grantId: string): Promise<GrantCont
     )
     .where(eq(espConfigTeamGrants.id, grantId))
     .limit(1)
-    .for("update");
+    // `no key update`, not `update`: each send inserts its outbound row,
+    // whose foreign key takes FOR KEY SHARE on this grant, in the same
+    // transaction before reserving. FOR UPDATE conflicts with that lock, so
+    // concurrent sends (a broadcast) deadlocked; NO KEY UPDATE still
+    // serialises reservations on the grant without that conflict.
+    .for("no key update");
   if (context?.grant.status !== "active") {
     throw new Error("organization_delivery_disabled");
   }
@@ -289,35 +307,21 @@ async function transitionReservationInTransaction(
     .limit(1)
     .for("update");
   if (reservation?.state !== "reserved") return;
-  const buckets = await tx
-    .select()
-    .from(organizationEspUsageBuckets)
-    .where(
-      and(
-        eq(organizationEspUsageBuckets.organizationId, reservation.organizationId),
-        eq(organizationEspUsageBuckets.periodStart, reservation.dayPeriodStart),
-        or(
-          eq(organizationEspUsageBuckets.bucketScope, "organization"),
-          eq(organizationEspUsageBuckets.grantId, reservation.grantId),
-        ),
-      ),
-    )
-    .for("update");
-  const monthBuckets = await tx
-    .select()
-    .from(organizationEspUsageBuckets)
-    .where(
-      and(
-        eq(organizationEspUsageBuckets.organizationId, reservation.organizationId),
-        eq(organizationEspUsageBuckets.periodStart, reservation.monthPeriodStart),
-        or(
-          eq(organizationEspUsageBuckets.bucketScope, "organization"),
-          eq(organizationEspUsageBuckets.grantId, reservation.grantId),
-        ),
-      ),
-    )
-    .for("update");
-  for (const bucket of [...buckets, ...monthBuckets]) {
+  const buckets = [];
+  for (const key of bucketKeysInLockOrder(
+    reservation.grantId,
+    reservation.dayPeriodStart,
+    reservation.monthPeriodStart,
+  )) {
+    const [bucket] = await tx
+      .select()
+      .from(organizationEspUsageBuckets)
+      .where(bucketWhere(reservation.organizationId, key))
+      .limit(1)
+      .for("update");
+    if (bucket) buckets.push(bucket);
+  }
+  for (const bucket of buckets) {
     await tx
       .update(organizationEspUsageBuckets)
       .set({
@@ -402,50 +406,102 @@ export async function releaseReservedQuotaForGrantInTransaction(
   }
 }
 
-export async function getTeamQuotaUsage(teamId: string) {
-  const [grant] = await db
+export type QuotaWindow = {
+  limit: number | null;
+  accepted: number;
+  reserved: number;
+  remaining: number | null;
+  resetsAt: Date;
+};
+
+export type TeamQuotaUsage = { day: QuotaWindow; month: QuotaWindow };
+
+function quotaWindow(
+  bucket: { acceptedCount: number; reservedCount: number } | undefined,
+  limit: number | null,
+  resetsAt: Date,
+): QuotaWindow {
+  const accepted = bucket?.acceptedCount ?? 0;
+  const reserved = bucket?.reservedCount ?? 0;
+  return {
+    limit,
+    accepted,
+    reserved,
+    remaining: limit === null ? null : Math.max(0, limit - accepted - reserved),
+    resetsAt,
+  };
+}
+
+/** A period's bucket, for one grant when `grantId` is given. On the 1st the
+ * day and month buckets share a start, so the type is matched too. */
+function findBucket(
+  buckets: (typeof organizationEspUsageBuckets.$inferSelect)[],
+  periodType: "day" | "month",
+  periodStart: Date,
+  grantId?: string,
+) {
+  return buckets.find(
+    (row) =>
+      (grantId === undefined || row.grantId === grantId) &&
+      row.periodType === periodType &&
+      row.periodStart.getTime() === periodStart.getTime(),
+  );
+}
+
+/** Shared-mailbox quota for several teams (by internal id). Teams without an
+ * active grant are left out. */
+export async function getTeamsQuotaUsage(
+  teamIds: string[],
+): Promise<Map<string, TeamQuotaUsage>> {
+  const result = new Map<string, TeamQuotaUsage>();
+  if (teamIds.length === 0) return result;
+  const grants = await db
     .select()
     .from(espConfigTeamGrants)
     .where(
       and(
-        eq(espConfigTeamGrants.teamId, teamId),
+        inArray(espConfigTeamGrants.teamId, teamIds),
         eq(espConfigTeamGrants.status, "active"),
       ),
-    )
-    .limit(1);
-  if (!grant) throw new Error("organization_delivery_disabled");
+    );
+  if (grants.length === 0) return result;
   const periods = utcPeriods();
   const buckets = await db
     .select()
     .from(organizationEspUsageBuckets)
     .where(
       and(
-        eq(organizationEspUsageBuckets.organizationId, grant.organizationId),
-        eq(organizationEspUsageBuckets.grantId, grant.id),
+        inArray(
+          organizationEspUsageBuckets.grantId,
+          grants.map((grant) => grant.id),
+        ),
         or(
           eq(organizationEspUsageBuckets.periodStart, periods.day),
           eq(organizationEspUsageBuckets.periodStart, periods.month),
         ),
       ),
     );
-  const makeWindow = (periodStart: Date, limit: number | null, resetsAt: Date) => {
-    const bucket = buckets.find(
-      (row) => row.periodStart.getTime() === periodStart.getTime(),
-    );
-    const accepted = bucket?.acceptedCount ?? 0;
-    const reserved = bucket?.reservedCount ?? 0;
-    return {
-      limit,
-      accepted,
-      reserved,
-      remaining: limit === null ? null : Math.max(0, limit - accepted - reserved),
-      resetsAt,
-    };
-  };
-  return {
-    day: makeWindow(periods.day, grant.dailyLimit, periods.nextDay),
-    month: makeWindow(periods.month, grant.monthlyLimit, periods.nextMonth),
-  };
+  for (const grant of grants) {
+    result.set(grant.teamId, {
+      day: quotaWindow(
+        findBucket(buckets, "day", periods.day, grant.id),
+        grant.dailyLimit,
+        periods.nextDay,
+      ),
+      month: quotaWindow(
+        findBucket(buckets, "month", periods.month, grant.id),
+        grant.monthlyLimit,
+        periods.nextMonth,
+      ),
+    });
+  }
+  return result;
+}
+
+export async function getTeamQuotaUsage(teamId: string): Promise<TeamQuotaUsage> {
+  const usage = (await getTeamsQuotaUsage([teamId])).get(teamId);
+  if (!usage) throw new Error("organization_delivery_disabled");
+  return usage;
 }
 
 /** Organization-level aggregate usage. Unlike a grant window this remains
@@ -471,22 +527,16 @@ export async function getOrganizationQuotaUsage(organizationId: string) {
         ),
       ),
     );
-  const makeWindow = (periodStart: Date, limit: number | null, resetsAt: Date) => {
-    const bucket = buckets.find(
-      (row) => row.periodStart.getTime() === periodStart.getTime(),
-    );
-    const accepted = bucket?.acceptedCount ?? 0;
-    const reserved = bucket?.reservedCount ?? 0;
-    return {
-      limit,
-      accepted,
-      reserved,
-      remaining: limit === null ? null : Math.max(0, limit - accepted - reserved),
-      resetsAt,
-    };
-  };
   return {
-    day: makeWindow(periods.day, policy.aggregateDailyLimit, periods.nextDay),
-    month: makeWindow(periods.month, policy.aggregateMonthlyLimit, periods.nextMonth),
+    day: quotaWindow(
+      findBucket(buckets, "day", periods.day),
+      policy.aggregateDailyLimit,
+      periods.nextDay,
+    ),
+    month: quotaWindow(
+      findBucket(buckets, "month", periods.month),
+      policy.aggregateMonthlyLimit,
+      periods.nextMonth,
+    ),
   };
 }

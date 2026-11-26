@@ -3,6 +3,7 @@ import {
   type DeliveryEventType,
   finalSoftBounceSuppressionThreshold,
 } from "../config/constants";
+import { evaluateSharedEspSoon } from "../delivery/shared-esp-guard";
 import { captureError } from "../observability";
 import logger from "../services/log";
 import { normalizeEmail } from "../utils/email";
@@ -169,6 +170,7 @@ async function processOneEvent(
       // A reputation calculation must never make an authenticated
       // provider receipt retry; the hourly sweep is the durable backup.
       await evaluateTeamReputation(teamId).catch(() => undefined);
+      await evaluateSharedEspSoon(outbound).catch(() => undefined);
     }
   }
 

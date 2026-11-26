@@ -229,10 +229,31 @@ export const sendingDomains = pgTable(
     nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
     failedCheckCount: integer("failed_check_count").notNull().default(0),
     firstFailedAt: timestamp("first_failed_at", { withTimezone: true }),
+    /** Set for a team's own From domain on a shared organization ESP (#220).
+     * Null for the organization's own verified domains. */
+    teamId: uuid("team_id").references(() => teams.id, { onDelete: "restrict" }),
+    /** The shared ESP the team domain is registered with. */
+    espConfigId: uuid("esp_config_id").references(() => espConfigs.id, {
+      onDelete: "restrict",
+    }),
+    /** Team domains only: the provider's DKIM state (pending | verified |
+     * failed) and whether a DMARC record is published (pass | missing). */
+    dkimStatus: text("dkim_status"),
+    dmarcStatus: text("dmarc_status"),
+    /** Team domains only: the DNS records to publish, as the provider gave
+     * them (`{type, name, value, purpose}[]`). */
+    dnsRecords: jsonb("dns_records"),
+    /** Team domains: when DKIM and DMARC started failing after they first
+     * passed (`verifiedAt`); a team sends from its domain only while it
+     * passes, within a grace period after a failure. */
+    authFailingSince: timestamp("auth_failing_since", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    liveTeamDomainIdx: uniqueIndex("sending_domains_live_team_idx")
+      .on(table.teamId)
+      .where(sql`${table.teamId} IS NOT NULL AND ${table.status} <> 'revoked'`),
     domainIdCheck: publicIdCheck(
       "sending_domains_domain_id_check",
       table.domainId,
@@ -1038,6 +1059,10 @@ export const espConfigs = pgTable(
      * confirmed. Providers like SES use random selectors that DNS can't list,
      * so it's remembered for later checks. */
     dkimSelector: text("dkim_selector"),
+    /** Organization ESPs only: an encrypted provider API credential (for
+     * SES, an access key and region) used to register teams' own sending
+     * domains. Separate from the SMTP secret, which can only send. */
+    encryptedManagementSecret: text("encrypted_management_secret"),
     status: text("status").notNull().default("draft"),
     secretVersion: integer("secret_version").notNull().default(1),
     lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
@@ -1088,10 +1113,26 @@ export const organizationDeliveryPolicies = pgTable(
       .notNull()
       .default(true),
     teamCanChangeDefault: boolean("team_can_change_default").notNull().default(true),
+    /** Whether teams on a shared ESP must send from their own verified
+     * domain: `off`, for `marketing` only, or for `all` mail (#220). */
+    requireTeamSendingDomain: text("require_team_sending_domain")
+      .notNull()
+      .default("off"),
+    /** Optional monthly cap on each team's marketing sends through a shared
+     * ESP while the team still uses the shared From domain. */
+    sharedDomainMonthlyLimit: integer("shared_domain_monthly_limit"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    requireTeamSendingDomainCheck: check(
+      "organization_delivery_policies_require_team_domain_check",
+      sql`${table.requireTeamSendingDomain} IN ('off', 'marketing', 'all')`,
+    ),
+    sharedDomainLimitCheck: check(
+      "organization_delivery_policies_shared_domain_limit_check",
+      sql`${table.sharedDomainMonthlyLimit} IS NULL OR ${table.sharedDomainMonthlyLimit} >= 0`,
+    ),
     defaultEspFk: foreignKey({
       name: "organization_delivery_policies_default_esp_fk",
       columns: [table.defaultEspConfigId, table.organizationId],
@@ -1209,6 +1250,12 @@ export const espConfigTeamGrants = pgTable(
     drainUntil: timestamp("drain_until", { withTimezone: true }),
     fromName: text("from_name"),
     replyTo: text("reply_to"),
+    /** The team's own From address and domain on this shared ESP (#220);
+     * used only while the domain is verified and authenticates. */
+    fromEmail: text("from_email"),
+    sendingDomainId: uuid("sending_domain_id").references(() => sendingDomains.id, {
+      onDelete: "set null",
+    }),
     dailyLimit: integer("daily_limit"),
     monthlyLimit: integer("monthly_limit"),
     createdByType: text("created_by_type").notNull(),
@@ -2058,6 +2105,10 @@ export const outboundMessages = pgTable(
     campaignDeliveryIdx: index("outbound_messages_campaign_delivery_id_idx").on(
       table.campaignDeliveryId,
     ),
+    // The shared-ESP guard's rolling window over one organization ESP.
+    espAcceptedAtIdx: index("outbound_messages_esp_config_id_accepted_at_idx")
+      .on(table.espConfigId, table.acceptedAt)
+      .where(sql`${table.deliverySourceType} = 'organization'`),
     recipientHistoryIdx: index("outbound_messages_team_id_recipient_created_at_idx").on(
       table.teamId,
       table.normalizedRecipient,
@@ -2079,6 +2130,63 @@ export const outboundMessages = pgTable(
                 AND ${table.espGrantId} IS NULL
                 AND ${table.deliveryStatus} <> 'queued'
             )`,
+    ),
+  }),
+);
+
+/**
+ * Shared-ESP guard state (#220). A row with a null `teamId` is the whole
+ * organization ESP; a row with a `teamId` pauses one team's marketing through
+ * that ESP only, leaving its own ESPs and transactional mail alone.
+ */
+export const sharedEspSendingControls = pgTable(
+  "shared_esp_sending_controls",
+  {
+    id: uuid("id").$defaultFn(genId).primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    espConfigId: uuid("esp_config_id")
+      .notNull()
+      .references(() => espConfigs.id, { onDelete: "restrict" }),
+    teamId: uuid("team_id").references(() => teams.id, { onDelete: "restrict" }),
+    status: text("status").notNull().default("normal"),
+    reasonCode: text("reason_code"),
+    source: text("source").notNull().default("automatic"),
+    enteredAt: timestamp("entered_at", { withTimezone: true }),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true }),
+    minimumHoldUntil: timestamp("minimum_hold_until", { withTimezone: true }),
+    cleanEvaluationDays: integer("clean_evaluation_days").notNull().default(0),
+    operatorUserId: text("operator_user_id").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    operatorReason: text("operator_reason"),
+    /** When an operator last released this control. Until `releaseGraceUntil`
+     * the guard judges only sends accepted after it, so the reviewed bounces
+     * can't pause it again but new ones still do. */
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    releaseGraceUntil: timestamp("release_grace_until", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    espUnique: uniqueIndex("shared_esp_sending_controls_esp_uidx")
+      .on(table.espConfigId)
+      .where(sql`${table.teamId} IS NULL`),
+    espTeamUnique: uniqueIndex("shared_esp_sending_controls_esp_team_uidx")
+      .on(table.espConfigId, table.teamId)
+      .where(sql`${table.teamId} IS NOT NULL`),
+    statusCheck: check(
+      "shared_esp_sending_controls_status_check",
+      sql`${table.status} IN ('normal', 'warned', 'marketing_paused')`,
+    ),
+    sourceCheck: check(
+      "shared_esp_sending_controls_source_check",
+      sql`${table.source} IN ('automatic', 'operator')`,
+    ),
+    cleanDaysCheck: check(
+      "shared_esp_sending_controls_clean_days_check",
+      sql`${table.cleanEvaluationDays} >= 0`,
     ),
   }),
 );

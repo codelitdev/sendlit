@@ -8,6 +8,7 @@ import { evaluateTeamReputation } from "../billing/reputation";
 import { db } from "../db/client";
 import { resolvePinnedDeliverySource } from "../delivery/queries";
 import { commitQuotaForOutbound, releaseQuotaForOutbound } from "../delivery/quota";
+import { evaluateSharedEspSoon } from "../delivery/shared-esp-guard";
 import { notifyFeedbackMilestones } from "../delivery-feedback/feedback-requirement";
 import {
   getOutboundMessageByTransactionalEmailId,
@@ -228,6 +229,7 @@ async function processTransactionalJob(job: Job, token?: string) {
       if (outbound) {
         await markOutboundBounced(outbound.id);
         await evaluateTeamReputation(row.teamId).catch(() => undefined);
+        await evaluateSharedEspSoon(outbound).catch(() => undefined);
         await releaseQuotaForOutbound(outbound.id, "provider_rejected");
         await releaseSendReservation(outbound.id);
       }

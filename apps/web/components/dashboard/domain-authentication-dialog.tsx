@@ -4,12 +4,12 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Copy,
   ExternalLink,
   RefreshCw,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/dashboard/banner";
+import { DnsRecordsTable } from "@/components/dashboard/dns-records-table";
 import { Loading } from "@/components/dashboard/loading";
 import { Badge } from "@/components/ui/codelit/badge";
 import { Button } from "@/components/ui/codelit/button";
@@ -21,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/codelit/dialog";
-import { IconButton } from "@/components/ui/codelit/icon-button";
 import { Input } from "@/components/ui/codelit/input";
 import { Label } from "@/components/ui/codelit/label";
 import {
@@ -29,14 +28,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   checkEspDomainAuthentication,
   type DomainAuthentication,
@@ -47,7 +38,9 @@ import { espProviderLabel } from "@/lib/esp-providers";
 import { relativeTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
-type Status = DomainAuthentication["spf"]["status"];
+export { CopyButton } from "@/components/dashboard/dns-records-table";
+
+export type Status = DomainAuthentication["spf"]["status"];
 type DnsRecord = DomainAuthentication["records"][number];
 type Section = "SPF" | "DKIM" | "DMARC";
 /** What every check (SPF, DKIM, DMARC) has in common. */
@@ -66,7 +59,7 @@ const SECTION_SUMMARY: Record<
   DMARC: () => "Tells inboxes what to do with mail that fails SPF or DKIM.",
 };
 
-const STATUS_STYLE: Record<
+export const STATUS_STYLE: Record<
   Status,
   { icon: string; bar: string; badge: "success" | "warning" | "destructive" }
 > = {
@@ -309,7 +302,6 @@ function AuthSection({
               : "Publish your mail server's DKIM key as a TXT record, then enter its selector below to check it."
           : "Add this record so inboxes know what to do with mail that fails SPF or DKIM. Start with p=none to monitor.";
 
-  let dkimKey = 0;
   return (
     <Collapsible
       open={open}
@@ -349,101 +341,34 @@ function AuthSection({
           <p className="text-sm text-muted-foreground">{check.message}</p>
         )}
 
-        {records.length > 0 && (
-          <div className="overflow-hidden rounded-lg border bg-muted/40">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="px-4">Type</TableHead>
-                  <TableHead className="px-4">Host</TableHead>
-                  <TableHead className="px-4">Value</TableHead>
-                  <TableHead className="px-4">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {records.map((record) => {
-                  const isToken = record.name.startsWith("<token");
-                  if (isToken) dkimKey += 1;
-                  return (
-                    <TableRow
-                      key={`${record.type}-${record.name}-${record.purpose}`}
-                      className="align-top hover:bg-transparent"
-                    >
-                      <TableCell className="whitespace-normal px-4 py-3">
-                        <span className="rounded-md border bg-card px-2 py-1 font-mono text-xs">
-                          {record.type}
-                        </span>
-                      </TableCell>
-                      <TableCell className="whitespace-normal px-4 py-3">
-                        <div className="flex items-start gap-1.5">
-                          <span className="break-all font-mono text-xs leading-5">
-                            {record.name}
-                          </span>
-                          <CopyButton
-                            value={record.name}
-                            label={`Copy ${record.purpose} host`}
-                          />
-                        </div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {isToken
-                            ? `DKIM key ${dkimKey} of ${records.length}`
-                            : record.purpose}
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-normal px-4 py-3">
-                        {record.value ? (
-                          <div className="flex items-start gap-1.5">
-                            <span className="break-all font-mono text-xs leading-5">
-                              {record.value}
-                            </span>
-                            <CopyButton
-                              value={record.value}
-                              label={`Copy ${record.purpose} value`}
-                            />
-                          </div>
-                        ) : result.providerConsoleUrl ? (
-                          <a
-                            href={result.providerConsoleUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
-                          >
-                            Copy from {provider}
-                            <ExternalLink className="size-3.5" />
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            From your mail server
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="whitespace-normal px-4 py-3">
-                        <Badge variant={record.present ? "success" : "outline"}>
-                          {record.present ? "Found" : "Not found"}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-
-        {records.some(
-          (record) => record.name.endsWith(domain) && record.name !== domain,
-        ) && (
-          <p className="text-xs text-muted-foreground">
-            Some DNS providers add <span className="font-mono">{domain}</span> to the
-            host for you. If yours does, enter only the first part, like{" "}
-            <span className="font-mono">
-              {records
-                .find((record) => record.name !== domain)
-                ?.name.replace(`.${domain}`, "")}
-            </span>
-            .
-          </p>
-        )}
+        <DnsRecordsTable
+          records={records}
+          domain={domain}
+          hostDetail={(record, index) =>
+            record.name.startsWith("<token")
+              ? `DKIM key ${
+                  records
+                    .slice(0, index + 1)
+                    .filter((other) => other.name.startsWith("<token")).length
+                } of ${records.length}`
+              : record.purpose
+          }
+          missingValue={
+            result.providerConsoleUrl ? (
+              <a
+                href={result.providerConsoleUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              >
+                Copy from {provider}
+                <ExternalLink className="size-3.5" />
+              </a>
+            ) : (
+              <span className="text-muted-foreground">From your mail server</span>
+            )
+          }
+        />
 
         {name === "DMARC" && result.dmarc.record && (
           <p className="break-all font-mono text-xs text-muted-foreground">
@@ -509,24 +434,5 @@ function SelectorField({
         </p>
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-export function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <IconButton
-      title={copied ? "Copied" : "Copy"}
-      aria-label={label}
-      className="-mt-0.5 shrink-0"
-      onClick={() => {
-        void navigator.clipboard.writeText(value).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-    >
-      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-    </IconButton>
   );
 }

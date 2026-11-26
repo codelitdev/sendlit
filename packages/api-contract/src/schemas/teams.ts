@@ -82,8 +82,23 @@ export const provisionTeamResponseSchema = z.discriminatedUnion("created", [
   }),
 ]);
 
+/** A team's sending health: the strictest control on it and its last 7 days
+ * of sends through the outbound ledger (campaigns and transactional). */
+export const teamHealthSchema = z.object({
+  status: z.enum(["normal", "warned", "marketing_paused", "all_paused"]),
+  reason: z.string().nullable(),
+  scope: z.enum(["team", "shared_mailbox"]).nullable(),
+  last7Days: z.object({
+    sent: z.number().int().nonnegative(),
+    bounced: z.number().int().nonnegative(),
+    complained: z.number().int().nonnegative(),
+  }),
+});
+
 /** The organization-key lifecycle surface deliberately returns no provider,
- * grant, or organization topology. */
+ * credentials or grant ids. `health` does say when a pause comes from the
+ * organization's shared mailbox (`scope`, `reason`): the organization owns
+ * that mailbox, and it's what the caller has to act on. */
 export const provisionedTeamSchema = provisionedTeamBaseSchema.extend({
   status: z.enum(["active", "sending_suspended", "archived"]),
   postalAddress: postalAddressSchema.nullable(),
@@ -91,6 +106,7 @@ export const provisionedTeamSchema = provisionedTeamBaseSchema.extend({
   teamCanChangeDefault: z.boolean(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
+  health: teamHealthSchema,
 });
 
 export const updateProvisionedTeamBodySchema = z
@@ -128,7 +144,11 @@ export const usageWindowSchema = z.object({
   resetsAt: z.string(),
 });
 
-export const provisionedTeamUsageSchema = z.object({
+export const teamQuotaUsageSchema = z.object({
   day: usageWindowSchema,
   month: usageWindowSchema,
+});
+
+export const provisionedTeamUsageSchema = teamQuotaUsageSchema.extend({
+  health: teamHealthSchema,
 });

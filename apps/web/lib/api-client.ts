@@ -51,7 +51,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, data?.error || res.statusText);
+    throw new ApiError(res.status, data?.error || res.statusText, data);
   }
 
   return data as T;

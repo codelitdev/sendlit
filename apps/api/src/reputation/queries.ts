@@ -6,6 +6,7 @@ import {
   espConfigTeamGrants,
   reputationConnections,
   reputationDailyStats,
+  sendingDomains,
 } from "../db/schema";
 import { sendingDomainOf } from "../settings/esp/domain-auth";
 import { encryptSecret } from "../utils/secret-crypto";
@@ -96,7 +97,8 @@ export async function saveDailyStats(
   }
 }
 
-/** Domains the team sends from: its own ESPs and mailboxes granted to it. */
+/** Domains the team sends from: its own ESPs, mailboxes granted to it, and
+ * its own domain on a shared mailbox once that has authenticated (#220). */
 export async function teamSendingDomains(teamId: string): Promise<string[]> {
   const grantedEspIds = db
     .select({ id: espConfigTeamGrants.espConfigId })
@@ -117,10 +119,23 @@ export async function teamSendingDomains(teamId: string): Promise<string[]> {
         or(eq(espConfigs.teamId, teamId), inArray(espConfigs.id, grantedEspIds)),
       ),
     );
+  const own = await db
+    .select({ domain: sendingDomains.domain })
+    .from(sendingDomains)
+    .where(
+      and(
+        eq(sendingDomains.teamId, teamId),
+        eq(sendingDomains.status, "verified"),
+        isNotNull(sendingDomains.verifiedAt),
+      ),
+    );
   return [
-    ...new Set(
-      rows.map((row) => sendingDomainOf(row.fromEmail)).filter(Boolean) as string[],
-    ),
+    ...new Set([
+      ...(rows
+        .map((row) => sendingDomainOf(row.fromEmail))
+        .filter(Boolean) as string[]),
+      ...own.map((row) => row.domain),
+    ]),
   ].sort();
 }
 

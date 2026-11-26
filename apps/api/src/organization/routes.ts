@@ -28,6 +28,16 @@ import {
 } from "../delivery/queries";
 import { getOrganizationQuotaUsage } from "../delivery/quota";
 import {
+  refreshTeamSendingDomain,
+  removeEspManagementCredentials,
+  removeTeamSendingDomain,
+  setEspManagementCredentials,
+  setTeamSendingDomain,
+  teamDomainErrorHttp,
+  teamDomainStatus,
+  teamDomainUsable,
+} from "../delivery/team-sending-domain";
+import {
   disableOrganizationFeedbackConnection,
   feedbackConnectionReadinessError,
   getActiveFeedbackConnectionForEspConfig,
@@ -119,6 +129,12 @@ function isHuman(req: any): boolean {
   return req.authKind === "session" || req.authKind === "oauth";
 }
 
+function actorOf(req: any): { type: "user" | "organization_key"; id: string } {
+  return req.authKind === "organization_key"
+    ? { type: "organization_key", id: req.organizationApiKeyId }
+    : { type: "user", id: req.userId };
+}
+
 /** Records the minimal Phase 1 security activity log without ever copying
  * secrets, credential data, or internal IDs into metadata. */
 async function auditOrganizationMutation(
@@ -134,10 +150,7 @@ async function auditOrganizationMutation(
 ): Promise<void> {
   await recordOrganizationAuditEvent(db, {
     organizationId,
-    actor:
-      req.authKind === "organization_key"
-        ? { type: "organization_key", id: req.organizationApiKeyId }
-        : { type: "user", id: req.userId },
+    actor: actorOf(req),
     action,
     ...refs,
   });
@@ -216,6 +229,7 @@ function serializeOrganizationEsp(config: EspConfig) {
     secure: config.secure,
     username: config.username,
     hasPassword: Boolean(config.encryptedSecret),
+    hasManagementCredentials: Boolean(config.encryptedManagementSecret),
     fromName: config.fromName,
     fromEmail: config.fromEmail,
     replyTo: config.replyTo,
@@ -232,6 +246,35 @@ function serializeOrganizationEsp(config: EspConfig) {
     retiredAt: config.retiredAt?.toISOString() ?? null,
     updatedAt: config.updatedAt.toISOString(),
   };
+}
+
+/** Owners and admins, or an organization key with `grants:manage`, acting
+ * on one team's grant or sending domain. */
+async function teamGrantAccess(
+  req: any,
+  params: { organizationId: string; teamId: string },
+): Promise<
+  | {
+      authorization: NonNullable<Awaited<ReturnType<typeof resolveAuthorization>>>;
+      team: NonNullable<Awaited<ReturnType<typeof getTeamByTeamId>>>;
+    }
+  | { status: 403 | 404; body: { error: string } }
+> {
+  const authorization = await resolveAuthorization(req, params.organizationId);
+  if (!authorization) {
+    return { status: 404, body: { error: "organization_not_found" } };
+  }
+  const allowed =
+    hasRole(authorization, ["owner", "admin"]) ||
+    Boolean(authorization.keyScopes?.includes("grants:manage"));
+  if (!allowed) {
+    return { status: 403, body: { error: "organization_permission_required" } };
+  }
+  const team = await getTeamByTeamId(params.teamId);
+  if (!team || team.organizationId !== authorization.organization.id) {
+    return { status: 404, body: { error: "team_not_found" } };
+  }
+  return { authorization, team };
 }
 
 function mayReadOrganizationEsp(
@@ -283,6 +326,11 @@ function serializeDeliveryPolicy(
     aggregateMonthlyLimit: view.policy.aggregateMonthlyLimit,
     teamEspEnabledByDefault: view.policy.teamEspEnabledByDefault,
     teamCanChangeDefault: view.policy.teamCanChangeDefault,
+    requireTeamSendingDomain: view.policy.requireTeamSendingDomain as
+      | "off"
+      | "marketing"
+      | "all",
+    sharedDomainMonthlyLimit: view.policy.sharedDomainMonthlyLimit,
     updatedAt: view.policy.updatedAt.toISOString(),
   };
 }
@@ -300,6 +348,14 @@ function serializeGrant(
     replyTo: view.grant.replyTo,
     dailyLimit: view.grant.dailyLimit,
     monthlyLimit: view.grant.monthlyLimit,
+    fromEmail: view.sendingDomain ? view.grant.fromEmail : null,
+    sendingDomain: view.sendingDomain
+      ? {
+          domain: view.sendingDomain.domain,
+          status: teamDomainStatus(view.sendingDomain),
+          inUse: teamDomainUsable(view.sendingDomain, new Date()),
+        }
+      : null,
     createdAt: view.grant.createdAt.toISOString(),
     updatedAt: view.grant.updatedAt.toISOString(),
   };
@@ -350,7 +406,7 @@ const impl = s.router(contract.organizations, {
   list: async ({ req }) => {
     if (!isHuman(req as any)) {
       return {
-        status: 403 as const,
+        status: 403,
         body: { error: "user_auth_required" },
       };
     }
@@ -369,7 +425,7 @@ const impl = s.router(contract.organizations, {
   create: async ({ req, body }) => {
     if (!isHuman(req as any)) {
       return {
-        status: 403 as const,
+        status: 403,
         body: { error: "user_auth_required" },
       };
     }
@@ -1635,24 +1691,92 @@ const impl = s.router(contract.organizations, {
       },
     };
   },
-  getEspGrant: async ({ req, params }) => {
+  getTeamSendingDomain: async ({ req, params }) => {
+    const access = await teamGrantAccess(req, params);
+    if ("status" in access) return access;
+    try {
+      return { status: 200, body: await refreshTeamSendingDomain(access.team.id) };
+    } catch (error) {
+      const mapped = teamDomainErrorHttp(error);
+      if (mapped) return mapped as any;
+      throw error;
+    }
+  },
+  setTeamSendingDomain: async ({ req, params, body }) => {
+    const access = await teamGrantAccess(req, params);
+    if ("status" in access) return access;
+    try {
+      const view = await setTeamSendingDomain(
+        access.authorization.organization.id,
+        access.team.id,
+        body,
+        actorOf(req),
+      );
+      return { status: 200, body: view };
+    } catch (error) {
+      const mapped = teamDomainErrorHttp(error);
+      if (mapped) return mapped as any;
+      throw error;
+    }
+  },
+  removeTeamSendingDomain: async ({ req, params }) => {
+    const access = await teamGrantAccess(req, params);
+    if ("status" in access) return access;
+    const removed = await removeTeamSendingDomain(
+      access.authorization.organization.id,
+      access.team.id,
+      actorOf(req),
+    );
+    if (!removed) return { status: 404, body: { error: "sending_domain_not_found" } };
+    return { status: 204, body: undefined };
+  },
+  setEspManagementCredentials: async ({ req, params, body }) => {
     const authorization = await resolveAuthorization(req, params.organizationId);
     if (!authorization) {
       return { status: 404, body: { error: "organization_not_found" } };
     }
-    const mayRead =
-      hasRole(authorization, ["owner", "admin"]) ||
-      authorization.keyScopes?.includes("grants:manage");
-    if (!mayRead) {
-      return {
-        status: 403,
-        body: { error: "organization_permission_required" },
-      };
+    if (!mayManageOrganizationEsp(authorization)) {
+      return { status: 403, body: { error: "organization_esp_permission_required" } };
     }
-    const team = await getTeamByTeamId(params.teamId);
-    if (!team || team.organizationId !== authorization.organization.id) {
-      return { status: 404, body: { error: "team_not_found" } };
+    try {
+      const esp = await setEspManagementCredentials(
+        authorization.organization.id,
+        params.espId,
+        body,
+        actorOf(req),
+      );
+      return { status: 200, body: serializeOrganizationEsp(esp) };
+    } catch (error) {
+      const mapped = teamDomainErrorHttp(error);
+      if (mapped) return mapped as any;
+      throw error;
     }
+  },
+  removeEspManagementCredentials: async ({ req, params }) => {
+    const authorization = await resolveAuthorization(req, params.organizationId);
+    if (!authorization) {
+      return { status: 404, body: { error: "organization_not_found" } };
+    }
+    if (!mayManageOrganizationEsp(authorization)) {
+      return { status: 403, body: { error: "organization_esp_permission_required" } };
+    }
+    try {
+      const esp = await removeEspManagementCredentials(
+        authorization.organization.id,
+        params.espId,
+        actorOf(req),
+      );
+      return { status: 200, body: serializeOrganizationEsp(esp) };
+    } catch (error) {
+      const mapped = teamDomainErrorHttp(error);
+      if (mapped) return mapped as any;
+      throw error;
+    }
+  },
+  getEspGrant: async ({ req, params }) => {
+    const access = await teamGrantAccess(req, params);
+    if ("status" in access) return access;
+    const { authorization, team } = access;
     const view = await getEspGrantView(authorization.organization.id, team.id);
     return {
       status: 200,
@@ -1660,31 +1784,18 @@ const impl = s.router(contract.organizations, {
     };
   },
   upsertEspGrant: async ({ req, params, body }) => {
-    const authorization = await resolveAuthorization(req, params.organizationId);
-    if (!authorization) {
-      return { status: 404, body: { error: "organization_not_found" } };
-    }
-    const mayManage =
-      hasRole(authorization, ["owner", "admin"]) ||
-      authorization.keyScopes?.includes("grants:manage");
-    if (!mayManage) {
-      return {
-        status: 403,
-        body: { error: "organization_permission_required" },
-      };
-    }
+    const access = await teamGrantAccess(req, params);
+    if ("status" in access) return access;
+    const { authorization, team } = access;
     const gate = await sharedMailboxGate(authorization.organization.id);
     if (gate) return gate;
-    const team = await getTeamByTeamId(params.teamId);
-    if (!team || team.organizationId !== authorization.organization.id) {
-      return { status: 404, body: { error: "team_not_found" } };
-    }
     try {
-      const view = await upsertEspGrant(authorization.organization.id, team.id, body, {
-        type:
-          (req as any).authKind === "organization_key" ? "organization_key" : "user",
-        id: (req as any).organizationApiKeyId ?? (req as any).userId,
-      });
+      const view = await upsertEspGrant(
+        authorization.organization.id,
+        team.id,
+        body,
+        actorOf(req),
+      );
       return { status: 200, body: serializeGrant(view!) };
     } catch (error: any) {
       if (error.message === "organization_esp_unavailable") {
@@ -1703,23 +1814,9 @@ const impl = s.router(contract.organizations, {
     }
   },
   transitionEspGrant: async ({ req, params, body }) => {
-    const authorization = await resolveAuthorization(req, params.organizationId);
-    if (!authorization) {
-      return { status: 404, body: { error: "organization_not_found" } };
-    }
-    const mayManage =
-      hasRole(authorization, ["owner", "admin"]) ||
-      authorization.keyScopes?.includes("grants:manage");
-    if (!mayManage) {
-      return {
-        status: 403,
-        body: { error: "organization_permission_required" },
-      };
-    }
-    const team = await getTeamByTeamId(params.teamId);
-    if (!team || team.organizationId !== authorization.organization.id) {
-      return { status: 404, body: { error: "team_not_found" } };
-    }
+    const access = await teamGrantAccess(req, params);
+    if ("status" in access) return access;
+    const { authorization, team } = access;
     let drainUntil: Date | undefined;
     if (body.action === "drain" && body.drainUntil) {
       drainUntil = new Date(body.drainUntil);
@@ -1797,6 +1894,8 @@ const impl = s.router(contract.organizations, {
     } catch (error: any) {
       if (error?.code === "23505")
         return { status: 409, body: { error: "domain_exists" } };
+      if (error?.message === "domain_in_use")
+        return { status: 409, body: { error: "domain_in_use" } };
       if (
         error?.message === "domain_invalid" ||
         error?.message === "domain_public_suffix"

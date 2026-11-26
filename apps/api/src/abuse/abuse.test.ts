@@ -231,8 +231,12 @@ describe("signup guards", () => {
 });
 
 describe("large imports", () => {
-  it("alerts on a new account's large import and holds its campaigns until released", async () => {
+  it("alerts on a new account's large import and holds that team's campaigns until released", async () => {
     const { team, account, organization } = await seedTeamAndContact(tdb);
+    const [otherTeam] = await tdb
+      .insert(schema.teams)
+      .values({ name: "School B", organizationId: organization.id })
+      .returning();
     const emails = Array.from({ length: 1_200 }, (_, i) => `c${i}@example.com`);
     await recordContactImport({
       teamId: team.id,
@@ -254,9 +258,11 @@ describe("large imports", () => {
       importedLast24h: 1_200,
       source: "beehiiv.csv",
     });
-    await expect(assertNoImportUnderReview(organization.id)).rejects.toThrow(
+    await expect(assertNoImportUnderReview(team.id)).rejects.toThrow(
       "import_under_review",
     );
+    // Other teams in the organization keep sending.
+    await expect(assertNoImportUnderReview(otherTeam.id)).resolves.toBeUndefined();
 
     const out: string[] = [];
     const code = await runAbuseCli(
@@ -264,7 +270,128 @@ describe("large imports", () => {
       { out: (line) => out.push(line), err: (line) => out.push(line) },
     );
     expect(code).toBe(0);
-    await expect(assertNoImportUnderReview(organization.id)).resolves.toBeUndefined();
+    await expect(assertNoImportUnderReview(team.id)).resolves.toBeUndefined();
+  });
+
+  it("keeps a flag raised before flags were per team holding the organization", async () => {
+    const { team, organization } = await seedTeamAndContact(tdb);
+    const [otherTeam] = await tdb
+      .insert(schema.teams)
+      .values({ name: "School B", organizationId: organization.id })
+      .returning();
+    await recordContactImport({
+      teamId: team.id,
+      createdEmails: Array.from({ length: 1_200 }, (_, i) => `c${i}@example.com`),
+      updated: 0,
+      skipped: 0,
+      suppressed: 0,
+    });
+    await expect(assertNoImportUnderReview(otherTeam.id)).resolves.toBeUndefined();
+    // Flags raised by the previous release carry the team but no `scope`.
+    const [flag] = await tdb.select().from(schema.abuseFlags);
+    const { scope: _scope, ...legacy } = flag.details as Record<string, unknown>;
+    await tdb.update(schema.abuseFlags).set({ details: legacy });
+    await expect(assertNoImportUnderReview(otherTeam.id)).rejects.toThrow(
+      "import_under_review",
+    );
+  });
+
+  it("judges each team on its own imports", async () => {
+    const { team, organization } = await seedTeamAndContact(tdb);
+    const [schoolB, schoolC] = await tdb
+      .insert(schema.teams)
+      .values([
+        { name: "School B", organizationId: organization.id },
+        { name: "School C", organizationId: organization.id },
+      ])
+      .returning();
+    const importInto = (teamId: string, prefix: string, count: number) =>
+      recordContactImport({
+        teamId,
+        createdEmails: Array.from(
+          { length: count },
+          (_, i) => `${prefix}${i}@example.com`,
+        ),
+        updated: 0,
+        skipped: 0,
+        suppressed: 0,
+      });
+
+    await importInto(team.id, "a", 1_200);
+    // A small import elsewhere isn't held for another team's list...
+    await importInto(schoolB.id, "b", 20);
+    await expect(assertNoImportUnderReview(schoolB.id)).resolves.toBeUndefined();
+    // ...but a team's own large import is, even with another flag open.
+    await importInto(schoolC.id, "c", 1_100);
+
+    const flags = await tdb
+      .select({
+        teamId: schema.abuseFlags.teamId,
+        severity: schema.abuseFlags.severity,
+      })
+      .from(schema.abuseFlags);
+    expect(flags).toHaveLength(2);
+    expect(flags.map((flag) => flag.teamId).sort()).toEqual(
+      [team.id, schoolC.id].sort(),
+    );
+    await expect(assertNoImportUnderReview(team.id)).rejects.toThrow(
+      "import_under_review",
+    );
+    await expect(assertNoImportUnderReview(schoolC.id)).rejects.toThrow(
+      "import_under_review",
+    );
+    await expect(assertNoImportUnderReview(schoolB.id)).resolves.toBeUndefined();
+  });
+
+  it("holds the whole organization for a list split across teams", async () => {
+    const { team, organization } = await seedTeamAndContact(tdb);
+    const others = await tdb
+      .insert(schema.teams)
+      .values([
+        { name: "School B", organizationId: organization.id },
+        { name: "School C", organizationId: organization.id },
+      ])
+      .returning();
+    // 400 each: under the new-account threshold and the growth floor, so no
+    // single team is over. Together they are, from the second import on.
+    for (const [index, teamId] of [team.id, ...others.map((t) => t.id)].entries()) {
+      await recordContactImport({
+        teamId,
+        createdEmails: Array.from(
+          { length: 400 },
+          (_, i) => `t${index}-${i}@example.com`,
+        ),
+        updated: 0,
+        skipped: 0,
+        suppressed: 0,
+      });
+    }
+
+    const [flag, ...more] = await tdb.select().from(schema.abuseFlags);
+    expect(more).toHaveLength(0);
+    expect(flag).toMatchObject({ teamId: null, severity: "high" });
+    expect(flag.details).toMatchObject({
+      scope: "organization",
+      importedLast24h: 800,
+    });
+    for (const t of [team, ...others]) {
+      await expect(assertNoImportUnderReview(t.id)).rejects.toThrow(
+        "import_under_review",
+      );
+    }
+  });
+
+  it("still holds every team for a flag raised without a team", async () => {
+    const { team, organization } = await seedTeamAndContact(tdb);
+    await tdb.insert(schema.abuseFlags).values({
+      organizationId: organization.id,
+      kind: "import",
+      severity: "high",
+      reason: "Imported 1200 contacts in 24 hours (threshold 1000)",
+    });
+    await expect(assertNoImportUnderReview(team.id)).rejects.toThrow(
+      "import_under_review",
+    );
   });
 
   it("only records small imports", async () => {

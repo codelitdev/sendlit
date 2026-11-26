@@ -1,4 +1,4 @@
-import { and, count, eq, gte, sql } from "drizzle-orm";
+import { and, count, eq, gte, isNull, or, sql } from "drizzle-orm";
 import { getOrganizationEntitlements } from "../billing/entitlements";
 import { db } from "../db/client";
 import {
@@ -22,8 +22,9 @@ const GROWTH_ALERT_FLOOR = 500;
  * Records an import in the organization's audit log and, on hosted, alerts
  * operators when the organization imported more than the thresholds in the
  * last 24 hours: an absolute count (lower for new accounts) or a jump over
- * the existing list. A new account's flag is high severity, which holds its
- * campaigns until an operator releases it (`assertNoImportUnderReview`).
+ * the existing list. A new account's flag is high severity, which holds the
+ * importing team's campaigns until an operator releases it
+ * (`assertNoImportUnderReview`).
  */
 export async function recordContactImport(input: {
   teamId: string;
@@ -57,8 +58,10 @@ export async function recordContactImport(input: {
 
   const config = readAbuseConfig();
   const now = Date.now();
-  const [{ imported }] = await db
+  const since = new Date(now - DAY_MS);
+  const importRows = await db
     .select({
+      teamId: organizationAuditEvents.teamId,
       imported: sql<number>`coalesce(sum((${organizationAuditEvents.metadata}->>'created')::int), 0)`,
     })
     .from(organizationAuditEvents)
@@ -66,14 +69,16 @@ export async function recordContactImport(input: {
       and(
         eq(organizationAuditEvents.organizationId, team.organizationId),
         eq(organizationAuditEvents.action, "contacts.imported"),
-        gte(organizationAuditEvents.createdAt, new Date(now - DAY_MS)),
+        gte(organizationAuditEvents.createdAt, since),
       ),
-    );
-  const [{ total }] = await db
-    .select({ total: count() })
+    )
+    .groupBy(organizationAuditEvents.teamId);
+  const contactRows = await db
+    .select({ teamId: contacts.teamId, total: count() })
     .from(contacts)
     .innerJoin(teams, eq(teams.id, contacts.teamId))
-    .where(eq(teams.organizationId, team.organizationId));
+    .where(eq(teams.organizationId, team.organizationId))
+    .groupBy(contacts.teamId);
   const [organization] = await db
     .select({
       createdAt: organizations.createdAt,
@@ -84,33 +89,63 @@ export async function recordContactImport(input: {
     .limit(1);
   const ageDays = Math.floor((now - organization.createdAt.getTime()) / DAY_MS);
   const isNew = ageDays < config.newAccountDays;
-  const importedLastDay = Number(imported);
-  const existingBefore = Math.max(Number(total) - importedLastDay, 0);
   const threshold = isNew
     ? config.importAlertContactsNewAccount
     : config.importAlertContacts;
-  const overThreshold = importedLastDay >= threshold;
-  const bigJump =
-    importedLastDay >= GROWTH_ALERT_FLOOR &&
-    importedLastDay > config.importAlertGrowthFactor * Math.max(existingBefore, 1);
-  if (!overThreshold && !bigJump) return;
+  const judge = (imported: number, total: number) => {
+    const existingBefore = Math.max(total - imported, 0);
+    const overThreshold = imported >= threshold;
+    const bigJump =
+      imported >= GROWTH_ALERT_FLOOR &&
+      imported > config.importAlertGrowthFactor * Math.max(existingBefore, 1);
+    return {
+      imported,
+      existingBefore,
+      overThreshold,
+      flagged: overThreshold || bigJump,
+    };
+  };
+  // Each team is judged on its own imports, so a flag holds only the team
+  // that imported. A list split across teams is still caught: what the
+  // teams that aren't over on their own imported together is judged too,
+  // and with no single team to blame that flag holds the whole organization.
+  const byTeam = new Map<string | null, { imported: number; total: number }>();
+  const entry = (id: string | null) => {
+    const value = byTeam.get(id) ?? { imported: 0, total: 0 };
+    byTeam.set(id, value);
+    return value;
+  };
+  for (const row of importRows) entry(row.teamId).imported += Number(row.imported);
+  for (const row of contactRows) entry(row.teamId).total += Number(row.total);
+  const rest = { imported: 0, total: 0 };
+  for (const [id, value] of byTeam) {
+    if (id !== null && judge(value.imported, value.total).flagged) continue;
+    rest.imported += value.imported;
+    rest.total += value.total;
+  }
+  const own = byTeam.get(input.teamId) ?? { imported: 0, total: 0 };
+  const teamResult = judge(own.imported, own.total);
+  const teamFlagged = teamResult.flagged;
+  const result = teamFlagged ? teamResult : judge(rest.imported, rest.total);
+  if (!result.flagged) return;
 
   const hold = isNew && config.holdLargeImportsOfNewAccounts;
   await raiseAbuseFlag({
     organizationId: team.organizationId,
-    teamId: input.teamId,
+    teamId: teamFlagged ? input.teamId : null,
     userId: input.userId,
     kind: "import",
     severity: hold ? "high" : "medium",
-    reason: overThreshold
-      ? `Imported ${importedLastDay} contacts in 24 hours (threshold ${threshold})`
-      : `Imported ${importedLastDay} contacts in 24 hours onto a list of ${existingBefore}`,
+    reason: result.overThreshold
+      ? `Imported ${result.imported} contacts in 24 hours (threshold ${threshold})`
+      : `Imported ${result.imported} contacts in 24 hours onto a list of ${result.existingBefore}`,
     details: {
       organization: organization.publicId,
+      scope: teamFlagged ? "team" : "organization",
       accountAgeDays: ageDays,
       plan: (await getOrganizationEntitlements(team.organizationId)).plan,
-      importedLast24h: importedLastDay,
-      existingContacts: existingBefore,
+      importedLast24h: result.imported,
+      existingContacts: result.existingBefore,
       latestBatch: classifyEmails(input.createdEmails),
       source: input.source ?? null,
       campaignsHeld: hold,
@@ -118,19 +153,29 @@ export async function recordContactImport(input: {
   });
 }
 
-/** Throws `import_under_review` while a new account's large import waits for
- * an operator. */
-export async function assertNoImportUnderReview(organizationId: string): Promise<void> {
+/** Throws `import_under_review` while a large import by this team on a new
+ * account waits for an operator. Only the team that imported is held, so
+ * other teams in the organization keep sending. These still hold the whole
+ * organization: a flag with no team (a list split across teams), and a flag
+ * raised before flags were per team, which has no `scope` in its details
+ * and held the organization when it was raised. */
+export async function assertNoImportUnderReview(teamId: string): Promise<void> {
   if (!abuseControlsEnabled()) return;
   const [held] = await db
     .select({ id: abuseFlags.id })
     .from(abuseFlags)
+    .innerJoin(teams, eq(teams.organizationId, abuseFlags.organizationId))
     .where(
       and(
-        eq(abuseFlags.organizationId, organizationId),
+        eq(teams.id, teamId),
         eq(abuseFlags.kind, "import"),
         eq(abuseFlags.status, "open"),
         eq(abuseFlags.severity, "high"),
+        or(
+          eq(abuseFlags.teamId, teamId),
+          isNull(abuseFlags.teamId),
+          sql`${abuseFlags.details}->>'scope' is null`,
+        ),
       ),
     )
     .limit(1);

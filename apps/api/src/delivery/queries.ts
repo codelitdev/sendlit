@@ -13,6 +13,7 @@ import {
   organizationDeliveryPolicies,
   organizations,
   outboundMessages,
+  sendingDomains,
   sequences,
   teamDeliverySettings,
   teams,
@@ -20,6 +21,12 @@ import {
 } from "../db/schema";
 import { recordOrganizationAuditEvent } from "../organization/audit";
 import { releaseReservedQuotaForGrantInTransaction } from "./quota";
+import { assertSharedEspAllowsMarketing } from "./shared-esp-guard";
+import {
+  releaseTeamSendingDomains,
+  teamDomainUsable,
+  teamFromAddress,
+} from "./team-sending-domain";
 
 export type OrganizationDeliveryPolicy =
   typeof organizationDeliveryPolicies.$inferSelect;
@@ -125,12 +132,20 @@ export async function resolveDeliverySource(
     if (!row?.esp.fromEmail) {
       throw new Error("organization_delivery_disabled");
     }
+    const fromEmail = await teamFromAddress(
+      row.grant,
+      row.esp.fromEmail,
+      purpose === "marketing" ? "marketing" : "transactional",
+    );
     await assertSendingEligibility(
       context.team.organizationId,
-      row.esp.fromEmail,
+      fromEmail,
       context.team.id,
       row.esp.id,
     );
+    if (purpose === "marketing") {
+      await assertSharedEspAllowsMarketing(context.team.id, row.esp.id);
+    }
     return {
       type: "organization",
       espConfigId: row.esp.id,
@@ -138,7 +153,7 @@ export async function resolveDeliverySource(
       provider: row.esp.provider,
       secretVersion: row.esp.secretVersion,
       fromName: row.grant.fromName ?? row.esp.fromName ?? context.team.name,
-      fromEmail: row.esp.fromEmail,
+      fromEmail,
       replyTo: row.grant.replyTo ?? row.esp.replyTo,
     };
   }
@@ -300,12 +315,20 @@ export async function resolvePinnedDeliverySource(input: {
   ) {
     throw new Error("delivery_source_unavailable");
   }
+  const fromEmail = await teamFromAddress(
+    row.grant,
+    row.esp.fromEmail,
+    input.purpose === "marketing" ? "marketing" : "transactional",
+  );
   await assertSendingEligibility(
     row.team.organizationId,
-    row.esp.fromEmail,
+    fromEmail,
     row.team.id,
     row.esp.id,
   );
+  if (input.purpose === "marketing") {
+    await assertSharedEspAllowsMarketing(row.team.id, row.esp.id);
+  }
   return {
     type: "organization",
     espConfigId: row.esp.id,
@@ -313,7 +336,7 @@ export async function resolvePinnedDeliverySource(input: {
     provider: row.esp.provider,
     secretVersion: row.esp.secretVersion,
     fromName: row.grant.fromName ?? row.esp.fromName ?? row.team.name,
-    fromEmail: row.esp.fromEmail,
+    fromEmail,
     replyTo: row.grant.replyTo ?? row.esp.replyTo,
   };
 }
@@ -355,6 +378,8 @@ export async function updateOrganizationDeliveryPolicy(
     aggregateMonthlyLimit?: number | null;
     teamEspEnabledByDefault?: boolean;
     teamCanChangeDefault?: boolean;
+    requireTeamSendingDomain?: "off" | "marketing" | "all";
+    sharedDomainMonthlyLimit?: number | null;
   },
 ): Promise<Awaited<ReturnType<typeof getOrganizationDeliveryPolicyView>>> {
   const values: Partial<typeof organizationDeliveryPolicies.$inferInsert> = {
@@ -388,6 +413,8 @@ export async function updateOrganizationDeliveryPolicy(
     "aggregateMonthlyLimit",
     "teamEspEnabledByDefault",
     "teamCanChangeDefault",
+    "requireTeamSendingDomain",
+    "sharedDomainMonthlyLimit",
   ] as const) {
     if (input[field] !== undefined) values[field] = input[field] as never;
   }
@@ -446,10 +473,15 @@ export async function getEspGrantView(organizationId: string, teamId: string) {
       grant: espConfigTeamGrants,
       teamPublicId: teams.teamId,
       espPublicId: espConfigs.espId,
+      sendingDomain: sendingDomains,
     })
     .from(espConfigTeamGrants)
     .innerJoin(teams, eq(teams.id, espConfigTeamGrants.teamId))
     .innerJoin(espConfigs, eq(espConfigs.id, espConfigTeamGrants.espConfigId))
+    .leftJoin(
+      sendingDomains,
+      eq(sendingDomains.id, espConfigTeamGrants.sendingDomainId),
+    )
     .where(
       and(
         eq(espConfigTeamGrants.organizationId, organizationId),
@@ -706,15 +738,28 @@ export async function transitionEspGrant(
     });
   });
   if (action === "cancel") {
+    // The team's own domain was registered through this mailbox; without
+    // the grant nothing would ever check or remove it.
+    await releaseTeamSendingDomains(
+      { teamId },
+      actor.type === "team_key"
+        ? { type: "system" }
+        : { type: actor.type, id: actor.id },
+    );
     const [row] = await db
       .select({
         grant: espConfigTeamGrants,
         teamPublicId: teams.teamId,
         espPublicId: espConfigs.espId,
+        sendingDomain: sendingDomains,
       })
       .from(espConfigTeamGrants)
       .innerJoin(teams, eq(teams.id, espConfigTeamGrants.teamId))
       .innerJoin(espConfigs, eq(espConfigs.id, espConfigTeamGrants.espConfigId))
+      .leftJoin(
+        sendingDomains,
+        eq(sendingDomains.id, espConfigTeamGrants.sendingDomainId),
+      )
       .where(
         and(
           eq(espConfigTeamGrants.organizationId, organizationId),
@@ -793,9 +838,14 @@ export async function listSendingOptions(teamId: string) {
     .select({
       grant: espConfigTeamGrants,
       esp: espConfigs,
+      sendingDomain: sendingDomains,
     })
     .from(espConfigTeamGrants)
     .innerJoin(espConfigs, eq(espConfigs.id, espConfigTeamGrants.espConfigId))
+    .leftJoin(
+      sendingDomains,
+      eq(sendingDomains.id, espConfigTeamGrants.sendingDomainId),
+    )
     .where(
       and(
         eq(espConfigTeamGrants.teamId, teamId),
@@ -804,11 +854,18 @@ export async function listSendingOptions(teamId: string) {
     )
     .limit(1);
   if (organizationOption) {
+    // Show the team's own address once its domain sends (#220).
+    const ownFrom =
+      organizationOption.sendingDomain &&
+      organizationOption.grant.fromEmail &&
+      teamDomainUsable(organizationOption.sendingDomain, new Date())
+        ? organizationOption.grant.fromEmail
+        : null;
     options.push({
       type: "organization",
       name: organizationOption.esp.name,
       fromName: organizationOption.grant.fromName ?? organizationOption.esp.fromName,
-      fromEmail: organizationOption.esp.fromEmail,
+      fromEmail: ownFrom ?? organizationOption.esp.fromEmail,
       replyTo: organizationOption.grant.replyTo,
       isDefault: setting.defaultSource === "organization",
       available:

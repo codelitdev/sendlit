@@ -99,6 +99,7 @@ function getAuthMode(path: string, method: string): AuthMode {
       path === "/organizations/:organizationId/audit-events" ||
       path === "/organizations/:organizationId/delivery-policy" ||
       path === "/organizations/:organizationId/teams/:teamId/esp-grant" ||
+      path === "/organizations/:organizationId/teams/:teamId/sending-domain" ||
       path === "/organizations/:organizationId/teams/:teamId/esp-grant/transition";
 
     // These routes authorize either a human member or an organization
