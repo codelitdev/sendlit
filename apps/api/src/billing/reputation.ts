@@ -48,12 +48,14 @@ export async function ledgerCounts(options: {
   teamIds?: string[];
   espConfigId?: string;
   deliverySource?: "organization";
+  /** A transaction to read in, instead of the pool. */
+  executor?: Pick<typeof db, "select">;
 }): Promise<LedgerCounts[]> {
   const { now } = options;
   const windowStart = new Date(now.getTime() - WINDOW_MS);
   const since =
     options.since && options.since > windowStart ? options.since : windowStart;
-  const rows = await db
+  const rows = await (options.executor ?? db)
     .select({
       teamId: outboundMessages.teamId,
       accepted: count(),

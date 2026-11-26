@@ -39,13 +39,16 @@ type ControlChange = {
 
 /** Each team's seven-day counts through one organization ESP, from the
  * deduplicated outbound ledger (the same projection team reputation uses). */
+type Executor = Pick<typeof db, "select">;
+
 export function sharedEspMetrics(
   espConfigId: string,
   now = new Date(),
-  options: { since?: Date; teamId?: string } = {},
+  options: { since?: Date; teamId?: string; executor?: Executor } = {},
 ): Promise<TeamEspMetrics[]> {
   return ledgerCounts({
     now,
+    executor: options.executor,
     since: options.since,
     teamIds: options.teamId ? [options.teamId] : undefined,
     espConfigId,
@@ -79,9 +82,6 @@ export async function evaluateSharedEsp(
   if (esp?.ownerScope !== "organization" || !esp.organizationId) return;
   const organizationId = esp.organizationId;
 
-  const metrics = await graceAwareMetrics(espConfigId, now);
-  const decision = sharedEspDecision(metrics, config);
-  const byTeam = new Map(metrics.map(({ teamId, ...counts }) => [teamId, counts]));
   const changes: ControlChange[] = [];
 
   await db.transaction(async (tx) => {
@@ -90,6 +90,12 @@ export async function evaluateSharedEsp(
       .from(sharedEspSendingControls)
       .where(eq(sharedEspSendingControls.espConfigId, espConfigId))
       .for("update");
+    // Decide only once the controls are locked, from their current release
+    // state: an operator release that committed while this evaluation
+    // waited must get its grace, not be re-paused on older numbers.
+    const metrics = await graceAwareMetrics(tx, espConfigId, now, existing);
+    const decision = sharedEspDecision(metrics, config);
+    const byTeam = new Map(metrics.map(({ teamId, ...counts }) => [teamId, counts]));
 
     const apply = async (
       row: ControlRow | undefined,
@@ -197,31 +203,33 @@ export async function evaluateSharedEsp(
  * it again, but a new bad list still does.
  */
 async function graceAwareMetrics(
+  tx: Executor,
   espConfigId: string,
   now: Date,
+  /** The ESP's controls, as locked by the evaluation. */
+  rows: Pick<ControlRow, "teamId" | "releasedAt" | "releaseGraceUntil">[],
 ): Promise<TeamEspMetrics[]> {
-  const rows = await db
-    .select({
-      teamId: sharedEspSendingControls.teamId,
-      releasedAt: sharedEspSendingControls.releasedAt,
-      releaseGraceUntil: sharedEspSendingControls.releaseGraceUntil,
-    })
-    .from(sharedEspSendingControls)
-    .where(eq(sharedEspSendingControls.espConfigId, espConfigId));
   const releasedAt = (row: (typeof rows)[number]) =>
     row.releasedAt && row.releaseGraceUntil && row.releaseGraceUntil > now
       ? row.releasedAt
       : undefined;
   const espRow = rows.find((row) => row.teamId === null);
   const espRelease = espRow ? releasedAt(espRow) : undefined;
-  const metrics = await sharedEspMetrics(espConfigId, now, { since: espRelease });
+  const metrics = await sharedEspMetrics(espConfigId, now, {
+    since: espRelease,
+    executor: tx,
+  });
   for (const row of rows) {
     const teamRelease = releasedAt(row);
     if (!row.teamId || !teamRelease) continue;
     const teamId = row.teamId;
     // A later ESP-wide release also covers this team's earlier bounces.
     const since = espRelease && espRelease > teamRelease ? espRelease : teamRelease;
-    const [fresh] = await sharedEspMetrics(espConfigId, now, { since, teamId });
+    const [fresh] = await sharedEspMetrics(espConfigId, now, {
+      since,
+      teamId,
+      executor: tx,
+    });
     const index = metrics.findIndex((team) => team.teamId === teamId);
     if (index >= 0) metrics.splice(index, 1);
     if (fresh) metrics.push(fresh);
