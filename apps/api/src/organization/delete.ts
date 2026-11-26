@@ -30,7 +30,8 @@ export interface OrganizationDeletionResult {
  * - the organization is closed, its teams archived, organization keys
  *   revoked and ESP grants cancelled (`closeOrganization`);
  * - team API keys are revoked, sending domains revoked, and every ESP
- *   config (shared and team-owned) retired with its credentials wiped;
+ *   config (shared and team-owned) retired with its credentials and
+ *   provider API key wiped, after teams' own domains are removed from it;
  * - every `media` row of its teams is deleted with its MediaLit file. A
  *   MediaLit failure does not undo the deletion: the file is queued for
  *   retry (`media/deletion-queue.ts`) and the error goes to `captureError`.
@@ -87,8 +88,16 @@ export async function deleteOrganization(
     .where(and(ownership, ne(espConfigs.status, "retired")));
   await db
     .update(espConfigs)
-    .set({ encryptedSecret: null, updatedAt: now })
-    .where(and(ownership, isNotNull(espConfigs.encryptedSecret)));
+    .set({ encryptedSecret: null, encryptedManagementSecret: null, updatedAt: now })
+    .where(
+      and(
+        ownership,
+        or(
+          isNotNull(espConfigs.encryptedSecret),
+          isNotNull(espConfigs.encryptedManagementSecret),
+        ),
+      ),
+    );
 
   let mediaDeleted = 0;
   let mediaFailed = 0;

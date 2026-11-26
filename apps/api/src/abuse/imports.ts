@@ -155,8 +155,10 @@ export async function recordContactImport(input: {
 
 /** Throws `import_under_review` while a large import by this team on a new
  * account waits for an operator. Only the team that imported is held, so
- * other teams in the organization keep sending; a flag with no team (raised
- * before flags were per team) still holds the whole organization. */
+ * other teams in the organization keep sending. These still hold the whole
+ * organization: a flag with no team (a list split across teams), and a flag
+ * raised before flags were per team, which has no `scope` in its details
+ * and held the organization when it was raised. */
 export async function assertNoImportUnderReview(teamId: string): Promise<void> {
   if (!abuseControlsEnabled()) return;
   const [held] = await db
@@ -169,7 +171,11 @@ export async function assertNoImportUnderReview(teamId: string): Promise<void> {
         eq(abuseFlags.kind, "import"),
         eq(abuseFlags.status, "open"),
         eq(abuseFlags.severity, "high"),
-        or(eq(abuseFlags.teamId, teamId), isNull(abuseFlags.teamId)),
+        or(
+          eq(abuseFlags.teamId, teamId),
+          isNull(abuseFlags.teamId),
+          sql`${abuseFlags.details}->>'scope' is null`,
+        ),
       ),
     )
     .limit(1);

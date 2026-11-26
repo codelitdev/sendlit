@@ -128,7 +128,9 @@ describe("provisioning: team sending domain", () => {
     });
     expect((await send("GET", path)).json()).toMatchObject({ status: "pending" });
 
-    // A provider failure is a declared 422, not an undeclared 502.
+    // A provider failure is a declared 422, not an undeclared 502. (Reads
+    // within 30 seconds of a check reuse it, so make the last one older.)
+    await tdb.update(schema.sendingDomains).set({ lastCheckedAt: null });
     providerFails = true;
     const failed = await send("GET", path);
     expect(failed.status).toBe(422);

@@ -105,6 +105,7 @@ Setting a team's own sending domain on a shared mailbox can return
 `domain_invalid`, `domain_public_suffix`, `domain_in_use`,
 `domain_exists_at_provider`, `esp_management_credentials_required`,
 `provider_domain_unsupported`, `organization_delivery_disabled` or
-`esp_provider_error`. See
+`esp_provider_error`. Removing the mailbox's SES API key while teams'
+domains use it returns `409 esp_management_credentials_in_use`. See
 [Give a team its own sending domain](/docs/developers/provisioning#give-a-team-its-own-sending-domain)
 for what each means.

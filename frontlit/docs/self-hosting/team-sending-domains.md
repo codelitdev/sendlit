@@ -61,7 +61,9 @@ actions, then **Amazon SES API key**. Paste the key ID and secret, and enter
 the **region** your SES account sends from (the one in the SMTP host, for
 example `ap-southeast-1` for `email-smtp.ap-southeast-1.amazonaws.com`).
 Domain identities are per region, so it must match. SendLit checks the key
-with one SES lookup before saving it.
+with one SES lookup before saving it. The key can't be removed while teams'
+domains are registered through it, since SendLit needs it to check and
+remove them.
 
 Over the API, an organization key with `esps:manage` can store it instead:
 

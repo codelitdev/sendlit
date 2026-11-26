@@ -159,8 +159,12 @@ fixed. It never quietly falls back to the shared domain.
 
 Under **Default delivery for new teams**, **Require a team's own domain for**
 can make it mandatory for broadcasts and sequences, or for all email, and
-**Monthly marketing on the shared domain** caps how much a team can send
-before it has its own domain.
+**Monthly marketing on the shared domain** caps how many broadcast and
+sequence emails a team can send from the shared domain each month before it
+has its own domain. Transactional email doesn't count.
+
+Cancelling a team's mailbox grant, archiving the team or retiring the mailbox
+removes the team's domain from SES too.
 
 ## Grant a mailbox to a team
 

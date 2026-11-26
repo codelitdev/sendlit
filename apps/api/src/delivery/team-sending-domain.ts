@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, inArray, isNotNull, lt, ne } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNotNull, lt, ne } from "drizzle-orm";
 import { normalizeSendingDomain } from "../billing/domains";
 import { PlanGateError } from "../billing/errors";
 import { db } from "../db/client";
@@ -7,7 +7,7 @@ import {
   espConfigs,
   espConfigTeamGrants,
   organizationDeliveryPolicies,
-  organizationEspUsageBuckets,
+  outboundMessages,
   sendingDomains,
 } from "../db/schema";
 import { captureError, captureEvent } from "../observability";
@@ -32,6 +32,7 @@ import {
 const HOUR = 60 * 60 * 1000;
 const PENDING_RECHECK_MS = HOUR;
 const VERIFIED_RECHECK_MS = 24 * HOUR;
+const RECHECK_THROTTLE_MS = 30 * 1000;
 
 /** How long a team keeps sending from its domain after DKIM or DMARC start
  * failing, before its marketing pauses. */
@@ -192,7 +193,9 @@ export async function setTeamSendingDomain(
   if (taken && taken.teamId !== teamId) throw new Error("domain_in_use");
 
   const existing = await liveDomain(teamId);
-  const same = existing?.domain === domain;
+  // On another ESP (the team was re-granted elsewhere) it's a new
+  // registration there, even for the same domain.
+  const same = existing?.domain === domain && existing.espConfigId === grant.esp.id;
   // Throws `domain_exists_at_provider` for an identity SendLit didn't create.
   if (!same) await adapter.register(domain);
   const now = new Date();
@@ -308,16 +311,9 @@ async function removeFromProvider(row: DomainRow): Promise<void> {
   }
 }
 
-/** Stops using the team's own domain and removes it from the ESP. The team
- * goes back to the shared domain, which the organization's policy may
- * refuse. */
-export async function removeTeamSendingDomain(
-  organizationId: string,
-  teamId: string,
-  actor: Actor,
-): Promise<boolean> {
-  const row = await liveDomain(teamId);
-  if (!row || row.organizationId !== organizationId) return false;
+/** Revokes the team's domain row, unlinks it from the grant and removes it
+ * from the provider once that's committed. */
+async function revokeTeamDomain(row: DomainRow, actor: Actor): Promise<void> {
   const now = new Date();
   await db.transaction(async (tx) => {
     await tx
@@ -329,16 +325,60 @@ export async function removeTeamSendingDomain(
       .set({ fromEmail: null, sendingDomainId: null, updatedAt: now })
       .where(eq(espConfigTeamGrants.sendingDomainId, row.id));
     await recordOrganizationAuditEvent(tx, {
-      organizationId,
+      organizationId: row.organizationId,
       actor,
       action: "team_sending_domain.removed",
-      teamId,
+      teamId: row.teamId,
       espConfigId: row.espConfigId,
       metadata: { domain: row.domain },
     });
   });
   await removeFromProvider(row);
+}
+
+/** Stops using the team's own domain and removes it from the ESP. The team
+ * goes back to the shared domain, which the organization's policy may
+ * refuse. */
+export async function removeTeamSendingDomain(
+  organizationId: string,
+  teamId: string,
+  actor: Actor,
+): Promise<boolean> {
+  const row = await liveDomain(teamId);
+  if (!row || row.organizationId !== organizationId) return false;
+  await revokeTeamDomain(row, actor);
   return true;
+}
+
+/**
+ * Removes team domains whose shared mailbox is gone: the team's grant was
+ * revoked (team archived, organization closed) or the ESP retired. Their
+ * identities would otherwise stay in the customer's ESP account and keep
+ * being checked. Never throws; failures are reported.
+ */
+export async function releaseTeamSendingDomains(
+  where: { teamId: string } | { espConfigId: string },
+  actor: Actor = { type: "system" },
+): Promise<void> {
+  try {
+    const rows = await db
+      .select()
+      .from(sendingDomains)
+      .where(
+        and(
+          "teamId" in where
+            ? eq(sendingDomains.teamId, where.teamId)
+            : and(
+                isNotNull(sendingDomains.teamId),
+                eq(sendingDomains.espConfigId, where.espConfigId),
+              ),
+          ne(sendingDomains.status, "revoked"),
+        ),
+      );
+    for (const row of rows) await revokeTeamDomain(row, actor);
+  } catch (error) {
+    captureError({ error, source: "delivery.team_sending_domain.release" });
+  }
 }
 
 /**
@@ -418,9 +458,13 @@ export async function refreshTeamSendingDomain(
 ): Promise<TeamSendingDomainView | null> {
   const row = await liveDomain(teamId);
   if (!row) return null;
+  // Reads within a short window reuse the last check, so polling can't
+  // turn into a provider call per request.
+  const fresh =
+    row.lastCheckedAt && Date.now() - row.lastCheckedAt.getTime() < RECHECK_THROTTLE_MS;
   const [grant, checked] = await Promise.all([
     liveGrant(teamId),
-    checkTeamSendingDomain(row),
+    fresh ? row : checkTeamSendingDomain(row),
   ]);
   return viewOf(
     checked,
@@ -474,6 +518,8 @@ export function startTeamSendingDomainChecks(intervalMs = HOUR): () => void {
 type GrantForSend = {
   id: string;
   organizationId: string;
+  teamId: string;
+  espConfigId: string;
   fromEmail: string | null;
   sendingDomainId: string | null;
 };
@@ -496,7 +542,11 @@ export async function teamFromAddress(
       .from(sendingDomains)
       .where(eq(sendingDomains.id, grant.sendingDomainId))
       .limit(1);
-    if (row?.verifiedAt && row.status === "verified") {
+    if (
+      row?.verifiedAt &&
+      row.status === "verified" &&
+      row.espConfigId === grant.espConfigId
+    ) {
       if (teamDomainUsable(row, now) || purpose === "transactional") {
         return grant.fromEmail;
       }
@@ -526,19 +576,7 @@ export async function teamFromAddress(
     });
   }
   if (purpose === "marketing" && policy?.sharedLimit != null) {
-    const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const [bucket] = await db
-      .select({ accepted: organizationEspUsageBuckets.acceptedCount })
-      .from(organizationEspUsageBuckets)
-      .where(
-        and(
-          eq(organizationEspUsageBuckets.grantId, grant.id),
-          eq(organizationEspUsageBuckets.periodType, "month"),
-          eq(organizationEspUsageBuckets.periodStart, month),
-        ),
-      )
-      .limit(1);
-    if ((bucket?.accepted ?? 0) >= policy.sharedLimit) {
+    if ((await sharedDomainMarketingThisMonth(grant, now)) >= policy.sharedLimit) {
       throw new PlanGateError("plan_limit_reached", {
         organizationId: grant.organizationId,
         capability: "shared_domain_monthly_limit",
@@ -547,6 +585,42 @@ export async function teamFromAddress(
     }
   }
   return sharedFromEmail;
+}
+
+/** Marketing this team sent through the grant from the shared domain this
+ * UTC month: campaign sends on the ledger, queued ones included, since the
+ * team last stopped using its own domain. */
+async function sharedDomainMarketingThisMonth(
+  grant: GrantForSend,
+  now: Date,
+): Promise<number> {
+  let since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const [own] = await db
+    .select({ endedAt: sendingDomains.updatedAt })
+    .from(sendingDomains)
+    .where(
+      and(
+        eq(sendingDomains.teamId, grant.teamId),
+        eq(sendingDomains.status, "revoked"),
+        isNotNull(sendingDomains.verifiedAt),
+        gte(sendingDomains.updatedAt, since),
+      ),
+    )
+    .orderBy(desc(sendingDomains.updatedAt))
+    .limit(1);
+  if (own) since = own.endedAt;
+  const [sent] = await db
+    .select({ n: count() })
+    .from(outboundMessages)
+    .where(
+      and(
+        eq(outboundMessages.espGrantId, grant.id),
+        eq(outboundMessages.sourceType, "campaign"),
+        ne(outboundMessages.deliveryStatus, "cancelled"),
+        gte(outboundMessages.createdAt, since),
+      ),
+    );
+  return Number(sent?.n ?? 0);
 }
 
 /**
@@ -575,13 +649,27 @@ export async function setEspManagementCredentials(
   return saveManagementSecret(organizationId, esp.id, encrypted, actor);
 }
 
-/** Throws `esp_not_found`. */
+/** Throws `esp_not_found`, or `esp_management_credentials_in_use` while
+ * team domains are registered with it. */
 export async function removeEspManagementCredentials(
   organizationId: string,
   espPublicId: string,
   actor: Actor,
 ): Promise<typeof espConfigs.$inferSelect> {
   const esp = await organizationEsp(organizationId, espPublicId);
+  // Live team domains need the key to be checked and, later, removed.
+  const [inUse] = await db
+    .select({ id: sendingDomains.id })
+    .from(sendingDomains)
+    .where(
+      and(
+        eq(sendingDomains.espConfigId, esp.id),
+        isNotNull(sendingDomains.teamId),
+        ne(sendingDomains.status, "revoked"),
+      ),
+    )
+    .limit(1);
+  if (inUse) throw new Error("esp_management_credentials_in_use");
   return saveManagementSecret(organizationId, esp.id, null, actor);
 }
 
@@ -639,6 +727,7 @@ export function teamDomainErrorHttp(
       return { status: 404, body: { error: message } };
     case "domain_in_use":
     case "domain_exists_at_provider":
+    case "esp_management_credentials_in_use":
       return { status: 409, body: { error: message } };
     case "organization_delivery_disabled":
     case "provider_domain_unsupported":

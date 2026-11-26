@@ -35,8 +35,14 @@ const { EmailRenderError } = await import("../mail/render");
 const { TemplateValidationError } = await import("../templates/validation");
 const generalSettings = await import("../settings/general/queries");
 const { getDueOngoingSequences } = await import("./queries");
-const { resetSendingHealthCacheForTests, isFatalEspError, renderErrorReason } =
-  await import("./sending-health");
+const {
+  resetSendingHealthCacheForTests,
+  isFatalEspError,
+  renderErrorReason,
+  sendingBlockedReason,
+  teamFixableSendingStop,
+} = await import("./sending-health");
+const { PlanGateError } = await import("../billing/errors");
 const { startSequence } = await import("../sequences/queries");
 
 const tdb = db as unknown as TestDb;
@@ -281,6 +287,17 @@ describe("auto-pause (#25)", () => {
     expect((after.report as any).autoPause).toBeUndefined();
     expect((after.report as any).sequence.failed).toEqual([broken.contactId]);
     expect(await tdb.select().from(schema.ongoingSequences)).toHaveLength(0);
+  });
+
+  it("tells the team to set up its own domain when the organization requires one", () => {
+    const stop = teamFixableSendingStop(
+      new PlanGateError("domain_verification_required", {
+        organizationId: "org",
+        reason: "team_sending_domain_required",
+      }),
+    );
+    expect(stop).toEqual({ code: "team_sending_domain_required" });
+    expect(sendingBlockedReason(stop!.code).next).toContain("Organizations → Teams");
   });
 
   it("treats only content and footer errors as permanent render errors", () => {

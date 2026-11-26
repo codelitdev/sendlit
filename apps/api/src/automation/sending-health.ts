@@ -133,6 +133,10 @@ export function teamFixableSendingStop(
 ): { code: string; domain?: string } | null {
   if (!isPlanGateError(error)) return null;
   if (error.code === "domain_verification_required") {
+    // The organization requires each team to send from its own domain.
+    if (error.details.reason === "team_sending_domain_required") {
+      return { code: "team_sending_domain_required" };
+    }
     const domain = error.details.domain;
     return {
       code: "domain_verification_required",
@@ -160,6 +164,11 @@ export function sendingBlockedReason(
       return {
         why: `its From domain${domain ? ` ${domain}` : ""} isn't verified for your organization, which is required after your organization's first ${threshold ?? "few"} emails`,
         next: "Verify the domain in Organizations → Sending domains",
+      };
+    case "team_sending_domain_required":
+      return {
+        why: "your organization requires each team to send marketing from its own domain, and this team hasn't set one up yet",
+        next: "Ask an organization admin to set up the team's sending domain in Organizations → Teams",
       };
     case "feedback_connection_required":
       return {

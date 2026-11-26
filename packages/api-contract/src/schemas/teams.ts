@@ -96,7 +96,9 @@ export const teamHealthSchema = z.object({
 });
 
 /** The organization-key lifecycle surface deliberately returns no provider,
- * grant, or organization topology. */
+ * credentials or grant ids. `health` does say when a pause comes from the
+ * organization's shared mailbox (`scope`, `reason`): the organization owns
+ * that mailbox, and it's what the caller has to act on. */
 export const provisionedTeamSchema = provisionedTeamBaseSchema.extend({
   status: z.enum(["active", "sending_suspended", "archived"]),
   postalAddress: postalAddressSchema.nullable(),

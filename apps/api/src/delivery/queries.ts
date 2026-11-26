@@ -22,7 +22,11 @@ import {
 import { recordOrganizationAuditEvent } from "../organization/audit";
 import { releaseReservedQuotaForGrantInTransaction } from "./quota";
 import { assertSharedEspAllowsMarketing } from "./shared-esp-guard";
-import { teamDomainUsable, teamFromAddress } from "./team-sending-domain";
+import {
+  releaseTeamSendingDomains,
+  teamDomainUsable,
+  teamFromAddress,
+} from "./team-sending-domain";
 
 export type OrganizationDeliveryPolicy =
   typeof organizationDeliveryPolicies.$inferSelect;
@@ -734,6 +738,14 @@ export async function transitionEspGrant(
     });
   });
   if (action === "cancel") {
+    // The team's own domain was registered through this mailbox; without
+    // the grant nothing would ever check or remove it.
+    await releaseTeamSendingDomains(
+      { teamId },
+      actor.type === "team_key"
+        ? { type: "system" }
+        : { type: actor.type, id: actor.id },
+    );
     const [row] = await db
       .select({
         grant: espConfigTeamGrants,

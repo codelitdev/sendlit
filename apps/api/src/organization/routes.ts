@@ -1894,6 +1894,8 @@ const impl = s.router(contract.organizations, {
     } catch (error: any) {
       if (error?.code === "23505")
         return { status: 409, body: { error: "domain_exists" } };
+      if (error?.message === "domain_in_use")
+        return { status: 409, body: { error: "domain_in_use" } };
       if (
         error?.message === "domain_invalid" ||
         error?.message === "domain_public_suffix"

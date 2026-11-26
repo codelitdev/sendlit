@@ -273,6 +273,29 @@ describe("large imports", () => {
     await expect(assertNoImportUnderReview(team.id)).resolves.toBeUndefined();
   });
 
+  it("keeps a flag raised before flags were per team holding the organization", async () => {
+    const { team, organization } = await seedTeamAndContact(tdb);
+    const [otherTeam] = await tdb
+      .insert(schema.teams)
+      .values({ name: "School B", organizationId: organization.id })
+      .returning();
+    await recordContactImport({
+      teamId: team.id,
+      createdEmails: Array.from({ length: 1_200 }, (_, i) => `c${i}@example.com`),
+      updated: 0,
+      skipped: 0,
+      suppressed: 0,
+    });
+    await expect(assertNoImportUnderReview(otherTeam.id)).resolves.toBeUndefined();
+    // Flags raised by the previous release carry the team but no `scope`.
+    const [flag] = await tdb.select().from(schema.abuseFlags);
+    const { scope: _scope, ...legacy } = flag.details as Record<string, unknown>;
+    await tdb.update(schema.abuseFlags).set({ details: legacy });
+    await expect(assertNoImportUnderReview(otherTeam.id)).rejects.toThrow(
+      "import_under_review",
+    );
+  });
+
   it("judges each team on its own imports", async () => {
     const { team, organization } = await seedTeamAndContact(tdb);
     const [schoolB, schoolC] = await tdb

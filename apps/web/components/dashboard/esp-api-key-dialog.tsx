@@ -26,6 +26,8 @@ const ERRORS: Record<string, string> = {
   esp_management_credentials_invalid:
     "Amazon SES refused this key. Check it, and that it may call ses:GetEmailIdentity.",
   provider_domain_unsupported: "Only Amazon SES mailboxes take an API key for now.",
+  esp_management_credentials_in_use:
+    "Teams' own sending domains use this key. Stop using those domains first.",
 };
 
 /** The Amazon SES API key that lets teams register their own sending domains

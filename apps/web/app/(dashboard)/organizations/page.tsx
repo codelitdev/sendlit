@@ -232,6 +232,8 @@ const ORGANIZATION_ERROR_MESSAGES: Record<string, string> = {
   esp_retire_instead:
     "A mailbox that has been activated can't be deleted. Retire it instead; it stops sending and its reports stay intact.",
   domain_exists: "That sending domain has already been added.",
+  domain_in_use:
+    "One of your teams sends from this domain. Stop using it there first (Teams → Sending domain).",
   domain_invalid: "Enter a valid domain, such as example.com.",
   domain_not_found: "That sending domain could not be found.",
   domain_public_suffix:

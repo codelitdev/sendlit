@@ -35,6 +35,11 @@ function sendingBlockedReason(
         why: `Its From domain${domain ? ` ${domain}` : ""} isn't verified for your organization, which is required after your organization's first ${threshold ?? "few"} emails.`,
         next: "Verify the domain in Organizations → Sending domains",
       };
+    case "team_sending_domain_required":
+      return {
+        why: "Your organization requires each team to send marketing from its own domain, and this team hasn't set one up yet.",
+        next: "Ask an organization admin to set up the team's sending domain in Organizations → Teams",
+      };
     case "feedback_connection_required":
       return {
         why: `Your email provider isn't reporting bounces and spam complaints back to SendLit, which is required after your organization's first ${threshold ?? "few"} emails.`,

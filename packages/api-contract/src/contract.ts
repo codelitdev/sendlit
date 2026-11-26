@@ -1455,7 +1455,7 @@ const provisioningContract = c.router(
       },
       summary: "Check a provisioned team's own sending domain",
       description:
-        "Re-checks the domain with the shared ESP and DNS. Requires `teams:read`. `null` when the team has none.",
+        "Re-checks the domain with the shared ESP and DNS, at most every 30 seconds (calls in between return the last check). Requires `teams:read`. `null` when the team has none.",
     },
     setTeamSendingDomain: {
       method: "PUT",
@@ -1824,8 +1824,15 @@ const organizationsContract = c.router(
     removeEspManagementCredentials: {
       method: "DELETE",
       path: "/organizations/:organizationId/esps/:espId/management-credentials",
-      responses: { 200: espConfigSchema, 403: errorSchema, 404: errorSchema },
+      responses: {
+        200: espConfigSchema,
+        403: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+      },
       summary: "Remove a shared ESP's provider API credential",
+      description:
+        "409 `esp_management_credentials_in_use` while teams' own sending domains are registered through the mailbox: remove those first.",
     },
     getEspFeedback: {
       method: "GET",
@@ -2003,7 +2010,7 @@ const organizationsContract = c.router(
       },
       summary: "Check a team's own sending domain",
       description:
-        "Re-checks the domain with the shared ESP and DNS and returns its status and the DNS records to publish. `null` when the team has none. The team sends from it once the ESP has verified DKIM and a DMARC record is published.",
+        "Re-checks the domain with the shared ESP and DNS (at most every 30 seconds; calls in between return the last check) and returns its status and the DNS records to publish. `null` when the team has none. The team sends from it once the ESP has verified DKIM and a DMARC record is published.",
     },
     setTeamSendingDomain: {
       method: "PUT",

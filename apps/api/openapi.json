@@ -27446,7 +27446,7 @@
         ]
       },
       "delete": {
-        "description": "**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
+        "description": "409 `esp_management_credentials_in_use` while teams' own sending domains are registered through the mailbox: remove those first.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
         "summary": "Remove a shared ESP's provider API credential",
         "tags": [
           "Organizations"
@@ -27646,6 +27646,24 @@
           },
           "404": {
             "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
             "content": {
               "application/json": {
                 "schema": {
@@ -30309,7 +30327,7 @@
     },
     "/organizations/{organizationId}/teams/{teamId}/sending-domain": {
       "get": {
-        "description": "Re-checks the domain with the shared ESP and DNS and returns its status and the DNS records to publish. `null` when the team has none. The team sends from it once the ESP has verified DKIM and a DMARC record is published.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
+        "description": "Re-checks the domain with the shared ESP and DNS (at most every 30 seconds; calls in between return the last check) and returns its status and the DNS records to publish. `null` when the team has none. The team sends from it once the ESP has verified DKIM and a DMARC record is published.\n\n**Authentication:** Requires a user OAuth access token or dashboard session, or a scoped organization API key. The caller must also have the required organization role or key scope.",
         "summary": "Check a team's own sending domain",
         "tags": [
           "Organizations"
@@ -33589,7 +33607,7 @@
     },
     "/provisioning/teams/{teamId}/sending-domain": {
       "get": {
-        "description": "Re-checks the domain with the shared ESP and DNS. Requires `teams:read`. `null` when the team has none.\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
+        "description": "Re-checks the domain with the shared ESP and DNS, at most every 30 seconds (calls in between return the last check). Requires `teams:read`. `null` when the team has none.\n\n**Authentication:** Requires a scoped organization API key sent as a Bearer token.",
         "summary": "Check a provisioned team's own sending domain",
         "tags": [
           "Teams"

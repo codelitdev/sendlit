@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
-import { and, count, eq, gte, isNull } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull, isNull } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   espFeedbackConnections,
@@ -104,18 +104,50 @@ export async function listSendingDomains(organizationId: string) {
   return db.select().from(sendingDomains).where(organizationOwned(organizationId));
 }
 
+/** Throws `domain_in_use` while one of the organization's teams sends
+ * from the domain. A domain a team used before is taken over. */
 export async function createSendingDomain(organizationId: string, input: string) {
   const domain = normalizeSendingDomain(input);
   const token = randomBytes(32).toString("base64url");
-  const [row] = await db
-    .insert(sendingDomains)
-    .values({
-      organizationId,
-      domain,
-      challengeTokenHash: hashChallenge(token),
-      status: "pending",
-    })
-    .returning();
+  const values = {
+    organizationId,
+    domain,
+    challengeTokenHash: hashChallenge(token),
+    status: "pending",
+  };
+  const [teamRow] = await db
+    .select({ id: sendingDomains.id, status: sendingDomains.status })
+    .from(sendingDomains)
+    .where(
+      and(
+        eq(sendingDomains.organizationId, organizationId),
+        eq(sendingDomains.domain, domain),
+        isNotNull(sendingDomains.teamId),
+      ),
+    )
+    .limit(1);
+  if (teamRow && teamRow.status !== "revoked") throw new Error("domain_in_use");
+  const [row] = teamRow
+    ? await db
+        .update(sendingDomains)
+        .set({
+          ...values,
+          teamId: null,
+          espConfigId: null,
+          dkimStatus: null,
+          dmarcStatus: null,
+          dnsRecords: null,
+          verifiedAt: null,
+          authFailingSince: null,
+          lastCheckedAt: null,
+          nextCheckAt: null,
+          failedCheckCount: 0,
+          firstFailedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(sendingDomains.id, teamRow.id))
+        .returning()
+    : await db.insert(sendingDomains).values(values).returning();
   return { row, token };
 }
 

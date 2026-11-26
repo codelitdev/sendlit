@@ -122,6 +122,36 @@ async function fromFor(teamId: string, purpose: "marketing" | "transactional") {
     .fromEmail;
 }
 
+async function ledger(
+  ctx: Awaited<ReturnType<typeof setup>>,
+  sourceType: "campaign" | "transactional",
+  count: number,
+  deliveryStatus = "delivered",
+) {
+  await tdb.insert(schema.outboundMessages).values(
+    Array.from({ length: count }, (_, i) => ({
+      teamId: ctx.team.id,
+      deliverySourceType: "organization",
+      espConfigId: ctx.esp.id,
+      espGrantId: ctx.grant.id,
+      sourceType,
+      recipientEmail: `r${i}-${crypto.randomUUID()}@example.com`,
+      normalizedRecipient: `r${i}@example.com`,
+      provider: "ses",
+      deliveryStatus,
+    })) as any,
+  );
+}
+
+/** Re-checks now, past the window in which reads reuse the last check. */
+async function recheck(teamId: string) {
+  await tdb
+    .update(schema.sendingDomains)
+    .set({ lastCheckedAt: null })
+    .where(eq(schema.sendingDomains.teamId, teamId));
+  return domains.refreshTeamSendingDomain(teamId);
+}
+
 async function domainRow(teamId: string) {
   const [row] = await tdb
     .select()
@@ -159,11 +189,9 @@ describe("team sending domains", () => {
     expect(await fromFor(ctx.team.id, "marketing")).toBe("news@district.example.org");
 
     identities.set("school-a.example.org", { verified: true, dkim: "verified" });
-    expect((await domains.refreshTeamSendingDomain(ctx.team.id))?.status).toBe(
-      "pending",
-    );
+    expect((await recheck(ctx.team.id))?.status).toBe("pending");
     dmarc.published = true;
-    const verified = await domains.refreshTeamSendingDomain(ctx.team.id);
+    const verified = await recheck(ctx.team.id);
 
     expect(verified).toMatchObject({ status: "verified", inUse: true, dmarc: "pass" });
     expect(await fromFor(ctx.team.id, "marketing")).toBe("office@school-a.example.org");
@@ -182,10 +210,10 @@ describe("team sending domains", () => {
     );
     identities.set("school-a.example.org", { verified: true, dkim: "verified" });
     dmarc.published = true;
-    await domains.refreshTeamSendingDomain(ctx.team.id);
+    await recheck(ctx.team.id);
 
     dmarc.published = false;
-    const failing = await domains.refreshTeamSendingDomain(ctx.team.id);
+    const failing = await recheck(ctx.team.id);
     expect(failing).toMatchObject({ status: "failing", inUse: true });
     expect(failing?.graceEndsAt).not.toBeNull();
     // Within the grace period it still sends from its own domain.
@@ -206,9 +234,7 @@ describe("team sending domains", () => {
     );
 
     dmarc.published = true;
-    expect((await domains.refreshTeamSendingDomain(ctx.team.id))?.status).toBe(
-      "verified",
-    );
+    expect((await recheck(ctx.team.id))?.status).toBe("verified");
     expect(await fromFor(ctx.team.id, "marketing")).toBe("office@school-a.example.org");
   });
 
@@ -238,17 +264,12 @@ describe("team sending domains", () => {
     });
 
     await policy({ requireTeamSendingDomain: "off", sharedDomainMonthlyLimit: 10 });
-    const month = new Date(
-      Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
-    );
-    await tdb.insert(schema.organizationEspUsageBuckets).values({
-      bucketScope: "grant",
-      organizationId: ctx.organization.id,
-      grantId: ctx.grant.id,
-      periodType: "month",
-      periodStart: month,
-      acceptedCount: 10,
-    });
+    // Transactional email doesn't count towards the shared-domain cap.
+    await ledger(ctx, "transactional", 50);
+    await ledger(ctx, "campaign", 9);
+    expect(await fromFor(ctx.team.id, "marketing")).toBe("news@district.example.org");
+    // Queued sends count, so a broadcast can't overshoot it.
+    await ledger(ctx, "campaign", 1, "queued");
     await expect(fromFor(ctx.team.id, "marketing")).rejects.toMatchObject({
       code: "plan_limit_reached",
       details: expect.objectContaining({ capability: "shared_domain_monthly_limit" }),
@@ -495,6 +516,141 @@ describe("team sending domains", () => {
       .where(eq(schema.espConfigTeamGrants.id, ctx.grant.id));
 
     expect((await domains.refreshTeamSendingDomain(ctx.team.id))?.fromEmail).toBeNull();
+  });
+
+  it("removes the team's domain when its grant is cancelled or the mailbox retired", async () => {
+    const ctx = await setup();
+    const { transitionEspGrant } = await import("./queries");
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      ctx.team.id,
+      { fromEmail: "office@school-a.example.org" },
+      actor,
+    );
+    await transitionEspGrant(ctx.organization.id, ctx.team.id, "cancel");
+    expect((await domainRow(ctx.team.id)).status).toBe("revoked");
+    expect(removed()).toEqual(["DeleteEmailIdentityCommand school-a.example.org"]);
+
+    // Retiring the mailbox removes its other teams' domains and its API key.
+    const [other] = await tdb
+      .insert(schema.teams)
+      .values({ name: "School B", organizationId: ctx.organization.id })
+      .returning();
+    await tdb.insert(schema.espConfigTeamGrants).values({
+      organizationId: ctx.organization.id,
+      espConfigId: ctx.esp.id,
+      teamId: other.id,
+      createdByType: "user",
+    });
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      other.id,
+      { fromEmail: "office@school-b.example.org" },
+      actor,
+    );
+    const { transitionEspConfig } = await import("../settings/esp/queries");
+    const retired = await transitionEspConfig(ctx.esp, "retire", { cancel: true });
+    expect((await domainRow(other.id)).status).toBe("revoked");
+    expect(removed()).toContain("DeleteEmailIdentityCommand school-b.example.org");
+    expect(retired.encryptedManagementSecret).toBeNull();
+  });
+
+  it("registers the domain again when the team was moved to another mailbox", async () => {
+    const ctx = await setup();
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      ctx.team.id,
+      { fromEmail: "office@school-a.example.org" },
+      actor,
+    );
+    const [esp2] = await tdb
+      .insert(schema.espConfigs)
+      .values({
+        ...ctx.esp,
+        id: undefined,
+        espId: undefined,
+        name: "Second SES",
+      } as any)
+      .returning();
+    await tdb
+      .update(schema.espConfigTeamGrants)
+      .set({ espConfigId: esp2.id })
+      .where(eq(schema.espConfigTeamGrants.id, ctx.grant.id));
+    // A stale row on the old mailbox is never used to send.
+    expect(await fromFor(ctx.team.id, "transactional")).toBe(
+      "news@district.example.org",
+    );
+
+    identities.delete("school-a.example.org"); // the second SES account
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      ctx.team.id,
+      { fromEmail: "office@school-a.example.org" },
+      actor,
+    );
+    expect(registered()).toHaveLength(2);
+    expect((await domainRow(ctx.team.id)).espConfigId).toBe(esp2.id);
+  });
+
+  it("keeps the API key while team domains need it", async () => {
+    const ctx = await setup();
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      ctx.team.id,
+      { fromEmail: "office@school-a.example.org" },
+      actor,
+    );
+    await expect(
+      domains.removeEspManagementCredentials(ctx.organization.id, ctx.esp.espId, actor),
+    ).rejects.toThrow("esp_management_credentials_in_use");
+    await domains.removeTeamSendingDomain(ctx.organization.id, ctx.team.id, actor);
+    const saved = await domains.removeEspManagementCredentials(
+      ctx.organization.id,
+      ctx.esp.espId,
+      actor,
+    );
+    expect(saved.encryptedManagementSecret).toBeNull();
+  });
+
+  it("reuses a recent check instead of calling the provider on every read", async () => {
+    const ctx = await setup();
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      ctx.team.id,
+      { fromEmail: "office@school-a.example.org" },
+      actor,
+    );
+    const before = calls.length;
+    await domains.refreshTeamSendingDomain(ctx.team.id);
+    expect(calls.length).toBe(before);
+    await tdb
+      .update(schema.sendingDomains)
+      .set({ lastCheckedAt: new Date(Date.now() - 60_000) })
+      .where(eq(schema.sendingDomains.teamId, ctx.team.id));
+    await domains.refreshTeamSendingDomain(ctx.team.id);
+    expect(calls.length).toBe(before + 1);
+  });
+
+  it("lets the organization add a domain a team used before, not one it uses", async () => {
+    const ctx = await setup();
+    await domains.setTeamSendingDomain(
+      ctx.organization.id,
+      ctx.team.id,
+      { fromEmail: "office@school-a.example.org" },
+      actor,
+    );
+    await expect(
+      orgDomains.createSendingDomain(ctx.organization.id, "school-a.example.org"),
+    ).rejects.toThrow("domain_in_use");
+    await domains.removeTeamSendingDomain(ctx.organization.id, ctx.team.id, actor);
+    const { row } = await orgDomains.createSendingDomain(
+      ctx.organization.id,
+      "school-a.example.org",
+    );
+    expect(row).toMatchObject({ teamId: null, status: "pending", espConfigId: null });
+    expect(
+      (await orgDomains.listSendingDomains(ctx.organization.id)).map((r) => r.domain),
+    ).toEqual(["school-a.example.org"]);
   });
 
   it("maps provider errors to 422 and an identity SendLit didn't create to 409", () => {

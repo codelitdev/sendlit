@@ -449,8 +449,9 @@ curl --request PUT \
 
 SES returns three DKIM CNAMEs (one is shown). Skip the DMARC record if the
 domain already has one. Show the records to the team, then check progress
-with `GET` on the same path (`teams:read`), which re-checks SES and DNS.
-SendLit also re-checks every hour.
+with `GET` on the same path (`teams:read`), which re-checks SES and DNS at
+most every 30 seconds (calls in between return the last check). SendLit also
+re-checks every hour.
 
 - `status` is `pending` until SES has verified DKIM and DMARC is published,
   then `verified`. From then on the team's mail goes out from its own
@@ -461,7 +462,8 @@ SendLit also re-checks every hour.
   "team_sending_domain_failing"`). Transactional email keeps sending. It
   never falls back to the shared domain on its own.
 - `DELETE` on the same path removes the domain from SES. The team goes back
-  to the shared domain.
+  to the shared domain. Cancelling the team's shared-mailbox grant, archiving
+  the team or retiring the mailbox also removes it.
 
 | Status | Error                                    | Meaning                                                                                                   |
 | ------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -477,7 +479,8 @@ The organization's delivery policy can require teams to use their own domain:
 `requireTeamSendingDomain` set to `marketing` or `all` refuses those sends
 from teams still on the shared domain with `domain_verification_required`
 (`reason: "team_sending_domain_required"`), and `sharedDomainMonthlyLimit`
-caps each team's monthly marketing through the shared domain.
+caps how many broadcast and sequence emails each team sends from the shared
+domain in a calendar month (UTC). Transactional email doesn't count.
 
 ## Errors
 
