@@ -14,6 +14,10 @@
         "label": "Docs",
         "href": "/docs",
         "isButton": false
+      },
+      {
+        "label": "Blog",
+        "href": "/blog"
       }
     ],
     "ctaHref": "https://app.sendlit.app",
